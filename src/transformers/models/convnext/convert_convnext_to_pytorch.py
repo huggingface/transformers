@@ -21,11 +21,11 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
 from transformers.utils import logging
 
@@ -62,9 +62,9 @@ def get_convnext_config(checkpoint_url):
         filename = "imagenet-22k-id2label.json"
         expected_shape = (1, 21841)
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841

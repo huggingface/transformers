@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -41,6 +42,9 @@ if is_torch_available():
         ViltModel,
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
+else:
+    is_torch_greater_or_equal_than_1_10 = False
 
 if is_vision_available():
     import PIL
@@ -214,7 +218,8 @@ class ViltModelTester:
 
 
 @require_torch
-class ViltModelTest(ModelTesterMixin, unittest.TestCase):
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "Vilt is only available in torch v1.10+")
+class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViltModel,
@@ -225,6 +230,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ViltModel, "visual-question-answering": ViltForQuestionAnswering}
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -510,6 +520,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "Vilt is only available in torch v1.10+")
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
     all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
@@ -534,6 +545,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "Vilt is only available in torch v1.10+")
 class ViltModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):

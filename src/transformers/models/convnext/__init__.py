@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -38,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_convnext"] = ["ConvNextFeatureExtractor"]
+    _import_structure["image_processing_convnext"] = ["ConvNextImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -50,6 +46,7 @@ else:
         "ConvNextForImageClassification",
         "ConvNextModel",
         "ConvNextPreTrainedModel",
+        "ConvNextBackbone",
     ]
 
 try:
@@ -74,6 +71,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_convnext import ConvNextFeatureExtractor
+        from .image_processing_convnext import ConvNextImageProcessor
 
     try:
         if not is_torch_available():
@@ -83,6 +81,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,

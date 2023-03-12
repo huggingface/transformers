@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -429,8 +430,7 @@ class BigBirdModelTester:
 
 
 @require_torch
-class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
-
+class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # head masking & pruning is currently not supported for big bird
     test_head_masking = False
     test_pruning = False
@@ -454,6 +454,19 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (BigBirdForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BigBirdModel,
+            "fill-mask": BigBirdForMaskedLM,
+            "question-answering": BigBirdForQuestionAnswering,
+            "text-classification": BigBirdForSequenceClassification,
+            "text-generation": BigBirdForCausalLM,
+            "token-classification": BigBirdForTokenClassification,
+            "zero-shot": BigBirdForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -627,7 +640,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 1024], dtype=torch.long, device=torch_device)
-        outputs = model(input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids)
         prediction_logits = outputs.prediction_logits
         seq_relationship_logits = outputs.seq_relationship_logits
 
@@ -655,7 +669,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 512], dtype=torch.long, device=torch_device)
-        outputs = model(input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids)
         prediction_logits = outputs.prediction_logits
         seq_relationship_logits = outputs.seq_relationship_logits
 
@@ -920,7 +935,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.eval()
 
         input_ids = torch.tensor([200 * [10] + 40 * [2] + [1]], device=torch_device, dtype=torch.long)
-        output = model(input_ids).to_tuple()[0]
+        with torch.no_grad():
+            output = model(input_ids).to_tuple()[0]
 
         # fmt: off
         target = torch.tensor(

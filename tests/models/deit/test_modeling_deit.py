@@ -21,11 +21,19 @@ import warnings
 
 from transformers import DeiTConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -180,7 +188,7 @@ class DeiTModelTester:
 
 
 @require_torch
-class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
+class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as DeiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -195,6 +203,14 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DeiTModel,
+            "image-classification": (DeiTForImageClassification, DeiTForImageClassificationWithTeacher),
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -320,7 +336,6 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
@@ -384,7 +399,8 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
@@ -393,3 +409,23 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    @require_accelerate
+    @require_torch_gpu
+    def test_inference_fp16(self):
+        r"""
+        A small test to make sure that inference work in half precision without any problem.
+        """
+        model = DeiTModel.from_pretrained(
+            "facebook/deit-base-distilled-patch16-224", torch_dtype=torch.float16, device_map="auto"
+        )
+        feature_extractor = self.default_feature_extractor
+
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass to make sure inference works in fp16
+        with torch.no_grad():
+            _ = model(pixel_values)

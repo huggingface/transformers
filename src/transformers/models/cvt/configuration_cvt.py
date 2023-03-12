@@ -85,12 +85,12 @@ class CvtConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CvtModel, CvtConfig
+    >>> from transformers import CvtConfig, CvtModel
 
     >>> # Initializing a Cvt msft/cvt style configuration
     >>> configuration = CvtConfig()
 
-    >>> # Initializing a model from the msft/cvt style configuration
+    >>> # Initializing a model (with random weights) from the msft/cvt style configuration
     >>> model = CvtModel(configuration)
 
     >>> # Accessing the model configuration
@@ -121,7 +121,7 @@ class CvtConfig(PretrainedConfig):
         stride_q=[1, 1, 1],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.num_channels = num_channels

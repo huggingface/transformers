@@ -20,9 +20,10 @@ import unittest
 from transformers import TransfoXLConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,28 +38,47 @@ class TransfoXLModelTester:
     def __init__(
         self,
         parent,
+        batch_size=14,
+        seq_length=7,
+        mem_len=30,
+        clamp_len=15,
+        is_training=False,
+        use_labels=True,
+        vocab_size=99,
+        cutoffs=[10, 50, 80],
+        hidden_size=32,
+        d_embed=32,
+        num_attention_heads=4,
+        d_head=8,
+        d_inner=128,
+        div_val=2,
+        num_hidden_layers=5,
+        scope=None,
+        seed=1,
+        eos_token_id=0,
+        num_labels=3,
     ):
         self.parent = parent
-        self.batch_size = 14
-        self.seq_length = 7
-        self.mem_len = 30
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.mem_len = mem_len
         self.key_length = self.seq_length + self.mem_len
-        self.clamp_len = 15
-        self.is_training = False
-        self.use_labels = True
-        self.vocab_size = 99
-        self.cutoffs = [10, 50, 80]
-        self.hidden_size = 32
-        self.d_embed = 32
-        self.num_attention_heads = 4
-        self.d_head = 8
-        self.d_inner = 128
-        self.div_val = 2
-        self.num_hidden_layers = 5
-        self.scope = None
-        self.seed = 1
-        self.eos_token_id = 0
-        self.num_labels = 3
+        self.clamp_len = clamp_len
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.cutoffs = cutoffs
+        self.hidden_size = hidden_size
+        self.d_embed = d_embed
+        self.num_attention_heads = num_attention_heads
+        self.d_head = d_head
+        self.d_inner = d_inner
+        self.div_val = div_val
+        self.num_hidden_layers = num_hidden_layers
+        self.scope = scope
+        self.seed = seed
+        self.eos_token_id = eos_token_id
+        self.num_labels = num_labels
         self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
@@ -232,11 +252,21 @@ class TransfoXLModelTester:
 
 
 @require_torch
-class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TransfoXLModel, TransfoXLLMHeadModel, TransfoXLForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TransfoXLModel,
+            "text-classification": TransfoXLForSequenceClassification,
+            "text-generation": TransfoXLLMHeadModel,
+            "zero-shot": TransfoXLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = True
     test_mismatched_shapes = False
@@ -328,7 +358,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             # Retrieve the cutoffs and copy them
             copied_cutoffs = copy.copy(model_embed.cutoffs)
 
-            test_layers = [x for x in range(config.div_val)]
+            test_layers = list(range(config.div_val))
             for layer in test_layers:
                 # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
                 model_embed = model.resize_token_embeddings(model_vocab_size + 10, layer)

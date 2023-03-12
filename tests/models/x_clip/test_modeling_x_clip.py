@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -393,7 +394,6 @@ class XCLIPTextModelTester:
 
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -436,12 +436,25 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class XCLIPModelTester:
-    def __init__(self, parent, projection_dim=64, mit_hidden_size=64, is_training=True):
+    def __init__(
+        self,
+        parent,
+        text_kwargs=None,
+        vision_kwargs=None,
+        projection_dim=64,
+        mit_hidden_size=64,
+        is_training=True,
+    ):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
-        self.text_model_tester = XCLIPTextModelTester(parent)
-        self.vision_model_tester = XCLIPVisionModelTester(parent)
+        self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -494,8 +507,9 @@ class XCLIPModelTester:
 
 
 @require_torch
-class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -633,7 +647,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on a spaghetti video
 def prepare_video():
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy", repo_type="dataset"
     )
     video = np.load(file)
     return list(video)
@@ -667,6 +681,6 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)
+        expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))

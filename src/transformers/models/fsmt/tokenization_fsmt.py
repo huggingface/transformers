@@ -195,7 +195,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         sep_token="</s>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             langs=langs,
@@ -226,10 +226,10 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.do_lower_case = do_lower_case
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.cache_moses_detokenizer = dict()
+        self.cache_moses_tokenizer = {}
+        self.cache_moses_detokenizer = {}
 
         if langs and len(langs) == 2:
             self.src_lang, self.tgt_lang = langs
@@ -275,8 +275,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
     def moses_detokenize(self, tokens, lang):
-        if lang not in self.cache_moses_tokenizer:
-            moses_detokenizer = self.sm.MosesDetokenizer(lang=self.tgt_lang)
+        if lang not in self.cache_moses_detokenizer:
+            moses_detokenizer = self.sm.MosesDetokenizer(lang=lang)
             self.cache_moses_detokenizer[lang] = moses_detokenizer
         return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
@@ -379,7 +379,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

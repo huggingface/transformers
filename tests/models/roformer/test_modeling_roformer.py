@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -360,8 +361,7 @@ class RoFormerModelTester:
 
 
 @require_torch
-class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
+class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RoFormerModel,
@@ -376,6 +376,19 @@ class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (RoFormerForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RoFormerModel,
+            "fill-mask": RoFormerForMaskedLM,
+            "question-answering": RoFormerForQuestionAnswering,
+            "text-classification": RoFormerForSequenceClassification,
+            "text-generation": RoFormerForCausalLM,
+            "token-classification": RoFormerForTokenClassification,
+            "zero-shot": RoFormerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)
@@ -457,7 +470,8 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_lm(self):
         model = RoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         # TODO Replace vocab size
         vocab_size = 50000
@@ -490,7 +504,6 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
         )
 
     def test_positional_emb_weights_against_roformer(self):
-
         desired_weights = torch.tensor(
             [
                 [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],

@@ -47,8 +47,18 @@ Tips:
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**.
 - BigBirdPegasus uses the [PegasusTokenizer](https://github.com/huggingface/transformers/blob/main/src/transformers/models/pegasus/tokenization_pegasus.py).
+- BigBird is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
 
 The original code can be found [here](https://github.com/google-research/bigbird).
+
+## Documentation resources
+
+- [Text classification task guide](./tasks/sequence_classification)
+- [Question answering task guide](./tasks/question_answering)
+- [Causal language modeling task guide](./tasks/language_modeling)
+- [Translation task guide](./tasks/translation)
+- [Summarization task guide](./tasks/summarization)
 
 ## BigBirdPegasusConfig
 

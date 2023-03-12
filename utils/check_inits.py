@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import collections
-import importlib.util
 import os
 import re
 from pathlib import Path
@@ -268,17 +267,15 @@ def get_transformers_submodules():
 IGNORE_SUBMODULES = [
     "convert_pytorch_checkpoint_to_tf2",
     "modeling_flax_pytorch_utils",
+    "models.esm.openfold_utils",
 ]
 
 
 def check_submodules():
     # This is to make sure the transformers module imported is the one in the repo.
-    spec = importlib.util.spec_from_file_location(
-        "transformers",
-        os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-        submodule_search_locations=[PATH_TO_TRANSFORMERS],
-    )
-    transformers = spec.loader.load_module()
+    from transformers.utils import direct_transformers_import
+
+    transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
     module_not_registered = [
         module

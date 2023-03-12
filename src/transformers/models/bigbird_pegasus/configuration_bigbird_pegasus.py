@@ -109,19 +109,17 @@ class BigBirdPegasusConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel
 
-    ```
+    >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration
+    >>> configuration = BigBirdPegasusConfig()
 
-        >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
+    >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration
+    >>> model = BigBirdPegasusModel(configuration)
 
-        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
-        BigBirdPegasusConfig()
-
-        >>> # Initializing a model from the bigbird-pegasus-base style configuration >>> model =
-        BigBirdPegasusModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -160,7 +158,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

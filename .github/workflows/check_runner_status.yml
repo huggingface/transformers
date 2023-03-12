@@ -23,7 +23,7 @@ jobs:
       offline_runners: ${{ steps.set-offline_runners.outputs.offline_runners }}
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
 
@@ -35,7 +35,7 @@ jobs:
         if: ${{ always() }}
         run: |
           offline_runners=$(python3 -c 'fp = open("offline_runners.txt"); failed = fp.read(); fp.close(); print(failed)')
-          echo "::set-output name=offline_runners::$offline_runners"
+          echo "offline_runners=$offline_runners" >> $GITHUB_OUTPUT
 
   send_results:
     name: Send results to webhook
@@ -48,8 +48,8 @@ jobs:
         run: |
           echo "Runner availability: ${{ needs.check_runner_status.result }}"
 
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
@@ -57,6 +57,7 @@ jobs:
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: runner status check
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
           OFFLINE_RUNNERS: ${{ needs.check_runner_status.outputs.offline_runners }}

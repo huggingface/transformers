@@ -34,24 +34,26 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
 @is_pipeline_test
-class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
     def run_pipeline_test(self, token_classifier, _):
         model = token_classifier.model
         tokenizer = token_classifier.tokenizer
+        if not tokenizer.is_fast:
+            return  # Slow tokenizers do not return offsets mappings, so this test will fail
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)
@@ -770,7 +772,6 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
 
-@is_pipeline_test
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def setUp(self):
         self.args_parser = TokenClassificationArgumentHandler()

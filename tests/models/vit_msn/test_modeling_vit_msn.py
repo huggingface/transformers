@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -40,7 +41,7 @@ if is_vision_available():
     from transformers import ViTFeatureExtractor
 
 
-class ViTMAEModelTester:
+class ViTMSNModelTester:
     def __init__(
         self,
         parent,
@@ -144,13 +145,18 @@ class ViTMAEModelTester:
 
 
 @require_torch
-class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViTMAE does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as ViTMSN does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
@@ -158,13 +164,13 @@ class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTMAEModelTester(self)
+        self.model_tester = ViTMSNModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="ViTMAE does not use inputs_embeds")
+    @unittest.skip(reason="ViTMSN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 

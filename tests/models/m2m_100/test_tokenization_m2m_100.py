@@ -30,7 +30,7 @@ from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
-    from transformers.models.m2m_100.tokenization_m2m_100 import save_json, VOCAB_FILES_NAMES
+    from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -84,15 +84,13 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+        tokenizer = self.get_tokenizer()
+        vocab_keys = list(tokenizer.get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "</s>")
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "<s>")
-        self.assertEqual(len(vocab_keys), 10)
-
-    def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 117)
+        self.assertEqual(len(vocab_keys), tokenizer.vocab_size + len(tokenizer.get_added_vocab()))
 
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
@@ -159,6 +157,12 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.get_lang_id("en"), 128022)
         self.assertEqual(self.tokenizer.get_lang_id("ro"), 128076)
         self.assertEqual(self.tokenizer.get_lang_id("mr"), 128063)
+
+    def test_get_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        self.assertEqual(len(vocab), self.tokenizer.vocab_size)
+        self.assertEqual(vocab["<unk>"], 3)
+        self.assertIn(self.tokenizer.get_lang_token("en"), vocab)
 
     def test_tokenizer_batch_encode_plus(self):
         self.tokenizer.src_lang = "en"

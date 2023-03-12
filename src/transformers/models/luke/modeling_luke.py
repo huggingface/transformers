@@ -41,7 +41,6 @@ from .configuration_luke import LukeConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LukeConfig"
-_TOKENIZER_FOR_DOC = "LukeTokenizer"
 _CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -902,6 +901,7 @@ class LukePreTrainedModel(PreTrainedModel):
     config_class = LukeConfig
     base_model_prefix = "luke"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -946,7 +946,7 @@ LUKE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LukeTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -974,7 +974,7 @@ LUKE_INPUTS_DOCSTRING = r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
-            Indices can be obtained using [`LukeTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
         entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
@@ -1022,7 +1022,6 @@ LUKE_INPUTS_DOCSTRING = r"""
     LUKE_START_DOCSTRING,
 )
 class LukeModel(LukePreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config: LukeConfig, add_pooling_layer: bool = True):
@@ -1078,9 +1077,9 @@ class LukeModel(LukePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LukeTokenizer, LukeModel
+        >>> from transformers import AutoTokenizer, LukeModel
 
-        >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("studio-ousia/luke-base")
         >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
         # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
 
@@ -1264,7 +1263,11 @@ class LukeLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
@@ -1462,9 +1465,9 @@ class LukeForEntityClassification(LukePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LukeTokenizer, LukeForEntityClassification
+        >>> from transformers import AutoTokenizer, LukeForEntityClassification
 
-        >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
+        >>> tokenizer = AutoTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
         >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-large-finetuned-open-entity")
 
         >>> text = "Beyoncé lives in Los Angeles."
@@ -1575,9 +1578,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LukeTokenizer, LukeForEntityPairClassification
+        >>> from transformers import AutoTokenizer, LukeForEntityPairClassification
 
-        >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
+        >>> tokenizer = AutoTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
         >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 
         >>> text = "Beyoncé lives in Los Angeles."
@@ -1701,9 +1704,9 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LukeTokenizer, LukeForEntitySpanClassification
+        >>> from transformers import AutoTokenizer, LukeForEntitySpanClassification
 
-        >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
+        >>> tokenizer = AutoTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
         >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
 
         >>> text = "Beyoncé lives in Los Angeles"
@@ -1746,9 +1749,15 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         hidden_size = outputs.last_hidden_state.size(-1)
 
         entity_start_positions = entity_start_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        if entity_start_positions.device != outputs.last_hidden_state.device:
+            entity_start_positions = entity_start_positions.to(outputs.last_hidden_state.device)
         start_states = torch.gather(outputs.last_hidden_state, -2, entity_start_positions)
+
         entity_end_positions = entity_end_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        if entity_end_positions.device != outputs.last_hidden_state.device:
+            entity_end_positions = entity_end_positions.to(outputs.last_hidden_state.device)
         end_states = torch.gather(outputs.last_hidden_state, -2, entity_end_positions)
+
         feature_vector = torch.cat([start_states, end_states, outputs.entity_last_hidden_state], dim=2)
 
         feature_vector = self.dropout(feature_vector)
@@ -1801,7 +1810,6 @@ class LukeForSequenceClassification(LukePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1915,7 +1923,6 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2008,7 +2015,6 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2129,7 +2135,6 @@ class LukeForMultipleChoice(LukePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

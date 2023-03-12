@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +37,7 @@ else:
         "OPTModel",
         "OPTPreTrainedModel",
         "OPTForSequenceClassification",
+        "OPTForQuestionAnswering",
     ]
 
 try:
@@ -76,6 +73,7 @@ if TYPE_CHECKING:
         from .modeling_opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
+            OPTForQuestionAnswering,
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,

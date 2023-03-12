@@ -93,12 +93,12 @@ class MobileBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import MobileBertModel, MobileBertConfig
+    >>> from transformers import MobileBertConfig, MobileBertModel
 
     >>> # Initializing a MobileBERT configuration
     >>> configuration = MobileBertConfig()
 
-    >>> # Initializing a model from the configuration above
+    >>> # Initializing a model (with random weights) from the configuration above
     >>> model = MobileBertModel(configuration)
 
     >>> # Accessing the model configuration
@@ -136,7 +136,7 @@ class MobileBertConfig(PretrainedConfig):
         normalization_type="no_norm",
         classifier_activation=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

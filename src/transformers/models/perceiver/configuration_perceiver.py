@@ -133,10 +133,8 @@ class PerceiverConfig(PretrainedConfig):
         cross_attention_widening_factor=1,
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
-        position_embedding_init_scale=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         use_query_residual=True,
         vocab_size=262,
         max_position_embeddings=2048,
@@ -146,7 +144,7 @@ class PerceiverConfig(PretrainedConfig):
         audio_samples_per_frame=1920,
         samples_per_patch=16,
         output_shape=[1, 16, 224, 224],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

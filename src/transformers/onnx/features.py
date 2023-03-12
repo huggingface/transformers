@@ -29,7 +29,9 @@ if is_torch_available():
         AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -98,6 +100,8 @@ class FeaturesManager:
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
             "semantic-segmentation": AutoModelForSemanticSegmentation,
+            "vision2seq-lm": AutoModelForVision2Seq,
+            "speech2seq-lm": AutoModelForSpeechSeq2Seq,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -339,6 +343,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.ibert.IBertOnnxConfig",
         ),
+        "imagegpt": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.imagegpt.ImageGPTOnnxConfig"
+        ),
         "layoutlm": supported_features_mapping(
             "default",
             "masked-lm",
@@ -401,6 +408,16 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
+        "mobilenet-v1": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v1.MobileNetV1OnnxConfig",
+        ),
+        "mobilenet-v2": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v2.MobileNetV2OnnxConfig",
+        ),
         "mobilevit": supported_features_mapping(
             "default",
             "image-classification",
@@ -429,6 +446,19 @@ class FeaturesManager:
             "masked-lm",
             "sequence-classification",
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
+        ),
+        "poolformer": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.poolformer.PoolFormerOnnxConfig"
+        ),
+        "rembert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.rembert.RemBertOnnxConfig",
         ),
         "resnet": supported_features_mapping(
             "default",
@@ -471,6 +501,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.squeezebert.SqueezeBertOnnxConfig",
         ),
+        "swin": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls="models.swin.SwinOnnxConfig"
+        ),
         "t5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -478,8 +511,18 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.t5.T5OnnxConfig",
         ),
+        "vision-encoder-decoder": supported_features_mapping(
+            "vision2seq-lm", onnx_config_cls="models.vision_encoder_decoder.VisionEncoderDecoderOnnxConfig"
+        ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"
+        ),
+        "whisper": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "speech2seq-lm",
+            "speech2seq-lm-with-past",
+            onnx_config_cls="models.whisper.WhisperOnnxConfig",
         ),
         "xlm": supported_features_mapping(
             "default",
@@ -579,6 +622,7 @@ class FeaturesManager:
             raise KeyError(
                 f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
+
         return task_to_automodel[task]
 
     @staticmethod

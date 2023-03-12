@@ -108,12 +108,12 @@ class LayoutLMv3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LayoutLMv3Model, LayoutLMv3Config
+    >>> from transformers import LayoutLMv3Config, LayoutLMv3Model
 
     >>> # Initializing a LayoutLMv3 microsoft/layoutlmv3-base style configuration
     >>> configuration = LayoutLMv3Config()
 
-    >>> # Initializing a model from the microsoft/layoutlmv3-base style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/layoutlmv3-base style configuration
     >>> model = LayoutLMv3Model(configuration)
 
     >>> # Accessing the model configuration
@@ -153,7 +153,7 @@ class LayoutLMv3Config(PretrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -191,7 +191,6 @@ class LayoutLMv3Config(PretrainedConfig):
 
 
 class LayoutLMv3OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.12")
 
     @property

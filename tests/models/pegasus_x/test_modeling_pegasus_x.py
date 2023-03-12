@@ -24,9 +24,10 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -194,9 +195,19 @@ class PegasusXModelTester:
 
 
 @require_torch
-class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": PegasusXForConditionalGeneration,
+            "feature-extraction": PegasusXModel,
+            "summarization": PegasusXForConditionalGeneration,
+            "text2text-generation": PegasusXForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False

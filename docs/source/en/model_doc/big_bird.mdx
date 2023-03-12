@@ -46,9 +46,20 @@ Tips:
 - Sequence length must be divisible by block size.
 - Current implementation supports only **ITC**.
 - Current implementation doesn't support **num_random_blocks = 0**
+- BigBird is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
 
 This model was contributed by [vasudevgupta](https://huggingface.co/vasudevgupta). The original code can be found
 [here](https://github.com/google-research/bigbird).
+
+## Documentation resources
+
+- [Text classification task guide](./tasks/sequence_classification)
+- [Token classification task guide](./tasks/token_classification)
+- [Question answering task guide](./tasks/question_answering)
+- [Causal language modeling task guide](./tasks/language_modeling)
+- [Masked language modeling task guide](./tasks/masked_language_modeling)
+- [Multiple choice task guide](./tasks/multiple_choice)
 
 ## BigBirdConfig
 

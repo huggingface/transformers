@@ -27,6 +27,11 @@ from git import Repo
 # This script is intended to be run from the root of the repo but you can adapt this constant if you need to.
 PATH_TO_TRANFORMERS = "."
 
+# A temporary way to trigger all pipeline tests contained in model test files after PR #21516
+all_model_test_files = [str(x) for x in Path("tests/models/").glob("**/**/test_modeling_*.py")]
+
+all_pipeline_test_files = [str(x) for x in Path("tests/pipelines/").glob("**/test_pipelines_*.py")]
+
 
 @contextmanager
 def checkout_commit(repo, commit_id):
@@ -78,13 +83,11 @@ def get_all_tests():
 
     # test folders/files directly under `tests` folder
     tests = os.listdir(test_root_dir)
-    tests = sorted(
-        list(filter(lambda x: os.path.isdir(x) or x.startswith("tests/test_"), [f"tests/{x}" for x in tests]))
-    )
+    tests = sorted(filter(lambda x: os.path.isdir(x) or x.startswith("tests/test_"), [f"tests/{x}" for x in tests]))
 
     # model specific test folders
     model_tests_folders = os.listdir(os.path.join(test_root_dir, "models"))
-    model_test_folders = sorted(list(filter(os.path.isdir, [f"tests/models/{x}" for x in model_tests_folders])))
+    model_test_folders = sorted(filter(os.path.isdir, [f"tests/models/{x}" for x in model_tests_folders]))
 
     tests.remove("tests/models")
     tests = model_test_folders + tests
@@ -265,7 +268,7 @@ def get_tree_starting_at(module, edges):
     tree = [module]
     while len(new_edges) > 0:
         tree.append(new_edges)
-        final_vertices = list(set(edge[1] for edge in new_edges))
+        final_vertices = list({edge[1] for edge in new_edges})
         vertices_seen.extend(final_vertices)
         new_edges = [edge for edge in edges if edge[0] in final_vertices and edge[1] not in vertices_seen]
 
@@ -285,10 +288,10 @@ def print_tree_deps_of(module, all_edges=None):
     lines = [(tree[0], tree[0])]
     for index in range(1, len(tree)):
         edges = tree[index]
-        start_edges = set([edge[0] for edge in edges])
+        start_edges = {edge[0] for edge in edges}
 
         for start in start_edges:
-            end_edges = set([edge[1] for edge in edges if edge[0] == start])
+            end_edges = {edge[1] for edge in edges if edge[0] == start}
             # We will insert all those edges just after the line showing start.
             pos = 0
             while lines[pos][1] != start:
@@ -353,8 +356,10 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "image_processing_utils.py": ["test_image_processing_common.py", "utils/test_image_processing_utils.py"],
+    "image_transforms.py": "test_image_transforms.py",
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
-    "utils/hub.py": "utils/test_file_utils.py",
+    "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
@@ -375,10 +380,14 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "models/gpt2/test_modeling_gpt2.py",
         "models/megatron_gpt2/test_modeling_megatron_gpt2.py",
     ],
+    "models/dpt/modeling_dpt.py": [
+        "models/dpt/test_modeling_dpt.py",
+        "models/dpt/test_modeling_dpt_hybrid.py",
+    ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
-    "pipelines/__init__.py": "pipelines/test_pipelines_*.py",
-    "pipelines/base.py": "pipelines/test_pipelines_*.py",
+    "pipelines/__init__.py": all_pipeline_test_files + all_model_test_files,
+    "pipelines/base.py": all_pipeline_test_files + all_model_test_files,
     "pipelines/text2text_generation.py": [
         "pipelines/test_pipelines_text2text_generation.py",
         "pipelines/test_pipelines_summarization.py",
@@ -426,6 +435,7 @@ def module_to_test_file(module_fname):
     # Special case for pipelines submodules
     if len(splits) >= 2 and splits[-2] == "pipelines":
         default_test_file = f"tests/pipelines/test_pipelines_{module_name}"
+        return [default_test_file] + all_model_test_files
     # Special case for benchmarks submodules
     elif len(splits) >= 2 and splits[-2] == "benchmark":
         return ["tests/benchmark/test_benchmark.py", "tests/benchmark/test_benchmark_tf.py"]
@@ -460,12 +470,14 @@ def module_to_test_file(module_fname):
 # This list contains the list of test files we expect never to be launched from a change in a module/util. Those are
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
-    "tests/utils/test_doc_samples.py",  # Doc tests
+    "tests/generation/test_framework_agnostic.py",  # Mixins inherited by actual test classes
+    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
     "tests/pipelines/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
-    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
+    "tests/test_pipeline_mixin.py",  # Contains no test of its own (only the common tester class)
+    "tests/utils/test_doc_samples.py",  # Doc tests
 ]
 
 
@@ -540,12 +552,13 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             impacted_files.extend(impacted_modules_map[f])
 
     # Remove duplicates
-    impacted_files = sorted(list(set(impacted_files)))
+    impacted_files = sorted(set(impacted_files))
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
     if "setup.py" in impacted_files:
         test_files_to_run = ["tests"]
+        repo_utils_launch = True
     else:
         # Grab the corresponding test files:
         test_files_to_run = []
@@ -557,6 +570,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_pytorch_examples.py")
                 test_files_to_run.append("examples/pytorch/test_accelerate_examples.py")
+            elif f.startswith("examples/tensorflow"):
+                test_files_to_run.append("examples/tensorflow/test_tensorflow_examples.py")
             elif f.startswith("examples/flax"):
                 test_files_to_run.append("examples/flax/test_flax_examples.py")
             else:
@@ -568,7 +583,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                         test_files_to_run.extend(new_tests)
 
         # Remove duplicates
-        test_files_to_run = sorted(list(set(test_files_to_run)))
+        test_files_to_run = sorted(set(test_files_to_run))
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
         if filters is not None:
@@ -576,6 +591,12 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             for filter in filters:
                 filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
             test_files_to_run = filtered_files
+        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in test_files_to_run)
+
+    if repo_utils_launch:
+        repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
+        with open(repo_util_file, "w", encoding="utf-8") as f:
+            f.write("tests/repo_utils")
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
@@ -619,6 +640,33 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                 json.dump(test_map, fp, ensure_ascii=False)
 
 
+def filter_tests(output_file, filters):
+    """
+    Reads the content of the output file and filters out all the tests in a list of given folders.
+
+    Args:
+        output_file (`str` or `os.PathLike`): The path to the output file of the tests fetcher.
+        filters (`List[str]`): A list of folders to filter.
+    """
+    if not os.path.isfile(output_file):
+        print("No test file found.")
+        return
+    with open(output_file, "r", encoding="utf-8") as f:
+        test_files = f.read().split(" ")
+
+    if len(test_files) == 0 or test_files == [""]:
+        print("No tests to filter.")
+        return
+
+    if test_files == ["tests"]:
+        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+    else:
+        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(" ".join(test_files))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -646,6 +694,11 @@ if __name__ == "__main__":
         help="Only keep the test files matching one of those filters.",
     )
     parser.add_argument(
+        "--filter_tests",
+        action="store_true",
+        help="Will filter the pipeline/repo utils tests outside of the generated list of tests.",
+    )
+    parser.add_argument(
         "--print_dependencies_of",
         type=str,
         help="Will only print the tree of modules depending on the file passed.",
@@ -656,6 +709,8 @@ if __name__ == "__main__":
         print_tree_deps_of(args.print_dependencies_of)
     elif args.sanity_check:
         sanity_check()
+    elif args.filter_tests:
+        filter_tests(args.output_file, ["pipelines", "repo_utils"])
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 
@@ -671,6 +726,7 @@ if __name__ == "__main__":
                 filters=args.filters,
                 json_output_file=args.json_output_file,
             )
+            filter_tests(args.output_file, ["repo_utils"])
         except Exception as e:
             print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:

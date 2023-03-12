@@ -68,17 +68,17 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 >>> import requests
 >>> from PIL import Image
 
->>> from transformers import GPT2TokenizerFast, ViTFeatureExtractor, VisionEncoderDecoderModel
+>>> from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
 
->>> # load a fine-tuned image captioning model and corresponding tokenizer and feature extractor
+>>> # load a fine-tuned image captioning model and corresponding tokenizer and image processor
 >>> model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 >>> tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
->>> feature_extractor = ViTFeatureExtractor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+>>> image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 
 >>> # let's perform inference on an image
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
->>> pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
+>>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
 >>> # autoregressively generate caption (uses greedy decoding by default)
 >>> generated_ids = model.generate(pixel_values)
@@ -115,10 +115,10 @@ As you can see, only 2 inputs are required for the model in order to compute a l
 images) and `labels` (which are the `input_ids` of the encoded target sequence).
 
 ```python
->>> from transformers import ViTFeatureExtractor, BertTokenizer, VisionEncoderDecoderModel
+>>> from transformers import ViTImageProcessor, BertTokenizer, VisionEncoderDecoderModel
 >>> from datasets import load_dataset
 
->>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+>>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
 ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
@@ -129,7 +129,7 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 
 >>> dataset = load_dataset("huggingface/cats-image")
 >>> image = dataset["test"]["image"][0]
->>> pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
+>>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
 >>> labels = tokenizer(
 ...     "an image of two cats chilling on a couch",

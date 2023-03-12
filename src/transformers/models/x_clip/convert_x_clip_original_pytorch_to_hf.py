@@ -15,11 +15,11 @@
 
 import argparse
 
+import gdown
 import numpy as np
 import torch
-
-import gdown
 from huggingface_hub import hf_hub_download
+
 from transformers import (
     CLIPTokenizer,
     CLIPTokenizerFast,
@@ -207,15 +207,15 @@ def prepare_video(num_frames):
     elif num_frames == 32:
         filename = "eating_spaghetti_32_frames.npy"
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video",
+        repo_id="hf-internal-testing/spaghetti-video",
         filename=filename,
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)
 
 
 def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
-
     model_to_url = {
         # fully supervised kinetics-400 checkpoints
         "xclip-base-patch32": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",

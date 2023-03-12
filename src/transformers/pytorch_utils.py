@@ -16,7 +16,7 @@ from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data, nn
+from torch import nn
 
 from .utils import logging
 
@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
 is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
+is_torch_less_than_1_9 = parsed_torch_version_base < version.parse("1.9.0")
 is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
 
@@ -47,6 +48,8 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
     """
+
+    from torch import _softmax_backward_data
 
     if is_torch_less_than_1_11:
         return _softmax_backward_data(grad_output, output, parent.dim, self)
@@ -102,10 +105,9 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
+        self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
+        nn.init.normal_(self.weight, std=0.02)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
@@ -270,3 +272,19 @@ def find_pruneable_heads_and_indices(
     mask = mask.view(-1).contiguous().eq(1)
     index: torch.LongTensor = torch.arange(len(mask))[mask].long()
     return heads, index
+
+
+def meshgrid(
+    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
+) -> Tuple[torch.Tensor, ...]:
+    """
+    Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
+
+    Reference: https://pytorch.org/docs/1.13/generated/torch.meshgrid.html
+    """
+    if is_torch_greater_or_equal_than_1_10:
+        return torch.meshgrid(*tensors, indexing=indexing)
+    else:
+        if indexing != "ij":
+            raise ValueError('torch.meshgrid only supports `indexing="ij"` for torch<1.10.')
+        return torch.meshgrid(*tensors)

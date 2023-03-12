@@ -21,15 +21,15 @@ import transformers
 from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_sentencepiece, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
-    import numpy as np
-
     import jax
     import jax.numpy as jnp
+    import numpy as np
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -196,7 +196,6 @@ class FlaxXGLMModelTester:
 @require_sentencepiece
 @require_flax
 class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxXGLMForCausalLM,) if is_flax_available() else ()
 
