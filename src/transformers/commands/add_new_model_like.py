@@ -173,8 +173,8 @@ def parse_module_content(content: str) -> List[str]:
     return objects
 
 
-def extract_blocks(content: str, indent_level: int = 0) -> List[str]:
-    """Parse the blocks in `content` into the list of objects it defines.
+def extract_block(content: str, indent_level: int = 0) -> str:
+    """Return the first block in `content` with the indent level `indent_level`.
 
     The first line in `content` should be indented at `indent_level` level, otherwise an error will be thrown.
 
@@ -186,9 +186,8 @@ def extract_blocks(content: str, indent_level: int = 0) -> List[str]:
         indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
 
     Returns:
-        `List[str]`: The list of objects defined in `content` with the indent level `indent_level`.
+        `str`: The first block in `content` with the indent level `indent_level`.
     """
-    objects = []
     current_object = []
     lines = content.split("\n")
     # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
@@ -215,19 +214,13 @@ def extract_blocks(content: str, indent_level: int = 0) -> List[str]:
             # Closing parts should be included in current object
             if line.lstrip() in end_markers:
                 current_object.append(line)
-                objects.append("\n".join(current_object))
-                current_object = []
-            else:
-                objects.append("\n".join(current_object))
-                current_object = [line]
+            return "\n".join(current_object)
         else:
             current_object.append(line)
 
     # Add last object
     if len(current_object) > 0:
-        objects.append("\n".join(current_object))
-
-    return objects
+        return "\n".join(current_object)
 
 
 def add_content_to_text(
@@ -481,12 +474,10 @@ def remove_attributes(obj, target_attr):
     line = lines[target_idx]
     indent_level = find_indent(line)
     # forward pass to find the ending of the block (including empty lines)
-    parsed = extract_blocks("\n".join(lines[target_idx:]), indent_level)
-    if len(parsed) > 0:
-        parsed = parsed[0]
-        num_lines = len(parsed.split("\n"))
-        for idx in range(num_lines):
-            lines[target_idx + idx] = None
+    parsed = extract_block("\n".join(lines[target_idx:]), indent_level)
+    num_lines = len(parsed.split("\n"))
+    for idx in range(num_lines):
+        lines[target_idx + idx] = None
 
     # backward pass to find comments or decorator
     for idx in range(target_idx - 1, -1, -1):
