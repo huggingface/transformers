@@ -304,7 +304,9 @@ class TokenClassificationPipeline(Pipeline):
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
                 word_ref = sentence[start_ind:end_ind]
-                if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
+                if getattr(self.tokenizer, "_tokenizer", None) and getattr(
+                    self.tokenizer._tokenizer.model, "continuing_subword_prefix", None
+                ):
                     # This is a BPE, word aware tokenizer, there is a correct way
                     # to fuse tokens
                     is_subword = len(word) != len(word_ref)

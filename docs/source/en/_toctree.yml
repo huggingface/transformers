@@ -580,6 +580,8 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/mgp-str
+        title: MGP-STR
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
