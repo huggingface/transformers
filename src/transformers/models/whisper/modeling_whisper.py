@@ -1471,8 +1471,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
             language (`bool`, *optional*):
-                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible
-                language tokens in the `model.generation_config.lang_to_id` dictionary.
+                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
+                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             kwargs:
@@ -1528,7 +1528,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 elif generation_config.language in TO_LANGUAGE_CODE.keys():
                     language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
                 else:
-                    raise ValueError(f"The `{generation_config.language}` language token is not supported.")
+                    raise ValueError(
+                        f"Unsupported language: {self.language}. Language should be one of:"
+                        f" {list(TO_LANGUAGE_CODE.keys()) if generation_config.language in TO_LANGUAGE_CODE.keys() else list(TO_LANGUAGE_CODE.values())}."
+                    )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:
                 forced_decoder_ids.append((1, None))  # automatically detect the language
