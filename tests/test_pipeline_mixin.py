@@ -443,30 +443,6 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
 
     to_skip = False
 
-    if config_class.__name__ == "RoCBertConfig" and test_casse_name in [
-        "FillMaskPipelineTests",
-        "FeatureExtractionPipelineTests",
-        "TextClassificationPipelineTests",
-        "TokenClassificationPipelineTests",
-    ]:
-        # Get error: IndexError: index out of range in self.
-        # `word_shape_file` and `word_pronunciation_file` should be shrunk during tiny model creation,
-        # otherwise `IndexError` could occur in some embedding layers. Skip for now until this model has
-        # more usage.
-        to_skip = True
-    elif config_class.__name__ in ["LayoutLMv3Config", "LiltConfig"]:
-        # Get error: ValueError: Words must be of type `List[str]`. Previously, `LayoutLMv3` is not
-        # used in pipeline tests as it could not find a checkpoint
-        # TODO: check and fix if possible
-        to_skip = True
-    # config/model class we decide to skip
-    elif config_class.__name__ in ["TapasConfig"]:
-        # Get error: AssertionError: Table must be of type pd.DataFrame. Also, the tiny model has large
-        # vocab size as the fast tokenizer could not be converted. Previous, `Tapas` is not used in
-        # pipeline tests due to the same reason.
-        # TODO: check and fix if possible
-        to_skip = True
-
     # TODO: check and fix if possible
     if not to_skip and tokenizer_name is not None:
         if (
