@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import json
+import math
 import os
 import shutil
 
@@ -50,6 +51,10 @@ NUM_SHARDS = {
 }
 
 
+def compute_intermediate_size(n):
+    return int(math.ceil(n * 8/3) + 255) // 256 * 256
+
+
 def read_json(path):
     with open(path, "r") as f:
         return json.load(f)
@@ -61,7 +66,7 @@ def write_json(text, path):
 
 
 def write_model(model_path, input_base_path, model_size):
-    assert model_size in INTERMEDIATE_SIZE_MAP
+    assert model_size in NUM_SHARDS
     os.makedirs(model_path, exist_ok=True)
 
     params = read_json(os.path.join(input_base_path, "params.json"))
@@ -199,8 +204,8 @@ def write_model(model_path, input_base_path, model_size):
         "bos_token_id": 1,
         "eos_token_id": 2,
         "hidden_act": "silu",
-        "hidden_size": params["dim"],
-        "intermediate_size": INTERMEDIATE_SIZE_MAP[model_size],
+        "hidden_size": dim,
+        "intermediate_size": compute_intermediate_size(dim),
         "initializer_range": 0.02,
         "max_sequence_length": 2048,
         "model_type": "llama",
@@ -254,18 +259,19 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "13B", "30B", "65B"],
+        choices=["7B", "13B", "30B", "65B", "tokenizer_only"],
     )
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
     args = parser.parse_args()
-    write_model(
-        model_path=os.path.join(args.output_dir, "llama-{}".format(args.model_size).lower()),
-        input_base_path=os.path.join(args.input_dir, args.model_size),
-        model_size=args.model_size,
-    )
+    if args.model_size != "tokenizer_only":
+        write_model(
+            model_path=os.path.join(args.output_dir, "llama-{}".format(args.model_size).lower()),
+            input_base_path=os.path.join(args.input_dir, args.model_size),
+            model_size=args.model_size,
+        )
     write_tokenizer(
         tokenizer_path=os.path.join(args.output_dir, "tokenizer"),
         input_tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),

@@ -59,6 +59,7 @@ class LLaMATokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
+        decode_with_prefix_space=False,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -66,10 +67,23 @@ class LLaMATokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
+        self.decode_with_prefix_space = decode_with_prefix_space
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
+        self._no_prefix_space_tokens = None
 
         """ Initialisation"""
+
+    @property
+    def no_prefix_space_tokens(self):
+        vocab = self.convert_ids_to_tokens(list(range(self.vocab_size)))
+        if self._no_prefix_space_tokens is None:
+            self._no_prefix_space_tokens = {
+                i
+                for i, tok in enumerate(vocab)
+                if not tok.startswith("▁")
+            }
+        return self._no_prefix_space_tokens
 
     @property
     def vocab_size(self):
@@ -103,6 +117,12 @@ class LLaMATokenizer(PreTrainedTokenizer):
         token = self.sp_model.IdToPiece(index)
         return token
 
+    def _maybe_add_prefix_space(self, tokens, decoded):
+        if tokens and tokens[0] not in self.no_prefix_space_tokens:
+            return " " + decoded
+        else:
+            return decoded
+
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
@@ -120,7 +140,8 @@ class LLaMATokenizer(PreTrainedTokenizer):
                 current_sub_tokens.append(token)
                 prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string.strip()
+        out_string = self._maybe_add_prefix_space(tokens=tokens, decoded=out_string)
+        return out_string
 
     def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
