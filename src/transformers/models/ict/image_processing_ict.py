@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Union
 import os
 
 import numpy as np
-
+from huggingface_hub import hf_hub_download
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
@@ -32,13 +32,10 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, logging, is_vision_available
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-if is_vision_available():
-    import PIL.Image
 
 class ICTImageProcessor(BaseImageProcessor):
     r"""
@@ -83,6 +80,8 @@ class ICTImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_discretize: bool = True,
+        clusters: Optional[np.ndarray] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -96,11 +95,15 @@ class ICTImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.do_discretize = do_discretize
+        self.clusters = np.array(clusters) if clusters is not None else self.get_image_net_clusters()
         
-        __current_dir__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
-        kmeans_centers = np.load(os.path.join(__current_dir__, './assets/kmeans_centers.npy'))
-        self.kmeans_centers = np.rint(127.5 * (kmeans_centers + 1.0))
 
+    def get_image_net_clusters(self):
+        kmeans_centers = np.load(hf_hub_download(repo_id="sheonhan/ict-imagenet-32", filename="kmeans_centers.npy"))
+        return np.rint(127.5 * (kmeans_centers + 1.0))
+        
+    
     def resize(
         self,
         image: np.ndarray,
@@ -186,7 +189,7 @@ class ICTImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
     
-    def reduce_dims(
+    def discretize(
             self,
             image: np.ndarray
     ):
@@ -204,32 +207,14 @@ class ICTImageProcessor(BaseImageProcessor):
         
         image = np.array(image).reshape((-1, 3))
         image = image.astype(np.float32)
-        image = ((image[:, None, :] - self.kmeans_centers[None, :, :])**2).sum(-1).argmin(1) 
+        # Copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
+        image = ((image[:, None, :] - self.clusters[None, :, :])**2).sum(-1).argmin(1) 
         return image
     
-    def process_mask(
-            self,
-            image: np.ndarray
-    ):
-        """
-        Convert 
-        
-        Args:
-            image (`np.ndarray`):
-                Mask image to process.
-
-        Returns:
-            `np.ndarray`: The mask image with .
-        """
-        
-        image = (image / 255.).reshape(-1)
-        image = (image > 0.5).astype(np.float32)
-        return image
 
     def preprocess(
         self,
         images: ImageInput,
-        masks: ImageInput, 
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -238,6 +223,8 @@ class ICTImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_discretize: bool = True,
+        clusters: Optional[np.ndarray] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs,
@@ -266,6 +253,11 @@ class ICTImageProcessor(BaseImageProcessor):
                 Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
+            do_discretize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+                Whether to discretize the image.
+            clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
+                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
+                `do_discretize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -286,47 +278,48 @@ class ICTImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        do_discretize = do_discretize if do_discretize is not None else self.do_discretize
+        clusters = clusters if clusters is not None else self.clusters
 
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
 
         images = make_list_of_images(images)
-        masks = make_list_of_images(masks)
 
-        if not valid_images(images) or not valid_images(masks):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        if len(images) != len(masks):
-            raise ValueError("The number of images and masks have to be the same.")
 
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        
+        if do_discretize and clusters is None:
+            raise ValueError("Clusters must be specified if do_discretize is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-        masks = [to_numpy_array(mask) for mask in masks]
- 
+
         if do_resize:
             images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
-            masks = [self.resize(image=mask, size=size_dict, resample=PILImageResampling.NEAREST) for mask in masks]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-            masks = [self.rescale(image=mask, scale=rescale_factor) for mask in masks]
 
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
         
-        if masks[0] is isinstance(masks[0], PIL.Image.Image):
-            masks = [to_numpy_array(mask.convert('L')) for mask in masks]
-        masks = [self.process_mask(mask) for mask in masks]
-       
-        masked_images = [img * (1 - mask)for img, mask in zip(images, masks)]
-        
-        data = {"pixel_values": masked_images}
+        # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
+        if do_discretize:
+            images = [to_channel_dimension_format(image, data_format) for image in images]
+            # reshape each image to (image_size * image_size)
+            images = [self.discretize(image=image) for image in images]
+        else:
+            images = [to_channel_dimension_format(image, data_format) for image in images]
+
+        data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
