@@ -166,6 +166,8 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     Output type of ['BridgeTowerForContrastiveLearning']
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Image-text contrastive loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         text_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
@@ -174,8 +176,6 @@ class BridgeTowerContrastiveOutput(ModelOutput):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         cross_embeds  (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
             The text-image cross-modal embeddings obtained by applying the projection layer to the pooler_output.
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Image-text contrastive loss.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -185,11 +185,11 @@ class BridgeTowerContrastiveOutput(ModelOutput):
             the model at the output of each layer plus the optional initial embedding outputs.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     text_embeds: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[Tuple[torch.FloatTensor]] = None
     cross_embeds: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1804,22 +1804,26 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         >>> from PIL import Image
         >>> import torch
 
-        >>> image_urls = ["https://farm4.staticflickr.com/3395/3428278415_81c3e27f15_z.jpg", "http://images.cocodataset.org/val2017/000000039769.jpg"]
+        >>> image_urls = [
+        ...     "https://farm4.staticflickr.com/3395/3428278415_81c3e27f15_z.jpg",
+        ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
+        ... ]
         >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
         >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
-        >>> inputs  = processor(images, texts, padding=True, return_tensors="pt")
+        >>> inputs = processor(images, texts, padding=True, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> inputs  = processor(images, texts[::-1], padding=True, return_tensors="pt")
+        >>> inputs = processor(images, texts[::-1], padding=True, return_tensors="pt")
         >>> outputs_swapped = model(**inputs)
 
-        >>> print('Loss', outputs.loss.item())
+        >>> print("Loss", outputs.loss.item())
         Loss 0.00191505195107311
-        >>> print('Loss with swapped images', outputs_swapped.loss.item())
+
+        >>> print("Loss with swapped images", outputs_swapped.loss.item())
         Loss with swapped images 2.1259872913360596
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1875,7 +1879,14 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             itc_loss = (text_to_image_loss + text_to_cross_loss + image_to_cross_loss) / 3.0
 
         if not return_dict:
-            output = tuple(logits)
+            output = (logits, text_embeds, image_embeds, cross_embeds)
+            if output_attentions:
+                output = output + (outputs[4],)
+                if output_hidden_states:
+                    output = output + (outputs[3],)
+            elif output_hidden_states:
+                output = output + (outputs[3],)
+
             return ((itc_loss,) + output) if itc_loss is not None else output
 
         return BridgeTowerContrastiveOutput(
