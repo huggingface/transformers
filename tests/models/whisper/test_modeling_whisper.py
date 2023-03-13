@@ -1566,9 +1566,16 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
             self.assertTrue((outputs_embeds == outputs).all())
 
-    # WhisperEncoder has no inputs_embeds and thus the `get_input_embeddings` fn is not implemented
+    # Needs to override as the encoder input embedding is a Conv1d
     def test_model_common_attributes(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Conv1d))
+            model.set_input_embeddings(torch.nn.Conv1d(10, 10, 3))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, torch.nn.Conv1d))
 
     # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):

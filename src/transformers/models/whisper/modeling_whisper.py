@@ -770,6 +770,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
 
+    def set_input_embeddings(self, value: nn.Module):
+        self.conv1 = value
+
     def forward(
         self,
         input_features,
@@ -1643,6 +1646,9 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.encoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.encoder.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(WHISPER_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
