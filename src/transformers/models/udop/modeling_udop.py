@@ -249,6 +249,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
 
+
 class UdopPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -326,7 +327,7 @@ class UdopPreTrainedModel(PreTrainedModel):
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, MaskedAutoencoderViT):
             pos_embed = get_2d_sincos_pos_embed(
-                module.pos_embed.shape[-1], int(module.patch_embed.num_patches ** 0.5), cls_token=True
+                module.pos_embed.shape[-1], int(module.patch_embed.num_patches**0.5), cls_token=True
             )
             module.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
             module.patch_embed.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -343,7 +344,6 @@ class UdopPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=factor)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (UdopAttention, UdopDualStack, UdopUniStack)):
@@ -449,10 +449,11 @@ class Attention(UdopPreTrainedModel):
 
         # self.initialize_weights(config)
 
-    def initialize_weights(self,config):
-        self.qkv.weight.data.normal_(mean=0.0, std=config.initializer_factor * ((config.d_model * config.d_kv) ** -0.5))
+    def initialize_weights(self, config):
+        self.qkv.weight.data.normal_(
+            mean=0.0, std=config.initializer_factor * ((config.d_model * config.d_kv) ** -0.5)
+        )
         self.proj.weight.data.normal_(mean=0.0, std=config.initializer_factor * 1.0)
-
 
     def forward(self, x):
         batch_size, N, num_channels = x.shape
@@ -1534,9 +1535,8 @@ class UdopLayerNorm(nn.Module):
 
 # class UdopPreTrainedModel(PreTrainedModel):
 #     """
-#     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-#     models.
-#     """
+# An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained #
+models. #"""
 #
 #     config_class = UdopConfig
 #     base_model_prefix = "transformer"
@@ -1930,7 +1930,6 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopDualStack(decoder_config, self.shared)
-
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
