@@ -558,6 +558,8 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @add_start_docstrings_to_model_forward(PIX2STRUCT_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_embeds: Optional[torch.Tensor] = None,
@@ -1253,6 +1255,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @add_start_docstrings_to_model_forward(PIX2STRUCT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
