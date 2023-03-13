@@ -36,7 +36,6 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
@@ -51,13 +50,9 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "Pix2StructConfig"
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/pix2struct-textcaps-base"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
 
 PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pix2struct-textcaps-base",
+    "ybelkada/pix2struct-textcaps-base",
     # See all Pix2StructVision models at https://huggingface.co/models?filter=pix2struct
 ]
 
@@ -563,14 +558,6 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PIX2STRUCT_VISION_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         pixel_embeds: Optional[torch.Tensor] = None,
@@ -580,6 +567,30 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Example:
+        ```python
+        >>> import requests
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, Pix2StructVisionModel
+
+        >>> image_processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> model = Pix2StructVisionModel.from_pretrained("ybelkada/pix2struct-textcaps-base")
+
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 2048, 768]
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1064,6 +1075,127 @@ class Pix2StructTextBlock(nn.Module):
         return outputs
 
 
+PIX2STRUCT_START_DOCSTRING = r"""
+
+    The Pix2StructText model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
+    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
+    text-to-text denoising generative setting.
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Pix2StructTextConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+PIX2STRUCT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
+            embeddings so you should be able to pad the inputs on both the right and the left.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructText
+            Training](./t5#training).
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            Pix2StructText uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [Pix2StructText
+            Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+                `[0, 1]`:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
+            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention layers. Can be used to speed up decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
+
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
+    PIX2STRUCT_START_DOCSTRING,
+)
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
@@ -1137,6 +1269,22 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return_dict=None,
         **kwargs,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Pix2StructTextModel
+
+        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> model = Pix2StructTextModel.from_pretrained("ybelkada/pix2struct-textcaps-base")
+
+        >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        ```
+        """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1327,125 +1475,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         }
 
 
-PIX2STRUCT_START_DOCSTRING = r"""
-
-    The Pix2StructText model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Pix2StructTextConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-PIX2STRUCT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
-            embeddings so you should be able to pad the inputs on both the right and the left.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for detail.
-
-            [What are input IDs?](../glossary#input-ids)
-
-            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructText
-            Training](./t5#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            Pix2StructText uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [Pix2StructText
-            Training](./t5#training).
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
-                `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
-            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention layers. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
-    "The bare Pix2StructText Model transformer outputting raw hidden-states without any specific head on top.",
+    "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
     PIX2STRUCT_START_DOCSTRING,
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
@@ -1466,7 +1497,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         self.encoder = Pix2StructVisionModel(encoder_config)
 
         decoder_config = copy.deepcopy(config.text_config)
-        self.decoder_input_ids = decoder_config.pad_token_id
+        self.decoder_start_token_id = decoder_config.pad_token_id
         self.decoder_eos_token_ids = decoder_config.eos_token_id
         self.decoder = Pix2StructTextModel(decoder_config)
 
@@ -1514,23 +1545,22 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, Pix2StructTextModel
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = Pix2StructTextModel.from_pretrained("t5-small")
+        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> labels = "A stop sign is on the street corner."
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for Pix2StructTextModel.
-        >>> # This is not needed for torch's Pix2StructTextForConditionalGeneration as it does this internally using labels arg.
-        >>> decoder_input_ids = model._shift_right(decoder_input_ids)
+        >>> inputs = processor(images=image, text=labels, return_tensors="pt", add_special_tokens=True)
 
         >>> # forward pass
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.loss
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1601,26 +1631,50 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     def generate(
         self,
         pixel_embeds: torch.FloatTensor,
-        input_ids: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base")
+
+        >>> conditional_text = "A stop sign"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=conditional_text, return_tensors="pt", add_special_tokens=True)
+
+        >>> # forward pass
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
+        ['A stop sign the street with a sign that says yes']
+        ```"""
         batch_size, _, _ = pixel_embeds.shape
 
         vision_outputs = self.encoder(pixel_embeds=pixel_embeds, attention_mask=attention_mask)
 
         image_embeds = vision_outputs[0]
 
-        if isinstance(input_ids, torch.Tensor):
+        if isinstance(decoder_input_ids, torch.Tensor):
             # check if the first element of `input_ids` is equal to `decoder_input_ids`:
-            if (input_ids[:, 0] != self.decoder_input_ids).all().item():
+            if (decoder_input_ids[:, 0] != self.decoder_start_token_id).all().item():
                 # add `decoder_input_ids` as first token to `input_ids`
-                input_ids = torch.cat(
+                decoder_input_ids = torch.cat(
                     [
-                        torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
-                        * self.decoder_input_ids,
-                        input_ids,
+                        torch.ones((decoder_input_ids.shape[0], 1), dtype=torch.long, device=decoder_input_ids.device)
+                        * self.decoder_start_token_id,
+                        decoder_input_ids,
                     ],
                     dim=-1,
                 )
@@ -1637,8 +1691,10 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                         ],
                         dim=-1,
                     )
-        elif input_ids is None:
-            input_ids = torch.LongTensor([[self.decoder_input_ids]]).repeat(batch_size, 1).to(image_embeds.device)
+        elif decoder_input_ids is None:
+            decoder_input_ids = (
+                torch.LongTensor([[self.decoder_start_token_id]]).repeat(batch_size, 1).to(image_embeds.device)
+            )
 
             if self.is_vqa:
                 # warn users that they should pass `input_ids` if they want to use `generate` for VQA
@@ -1648,10 +1704,10 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                 )
 
         if decoder_attention_mask is None:
-            decoder_attention_mask = torch.ones_like(input_ids).to(image_embeds.device)
+            decoder_attention_mask = torch.ones_like(decoder_input_ids).to(image_embeds.device)
 
         outputs = self.decoder.generate(
-            input_ids=input_ids,
+            input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=attention_mask,

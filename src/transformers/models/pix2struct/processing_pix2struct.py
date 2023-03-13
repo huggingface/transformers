@@ -127,6 +127,8 @@ class Pix2StructProcessor(ProcessorMixin):
 
             if "attention_mask" in text_encoding:
                 text_encoding["decoder_attention_mask"] = text_encoding.pop("attention_mask")
+            if "input_ids" in text_encoding:
+                text_encoding["decoder_input_ids"] = text_encoding.pop("input_ids")
         else:
             text_encoding = None
 
