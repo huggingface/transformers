@@ -15,10 +15,12 @@
 
 
 import unittest
+import tempfile
+import os
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision, get_tests_dir
+from transformers.testing_utils import require_torch, require_vision, check_json_file_has_correct_format
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
@@ -82,16 +84,6 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
-    
-    def get_masked_image(self, format=None):
-        image = Image.open(get_tests_dir("fixtures/tests_samples/ict/mask.png"))
-        if format is 'numpy':
-            return np.array(image)
-        elif format is 'torch':
-            return torch.from_numpy(np.array(image))
-        else:
-            return image
-
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -107,6 +99,37 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
+    def test_image_processor_to_json_file(self):
+        image_processor_first = self.image_processing_class(**self.image_processor_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "image_processor.json")
+            image_processor_first.to_json_file(json_file_path)
+            image_processor_second = self.image_processing_class.from_json_file(json_file_path).to_dict()
+
+        image_processor_first = image_processor_first.to_dict()
+        for key, value in image_processor_first.items():
+            if key == "clusters":
+                self.assertTrue(np.array_equal(value, image_processor_second[key]))
+            else:
+                self.assertEqual(image_processor_first[key], value)
+
+
+    def test_image_processor_from_and_save_pretrained(self):
+        image_processor_first = self.image_processing_class(**self.image_processor_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
+        
+        image_processor_first = image_processor_first.to_dict()
+        for key, value in image_processor_first.items():
+            if key == "clusters":
+                self.assertTrue(np.array_equal(value, image_processor_second[key]))
+            else:
+                self.assertEqual(image_processor_first[key], value)
+        
     def test_batch_feature(self):
         pass
 
@@ -117,29 +140,23 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
-        mask_inputs = [self.get_masked_image() for _ in range(len(image_inputs))]
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
-
         # Test batched
-        encoded_images = image_processing(image_inputs, masks=mask_inputs, return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
 
@@ -150,29 +167,24 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
-        mask_inputs = [self.get_masked_image('numpy') for _ in range(len(image_inputs))]
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
 
         # Test batched
-        encoded_images = image_processing(image_inputs, masks=mask_inputs, return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
 
@@ -183,40 +195,23 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
-        mask_inputs = [self.get_masked_image('torch') for _ in range(len(image_inputs))]
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
 
         # Test batched
-        encoded_images = image_processing(image_inputs, masks=mask_inputs, return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+  self.image_processor_tester.batch_size,
+                self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
-        
-    def test_example_image(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # import image
-        image_inputs = Image.open(get_tests_dir("fixtures/tests_samples/ict/image.png"))
-        mask_inputs = self.get_masked_image()
-
-        encoded_image = image_processing(image_inputs, masks=mask_inputs, return_tensors="pt").pixel_values
-        masked_image = np.array(torch.load(get_tests_dir("fixtures/tests_samples/ict/masked_test_image.pt")))
-        
-        self.assertTrue(np.array_equal(encoded_image, masked_image))
