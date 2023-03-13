@@ -170,7 +170,7 @@ class Pix2StructVisionAttention(nn.Module):
 
         def to_projection_shape(states):
             """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            return states.contiguous().view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # get query states
         # (batch_size, n_heads, seq_length, dim_per_head)
@@ -801,7 +801,7 @@ class Pix2StructTextAttention(nn.Module):
 
         def to_projection_shape(states):
             """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            return states.contiguous().view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
             """projects hidden states correctly to key/query states"""
@@ -1436,7 +1436,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean", label_smoothing=0.1)
             masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
-            loss = loss_fct(logits.view(-1, logits.size(-1)), masked_labels.view(-1))
+            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), masked_labels.contiguous().view(-1))
 
         if not return_dict:
             return tuple(
