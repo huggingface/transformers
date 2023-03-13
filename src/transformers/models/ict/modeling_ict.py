@@ -15,19 +15,16 @@
 """ PyTorch ICT model."""
 
 
-import collections.abc
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -45,7 +42,7 @@ _CONFIG_FOR_DOC = "ICTConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sheonhan/ict-imagenet-32"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768] # TODO
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]  # TODO
 
 
 ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -71,7 +68,7 @@ class ICTSelfAttention(nn.Module):
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        
+
         self.output_projection = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -83,7 +80,8 @@ class ICTSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, output_attentions: bool = False) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        self, hidden_states, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -110,7 +108,7 @@ class ICTSelfAttention(nn.Module):
 
         outputs = self.output_projection(context_layer)
         outputs = self.residual_dropout(outputs)
-        
+
         return (outputs, attention_probs) if output_attentions else (outputs,)
 
 
@@ -135,12 +133,12 @@ class ICTBlock(nn.Module):
         self_attention_outputs = self.attention(self.ln_1(hidden_states, output_attentions=output_attentions))
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        
+
         hidden_states = hidden_states + attention_output
         hidden_states = hidden_states + self.mlp(self.ln_2(hidden_states))
-        
+
         outputs = (hidden_states,) + outputs
-        
+
         return outputs
 
 
@@ -225,14 +223,14 @@ class ICTModel(ICTPreTrainedModel):
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embedding = nn.Parameter(torch.zeros(1, config.block_size, config.hidden_size))
         self.drop = nn.Dropout(config.residual_dropout_prob)
-        
+
         self.gradient_checkpointing = False
         self.blocks = nn.ModuleList([ICTBlock(config) for _ in range(config.num_hidden_layers)])
-        
+
         # Decoder head
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -264,11 +262,11 @@ class ICTModel(ICTPreTrainedModel):
         _, t = pixel_values.size()
 
         inputs_embeds = self.token_embedding(pixel_values)
-        
+
         if masks:
             masks = masks.unsqueeze(2)
             inputs_embeds = inputs_embeds * (1 - masks)
-        
+
         position_embeds = self.position_embedding[:, :t, :]
         hidden_states = inputs_embeds + position_embeds
         hidden_states = self.drop(hidden_states)
@@ -421,4 +419,3 @@ class ICTForMaskedImageModeling(ICTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-

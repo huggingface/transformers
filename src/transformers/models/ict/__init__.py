@@ -49,7 +49,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig, ICTOnnxConfig
-    
+
     try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_ict import ICTImageProcessor
-        
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

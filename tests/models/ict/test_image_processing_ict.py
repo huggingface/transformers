@@ -14,13 +14,13 @@
 # limitations under the License.
 
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision, check_json_file_has_correct_format
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
@@ -84,6 +84,7 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
+
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -114,7 +115,6 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
             else:
                 self.assertEqual(image_processor_first[key], value)
 
-
     def test_image_processor_from_and_save_pretrained(self):
         image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
@@ -122,14 +122,14 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
             saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
             check_json_file_has_correct_format(saved_file)
             image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
-        
+
         image_processor_first = image_processor_first.to_dict()
         for key, value in image_processor_first.items():
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, image_processor_second[key]))
             else:
                 self.assertEqual(image_processor_first[key], value)
-        
+
     def test_batch_feature(self):
         pass
 
@@ -211,7 +211,7 @@ class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         self.assertEqual(
             encoded_images.shape,
             (
-  self.image_processor_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )

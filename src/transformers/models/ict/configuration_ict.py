@@ -31,7 +31,6 @@ ICT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class ICTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ICTModel`]. It is used to instantiate an ICT

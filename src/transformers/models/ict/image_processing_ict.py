@@ -15,7 +15,6 @@
 """Image processor class for ICT."""
 
 from typing import Dict, List, Optional, Union
-import os
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -36,6 +35,7 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
+
 
 class ICTImageProcessor(BaseImageProcessor):
     r"""
@@ -97,13 +97,11 @@ class ICTImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_discretize = do_discretize
         self.clusters = np.array(clusters) if clusters is not None else self.get_image_net_clusters()
-        
 
     def get_image_net_clusters(self):
         kmeans_centers = np.load(hf_hub_download(repo_id="sheonhan/ict-imagenet-32", filename="kmeans_centers.npy"))
         return np.rint(127.5 * (kmeans_centers + 1.0))
-        
-    
+
     def resize(
         self,
         image: np.ndarray,
@@ -188,15 +186,12 @@ class ICTImageProcessor(BaseImageProcessor):
             `np.ndarray`: The normalized image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
-    
-    def discretize(
-            self,
-            image: np.ndarray
-    ):
+
+    def discretize(self, image: np.ndarray):
         """
-        Reduce the dimension by using an extra visual vocabulary with spatial size 512 × 3, which was generated using 
+        Reduce the dimension by using an extra visual vocabulary with spatial size 512 × 3, which was generated using
         k-means clustered centers of the ImageNet RGB pixel spaces.
-        
+
         Args:
             image (`np.ndarray`):
                 Image to reduce dimensions.
@@ -204,13 +199,12 @@ class ICTImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The image with reduced dimension.
         """
-        
+
         image = np.array(image).reshape((-1, 3))
         image = image.astype(np.float32)
         # Copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
-        image = ((image[:, None, :] - self.clusters[None, :, :])**2).sum(-1).argmin(1) 
+        image = ((image[:, None, :] - self.clusters[None, :, :]) ** 2).sum(-1).argmin(1)
         return image
-    
 
     def preprocess(
         self,
@@ -297,7 +291,7 @@ class ICTImageProcessor(BaseImageProcessor):
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
-        
+
         if do_discretize and clusters is None:
             raise ValueError("Clusters must be specified if do_discretize is True.")
 
@@ -312,7 +306,7 @@ class ICTImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
-        
+
         # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
         if do_discretize:
             images = [to_channel_dimension_format(image, data_format) for image in images]

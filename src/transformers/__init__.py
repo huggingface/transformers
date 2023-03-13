@@ -4211,6 +4211,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4403,7 +4404,6 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
-    from .models.ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -5498,6 +5498,13 @@ if TYPE_CHECKING:
             IBertModel,
             IBertPreTrainedModel,
         )
+        from .models.ict import (
+            ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ICTForImageClassification,
+            ICTForMaskedImageModeling,
+            ICTModel,
+            ICTPreTrainedModel,
+        )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalImageModeling,
@@ -6231,13 +6238,6 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
-        )
-        from .models.ict import (
-            ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ICTForImageClassification,
-            ICTForMaskedImageModeling,
-            ICTModel,
-            ICTPreTrainedModel,
         )
         from .models.vit_hybrid import (
             VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
