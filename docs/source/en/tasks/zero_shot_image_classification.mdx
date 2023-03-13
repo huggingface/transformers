@@ -134,7 +134,7 @@ Pass the inputs through the model, and post-process the results:
 >>> result = [
 ...     {"score": score, "label": candidate_label}
 ...     for score, candidate_label in sorted(zip(probs, candidate_labels), key=lambda x: -x[0])
->>> ]
+... ]
 
 >>> result
 [{'score': 0.998572, 'label': 'car'},
