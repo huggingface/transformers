@@ -950,11 +950,9 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
 
-    default_optim = (
-        "adamw_torch_fused"
-        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0")
-        else "adamw_hf"
-    )
+    default_optim = "adamw_hf"
+    if is_torch_available() and version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
+        default_optim = "adamw_torch_fused"
     optim: Union[OptimizerNames, str] = field(
         default=default_optim,
         metadata={"help": "The optimizer to use."},
@@ -1223,9 +1221,11 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
-        if self.optim == OptimizerNames.ADAMW_TORCH_FUSED and version.parse(
-            version.parse(torch.__version__).base_version
-        ) < version.parse("2.0.0"):
+        if (
+            self.optim == OptimizerNames.ADAMW_TORCH_FUSED
+            and is_torch_available()
+            and version.parse(version.parse(torch.__version__).base_version) < version.parse("2.0.0")
+        ):
             raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
 
         if (
