@@ -310,7 +310,7 @@ class AlignConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AlignTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`AlignVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 640):
             Dimentionality of text and vision projection layers.
         temperature_init_value (`float`, *optional*, defaults to 1.0):
             The inital value of the *temperature* paramter. Default is used as per the original ALIGN implementation.
