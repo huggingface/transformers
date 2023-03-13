@@ -44,7 +44,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard 
+            method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard
             deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
