@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import T5Tokenizer, UdopForConditionalGeneration
+    from transformers import T5Tokenizer, UdopForConditionalGeneration, UdopModel
     from transformers.models.udop.modeling_udop import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -147,6 +147,38 @@ class UdopModelTester:
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
         )
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        seg_data,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = UdopModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            seg_data=seg_data,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        result = model(input_ids=input_ids, seg_data=seg_data, decoder_input_ids=decoder_input_ids)
+        decoder_output = result.last_hidden_state
+        decoder_past = result.past_key_values
+        encoder_output = result.encoder_last_hidden_state
+
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        # There should be `num_layers` key value embeddings stored in decoder_past
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -296,7 +328,14 @@ class UdopModelTester:
 
 @require_torch
 class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            UdopModel,
+            UdopForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": UdopForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
@@ -400,12 +439,15 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 "seg_data",
                 "visual_seg_data",
                 "masked_lm_labels",
-                "labels",
                 "head_mask",
                 "char_ids",
                 "char_seg_data",
                 "inputs_embeds",
             ]
+            if model_class in self.all_generative_model_classes:
+                expected_arg_names.append(
+                    "labels",
+                )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow

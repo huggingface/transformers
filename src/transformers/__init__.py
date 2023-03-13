@@ -2845,6 +2845,7 @@ else:
         [
             "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "UdopForConditionalGeneration",
+            "UdopModel",
             "UdopPreTrainedModel",
         ]
     )
@@ -6570,6 +6571,7 @@ if TYPE_CHECKING:
         from .models.udop import (
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
             UdopForConditionalGeneration,
+            UdopModel,
             UdopPreTrainedModel,
         )
         from .models.umt5 import (
