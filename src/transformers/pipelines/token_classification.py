@@ -327,7 +327,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             ]
             all_entities.extend(entities)
         num_chunks = len(all_outputs)
-        if num_chunks > 1:
+        if num_chunks > 0:
             all_entities = self.aggregate_entities(all_entities)
         return all_entities
 
