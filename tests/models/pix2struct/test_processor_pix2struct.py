@@ -125,7 +125,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_embeds", "attention_mask", "input_ids", "decoder_attention_mask"]
+            list(inputs.keys()), ["pixel_embeds", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
         )
 
         # test if it raises when no input is passed
@@ -183,5 +183,10 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         # For now the processor supports only ["pixel_embeds", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_embeds", "attention_mask", "input_ids", "decoder_attention_mask"]
+            list(inputs.keys()), ["pixel_embeds", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
         )
+
+        inputs = processor(text=input_str)
+
+        # For now the processor supports only ["pixel_embeds", "input_ids", "attention_mask", "decoder_attention_mask"]
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
