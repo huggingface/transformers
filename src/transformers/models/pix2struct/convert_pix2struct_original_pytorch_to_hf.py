@@ -16,10 +16,8 @@ import argparse
 import os
 import re
 
-import requests
 import torch
 from flax.traverse_util import flatten_dict
-from PIL import Image
 from t5x import checkpoints
 
 from transformers import (
@@ -128,16 +126,8 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
     image_processor = Pix2StructImageProcessor()
     processor = Pix2StructProcessor(image_processor=image_processor, tokenizer=tok)
 
-    img_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-
-    model.eval()
-
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-
-    inputs = processor(raw_image, return_tensors="pt", max_patches=2048)
-    output = model.generate(**inputs, do_sample=False)
-
-    print(processor.decode(output[0], skip_special_tokens=True))
+    if use_large:
+        processor.image_processor.max_patches = 4096
 
     # mkdir if needed
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
