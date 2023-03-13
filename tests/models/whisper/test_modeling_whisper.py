@@ -357,9 +357,26 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return config, input_ids, None, max_length
 
-    # not implemented currently
     def test_inputs_embeds(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            encoder_input_ids = inputs["input_features"]
+            decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+            inputs.pop("decoder_input_ids", None)
+            inputs.pop("decoder_attention_mask", None)
+
+            wte = model.get_input_embeddings()
+            inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
 
     # training is not supported yet
     def test_training(self):
