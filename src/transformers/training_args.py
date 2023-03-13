@@ -562,15 +562,19 @@ class TrainingArguments:
             can customize the defaults with the argument `torch_compile_backend` and `torch_compile_mode` but we don't
             guarantee any of them will work as the support is progressively rolled in in PyTorch.
 
-            This whole API is experimental and subject to changes in future releases.
+            This flag and the whole compile API is experimental and subject to change in future releases.
         torch_compile_backend (`str`, *optional*):
             The backend to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
-            Refer to the PyTorch doc for possible values and not that they may change across PyTorch versions.
+            Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
+            
+            This flag is experimental and subject to change in future releases.
         torch_compile_mode (`str`, *optional*):
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
+            
+            This flag is experimental and subject to change in future releases.
     """
 
     framework = "pt"
