@@ -571,6 +571,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         Returns:
 
         Example:
+
         ```python
         >>> import requests
         >>> from PIL import Image

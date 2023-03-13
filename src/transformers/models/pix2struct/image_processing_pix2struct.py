@@ -19,8 +19,8 @@ from typing import Dict, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import convert_to_rgb, normalize
-from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
+from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format
+from ...image_utils import ChannelDimension, ImageInput, get_image_size, is_batched, to_numpy_array, valid_images
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -113,16 +113,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         # convert to torch if
         if not isinstance(image, torch.Tensor):
-            # check if channels first:
-            if image.shape[0] != 3:
-                image = torch.from_numpy(image).permute(2, 0, 1)
-            else:
-                image = torch.from_numpy(image)
+            image = to_channel_dimension_format(image, ChannelDimension.FIRST)
+            image = torch.from_numpy(image)
 
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        _, image_height, image_width = image.shape
-        image_height = float(image_height)
-        image_width = float(image_width)
+        image_height, image_width = get_image_size(image)
 
         # maximize scale s.t.
         scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
