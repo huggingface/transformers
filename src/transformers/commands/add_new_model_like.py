@@ -133,17 +133,60 @@ def find_indent(line: str) -> int:
     return len(search.groups()[0])
 
 
-def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
-    """Parse the content of a module in the list of objects it defines.
+def parse_module_content(content: str) -> List[str]:
+    """
+    Parse the content of a module in the list of objects it defines.
 
-    This method will immediately stop the search when a line with indent level less than `indent_level`.
+    Args:
+        content (`str`): The content to parse
+
+    Returns:
+        `List[str]`: The list of objects defined in the module.
+    """
+    objects = []
+    current_object = []
+    lines = content.split("\n")
+    # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
+    end_markers = [")", "]", "}", '"""']
+
+    for line in lines:
+        # End of an object
+        is_valid_object = len(current_object) > 0
+        if is_valid_object and len(current_object) == 1:
+            is_valid_object = not current_object[0].startswith("# Copied from")
+        if not is_empty_line(line) and find_indent(line) == 0 and is_valid_object:
+            # Closing parts should be included in current object
+            if line in end_markers:
+                current_object.append(line)
+                objects.append("\n".join(current_object))
+                current_object = []
+            else:
+                objects.append("\n".join(current_object))
+                current_object = [line]
+        else:
+            current_object.append(line)
+
+    # Add last object
+    if len(current_object) > 0:
+        objects.append("\n".join(current_object))
+
+    return objects
+
+
+def extract_blocks(content: str, indent_level: int = 0) -> List[str]:
+    """Parse the blocks in `content` into the list of objects it defines.
+
+    The first line in `content` should be indented at `indent_level` level, otherwise an error will be thrown.
+
+    This method will immediately stop the search when a (non-empty) line with indent level less than `indent_level` is
+    encountered.
 
     Args:
         content (`str`): The content to parse
         indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
 
     Returns:
-        `List[str]`: The list of objects defined in the module.
+        `List[str]`: The list of objects defined in `content` with the indent level `indent_level`.
     """
     objects = []
     current_object = []
@@ -163,8 +206,6 @@ def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
 
         # End of an object
         is_valid_object = len(current_object) > 0
-        if is_valid_object and len(current_object) == 1:
-            is_valid_object = not current_object[0].startswith("# Copied from")
         if (
             not is_empty_line(line)
             and not line.endswith(":")
@@ -440,7 +481,7 @@ def remove_attributes(obj, target_attr):
     line = lines[target_idx]
     indent_level = find_indent(line)
     # forward pass to find the ending of the block (including empty lines)
-    parsed = parse_module_content("\n".join(lines[target_idx:]), indent_level)
+    parsed = extract_blocks("\n".join(lines[target_idx:]), indent_level)
     if len(parsed) > 0:
         parsed = parsed[0]
         num_lines = len(parsed.split("\n"))
