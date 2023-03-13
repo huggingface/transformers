@@ -196,8 +196,8 @@ def write_model(model_path, input_base_path, model_size):
     write_json(index_dict, os.path.join(model_path, "pytorch_model.bin.index.json"))
     config_out = {
         "architectures": ["LLaMAForCausalLM"],
-        "bos_token_id": 0,
-        "eos_token_id": 1,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
         "hidden_act": "silu",
         "hidden_size": params["dim"],
         "intermediate_size": INTERMEDIATE_SIZE_MAP[model_size],
@@ -206,7 +206,7 @@ def write_model(model_path, input_base_path, model_size):
         "model_type": "llama",
         "num_attention_heads": params["n_heads"],
         "num_hidden_layers": params["n_layers"],
-        "pad_token_id": -1,
+        "pad_token_id": 0,
         "rms_norm_eps": params["norm_eps"],
         "torch_dtype": "float16",
         "transformers_version": "4.27.0.dev0",
@@ -219,8 +219,8 @@ def write_model(model_path, input_base_path, model_size):
     )
     generation_config = {
         "_from_model_config": True,
-        "bos_token_id": 0,
-        "eos_token_id": 1,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
         "pad_token_id": 0,
         "transformers_version": "4.27.0.dev0",
     }

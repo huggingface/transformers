@@ -53,9 +53,9 @@ class LLaMATokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        unk_token="",
-        bos_token=" ⁇ ",
-        eos_token="",
+        unk_token="<unk>",
+        bos_token="<s>",
+        eos_token="</s>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
