@@ -567,13 +567,13 @@ class TrainingArguments:
             The backend to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
-            
+
             This flag is experimental and subject to change in future releases.
         torch_compile_mode (`str`, *optional*):
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
-            
+
             This flag is experimental and subject to change in future releases.
     """
 
