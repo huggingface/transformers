@@ -471,7 +471,7 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
-        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.0 `"adamw_hf"`):
             The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
             adafactor.
         optim_args (`str`, *optional*):
@@ -949,8 +949,14 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
+
+    default_optim = (
+        "adamw_torch_fused"
+        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0")
+        else "adamw_hf"
+    )
     optim: Union[OptimizerNames, str] = field(
-        default="adamw_hf",
+        default=default_optim,
         metadata={"help": "The optimizer to use."},
     )
     optim_args: Optional[str] = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
