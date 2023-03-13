@@ -14,12 +14,12 @@
 # limitations under the License.
 """Image processor class for UDOP."""
 
-from typing import Dict, Optional, Union, List
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import rescale, normalize, resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -204,7 +204,7 @@ class UdopImageProcessor(BaseImageProcessor):
             `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
-    
+
     def normalize(
         self,
         image: np.ndarray,
@@ -215,7 +215,7 @@ class UdopImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
-        
+
         Args:
             image (`np.ndarray`):
                 Image to normalize.
@@ -232,7 +232,7 @@ class UdopImageProcessor(BaseImageProcessor):
             `np.ndarray`: The normalized image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
-    
+
     def preprocess(
         self,
         images: ImageInput,
@@ -300,6 +300,7 @@ class UdopImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr

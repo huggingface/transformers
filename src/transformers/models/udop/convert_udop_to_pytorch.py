@@ -3,7 +3,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import T5Tokenizer, UdopConfig, UdopForConditionalGeneration
+from transformers import T5Tokenizer, UdopConfig, UdopForConditionalGeneration, UdopImageProcessor
 
 
 def transform(image, image_size=224):
@@ -19,7 +19,7 @@ def transform(image, image_size=224):
     return image
 
 
-def prepare_dummy_inputs(tokenizer):
+def prepare_dummy_inputs(tokenizer, image_processor):
     prompt = "Question answering. What is the name of the company?"
     prompt = "Question answering. In which year is the report made?"
     prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
@@ -48,9 +48,12 @@ def prepare_dummy_inputs(tokenizer):
     input_ids = prompt_ids + input_ids
     seg_data = [[0, 0, 0, 0]] * len(prompt_ids) + bbox_list
 
-    image = transform(image).unsqueeze(0)
+    pixel_values = image_processor(image, return_tensors="pt").pixel_values
+    original_image = transform(image).unsqueeze(0)
+    # verify pixel values
+    assert torch.allclose(original_image, pixel_values)
 
-    return torch.tensor(input_ids).unsqueeze(0), torch.tensor(seg_data).unsqueeze(0).float(), image
+    return torch.tensor(input_ids).unsqueeze(0), torch.tensor(seg_data).unsqueeze(0).float(), pixel_values
 
 
 def convert():
@@ -81,7 +84,8 @@ def convert():
 
     # prepare dummy inputs
     tokenizer = T5Tokenizer.from_pretrained("t5-base")
-    input_ids, seg_data, image = prepare_dummy_inputs(tokenizer)
+    image_processor = UdopImageProcessor()
+    input_ids, seg_data, image = prepare_dummy_inputs(tokenizer, image_processor)
 
     # single forward pass
     print("Testing single forward pass..")
