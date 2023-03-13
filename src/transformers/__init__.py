@@ -5500,7 +5500,6 @@ if TYPE_CHECKING:
         )
         from .models.ict import (
             ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ICTForImageClassification,
             ICTForMaskedImageModeling,
             ICTModel,
             ICTPreTrainedModel,

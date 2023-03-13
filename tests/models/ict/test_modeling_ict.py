@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ICTForImageClassification, ICTForMaskedImageModeling, ICTModel
+    from transformers import ICTForMaskedImageModeling, ICTModel
     from transformers.models.ict.modeling_ict import ICT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -147,24 +147,6 @@ class ICTModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = ICTForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = ICTForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -186,14 +168,13 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ICTModel,
-            ICTForImageClassification,
             ICTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": ICTModel, "image-classification": ICTForImageClassification}
+        {"feature-extraction": ICTModel}
         if is_torch_available()
         else {}
     )
@@ -243,10 +224,6 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in ICT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -265,54 +242,7 @@ def prepare_img():
 class ICTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/ict-base-patch16-224") if is_vision_available() else None
-
-    @slow
-    def test_inference_image_classification_head(self):
-        model = ICTForImageClassification.from_pretrained("google/ict-base-patch16-224").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # ICT models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = ICTModel.from_pretrained("facebook/dino-icts8").to(torch_device)
-
-        feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/dino-icts8", size=480)
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        return ViTFeatureExtractor.from_pretrained("sheonhan/ict-imagenet-32") if is_vision_available() else None
 
     @slow
     @require_accelerate

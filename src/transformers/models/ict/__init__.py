@@ -41,7 +41,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_ict"] = [
         "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ICTForImageClassification",
         "ICTForMaskedImageModeling",
         "ICTModel",
         "ICTPreTrainedModel",
@@ -66,7 +65,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_ict import (
             ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ICTForImageClassification,
             ICTForMaskedImageModeling,
             ICTModel,
             ICTPreTrainedModel,
