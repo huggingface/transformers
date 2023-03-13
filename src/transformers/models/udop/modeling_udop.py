@@ -30,7 +30,6 @@ from torch.nn import CrossEntropyLoss
 from transformers import UdopConfig
 from transformers.modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -91,6 +90,36 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     seg_data: torch.FloatTensor = None
 
 
+def get_visual_bbox(image_size=224):
+    image_feature_pool_shape = [image_size // 16, image_size // 16]
+    visual_bbox_x = (
+        torch.arange(
+            0,
+            1.0 * (image_feature_pool_shape[1] + 1),
+            1.0,
+        )
+        / image_feature_pool_shape[1]
+    )
+    visual_bbox_y = (
+        torch.arange(
+            0,
+            1.0 * (image_feature_pool_shape[0] + 1),
+            1.0,
+        )
+        / image_feature_pool_shape[0]
+    )
+    visual_bbox_input = torch.stack(
+        [
+            visual_bbox_x[:-1].repeat(image_feature_pool_shape[0], 1),
+            visual_bbox_y[:-1].repeat(image_feature_pool_shape[1], 1).transpose(0, 1),
+            visual_bbox_x[1:].repeat(image_feature_pool_shape[0], 1),
+            visual_bbox_y[1:].repeat(image_feature_pool_shape[1], 1).transpose(0, 1),
+        ],
+        dim=-1,
+    ).view(-1, 4)
+    return visual_bbox_input
+
+
 def pad_sequence(seq, target_len, pad_value=0):
     if isinstance(seq, torch.Tensor):
         n = seq.shape[0]
@@ -113,7 +142,12 @@ def collate_vlembed(
     attention_mask=None,
     num_patches=14,
     max_len=0,
+    image_size=224,
 ):
+    print("Shape of inputs_patches:", inputs_patches.shape)
+    print("Shape of inputs_embeds:", inputs_embeds.shape)
+    print("Shape of seg_data:", seg_data.shape)
+
     L = num_patches
     ocr_points_x = torch.clip(torch.floor((seg_data[:, :, 0] + seg_data[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
     ocr_points_y = torch.clip(torch.floor((seg_data[:, :, 1] + seg_data[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
@@ -137,6 +171,11 @@ def collate_vlembed(
     patch_inds[rows, cols] = False
 
     input_vision_patches = [inputs_patches[i][patch_inds[i]] for i in range(len(patch_inds))]
+
+    if visual_segdata is None:
+        visual_segdata = get_visual_bbox(image_size=image_size).unsqueeze(0).repeat(inputs_patches.size(0), 1, 1)
+        visual_segdata = visual_segdata.to(inputs_patches.device)
+
     visual_segdata = [visual_segdata[i][patch_inds[i]] for i in range(len(patch_inds))]
     if attention_mask is not None:
         visual_attention_mask = [torch.tensor([1] * len(item)).to(attention_mask) for item in visual_segdata]
@@ -1096,13 +1135,16 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
 
 class UdopStack(UdopPreTrainedModel):
     """
-    Almost exact copy of transformers T5Stack with the modification of passing `position_bias` in the forward method
+    This class is based on `T5Stack` with the following modifications:
+    - support image embeddings
+    - passing `position_bias` in the forward method
     """
 
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config, embed_tokens=None, embed_patches=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
+        self.embed_patches = embed_patches
         self.is_decoder = config.is_decoder
         self._max_length = config.max_length
         self.num_layers = config.num_layers
@@ -1148,6 +1190,7 @@ class UdopStack(UdopPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
+        image=None,
         head_mask=None,
         past_key_values=None,
         ids_keep=None,
@@ -1161,6 +1204,7 @@ class UdopStack(UdopPreTrainedModel):
         seg_data=None,  # modified line,
         visual_seg_data=None,  # modified line,
         num_patches=None,  # modified line,
+        special_vis_token=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1200,17 +1244,39 @@ class UdopStack(UdopPreTrainedModel):
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
+        if image is not None:
+            inputs_patches = self.embed_patches(image)
+            # image_embeds = None
+            # if encoder_outputs is None:
+            #     print("hello world")
+            #     if image is not None:
+            #         x = self.udop.patch_embed(image)
+            #         if ids_keep is not None:
+            #             x = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.size(-1)))
+            #             pad_tokens = self.pad_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
+            #             x_padded = torch.cat([x, pad_tokens], dim=1)  # no cls token
+            #             x_padded = torch.gather(
+            #                 x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2])
+            #             )
+            #             image_embeds = x_padded
+            #         else:
+            #             image_embeds = x
+
         if inputs_patches is not None:
             # ===========================
             # combine OCR text and visual embed
+            if num_patches is None:
+                num_patches = self.config.image_size // self.config.patch_size
             inputs_embeds, seg_data, attention_mask = collate_vlembed(
                 inputs_patches,
                 inputs_embeds,
                 seg_data,
                 visual_seg_data,
+                special_vis_token,
                 attention_mask,
                 num_patches,
                 0,
+                self.config.image_size,
             )
             input_shape = inputs_embeds.size()[:-1]
 
@@ -1325,12 +1391,14 @@ class UdopStack(UdopPreTrainedModel):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithVisionEmbeds(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
+            attention_mask=attention_mask,
+            seg_data=seg_data,
         )
 
 
@@ -1340,13 +1408,15 @@ class UdopModel(UdopPreTrainedModel):
     def __init__(self, config):
         super(UdopModel, self).__init__(config)
 
+        # text and image embeddings
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.patch_embed = UdopPatchEmbeddings(config)
 
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared)
+        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
@@ -1368,7 +1438,6 @@ class UdopModel(UdopPreTrainedModel):
         #     config.max_2d_position_embeddings,
         # )
 
-        self.patch_embed = UdopPatchEmbeddings(config)
         # self.embed_dim = mae_model_tmp.embed_dim
         # self.pos_embed = mae_model_tmp.pos_embed
         # self.special_vis_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -1381,44 +1450,11 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    # def set_output_embeddings(self, new_embeddings):
-    #     self.shared = new_embeddings
-
-    # def get_output_embeddings(self):
-    #     return self.shared
-
     def get_encoder(self):
         return self.encoder
 
     def get_decoder(self):
         return self.decoder
-
-    # def patchify(self, imgs):
-    #     """
-    # imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3) #"""
-    #     p = self.patch_embed.patch_size[0]
-    #     assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
-
-    #     h = w = imgs.shape[2] // p
-    #     x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-    #     x = torch.einsum("nchpwq->nhwpqc", x)
-    #     x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
-    #     return x
-
-    # def mae_loss(self, imgs, pred, mask):
-    #     """
-    # imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove, #"""
-    #     target = self.patchify(imgs)
-    #     if self.norm_pix_loss:
-    #         mean = target.mean(dim=-1, keepdim=True)
-    #         var = target.var(dim=-1, keepdim=True)
-    #         target = (target - mean) / (var + 1.0e-6) ** 0.5
-
-    #     loss = (pred - target) ** 2
-    #     loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-
-    #     loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
-    #     return loss
 
     def forward(
         self,
@@ -1454,30 +1490,12 @@ class UdopModel(UdopPreTrainedModel):
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            inputs_patches = None
-            if image is not None:
-                assert visual_seg_data is not None
-                x = self.patch_embed(image)
-                image.size(2) // 16
-                if ids_keep is not None:
-                    x = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.size(-1)))
-                    pad_tokens = self.pad_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
-                    x_padded = torch.cat([x, pad_tokens], dim=1)  # no cls token
-                    x_padded = torch.gather(
-                        x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2])
-                    )
-                    inputs_patches = x_padded
-                else:
-                    inputs_patches = x
-
-            # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 seg_data=seg_data,
                 visual_seg_data=visual_seg_data,
-                inputs_patches=inputs_patches,
-                # num_patches=num_patches,
-                # special_vis_token=self.special_vis_token,
+                image=image,
+                special_vis_token=None,  # TODO check this
                 ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
@@ -1502,7 +1520,7 @@ class UdopModel(UdopPreTrainedModel):
             inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_outputs.attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
@@ -1685,4 +1703,30 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
             "seg_data": kwargs.get("seg_data", None),
+            "image": kwargs.get("image", None),
+            "visual_seg_data": kwargs.get("visual_seg_data", None),
         }
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        # if decoder past is not included in output
+        # speedy decoding is disabled and no need to reorder
+        if past_key_values is None:
+            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            return past_key_values
+
+        reordered_decoder_past = ()
+        for layer_past_states in past_key_values:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states:
+                # need to set correct `past` for each of the four key / value states
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
+                )
+
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return reordered_decoder_past

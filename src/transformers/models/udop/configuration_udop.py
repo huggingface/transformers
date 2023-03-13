@@ -121,7 +121,6 @@ class UdopConfig(PretrainedConfig):
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings
-        self.decoder_start_token_id = pad_token_id
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -142,5 +141,6 @@ class UdopConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=pad_token_id,
             **kwargs,
         )

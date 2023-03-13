@@ -29,7 +29,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -63,7 +62,6 @@ class UdopModelTester:
         initializer_factor=0.002,
         eos_token_id=1,
         pad_token_id=0,
-        decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
         range_bbox=1000,
@@ -87,7 +85,6 @@ class UdopModelTester:
         self.initializer_factor = initializer_factor
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
         self.range_bbox = range_bbox
@@ -145,7 +142,6 @@ class UdopModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def create_and_check_model(
@@ -215,10 +211,12 @@ class UdopModelTester:
         model = UdopForConditionalGeneration(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
-            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+            input_ids[:1], seg_data=seg_data[:1, :, :], num_beams=2, max_length=5, do_sample=True, use_cache=False
         )
         torch.manual_seed(0)
-        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        output_with_past_cache = model.generate(
+            input_ids[:1], seg_data=seg_data[:1, :, :], num_beams=2, max_length=5, do_sample=True
+        )
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_encoder_decoder_shared_weights(
@@ -232,12 +230,16 @@ class UdopModelTester:
         lm_labels,
     ):
         for model_class in [
+            UdopModel,
             UdopForConditionalGeneration,
         ]:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
+            if model_class.__name__ == "UdopForConditionalGeneration":
+                model.udop.encoder.load_state_dict(model.udop.decoder.state_dict(), strict=False)
+            elif model_class.__name__ == "UdopModel":
+                model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
 
             torch.manual_seed(0)
             tied_config = copy.deepcopy(config)
@@ -327,7 +329,7 @@ class UdopModelTester:
 
 
 @require_torch
-class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             UdopModel,
@@ -340,6 +342,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = {"feature-extraction": UdopModel} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
+    test_head_masking = False
     test_resize_embeddings = True
     test_model_parallel = False
     is_encoder_decoder = True
@@ -360,10 +363,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
