@@ -259,8 +259,9 @@ class NllbMoeTop2Router(nn.Module):
     """
     Router using tokens choose top-2 experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    This router uses the same mechanism as in NLLB-MoE from the fairseq repository, but it is also based on the 
+    implementation of Switch Transformers by the HuggingFace team
+    Tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
     token is processed by an expert**, or that each expert receives at least one token.
 
