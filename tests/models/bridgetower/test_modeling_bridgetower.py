@@ -486,7 +486,7 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
             torch_device
         )
         model.eval()
-        processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm")
+        processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         image = prepare_img()
         text = "a bunch of cats laying on a tower."
         inputs = processor(image, text, padding=True, return_tensors="pt").to(torch_device)
