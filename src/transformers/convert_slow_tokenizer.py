@@ -935,6 +935,34 @@ class T5Converter(SpmConverter):
         )
 
 
+class UdopConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [(piece.piece, piece.score) for piece in proto.pieces]
+        num_extra_ids = self.original_tokenizer._extra_ids
+        vocab += [("<extra_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [("<extra_l_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [("</extra_l_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [("<extra_t_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [("</extra_t_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+
+        num_loc_extra_ids = self.original_tokenizer._loc_extra_ids
+        vocab += [("<loc_{}>".format(i), 0.0) for i in range(num_loc_extra_ids - 1, -1, -1)]
+
+        num_other_extra_ids = self.original_tokenizer._other_extra_ids
+        vocab += [("<other_0{}>".format(i), 0.0) for i in range(num_other_extra_ids - 1, -1, -1)]
+
+        return vocab
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class WhisperConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.encoder
@@ -1304,6 +1332,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RoFormerTokenizer": RoFormerConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "UdopTokenizer": UdopConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

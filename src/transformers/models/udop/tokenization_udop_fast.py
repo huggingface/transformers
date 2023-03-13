@@ -17,7 +17,6 @@
 
 import os
 import re
-import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
@@ -126,7 +125,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids)])
-        
+
         if loc_extra_ids > 0 and (additional_special_tokens is None or "<loc_0>" not in additional_special_tokens):
             if additional_special_tokens is None:
                 additional_special_tokens = []
