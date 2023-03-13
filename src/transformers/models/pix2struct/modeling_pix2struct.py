@@ -52,7 +52,7 @@ _CONFIG_FOR_DOC = "Pix2StructConfig"
 
 
 PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ybelkada/pix2struct-textcaps-base",
+    "google/pix2struct-textcaps-base",
     # See all Pix2StructVision models at https://huggingface.co/models?filter=pix2struct
 ]
 
@@ -579,8 +579,8 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Pix2StructVisionModel
 
-        >>> image_processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
-        >>> model = Pix2StructVisionModel.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> image_processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructVisionModel.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1282,8 +1282,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, Pix2StructTextModel
 
-        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
-        >>> model = Pix2StructTextModel.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructTextModel.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1554,8 +1554,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
-        >>> model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> labels = "A stop sign is on the street corner."
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -1651,8 +1651,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
-        >>> model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> conditional_text = "A stop sign"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
