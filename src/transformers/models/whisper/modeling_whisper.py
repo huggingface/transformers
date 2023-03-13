@@ -767,6 +767,12 @@ class WhisperEncoder(WhisperPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.conv1
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.conv1 = value
+
     def forward(
         self,
         input_features,
@@ -1023,7 +1029,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        if input_ids is not None:
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        else:
+            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1330,6 +1339,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
+
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
@@ -1634,6 +1646,12 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         not be updated during training. Only the projection layers and classification head will be updated.
         """
         self.encoder._freeze_parameters()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.encoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.encoder.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(WHISPER_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
