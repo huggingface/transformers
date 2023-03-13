@@ -18,10 +18,19 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available,
 )
 
 
-_import_structure = {"configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig", "UdopOnnxConfig"]}
+_import_structure = {"configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"]}
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_udop"] = ["UdopImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -37,7 +46,15 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopOnnxConfig
+    from .configuration_udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_udop import UdopImageProcessor
 
     try:
         if not is_torch_available():
