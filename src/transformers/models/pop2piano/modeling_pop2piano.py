@@ -23,6 +23,7 @@ from typing import Optional, Tuple, Union, List
 
 import numpy as np
 import torch
+from ...feature_extraction_utils import BatchFeature
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -31,12 +32,13 @@ from ...generation.utils import GreedySearchEncoderDecoderOutput
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 
 from ...activations import ACT2FN
-# from ...generation.logits_process import Pop2PianoTimeStampLogitsProcessor
+
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
+    BackboneOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -1313,12 +1315,9 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    def __init__(self,
-                 config: Pop2PianoConfig
-        ):
+    def __init__(self, config: Pop2PianoConfig):
         super(Pop2PianoModel, self).__init__(config)
         self.config = config
-
         self.spectrogram = LogMelSpectrogram(sample_rate=self.config.dataset.get("sample_rate"),
                                              n_fft=self.config.n_fft,
                                              hop_length=self.config.hop_length,
@@ -1357,15 +1356,13 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         self.transformer.encoder._freeze_parameters()
 
     def forward(self,
-                input_embeds,
-                input_embeds_shapes: List[torch.Size],
-                input_ids=None,
+                inputs: BatchFeature,
                 composer="composer1",
                 max_batch_size:int = None,
-                n_bars: int = 2,
-                return_dict=True,
-                **kwargs
-                ):
+                n_bars:int = 2,
+                return_dict:Optional[bool] = True
+                ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput] :
+
 
         # select composer randomly if not already given
         composer_to_feature_token = self.config.composer_to_feature_token
@@ -1377,33 +1374,25 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
         max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
-        PAD = self.config.pad_token_id
 
-        relative_tokens_arr, relative_tokens_arr_shapes = [], []
+        relative_tokens_arr = []
         # For multiple audios(batch, seq_len, seq_dim)
-        for i, input_embeds_shape in enumerate(input_embeds_shapes):
-            _input_embeds = input_embeds[i, :input_embeds_shape[0], :input_embeds_shape[1]]
-            _input_embeds = self.spectrogram(_input_embeds).transpose(-1, -2)
+        for i, input_embeds in enumerate(inputs["input_features"]):
+            input_embeds = self.spectrogram(input_embeds).transpose(-1, -2)
             if self.config.dataset.get("mel_is_conditioned", None):
                 composer_value = composer_to_feature_token[composer]
                 composer_value = torch.tensor(composer_value, device=self.device)
-                composer_value = composer_value.repeat(_input_embeds.shape[0])
-                _input_embeds = self.mel_conditioner(_input_embeds, composer_value)
+                composer_value = composer_value.repeat(input_embeds.shape[0])
+                input_embeds = self.mel_conditioner(input_embeds, composer_value)
 
             # As described in the official pop2piano implementation
-            relative_tokens = self.transformer.generate(input_ids=input_ids, inputs_embeds=_input_embeds, max_length=max_length)
+            relative_tokens = self.transformer.generate(inputs_embeds=input_embeds,
+                                                        max_length=max_length,
+                                                        )
             relative_tokens_arr.append(relative_tokens)
-            relative_tokens_arr_shapes.append(relative_tokens.size())
 
-        # Outputs can be of different shapes such as - (78, 118), (120, 106) and (75, 106) so pad it to make it pass it through
-        # `GreedySearchEncoderDecoderOutput`
-        no_seq, seq_len = [*zip(*relative_tokens_arr_shapes)]
-        relative_tokens_mat = torch.full(size=[len(relative_tokens), max(no_seq), max(seq_len)], fill_value=-torch.inf)
-        for i, relative_token in enumerate(relative_tokens_arr):
-            relative_tokens_mat[i, :no_seq[i], :seq_len[i]] = relative_token
-        # if return_dict:
-        #     return GreedySearchEncoderDecoderOutput(sequences=relative_tokens)
+        if return_dict:
+            return BackboneOutput(feature_maps=relative_tokens_arr)
         return relative_tokens_arr
-
 
 

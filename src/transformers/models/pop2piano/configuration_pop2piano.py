@@ -149,9 +149,7 @@ class Pop2PianoConfig(PretrainedConfig):
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
+        self.num_decoder_layers = num_decoder_layers if num_decoder_layers is not None else self.num_layers
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
@@ -164,20 +162,17 @@ class Pop2PianoConfig(PretrainedConfig):
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = dense_act_fn
         self.is_gated_act = act_info[0] == "gated"
-
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
         self.dataset = {'target_length': dataset_target_length,
                         'n_bars': dataset_n_bars,
                         'sample_rate': dataset_sample_rate,
-                        'mel_is_conditioned': dataset_mel_is_conditioned
-                        }
+                        'mel_is_conditioned': dataset_mel_is_conditioned}
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.f_min = f_min
