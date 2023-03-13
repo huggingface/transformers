@@ -1535,7 +1535,7 @@ class UdopLayerNorm(nn.Module):
 
 # class UdopPreTrainedModel(PreTrainedModel):
 #     """
-# An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained #
+# An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained # #
 models. #"""
 #
 #     config_class = UdopConfig
