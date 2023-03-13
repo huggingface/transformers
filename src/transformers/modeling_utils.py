@@ -2564,25 +2564,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif len(special_dtypes) > 0:
                 logger.warn(
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
-                    "`accelerate` to properly deal with them (`pip install accelerate`)."
+                    "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
             if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
-                    max_memory=max_memory,
-                    no_split_module_classes=no_split_modules,
                     dtype=torch_dtype,
-                    special_dtypes=special_dtypes,
                     low_zero=(device_map == "balanced_low_0"),
+                    **kwargs,
                 )
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(
                 model,
-                no_split_module_classes=no_split_modules,
                 dtype=torch_dtype if not load_in_8bit else torch.int8,
-                max_memory=max_memory,
-                special_dtypes=special_dtypes,
+                **kwargs
             )
 
             if load_in_8bit:
