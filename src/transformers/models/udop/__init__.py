@@ -17,12 +17,21 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_sentencepiece_available,
     is_torch_available,
     is_vision_available,
 )
 
 
 _import_structure = {"configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"]}
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_udop"] = ["UdopTokenizer"]
 
 try:
     if not is_vision_available():
@@ -47,6 +56,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_udop import UdopTokenizer
 
     try:
         if not is_vision_available():

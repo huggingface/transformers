@@ -3,7 +3,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import T5Tokenizer, UdopConfig, UdopForConditionalGeneration, UdopImageProcessor
+from transformers import UdopConfig, UdopForConditionalGeneration, UdopImageProcessor, UdopTokenizer
 
 
 def transform(image, image_size=224):
@@ -83,7 +83,7 @@ def convert():
     print("Looks ok!")
 
     # prepare dummy inputs
-    tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    tokenizer = UdopTokenizer.from_pretrained("t5-base")
     image_processor = UdopImageProcessor()
     input_ids, seg_data, image = prepare_dummy_inputs(tokenizer, image_processor)
 
