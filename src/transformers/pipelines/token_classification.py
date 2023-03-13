@@ -327,11 +327,11 @@ class TokenClassificationPipeline(ChunkPipeline):
             ]
             all_entities.extend(entities)
         num_chunks = len(all_outputs)
-        if num_chunks > 0:
-            all_entities = self.aggregate_entities(all_entities)
+        if num_chunks > 1:
+            all_entities = self.aggregate_overlapping_entities(all_entities)
         return all_entities
 
-    def aggregate_entities(self, entities):
+    def aggregate_overlapping_entities(self, entities):
         if len(entities) == 0:
             return entities
         entities = sorted(entities, key=lambda x: x["start"])
