@@ -83,6 +83,8 @@
       title: Object detection
     - local: tasks/zero_shot_object_detection
       title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
     title: Computer Vision
   - sections:
     - local: tasks/image_captioning
@@ -580,6 +582,8 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/mgp-str
+        title: MGP-STR
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
