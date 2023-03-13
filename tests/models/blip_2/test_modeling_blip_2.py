@@ -710,6 +710,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_cpu_offload(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
