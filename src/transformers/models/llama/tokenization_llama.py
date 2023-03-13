@@ -20,7 +20,6 @@
 
 """Tokenization classes for LLaMA."""
 import os
-import re
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
