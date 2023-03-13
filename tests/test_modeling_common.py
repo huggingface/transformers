@@ -3346,7 +3346,7 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertTrue("does not appear to have a file named pytorch_model.bin" in str(env_error.exception))
 
-        # test that only safetensors if both available if set to True
+        # test that only safetensors if both available and use_safetensors=False
         with tempfile.TemporaryDirectory() as tmp_dir:
             CLIPTextModel.from_pretrained(
                 "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
@@ -3359,7 +3359,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
             self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
 
-        # test that no safetensors if both available if set to False
+        # test that no safetensors if both available and use_safetensors=True
         with tempfile.TemporaryDirectory() as tmp_dir:
             CLIPTextModel.from_pretrained(
                 "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
