@@ -595,11 +595,12 @@ class NllbMoeSparseMLP(nn.Module):
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, :, idx].bool()
+            expert_contribution = router_probs[:,:,idx][token_indices]
             # original code multiplies the hidden states by the dispatch mask
             # then chunks the dispatched input after some reshaping, then feeds each chunk to the corresponding
             # expert. Which is better in terms of performances? Chunks are then concatenated together
             # chunk size = torch.Size([1, 1, capacity, d_model])
-            next_states[token_indices] = expert(hidden_states[token_indices])
+            next_states[token_indices] =  expert_contribution[:,None]  * expert(hidden_states[token_indices])
 
         # TODO, they added dropout here, by randomly masking the outputs (Dropout2D can be used)
         if self.moe_token_dropout>0:
@@ -608,7 +609,6 @@ class NllbMoeSparseMLP(nn.Module):
             else:
                 next_states *= (1 - self.moe_token_dropout)
     
-        hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
 
 
