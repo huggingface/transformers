@@ -2747,7 +2747,6 @@ else:
     _import_structure["models.ict"].extend(
         [
             "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ICTForImageClassification",
             "ICTForMaskedImageModeling",
             "ICTModel",
             "ICTPreTrainedModel",

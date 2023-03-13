@@ -59,7 +59,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("glpn", "GLPNFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("ict", "ICTFeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
