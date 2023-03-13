@@ -356,9 +356,10 @@ class NllbMoeTop2Router(nn.Module):
             router_logits += gumbel(router_logits.shape).to(router_logits.device)
         
         # replace top_1_expert_index with min values
-        logits_except_top_1 = router_logits.masked_fill(top_1_expert_index.bool(), float("-inf"))
-        top_2_max_probs, top_2_expert_index = torch.max(logits_except_top_1, dim=-1)
+        logits_except_top_1 = router_logits.masked_fill(top_1_mask.bool(), float("-inf"))
+        top_2_expert_index = torch.argmax(logits_except_top_1, dim=-1)
         top_2_mask = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
+        top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
         
 
         if self.normalize_router_prob_before_dropping:
@@ -396,8 +397,8 @@ class NllbMoeTop2Router(nn.Module):
             locations2 = importance_sorted_locations2
     
         else:
-            locations1 = torch.cumsum(top_1_mask) - 1
-            locations2 = torch.cumsum(top_2_mask) - 1
+            locations1 = torch.cumsum(top_1_mask, dim = 0) - 1
+            locations2 = torch.cumsum(top_2_mask, dim = 0) - 1
             # Update 2nd's location by accounting for locations of 1st
             locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
@@ -415,16 +416,19 @@ class NllbMoeTop2Router(nn.Module):
             top_1_max_probs /= denom_s
             top_2_max_probs /= denom_s
 
-            # Store the capacity location for each token
+        # Store the nb of tokens routed to the expert at the token location
+        # running counter for how many tokens are dispatched to an expert
         locations1_s = torch.sum(locations1 * top_1_mask, dim=1)
         locations2_s = torch.sum(locations2 * top_2_mask, dim=1)
 
         # Calculate combine_weights and dispatch_mask
         gates1 = top_1_max_probs.unsqueeze(-1) * top_1_mask.to(top_1_max_probs.dtype)  # einsum("s,se->se")
         gates2 = top_2_max_probs.unsqueeze(-1) * top_2_mask.to(top_2_max_probs.dtype)  # einsum("s,se->se")
-        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=self.expert_capacity, unsqueeze_indices=True)
-        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=self.expert_capacity, unsqueeze_indices=True)
+        # from batch * seq_len to batch*seq_len , expert_capacity
+        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=self.expert_capacity)
+        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=self.expert_capacity)
         
+        # combine1_sec.shap torch.Size([24, 128, 24])
         # einsum("se,sc->sec")
         combine1_sec = torch.bmm(gates1.unsqueeze(-1),locations1_sc.to(gates1.dtype).unsqueeze(1))
         combine2_sec = torch.bmm(gates2.unsqueeze(-1),locations2_sc.to(gates2.dtype).unsqueeze(1))
