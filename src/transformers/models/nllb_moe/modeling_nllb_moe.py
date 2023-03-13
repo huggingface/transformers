@@ -586,7 +586,7 @@ class NllbMoeSparseMLP(nn.Module):
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, combine_weights, router_logits = self.router(hidden_states)
+        router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
@@ -603,17 +603,12 @@ class NllbMoeSparseMLP(nn.Module):
 
         # TODO, they added dropout here, by randomly masking the outputs (Dropout2D can be used)
         if self.moe_token_dropout>0:
-            if self.trainig:
+            if self.training:
                 next_states = self.token_dropout(next_states)
             else:
                 next_states *= (1 - self.moe_token_dropout)
     
-        # TODO to combine the expert states, they use the `combining_weights` not the router_logits
-        # combined_output = combine_weights.view(S, E * C).mm(
-        #     expert_output.view(E * C, M)
-        # )
-                    
-        hidden_states = combine_weights * next_states
+        hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
 
 
