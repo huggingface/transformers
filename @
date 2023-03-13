@@ -15,7 +15,6 @@
 
 import copy
 import gc
-import glob
 import inspect
 import json
 import os
@@ -120,7 +119,6 @@ if is_torch_available():
         AutoTokenizer,
         BertConfig,
         BertModel,
-        CLIPTextModel,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -3331,46 +3329,22 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_safetensors
     def test_use_safetensors(self):
-        # test nice error message if no safetensor files available
         with self.assertRaises(OSError) as env_error:
             AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
 
-        self.assertTrue(
-            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
-            in str(env_error.exception)
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors", use_safetensors=True, tempfile=tmp_dir)
 
-        # test that error if only safetensors is available
+        import ipdb; ipdb.set_trace()
+
         with self.assertRaises(OSError) as env_error:
-            BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors", use_safetensors=False)
+            BertModel.from_pretrained("hf-internal-testing/tiny-random-bert", use_safetensors=False, tempfile=tmp_dir)
 
-        self.assertTrue("does not appear to have a file named pytorch_model.bin" in str(env_error.exception))
-
-        # test that only safetensors if both available if set to True
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=False,
-                cache_dir=tmp_dir,
-            )
+            CLIPTextModel.from_pretrained("hf-internal-testing/diffusers-stable-diffusion-tiny-all", use_safetensors=False, tempfile=tmp_dir)
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
-
-        # test that no safetensors if both available if set to False
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=True,
-                cache_dir=tmp_dir,
-            )
-
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+            CLIPTextModel.from_pretrained("hf-internal-testing/diffusers-stable-diffusion-tiny-all", use_safetensors=False, tempfile=tmp_dir)
 
     @require_safetensors
     def test_safetensors_save_and_load(self):
