@@ -605,9 +605,7 @@ def prepare_img():
 @slow
 class Pix2StructIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image = prepare_img()
 
@@ -621,9 +619,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         )
 
     def test_batched_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
@@ -647,9 +643,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         )
 
     def test_batched_inference_image_captioning_conditioned(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
