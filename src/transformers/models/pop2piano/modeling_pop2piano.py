@@ -18,6 +18,7 @@
 import copy
 import math
 import random
+import warnings
 import torchaudio
 from typing import Optional, Tuple, Union, List
 
@@ -143,8 +144,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
-
-
+    
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -841,6 +841,11 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
     def forward(
         self,
         input_ids=None,
@@ -1069,6 +1074,13 @@ Pop2Piano_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+# Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+_Pop2PianoForConditionalGeneration__HEAD_MASK_WARNING_MSG = """
+The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
+If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = torch.ones(num_layers,
+num_heads)`.
+"""
 
 # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration with T5->Pop2Piano,t5->pop2piano
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
@@ -1333,6 +1345,7 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                                                         n_dim=n_dim
                                                         )
         self.transformer = Pop2PianoForConditionalGeneration(config)
+        self.transformer.config.bos_token_id = self.config.eos_token_id
 
         self.post_init()
 
@@ -1355,14 +1368,31 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         """
         self.transformer.encoder._freeze_parameters()
 
+    def freeze_decoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.transformer.decoder._freeze_parameters()
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        new_embeddings = self.transformer.resize_token_embeddings(new_num_tokens)
+        self.config.vocab_size = new_num_tokens
+        return new_embeddings
+
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
     def forward(self,
                 inputs: BatchFeature,
                 composer="composer1",
                 max_batch_size:int = None,
                 n_bars:int = 2,
-                return_dict:Optional[bool] = True
+                return_dict:Optional[bool] = False,
+                **kwargs
                 ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput] :
-
 
         # select composer randomly if not already given
         composer_to_feature_token = self.config.composer_to_feature_token
@@ -1388,6 +1418,7 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
             # As described in the official pop2piano implementation
             relative_tokens = self.transformer.generate(inputs_embeds=input_embeds,
                                                         max_length=max_length,
+                                                        **kwargs
                                                         )
             relative_tokens_arr.append(relative_tokens)
 

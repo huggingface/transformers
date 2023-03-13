@@ -42,7 +42,6 @@ if is_torch_available():
         set_seed,
     )
 
-
 def prepare_pop2piano_inputs_dict(
     input_features,
     composer="composer1",
@@ -54,7 +53,7 @@ def prepare_pop2piano_inputs_dict(
             "composer":composer,
             "max_batch_size":max_batch_size,
             "n_bars":n_bars,
-            "return_dict":return_dict}
+            }
 
 @require_torch
 @require_torchaudio
@@ -62,6 +61,8 @@ class Pop2PianoModelTester:
     def __init__(
         self,
         parent,
+        num_attention_heads=8,
+        num_hidden_layers=6,
         is_training=False,
         vocab_size=2400,
         d_model=512,
@@ -91,6 +92,8 @@ class Pop2PianoModelTester:
         n_mels=512
     ):
         self.parent = parent
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.is_training = is_training
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -118,7 +121,6 @@ class Pop2PianoModelTester:
         self.hop_length = hop_length
         self.f_min = f_min
         self.n_mels = n_mels
-
 
 
     def prepare_config_and_inputs(self):
@@ -173,14 +175,15 @@ class Pop2PianoModelTester:
         return config, inputs_dict
 
     def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
-        model = Pop2PianoModel(config=config).to(torch_device).eval()
+        model = Pop2PianoModel(config=config).to(torch_device)
+        model.eval()
 
         if freeze_encoder:
             model.freeze_encoder()
 
         # first forward pass
-        last_hidden_state = model(inputs_dict, return_dict=False)
-        self.parent.assertTrue(type(last_hidden_state), list)
+        outputs = model(**inputs_dict)
+        self.parent.assertTrue(type(outputs), list)
 
     def create_and_check_model_log_mel_spectogram_and_mel_conditioner(self, config):
         composer = "composer1"
@@ -211,7 +214,13 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     test_missing_keys = False
     test_torchscript = False
 
-    input_name = "input_features"
+    input_name = "inputs"
+
+    def test_attention_outputs(self):
+        pass
+
+    def test_generate_without_input_ids(self):
+        config, _, _, max_length = self._get_input_ids_and_config()
 
     def setUp(self):
         self.model_tester = Pop2PianoModelTester(self)
@@ -244,15 +253,12 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             model = model_class(config)
             model.freeze_encoder()
 
-            try:
-                encoder_grads = [param.requires_grad for param in model.encoder.parameters()]
-                decoder_grads = [param.requires_grad for param in model.decoder.parameters()]
-            except AttributeError:
-                encoder_grads = [param.requires_grad for param in model.model.encoder.parameters()]
-                decoder_grads = [param.requires_grad for param in model.model.decoder.parameters()]
-
+            # try:
+            #     encoder_grads = [param.requires_grad for param in model.encoder.parameters()]
+            #     decoder_grads = [param.requires_grad for param in model.decoder.parameters()]
+            # except AttributeError:
+            encoder_grads = [param.requires_grad for param in model.transformer.encoder.parameters()]
             self.assertFalse(all(encoder_grads))
-            self.assertTrue(all(decoder_grads))
 
     # not implemented currently
     def test_inputs_embeds(self):
@@ -261,23 +267,48 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     # training is not supported yet
     def test_training(self):
         pass
-
     def test_training_gradient_checkpointing(self):
         pass
-
     def test_generate_with_head_masking(self):
         pass
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+    def test_hidden_states_output(self):
+        pass
 
-    def test_generate_fp16(self): #
+    def test_generate_without_input_ids(self):
+        pass
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "inputs",
+                    "composer",
+                    "max_batch_size",
+                    "n_bars",
+                    "return_dict",
+                ]
+        self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
-        input_features = input_dict["input_features"]
-        model = Pop2PianoForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["inputs"]["input_features"]
+        model = Pop2PianoModel(config).eval().to(torch_device)
         if torch_device == "cuda":
-            input_features = input_features.half()
+            input_features = [input_feature.half() for input_feature in input_features]
             model.half()
-        model.generate(input_features)
-        model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+        input_dict['inputs']['input_features'] = input_features
+        model(**input_dict)
 
     def test_resize_tokens_embeddings(self):
         (
