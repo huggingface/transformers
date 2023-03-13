@@ -367,7 +367,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            encoder_input_ids = inputs["input_features"]
             decoder_input_ids = inputs.pop("decoder_input_ids", None)
             inputs.pop("decoder_attention_mask", None)
 
