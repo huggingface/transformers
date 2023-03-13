@@ -135,6 +135,7 @@ class OptimizerNames(ExplicitEnum):
 
     ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
+    ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
@@ -471,7 +472,8 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, adamw_anyprecision or adafactor.
+            The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
+            adafactor.
         optim_args (`str`, *optional*):
             Optional arguments that are supplied to AnyPrecisionAdamW.
         group_by_length (`bool`, *optional*, defaults to `False`):
@@ -1215,6 +1217,10 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
+        if self.optim == OptimizerNames.ADAMW_TORCH_FUSED and version.parse(
+            version.parse(torch.__version__).base_version
+        ) < version.parse("2.0.0"):
+            raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
 
         if (
             self.framework == "pt"
@@ -2285,8 +2291,8 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_apex_fused"`, `"adamw_anyprecision"` or
-                `"adafactor"`.
+                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`,`"adamw_apex_fused"`,
+                `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.
             weight_decay (`float`, *optional*, defaults to 0):
