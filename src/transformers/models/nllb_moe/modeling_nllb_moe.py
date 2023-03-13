@@ -260,10 +260,9 @@ class NllbMoeTop2Router(nn.Module):
     Router using tokens choose top-2 experts assignment.
 
     This router uses the same mechanism as in NLLB-MoE from the fairseq repository, but it is also based on the
-    implementation of Switch Transformers by the HuggingFace team
-    Tokens choose their top experts. Items are sorted by router_probs and then
-    routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
-    token is processed by an expert**, or that each expert receives at least one token.
+    implementation of Switch Transformers by the HuggingFace team Tokens choose their top experts. Items are sorted by
+    router_probs and then routed to their choice of expert until the expert's expert_capacity is reached. **There is no
+    guarantee that each token is processed by an expert**, or that each expert receives at least one token.
 
     """
 
@@ -275,6 +274,24 @@ class NllbMoeTop2Router(nn.Module):
         self.jitter_noise = config.router_jitter_noise
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
+        
+        self.second_expert_policy = config.second_expert_policy
+        self.normalize_router_prob_before_dropping = config.normalize_router_prob_before_dropping
+        self.batch_prioritized_routing = config.batch_prioritized_routing
+        self.moe_eval_capacity_token_fraction = config.moe_eval_capacity_token_fraction
+        # add normalize_gate_prob_before_dropping 
+        # second_expert_policy ( random / sampling/ all)
+        # add local droupout? 
+        # eval_capacity_token_fraction, either 0.25 when evaluating but 0 or 1 when training
+        # add normalize_expert_grad ???
+    
+    def _cast_classifier(self):
+        r"""
+        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
+        instance of the `Linear8bitLt` class by checking special attributes.
+        """
+        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
+            self.classifier = self.classifier.to(self.dtype)
 
     def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""
@@ -297,19 +314,6 @@ class NllbMoeTop2Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.jitter_noise > 0:
-            # Get the lower and upper bound of the uniform distribution
-            # Adapted from: https://stackoverflow.com/questions/44328530/how-to-get-a-uniform-distribution-in-a-range-r1-r2-in-pytorch
-            distrib_lower_bound = 1.0 - self.jitter_noise
-            distrib_upper_bound = 1.0 + self.jitter_noise
-
-            uniform_distrib = torch.rand(hidden_states.shape, device=hidden_states.device, dtype=self.dtype)
-            uniform_distrib = uniform_distrib * (distrib_lower_bound - distrib_upper_bound)
-
-            uniform_distrib = uniform_distrib + distrib_upper_bound
-            # Multiply the token inputs by the uniform distribution - adding some noise
-            hidden_states *= uniform_distrib
-
         # Shape: [num_groups, tokens_per_group, num_experts]
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
@@ -318,15 +322,7 @@ class NllbMoeTop2Router(nn.Module):
         router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
         return router_probabilities, router_logits
 
-    def _cast_classifier(self):
-        r"""
-        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
-        instance of the `Linear8bitLt` class by checking special attributes.
-        """
-        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
-            self.classifier = self.classifier.to(self.dtype)
-
-    def forward(self, hidden_states: torch.Tensor) -> Tuple:
+    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> Tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
@@ -343,24 +339,137 @@ class NllbMoeTop2Router(nn.Module):
             Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
+        sequence_length = hidden_states.shape[1]
+        if not self.training and self.eval_capacity_token_fraction > 0:
+            capacity = math.ceil(self.moe_eval_capacity_token_fraction * sequence_length)
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
         top_1_expert_index = torch.argmax(router_probs, dim=-1)
         top_1_expert_index = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
+        top_1_token_priority = torch.cumsum(top_1_expert_index, dim=-2) 
 
+
+        if self.second_expert_policy == "sampling":
+            one = torch.tensor(1.0, device=router_logits.device)
+            zero = torch.tensor(0.0, device=router_logits.device)
+            gumbel = torch.distributions.gumbel.Gumbel(zero, one).rsample
+            router_logits += gumbel(router_logits.shape)
+        
         # replace top_1_expert_index with min values
-        logits_except1 = router_logits.masked_fill(top_1_expert_index.bool(), float("-inf"))
-        top_2_expert_index = torch.argmax(logits_except1, dim=-1)
+        logits_except_top_1 = router_logits.masked_fill(top_1_expert_index.bool(), float("-inf"))
+        top_2_expert_index = torch.argmax(logits_except_top_1, dim=-1)
         top_2_expert_index = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
+        top_2_token_priority = torch.cumsum(top_2_expert_index, dim=-2)
+        
+        if self.normalize_router_prob_before_dropping:
+            # Normalize gate probabilities
+            denom_s = top_1_token_priority + top_2_token_priority
+            # Avoid divide-by-zero
+            denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
+            top_1_token_priority = top_1_token_priority / denom_s
+            top_2_token_priority = top_2_token_priority / denom_s
+        
+        if self.second_expert_policy == "random":
+            sampled = (2 * top_2_token_priority) > torch.rand_like(top_2_token_priority)
+            mask2 = mask2 * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
+        if padding_mask is not None:
+            nonpadding = ~padding_mask
+            mask1 = mask1 * nonpadding.unsqueeze(-1).to(mask1.dtype)
+            mask2 = mask2 * nonpadding.unsqueeze(-1).to(mask1.dtype)
+                
+        if self.batch_prioritized_routing:
+            # if batch_prioritized_routing:
+            importance_scores = -1 * router_probs.max(dim=1)[0]
+            sorted_mask1 = mask1[importance_scores.argsort(dim=0)]
+            sorted_cumsum1 = torch.cumsum(sorted_mask1) * sorted_mask1
+            importance_sorted_locations1 = sorted_cumsum1[
+                importance_scores.argsort(dim=0).argsort(dim=0)
+            ]
+
+            sorted_mask2 = mask2[importance_scores.argsort(dim=0)]
+            sorted_cumsum2 = torch.cumsum(sorted_mask2) * sorted_mask2
+            importance_sorted_locations2 = sorted_cumsum2[
+                importance_scores.argsort(dim=0).argsort(dim=0)
+            ]
+
+            importance_sorted_locations2 += torch.sum(mask1, dim=0, keepdim=True)
+
+            locations1 = importance_sorted_locations1,
+            locations2 = importance_sorted_locations2,
+    
+        else:
+            locations1 = torch.cumsum(mask1)
+            locations2 = torch.cumsum(mask2)
+            # Update 2nd's location by accounting for locations of 1st
+            locations2 += torch.sum(mask1, dim=0, keepdim=True)
+
+            # Remove locations outside capacity from
+            mask1 = mask1 * torch.lt(locations1, capacity)
+            mask2 = mask2 * torch.lt(locations2, capacity)
+            
+        if not self.normalize_router_prob_before_dropping:
+            # Normalize gate probabilities
+            gates1_s = (router_probs * mask1).sum(dim=1)
+            gates2_s = (router_probs * mask2).sum(dim=1)
+            denom_s = gates1_s + gates2_s
+            # Avoid divide-by-zero
+            denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
+            gates1_s /= denom_s
+            gates2_s /= denom_s
+
+            # Store the capacity location for each token
+        locations1_s = torch.sum(locations1 * mask1, dim=1)
+        locations2_s = torch.sum(locations2 * mask2, dim=1)
+
+        # Calculate combine_weights and dispatch_mask
+        gates1 = gates1_s.unsqueeze(-1) * mask1.to(gates1_s.dtype)  # einsum("s,se->se")
+        gates2 = gates2_s.unsqueeze(-1) * mask2.to(gates2_s.dtype)  # einsum("s,se->se")
+        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=capacity, unsqueeze_indices=True)
+        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=capacity, unsqueeze_indices=True)
+        combine1_sec = torch.bmm(
+            # einsum("se,sc->sec")
+            gates1.unsqueeze(-1),
+            locations1_sc.to(gates1.dtype).unsqueeze(1),
+        )
+        combine2_sec = torch.bmm(
+            # einsum("se,sc->sec")
+            gates2.unsqueeze(-1),
+            locations2_sc.to(gates2.dtype).unsqueeze(1),
+        )
+        combine_weights = combine1_sec + combine2_sec
+        dispatch_mask = combine_weights.bool()
+    
+        # Check if we need to implement the prefix tokens (normal this is if one expert is responsible of 1 language)
+        # dispatch masks are probably useless as they are required for data/model parallelism?
         # Mask tokens outside expert capacity. Sum over each sequence
-        top_1_token_priority = torch.cumsum(top_2_expert_index, dim=-2)
+
         # mask if the token routed to to the expert will overflow
         expert_capacity_mask = top_1_token_priority <= self.expert_capacity
-        expert_index = expert_index * expert_capacity_mask
+        top_1_expert_index = top_1_expert_index * expert_capacity_mask
 
+        expert_capacity_mask = top_2_token_priority <= self.expert_capacity
+        top_2_expert_index = top_2_expert_index * expert_capacity_mask
+
+        dipatch_mask = torch.cat([top_1_expert_index, top_2_expert_index])
+        # check that the next forward supports one more dimension (for both top1 gate and top2)
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return expert_index, router_probs, router_logits
+        
+        # dipatch_mask should be of shape batch, seq_len, expert, capacity
+        # then # S,E,C -> E,C,S
+        # then
+        # dispatched_input = torch.mm(
+        #         dispatch_mask.view(E * C, S), reshaped_input
+        #     )  # -> (E*C),M 
+        
+        # then 
+        # chunks = dispatched_input.chunk(self.num_local_experts, dim=1)
+        # expert_outputs = []
+        # for chunk, expert in zip(chunks, self.experts):
+        #     expert_outputs += [expert(chunk)]
+        # expert_output = torch.cat(expert_outputs, dim=1)
+        combine_weights = None
+        return dipatch_mask, combine_weights, router_logits
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->NllbMoe
@@ -500,8 +609,7 @@ class NllbMoeSparseMLP(nn.Module):
         # Step 1: Get the correct router according to its class
         self.router_type = config.router_type
         # TODO handle the type of router chosen
-        self.router = NllbMoeTop1Router(config)
-
+        self.router = NllbMoeTop2Router(config)
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
         for idx in range(config.num_experts):
@@ -520,7 +628,7 @@ class NllbMoeSparseMLP(nn.Module):
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, router_probs, router_logits = self.router(hidden_states)
+        router_mask, combine_weights, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
@@ -529,9 +637,19 @@ class NllbMoeSparseMLP(nn.Module):
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, :, idx].bool()
+            # original code multiplies the hidden states by the dispatch mask
+            # then chunks the dispatched input after some reshaping, then feeds each chunk to the corresponding
+            # expert. Which is better in terms of performances?
             next_states[token_indices] = expert(hidden_states[token_indices])
 
-        hidden_states = router_probs * next_states
+        # TODO, they added dropout here, by randomly masking the outputs (Dropout2D can be used)
+        
+        # TODO to combine the expert states, they use the `combining_weights` not the router_logits
+        # combined_output = combine_weights.view(S, E * C).mm(
+        #     expert_output.view(E * C, M)
+        # )
+                    
+        hidden_states = combine_weights * next_states
         return hidden_states, (router_logits, expert_index)
 
 
