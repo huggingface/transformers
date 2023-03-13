@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google Udop Authors and HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 
 
 import copy
+import inspect
 import tempfile
 import unittest
 
@@ -57,7 +58,7 @@ class UdopModelTester:
         num_hidden_layers=5,
         num_attention_heads=4,
         d_ff=37,
-        relative_attention_num_buckets=8,
+        relative_attention_num_buckets=32,
         dropout_rate=0.1,
         initializer_factor=0.002,
         eos_token_id=1,
@@ -65,6 +66,7 @@ class UdopModelTester:
         decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
+        range_bbox=1000,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -88,9 +90,22 @@ class UdopModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
+        self.range_bbox = range_bbox
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        seg_data = ids_tensor([self.batch_size, self.encoder_seq_length, 4], self.range_bbox).float()
+        # Ensure that seg_data is legal
+        for i in range(seg_data.shape[0]):
+            for j in range(seg_data.shape[1]):
+                if seg_data[i, j, 3] < seg_data[i, j, 1]:
+                    t = seg_data[i, j, 3]
+                    seg_data[i, j, 3] = seg_data[i, j, 1]
+                    seg_data[i, j, 1] = t
+                if seg_data[i, j, 2] < seg_data[i, j, 0]:
+                    t = seg_data[i, j, 2]
+                    seg_data[i, j, 2] = seg_data[i, j, 0]
+                    seg_data[i, j, 0] = t
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
         attention_mask = None
@@ -108,6 +123,7 @@ class UdopModelTester:
         return (
             config,
             input_ids,
+            seg_data,
             decoder_input_ids,
             attention_mask,
             decoder_attention_mask,
@@ -136,6 +152,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
+        seg_data,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -144,6 +161,7 @@ class UdopModelTester:
         model = UdopForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
+            seg_data=seg_data,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
@@ -156,6 +174,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
+        seg_data,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -174,6 +193,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
+        seg_data,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -194,6 +214,7 @@ class UdopModelTester:
 
             model_result = model(
                 input_ids=input_ids,
+                seg_data=seg_data,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
@@ -201,6 +222,7 @@ class UdopModelTester:
 
             tied_model_result = tied_model(
                 input_ids=input_ids,
+                seg_data=seg_data,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
@@ -234,6 +256,7 @@ class UdopModelTester:
 
                 tied_model_result = tied_model(
                     input_ids=input_ids,
+                    seg_data=seg_data,
                     decoder_input_ids=decoder_input_ids,
                     attention_mask=attention_mask,
                     decoder_attention_mask=decoder_attention_mask,
@@ -248,25 +271,12 @@ class UdopModelTester:
                     )
                 )
 
-    def check_resize_embeddings_udop_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = UdopForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             input_ids,
+            seg_data,
             decoder_input_ids,
             attention_mask,
             decoder_attention_mask,
@@ -276,6 +286,7 @@ class UdopModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "seg_data": seg_data,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
             "use_cache": False,
@@ -287,6 +298,7 @@ class UdopModelTester:
 class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": UdopForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -302,26 +314,8 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_shift_right(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
-
-    def test_config_and_model_silu_gated(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        config.feed_forward_proj = "gated-silu"
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_with_lm_head(self):
@@ -340,6 +334,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         (
             config,
             input_ids,
+            seg_data,
             decoder_input_ids,
             attention_mask,
             decoder_attention_mask,
@@ -381,53 +376,43 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_udop_v1_1(config)
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_ids",
+                "attention_mask",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+                "encoder_outputs",
+                "past_key_values",
+                "image",
+                "ids_keep",
+                "ids_restore",
+                "image_mask_label",
+                "mask_ratio",
+                "seg_data",
+                "visual_seg_data",
+                "masked_lm_labels",
+                "labels",
+                "head_mask",
+                "char_ids",
+                "char_seg_data",
+                "inputs_embeds",
+            ]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in UDOP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = UdopForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = UdopForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from UDOP model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
-    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
-    def test_disk_offload(self):
-        pass
 
 
 def use_task_specific_params(model, task):

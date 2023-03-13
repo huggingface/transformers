@@ -1087,7 +1087,11 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
 class RelativePositionBiasAggregated(nn.Module):
     def __init__(self, modules: Sequence[RelativePositionBiasBase]):
         """
-        Class will sums up computed biases :param modules: list of relative bias modules
+        Class which sums up various computed biases.
+
+        Args:
+            modules (Sequence[RelativePositionBiasBase]):
+                List of relative bias modules.
         """
         super().__init__()
         self.biases = nn.ModuleList(modules)
@@ -1144,8 +1148,6 @@ class UdopStack(UdopPreTrainedModel):
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
         self._max_length = config.max_length
-
-        setattr(config, "output_attentions", True)
         self.num_layers = config.num_layers
 
         self.block = nn.ModuleList(
