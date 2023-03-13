@@ -44,63 +44,14 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ICTConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "sheonhan/image-completion-transformer"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/ict-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_CHECKPOINT_FOR_DOC = "sheonhan/ict-imagenet-32"
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768] # TODO
 
 
 ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sheonhan/image-completion-transformer",
+    "sheonhan/ict-imagenet-32",
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
-
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->ICT
-class ICTEmbeddings(nn.Module):
-    """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-    """
-
-    def __init__(self, config: ICTConfig, use_mask_token: bool = False) -> None:
-        super().__init__()
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = ICTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
-        
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-    ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values)
-
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
-
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
@@ -120,8 +71,11 @@ class ICTSelfAttention(nn.Module):
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        
+        self.output_projection = nn.Linear(config.hidden_size, config.hidden_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.residual_dropout = nn.Dropout(config.residual_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -129,8 +83,7 @@ class ICTSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        self, hidden_states, output_attentions: bool = False) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -147,11 +100,7 @@ class ICTSelfAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+        attention_probs = self.attention_dropout(attention_probs)
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -159,143 +108,39 @@ class ICTSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = self.output_projection(context_layer)
+        outputs = self.residual_dropout(outputs)
+        
+        return (outputs, attention_probs) if output_attentions else (outputs,)
 
-        return outputs
 
-
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ICT
-class ICTSelfOutput(nn.Module):
-    """
-    The residual connection is defined in ICTLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: ICTConfig) -> None:
+class ICTBlock(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        num_embed = config.hidden_size
+        intermediate_size = config.intermediate_size
+        self.intermediate_act_fn = ACT2FN[config.activation_function]
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ICT
-class ICTAttention(nn.Module):
-    def __init__(self, config: ICTConfig) -> None:
-        super().__init__()
+        self.ln_1 = nn.LayerNorm(num_embed)
         self.attention = ICTSelfAttention(config)
-        self.output = ICTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+        self.ln_2 = nn.LayerNorm(num_embed)
+        self.mlp = nn.Sequential(
+            nn.Linear(num_embed, intermediate_size),
+            self.intermediate_act_fn,
+            nn.Linear(intermediate_size, num_embed),
+            nn.Dropout(config.resid_pdrop),
         )
 
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->ICT
-class ICTIntermediate(nn.Module):
-    def __init__(self, config: ICTConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->ICT
-class ICTOutput(nn.Module):
-    def __init__(self, config: ICTConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ICT
-class ICTLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: ICTConfig) -> None:
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = ICTAttention(config)
-        self.intermediate = ICTIntermediate(config)
-        self.output = ICTOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ICT, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
+    def forward(self, hidden_states, output_attentions: bool = False):
+        self_attention_outputs = self.attention(self.ln_1(hidden_states, output_attentions=output_attentions))
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        # first residual connection
-        hidden_states = attention_output + hidden_states
-
-        # in ICT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
-
+        
+        hidden_states = hidden_states + attention_output
+        hidden_states = hidden_states + self.mlp(self.ln_2(hidden_states))
+        
+        outputs = (hidden_states,) + outputs
+        
         return outputs
 
 
@@ -312,34 +157,22 @@ class ICTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the ViT version which uses truncated_normal for initialization
+            # https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/models/model.py#L159-L166
+            module.weight.data = nn.init.normal_(
                 module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
             ).to(module.weight.dtype)
-            if module.bias is not None:
+            if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ICTEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
-
-    def _set_gradient_checkpointing(self, module: ICTEncoder, value: bool = False) -> None:
-        if isinstance(module, ICTEncoder):
+    def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
+        if isinstance(module, ICTModel):
             module.gradient_checkpointing = value
 
 
@@ -385,34 +218,31 @@ ICT_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class ICTModel(ICTPreTrainedModel):
-    def __init__(self, config: ICTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: ICTConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ICTEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ICTEncoder(config)
-
+        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.position_embedding = nn.Parameter(torch.zeros(1, config.block_size, config.hidden_size))
+        self.drop = nn.Dropout(config.residual_dropout_prob)
+        
+        self.gradient_checkpointing = False
+        self.blocks = nn.ModuleList([ICTBlock(config) for _ in range(config.num_hidden_layers)])
+        
+        # Decoder head
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ICTPooler(config) if add_pooling_layer else None
-
+        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> ICTPatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+    def get_input_embeddings(self):
+        return self.token_embedding
 
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -420,75 +250,61 @@ class ICTModel(ICTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> Union[Tuple, BaseModelOutput]:
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        pixel_values = pixel_values.to(torch.long)
+        _, t = pixel_values.size()
 
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        inputs_embeds = self.token_embedding(pixel_values)
+        
+        if masks:
+            masks = masks.unsqueeze(2)
+            inputs_embeds = inputs_embeds * (1 - masks)
+        
+        position_embeds = self.position_embedding[:, :t, :]
+        hidden_states = inputs_embeds + position_embeds
+        hidden_states = self.drop(hidden_states)
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        for _, block in enumerate(self.blocks):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                )
+            else:
+                layer_outputs = block(hidden_states, output_attentions)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->ICT
-class ICTPooler(nn.Module):
-    def __init__(self, config: ICTConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 @add_start_docstrings(
@@ -528,10 +344,8 @@ class ICTForMaskedImageModeling(ICTPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
@@ -568,10 +382,8 @@ class ICTForMaskedImageModeling(ICTPreTrainedModel):
         outputs = self.ict(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
