@@ -526,6 +526,9 @@ MODEL_FOR_VISION_2_SEQ_MAPPING = None
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = None
 
 
+MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = None
 
 
@@ -732,6 +735,13 @@ class AutoModelForVision2Seq(metaclass=DummyObject):
 
 
 class AutoModelForVisualQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForZeroShotImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4203,6 +4213,30 @@ class MegatronBertModel(metaclass=DummyObject):
 
 
 class MegatronBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MgpstrForSceneTextRecognition(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MgpstrModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MgpstrPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

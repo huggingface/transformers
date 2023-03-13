@@ -116,6 +116,7 @@ from . import (
     mctct,
     megatron_bert,
     megatron_gpt2,
+    mgp_str,
     mluke,
     mmbt,
     mobilebert,
