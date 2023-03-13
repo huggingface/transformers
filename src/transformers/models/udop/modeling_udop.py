@@ -249,6 +249,131 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
 
+class UdopPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = UdopConfig
+    base_model_prefix = "transformer"
+    is_parallelizable = True
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["UDOPDualBlock"]
+    _keep_in_fp32_modules = ["wo"]
+
+    @property
+    def dummy_inputs(self):
+        input_ids = torch.tensor(DUMMY_INPUTS)
+        input_mask = torch.tensor(DUMMY_MASK)
+        dummy_inputs = {
+            "decoder_input_ids": input_ids,
+            "input_ids": input_ids,
+            "decoder_attention_mask": input_mask,
+        }
+        return dummy_inputs
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, UdopLayerNorm):
+            module.weight.data.fill_(factor * 1.0)
+        elif isinstance(
+            module,
+            (UdopDualForConditionalGeneration, UdopUnimodelForConditionalGeneration),
+        ):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            # if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+            module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopDenseActDense):
+            # Mesh TensorFlow FF initialization
+            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, UdopDenseGatedActDense):
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, UdopAttention):
+            # Mesh TensorFlow attention initialization to avoid scaling before softmax
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, UdopCellEmbeddings):
+            module.x_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.y_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, RelativePositionBiasBase):
+            module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, MaskedAutoencoderViT):
+            pos_embed = get_2d_sincos_pos_embed(
+                module.pos_embed.shape[-1], int(module.patch_embed.num_patches ** 0.5), cls_token=True
+            )
+            module.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+            module.patch_embed.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, Attention):
+            module.qkv.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (UdopAttention, UdopDualStack, UdopUniStack)):
+            module.gradient_checkpointing = value
+
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
+
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In UDOPDual it is usually set to the"
+            " pad_token_id. See UDOPDual docs for more information"
+        )
+
+        # shift inputs to the right
+        if is_torch_fx_proxy(input_ids):
+            # Item assignment is not supported natively for proxies.
+            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
+            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+        else:
+            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+            shifted_input_ids[..., 0] = decoder_start_token_id
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        return shifted_input_ids
+
 
 class UdopDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -308,9 +433,9 @@ class UdopMlp(nn.Module):
         return x
 
 
-class Attention(nn.Module):
+class Attention(UdopPreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.num_heads = config.mae_config["num_heads"]
         dim = config.mae_config["embed_dim"]
         head_dim = dim // self.num_heads
@@ -321,6 +446,13 @@ class Attention(nn.Module):
         # self.attn_drop = nn.Dropout(0)
         self.proj = nn.Linear(dim, dim)
         # self.proj_drop = nn.Dropout(0)
+
+        # self.initialize_weights(config)
+
+    def initialize_weights(self,config):
+        self.qkv.weight.data.normal_(mean=0.0, std=config.initializer_factor * ((config.d_model * config.d_kv) ** -0.5))
+        self.proj.weight.data.normal_(mean=0.0, std=config.initializer_factor * 1.0)
+
 
     def forward(self, x):
         batch_size, N, num_channels = x.shape
@@ -341,12 +473,12 @@ class Attention(nn.Module):
         return x
 
 
-class UdopMaeBlock(nn.Module):
+class UdopMaeBlock(UdopPreTrainedModel):
     def __init__(
         self,
         config,
     ):
-        super().__init__()
+        super().__init__(config)
         self.norm1 = nn.LayerNorm(config.mae_config["embed_dim"])
         self.attn = Attention(config)
 
@@ -358,6 +490,8 @@ class UdopMaeBlock(nn.Module):
             in_features=config.mae_config["embed_dim"], hidden_features=mlp_hidden_dim, act_layer=nn.GELU
         )
 
+        # self.post_init()
+
     def forward(self, x, context=None):
         x = x + self.drop_path(self.attn(self.norm1(x)))
         if context is not None and self.use_cross_attention:
@@ -366,11 +500,11 @@ class UdopMaeBlock(nn.Module):
         return x
 
 
-class MaskedAutoencoderViT(nn.Module):
+class MaskedAutoencoderViT(UdopPreTrainedModel):
     """Masked Autoencoder with VisionTransformer backbone"""
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
 
         # self.embed_dim = config.image_size
         self.decoder_embed_dim = 512
@@ -386,25 +520,30 @@ class MaskedAutoencoderViT(nn.Module):
         self.blocks = nn.ModuleList([UdopMaeBlock(config) for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
-        self.initialize_weights()
+        # self.initialize_weights(config)
+        # self.init_weights()
+        # self.post_init()
 
-    def initialize_weights(self):
-        # initialization
-        # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(
-            self.pos_embed.shape[-1], int(self.patch_embed.num_patches**0.5), cls_token=True
-        )
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
-        # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
-        w = self.patch_embed.proj.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-
-        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=0.02)
-
-        # initialize nn.Linear and nn.LayerNorm
-        self.apply(self._init_weights)
+    # def initialize_weights(self,config):
+    #     # initialization
+    #     # initialize (and freeze) pos_embed by sin-cos embedding
+    #     pos_embed = get_2d_sincos_pos_embed(
+    #         self.pos_embed.shape[-1], int(self.patch_embed.num_patches**0.5), cls_token=True
+    #     )
+    #     # self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+    #
+    #     # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
+    #     w = self.patch_embed.proj.weight.data
+    #     # torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+    #     factor = config.initializer_factor
+    #     # self.patch_embed.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
+    #     # self.patch_embed.proj.bias.data.normal_(mean=0.0, std=factor * 1.0)
+    #     self.cls_token.data.normal_(mean=0.0, std=factor * 1.0)
+    #     # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+    #     # torch.nn.init.normal_(self.cls_token, std=0.02)
+    #
+    #     # initialize nn.Linear and nn.LayerNorm
+    #     # self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -1393,105 +1532,116 @@ class UdopLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class UdopPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = UdopConfig
-    base_model_prefix = "transformer"
-    is_parallelizable = True
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["UDOPDualBlock"]
-    _keep_in_fp32_modules = ["wo"]
-
-    @property
-    def dummy_inputs(self):
-        input_ids = torch.tensor(DUMMY_INPUTS)
-        input_mask = torch.tensor(DUMMY_MASK)
-        dummy_inputs = {
-            "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
-            "decoder_attention_mask": input_mask,
-        }
-        return dummy_inputs
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, UdopLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-        elif isinstance(
-            module,
-            (UdopDualForConditionalGeneration, UdopUnimodelForConditionalGeneration),
-        ):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UdopDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, UdopDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, UdopAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UdopAttention, UdopDualStack, UdopUniStack)):
-            module.gradient_checkpointing = value
-
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In UDOPDual it is usually set to the"
-            " pad_token_id. See UDOPDual docs for more information"
-        )
-
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        return shifted_input_ids
+# class UdopPreTrainedModel(PreTrainedModel):
+#     """
+#     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+#     models.
+#     """
+#
+#     config_class = UdopConfig
+#     base_model_prefix = "transformer"
+#     is_parallelizable = True
+#     supports_gradient_checkpointing = True
+#     _no_split_modules = ["UDOPDualBlock"]
+#     _keep_in_fp32_modules = ["wo"]
+#
+#     @property
+#     def dummy_inputs(self):
+#         input_ids = torch.tensor(DUMMY_INPUTS)
+#         input_mask = torch.tensor(DUMMY_MASK)
+#         dummy_inputs = {
+#             "decoder_input_ids": input_ids,
+#             "input_ids": input_ids,
+#             "decoder_attention_mask": input_mask,
+#         }
+#         return dummy_inputs
+#
+#     def _init_weights(self, module):
+#         """Initialize the weights"""
+#         factor = self.config.initializer_factor  # Used for testing weights initialization
+#         if isinstance(module, UdopLayerNorm):
+#             module.weight.data.fill_(factor * 1.0)
+#         elif isinstance(
+#             module,
+#             (UdopDualForConditionalGeneration, UdopUnimodelForConditionalGeneration),
+#         ):
+#             # Mesh TensorFlow embeddings initialization
+#             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+#             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#             # if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+#             module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#         elif isinstance(module, UdopDenseActDense):
+#             # Mesh TensorFlow FF initialization
+#             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+#             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
+#             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+#             if hasattr(module.wi, "bias") and module.wi.bias is not None:
+#                 module.wi.bias.data.zero_()
+#             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+#             if hasattr(module.wo, "bias") and module.wo.bias is not None:
+#                 module.wo.bias.data.zero_()
+#         elif isinstance(module, UdopDenseGatedActDense):
+#             module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+#             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+#                 module.wi_0.bias.data.zero_()
+#             module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+#             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+#                 module.wi_1.bias.data.zero_()
+#             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+#             if hasattr(module.wo, "bias") and module.wo.bias is not None:
+#                 module.wo.bias.data.zero_()
+#         elif isinstance(module, UdopAttention):
+#             # Mesh TensorFlow attention initialization to avoid scaling before softmax
+#             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
+#             d_model = self.config.d_model
+#             key_value_proj_dim = self.config.d_kv
+#             n_heads = self.config.num_heads
+#             module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+#             module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+#             module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+#             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+#             if module.has_relative_attention_bias:
+#                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+#         elif isinstance(module, UdopCellEmbeddings):
+#             module.x_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#             module.y_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#         elif isinstance(module, RelativePositionBiasBase):
+#             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#         elif isinstance(module, MaskedAutoencoderViT):
+#             pos_embed = get_2d_sincos_pos_embed(
+#                 module.pos_embed.shape[-1], int(module.patch_embed.num_patches ** 0.5), cls_token=True
+#             )
+#             module.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+#             module.patch_embed.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
+#
+#     def _set_gradient_checkpointing(self, module, value=False):
+#         if isinstance(module, (UdopAttention, UdopDualStack, UdopUniStack)):
+#             module.gradient_checkpointing = value
+#
+#     def _shift_right(self, input_ids):
+#         decoder_start_token_id = self.config.decoder_start_token_id
+#         pad_token_id = self.config.pad_token_id
+#
+#         assert decoder_start_token_id is not None, (
+#             "self.model.config.decoder_start_token_id has to be defined. In UDOPDual it is usually set to the"
+#             " pad_token_id. See UDOPDual docs for more information"
+#         )
+#
+#         # shift inputs to the right
+#         if is_torch_fx_proxy(input_ids):
+#             # Item assignment is not supported natively for proxies.
+#             shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
+#             shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+#         else:
+#             shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+#             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+#             shifted_input_ids[..., 0] = decoder_start_token_id
+#
+#         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+#         # replace possible -100 values in labels by `pad_token_id`
+#         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+#
+#         return shifted_input_ids
 
 
 class UdopCellEmbeddings(UdopPreTrainedModel):
@@ -1566,13 +1716,15 @@ class UdopDualStack(UdopPreTrainedModel):
         if not self.is_decoder:
             self.cell2dembedding = UdopCellEmbeddings(config)
 
-        self.init_weights()
+        # self.init_weights()
 
         if not self.is_decoder:
-            self.vision_encoder = mae_model(config)
+            self.vision_encoder = MaskedAutoencoderViT(config)
         else:
             self.vision_fc = nn.Linear(config.d_model, config.d_model)
             self.vision_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+
+        # self.init_weights()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1766,6 +1918,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         self.config.decoder_start_token_id = self.config.pad_token_id
         self.model_dim = self.config.d_model
 
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
@@ -1778,7 +1931,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopDualStack(decoder_config, self.shared)
 
-        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
 
@@ -1845,7 +1998,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         use_cache=True,
-        output_attentions: Optional[bool] = None,
+        output_attentions: Optional[bool] = True,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
         input_dict: Dict[str, Any] = None,
@@ -1858,7 +2011,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-
+            A tuple or UdopSeq2SeqLMOutput containing loss, logits amoung other things.
         Examples:
 
         ```python
@@ -2330,7 +2483,6 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
-        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -2340,6 +2492,8 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
         mae_model_tmp = mae_model(config)
 
         self.patch_embed = mae_model_tmp.patch_embed
+
+        self.post_init()
 
     @staticmethod
     def get_required_segment_levels() -> Sequence[str]:
@@ -2391,7 +2545,7 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
         return_dict: Optional[bool] = True,
         input_dict: Dict[str, Any] = None,
         **kwargs,
-    ) -> Tuple[Tensor, ...]:
+    ) -> Tuple[Tensor, UdopSeq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -2399,7 +2553,7 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-
+            A tuple or UdopSeq2SeqLMOutput containing loss, logits amoung other things.
         Examples:
 
         ```python

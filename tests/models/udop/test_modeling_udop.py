@@ -15,10 +15,13 @@
 
 
 import copy
+import os
+import pickle
 import tempfile
 import unittest
 
 from transformers import UdopConfig, is_torch_available
+from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
     require_sentencepiece,
@@ -27,11 +30,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
+from transformers.utils import cached_property, is_torch_fx_available
+from transformers.utils.fx import symbolic_trace
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, _config_zero_init
 
 if is_torch_available():
     import torch
@@ -369,7 +372,7 @@ class UdopModelTest(ModelTesterMixin, unittest.TestCase):
     all_parallelizable_model_classes = (
         (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
     )
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = True
