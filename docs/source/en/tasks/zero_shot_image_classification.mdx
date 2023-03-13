@@ -21,12 +21,11 @@ Traditionally, image classification requires training a model on a specific set 
 "map" certain image features to labels. When there's a need to use such model for a classification task that introduces a
 new set of labels, fine-tuning is required to "recalibrate" the model.
 
-In contrast, a pre-trained model that can be used for zero-shot image classification typically has been trained on a large
-dataset of images and associated descriptions. Such model has learned aligned vision-language representations. These can
-be used for many downstream tasks including zero-shot image classification.
+In contrast, zero-shot or open vocabulary image classification models are typically multi-modal models that have been trained on a large
+dataset of images and associated descriptions. These models learn aligned vision-language representations that can be used for many downstream tasks including zero-shot image classification.
 
 This is a more flexible approach to image classification that allows models to generalize to new and unseen categories
-without the need for additional training data.
+without the need for additional training data and enables users to query images with free-form text descriptions of their target objects .
 
 In this guide you'll learn how to:
 
