@@ -471,7 +471,7 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
-        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.0 `"adamw_hf"`):
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`:
             The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
             adafactor.
         optim_args (`str`, *optional*):
@@ -951,8 +951,11 @@ class TrainingArguments:
     )
 
     default_optim = "adamw_hf"
-    if is_torch_available() and version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
-        default_optim = "adamw_torch_fused"
+    # XXX: enable when pytorch==2.0.1 comes out - we want to give it time to get all the bugs sorted out
+    # if is_torch_available() and version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.1.0"):
+    #     default_optim = "adamw_torch_fused"
+    # and update the doc above to:
+    # optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.1.0 `"adamw_hf"`):
     optim: Union[OptimizerNames, str] = field(
         default=default_optim,
         metadata={"help": "The optimizer to use."},
@@ -1221,12 +1224,12 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
-        if (
-            self.optim == OptimizerNames.ADAMW_TORCH_FUSED
-            and is_torch_available()
-            and version.parse(version.parse(torch.__version__).base_version) < version.parse("2.0.0")
-        ):
-            raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
+        if self.optim == OptimizerNames.ADAMW_TORCH_FUSED and is_torch_available():
+            if version.parse(version.parse(torch.__version__).base_version) < version.parse("2.0.0"):
+                raise ValueError("--optim adamw_torch_fused requires PyTorch 2.0 or higher")
+            # there is a bug in fp16/AMP in pt-2.0.0
+            if version.parse(version.parse(torch.__version__).base_version) == version.parse("2.0.0") and self.fp16:
+                raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
         if (
             self.framework == "pt"
