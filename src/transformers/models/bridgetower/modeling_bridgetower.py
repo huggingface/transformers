@@ -1811,7 +1811,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
         >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
 
-        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm")
+        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
         >>> inputs = processor(images, texts, padding=True, return_tensors="pt")
