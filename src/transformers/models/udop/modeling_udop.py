@@ -28,7 +28,12 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from transformers import UdopConfig
-from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput
+from transformers.modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -1370,15 +1375,12 @@ class UdopStack(UdopPreTrainedModel):
                 ]
                 if v is not None
             )
-
-        return BaseModelOutputWithVisionEmbeds(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
-            attention_mask=attention_mask,
-            seg_data=seg_data,
         )
 
 
@@ -1692,7 +1694,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
         if not return_dict:
-            output = (lm_logits,) + model_outputs[1:] + encoder_outputs
+            output = (lm_logits,) + model_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
