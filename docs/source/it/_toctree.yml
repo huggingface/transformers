@@ -45,5 +45,7 @@
     title: Hardware ottimizzato per l'addestramento
   - local: community
     title: Risorse della comunità
+  - local: pr_checks
+    title: Controlli su una Pull Request
   title: Guide How-to
   
