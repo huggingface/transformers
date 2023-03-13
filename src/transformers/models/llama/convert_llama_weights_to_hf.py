@@ -52,7 +52,7 @@ NUM_SHARDS = {
 
 
 def compute_intermediate_size(n):
-    return int(math.ceil(n * 8/3) + 255) // 256 * 256
+    return int(math.ceil(n * 8 / 3) + 255) // 256 * 256
 
 
 def read_json(path):
