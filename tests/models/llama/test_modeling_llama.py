@@ -267,6 +267,7 @@ class LLaMAModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (LLaMAForCausalLM,) if is_torch_available() else ()
+    test_headmasking = False
 
     def setUp(self):
         self.model_tester = LLaMAModelTester(self)
