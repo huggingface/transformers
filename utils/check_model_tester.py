@@ -33,7 +33,6 @@ if __name__ == "__main__":
     for test_file in test_files:
         tester_classes = get_tester_classes(test_file)
         for tester_class in tester_classes:
-            print(tester_class.__name__)
             # A few tester classes don't have `parent` parameter in `__init__`.
             # TODO: deal this better
             try:
