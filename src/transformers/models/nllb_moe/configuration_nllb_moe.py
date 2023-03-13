@@ -134,7 +134,6 @@ class NllbMoeConfig(PretrainedConfig):
         batch_prioritized_routing=False,
         moe_eval_capacity_token_fraction=1.0,
         moe_token_dropout=0.2,
-        use_moe_pad_mask=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -177,7 +176,6 @@ class NllbMoeConfig(PretrainedConfig):
         self.second_expert_policy = second_expert_policy
         self.normalize_router_prob_before_dropping = normalize_router_prob_before_dropping
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
-        self.use_moe_pad_mask = use_moe_pad_mask
         self.moe_token_dropout = moe_token_dropout
         super().__init__(
             pad_token_id=pad_token_id,

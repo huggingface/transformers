@@ -363,7 +363,7 @@ class NllbMoeTop2Router(nn.Module):
 
         if self.normalize_router_prob_before_dropping:
             # Normalize gate probabilities
-            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(denom_s.dtype).eps)
+            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(hidden_states.dtype).eps)
             top_1_max_probs = top_1_max_probs / denom_s
             top_2_max_probs = top_2_max_probs / denom_s
 
