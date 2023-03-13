@@ -337,7 +337,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": UdopForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": UdopModel} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True

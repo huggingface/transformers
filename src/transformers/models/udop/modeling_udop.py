@@ -91,59 +91,6 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     seg_data: torch.FloatTensor = None
 
 
-@dataclass
-class VisSeq2SeqLMOutput(BaseModelOutput):
-    """
-    Base class for sequence-to-sequence language models outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or
-        when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. Contains pre-computed
-            hidden-states (key and values in the self-attention blocks and in the cross-attention blocks) that can be
-            used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or:
-        when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
-        when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`,
-        *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or:
-        when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    image_output: Optional[Tuple[torch.FloatTensor]] = None
-    image_target: Optional[Tuple[torch.FloatTensor]] = None
-    image_mask_label: Optional[Tuple[torch.FloatTensor]] = None
-
-
 def pad_sequence(seq, target_len, pad_value=0):
     if isinstance(seq, torch.Tensor):
         n = seq.shape[0]
@@ -268,14 +215,19 @@ class UdopPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
             module.weight.data.fill_(factor * 1.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, RelativePositionBiasBase):
             factor = self.config.initializer_factor
             d_model = self.config.d_model
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, UdopForConditionalGeneration):
+        elif isinstance(module, UdopModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.udop.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopForConditionalGeneration):
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopDenseActDense):
@@ -1175,8 +1127,6 @@ class UdopStack(UdopPreTrainedModel):
                     bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
                 )
 
-        self.init_weights()
-
     @staticmethod
     def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
         relative_bias_list = create_relative_bias(config)
@@ -1708,3 +1658,31 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             encoder_hidden_states=model_outputs.encoder_hidden_states,
             encoder_attentions=model_outputs.encoder_attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
+    ):
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {
+            "decoder_input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
+            "use_cache": use_cache,
+            "seg_data": kwargs.get("seg_data", None),
+        }
