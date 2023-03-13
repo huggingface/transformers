@@ -119,6 +119,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
+        ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
