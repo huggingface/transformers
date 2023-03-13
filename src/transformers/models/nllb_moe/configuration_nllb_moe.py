@@ -178,7 +178,7 @@ class NllbMoeConfig(PretrainedConfig):
         self.normalize_router_prob_before_dropping = normalize_router_prob_before_dropping
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.use_moe_pad_mask = use_moe_pad_mask
-        self.moe_token_dropout=moe_token_dropout
+        self.moe_token_dropout = moe_token_dropout
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
