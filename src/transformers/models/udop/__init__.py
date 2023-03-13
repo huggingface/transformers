@@ -24,7 +24,10 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"]}
+_import_structure = {
+    "configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"],
+    "processing_udop": ["UdopProcessor"],
+}
 
 try:
     if not is_sentencepiece_available():
@@ -65,6 +68,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig
+    from .processing_udop import UdopProcessor
 
     try:
         if not is_sentencepiece_available():
