@@ -1,4 +1,4 @@
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +21,6 @@ from torch import nn
 from transformers import NllbMoeConfig, NllbMoeModel
 from transformers.modeling_utils import dtype_byte_size
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
-
-
-# 'encoder.layers.7.moe_layer.experts.0.fc2.bias', 'encoder.layers.11.moe_layer.experts.0.fc1.weight',
 
 
 def remove_ignore_keys_(state_dict):
@@ -49,25 +46,23 @@ def make_linear_from_emb(emb):
 
 
 def rename_fairseq_keys(state_dict, expert_idx=None):
-    # 'encoder.layers.7.moe_layer.experts.0.fc2.bias' ->'encoder.layers.7.ffn.mlp.experts.0.fc2.bias'
-    # 'encoder.layers.7.fc2.bias' ->  'encoder.layers.7.ffn.mlp.fc2.bias'
-    # encoder.layers.7.wg -> encoder.layers.7.ffn.mlp.router.classifier
     new_dict = {}
     for old_key in state_dict.keys():
         key = old_key
         if "experts" in key:
             key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
-        elif "fc2":
-            key = key.replace(".fc2.", ".ffn.mlp.fc2")
-        elif "fc1":
-            key = key.replace(".fc1.", ".ffn.mlp.fc1")
         elif "gate" in key:
             key = key.replace(".moe_layer.gate.wg", ".ffn.mlp.router.classifier")
-        elif "encoder_attn" in key:
-            key = key.replace("encoder_attn", "cross_attention")
-        elif "encoder_attn_layer_norm" in key:
+        if "fc2" and "experts" not in key:
+            key = key.replace(".fc2.", ".ffn.mlp.fc2.")
+        if "fc1" and "experts" not in key:
+            key = key.replace(".fc1.", ".ffn.mlp.fc1.")
+        if ".encoder_attn." in key:
+            key = key.replace(".encoder_attn.", ".cross_attention.")
+        if "encoder_attn_layer_norm" in key:
             key = key.replace("encoder_attn_layer_norm", "cross_attention_layer_norm")
-
+        if "final_layer_norm" in key:
+            key = key.replace("final_layer_norm", "ffn.layer_norm")
         new_dict[key] = state_dict[old_key]
     return new_dict
 
@@ -151,13 +146,10 @@ if __name__ == "__main__":
         args.dtype,
     )
 
-    # 'decoder.layers.1.ffn.mlp.experts.expert_7.fc1.weight',
-    # should start sparse with layer 3, then 7,
     config = NllbMoeConfig.from_pretrained(
         "facebook/nllb-200-3.3B", encoder_sparse_step=4, decoder_sparse_step=4, num_experts=128
     )
     config.save_pretrained(args.pytorch_dump_folder_path)
     model = NllbMoeModel.from_pretrained(args.pytorch_dump_folder_path)
     print("Done")
-    # model.push_to_hub("ArthurZ/nllb-moe-54b")
-    # model.save_pretrained(args.pytorch_dump_folder_path)
+    model.save_pretrained(args.pytorch_dump_folder_path)

@@ -259,7 +259,7 @@ class NllbMoeTop2Router(nn.Module):
     """
     Router using tokens choose top-2 experts assignment.
 
-    This router uses the same mechanism as in NLLB-MoE from the fairseq repository, but it is also based on the 
+    This router uses the same mechanism as in NLLB-MoE from the fairseq repository, but it is also based on the
     implementation of Switch Transformers by the HuggingFace team
     Tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
@@ -345,13 +345,18 @@ class NllbMoeTop2Router(nn.Module):
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
-        expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
+        top_1_expert_index = torch.argmax(router_probs, dim=-1)
+        top_1_expert_index = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
+
+        # replace top_1_expert_index with min values
+        logits_except1 = router_logits.masked_fill(top_1_expert_index.bool(), float("-inf"))
+        top_2_expert_index = torch.argmax(logits_except1, dim=-1)
+        top_2_expert_index = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
 
         # Mask tokens outside expert capacity. Sum over each sequence
-        token_priority = torch.cumsum(expert_index, dim=-2)
+        top_1_token_priority = torch.cumsum(top_2_expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
-        expert_capacity_mask = token_priority <= self.expert_capacity
+        expert_capacity_mask = top_1_token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
 
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
