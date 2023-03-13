@@ -213,10 +213,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
             testing).
         seq_len (`int`, *optional*, defaults to 4096):
             Maximum sequence length (here number of patches) supported by the model.
-        qkv_bias (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a bias to the query, key, and value transformations.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a bias to the mlp layers.
         layer_norm_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to add a bias to the layer normalization layers.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -260,8 +256,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         initializer_range=1e-10,
         initializer_factor=1.0,
         seq_len=4096,
-        qkv_bias=False,
-        mlp_bias=False,
         layer_norm_bias=False,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
@@ -285,8 +279,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
         self.seq_len = seq_len
-        self.qkv_bias = qkv_bias
-        self.mlp_bias = mlp_bias
         self.layer_norm_bias = layer_norm_bias
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance

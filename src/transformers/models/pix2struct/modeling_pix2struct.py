@@ -234,12 +234,13 @@ class Pix2StructVisionAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->hidden_dropout_prob
 class Pix2StructVisionMlp(nn.Module):
     def __init__(self, config: Pix2StructVisionConfig):
         super().__init__()
-        self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=config.mlp_bias)
-        self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=config.mlp_bias)
-        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=config.mlp_bias)
+        self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -252,7 +253,11 @@ class Pix2StructVisionMlp(nn.Module):
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
@@ -878,6 +883,7 @@ class Pix2StructTextAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,self.SelfAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -910,6 +916,7 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,self.EncDecAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1273,8 +1280,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean", label_smoothing=0.1)
             masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+
             loss = loss_fct(logits.view(-1, logits.size(-1)), masked_labels.view(-1))
 
         if not return_dict:
@@ -1506,9 +1514,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Pix2StructTextModel
+        >>> from transformers import AutoProcessor, Pix2StructTextModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+        >>> processor = AutoTokenizer.from_pretrained("t5-small")
         >>> model = Pix2StructTextModel.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(
@@ -1549,6 +1557,13 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
+            decoder_attention_mask = (
+                decoder_attention_mask
+                if decoder_attention_mask is not None
+                else decoder_input_ids.ne(self.config.pad_token_id).float()
+            )
+            # Always attend to the first token
+            decoder_attention_mask[:, 0] = 1
 
         # Decode
         decoder_outputs = self.decoder(
