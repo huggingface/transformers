@@ -869,6 +869,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.udop"].append("UdopTokenizerFast")
     _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -4953,6 +4954,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.udop import UdopTokenizerFast
         from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
