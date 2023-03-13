@@ -416,26 +416,15 @@ class NllbMoeTop2Router(nn.Module):
             top_1_max_probs /= denom_s
             top_2_max_probs /= denom_s
 
-        # Store the nb of tokens routed to the expert at the token location
-        # running counter for how many tokens are dispatched to an expert
-        locations1_s = torch.sum(locations1 * top_1_mask, dim=1)
-        locations2_s = torch.sum(locations2 * top_2_mask, dim=1)
 
         # Calculate combine_weights and dispatch_mask
-        gates1 = top_1_max_probs.unsqueeze(-1) * top_1_mask.to(top_1_max_probs.dtype)  # einsum("s,se->se")
-        gates2 = top_2_max_probs.unsqueeze(-1) * top_2_mask.to(top_2_max_probs.dtype)  # einsum("s,se->se")
-        # from batch * seq_len to batch*seq_len , expert_capacity
-        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=self.expert_capacity)
-        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=self.expert_capacity)
-        
-        # combine1_sec.shap torch.Size([24, 128, 24])
-        # einsum("se,sc->sec")
-        combine1_sec = torch.bmm(gates1.unsqueeze(-1),locations1_sc.to(gates1.dtype).unsqueeze(1))
-        combine2_sec = torch.bmm(gates2.unsqueeze(-1),locations2_sc.to(gates2.dtype).unsqueeze(1))
-        combine_weights = combine1_sec + combine2_sec
-        dispatch_mask = combine_weights.bool()
-    
-        return dispatch_mask, combine_weights, router_logits
+        gates1 = top_1_max_probs[:, None] * top_1_mask
+        gates2 = top_2_max_probs[:, None] * top_2_mask
+
+        dispatch_mask = torch.stack([top_1_mask, top_2_mask])
+        router_probs = torch.stack([gates1, gates2])
+
+        return dispatch_mask, router_probs, router_logits
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->NllbMoe
