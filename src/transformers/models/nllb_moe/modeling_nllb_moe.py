@@ -339,137 +339,99 @@ class NllbMoeTop2Router(nn.Module):
             Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
-        sequence_length = hidden_states.shape[1]
-        if not self.training and self.eval_capacity_token_fraction > 0:
-            capacity = math.ceil(self.moe_eval_capacity_token_fraction * sequence_length)
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        
+        # 1. hide the batch
+        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
+        if not self.training and self.moe_eval_capacity_token_fraction > 0:
+            self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * sequence_length)
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
-        top_1_expert_index = torch.argmax(router_probs, dim=-1)
-        top_1_expert_index = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
-        top_1_token_priority = torch.cumsum(top_1_expert_index, dim=-2) 
-
-
+        top_1_max_probs, top_1_expert_index = torch.max(router_probs, dim=-1)
+        # ((batch_size * sequence_length), self.num_experts)
+        top_1_mask = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
+        
         if self.second_expert_policy == "sampling":
-            one = torch.tensor(1.0, device=router_logits.device)
-            zero = torch.tensor(0.0, device=router_logits.device)
-            gumbel = torch.distributions.gumbel.Gumbel(zero, one).rsample
-            router_logits += gumbel(router_logits.shape)
+            gumbel = torch.distributions.gumbel.Gumbel(0, 1).rsample
+            router_logits += gumbel(router_logits.shape).to(router_logits.device)
         
         # replace top_1_expert_index with min values
         logits_except_top_1 = router_logits.masked_fill(top_1_expert_index.bool(), float("-inf"))
-        top_2_expert_index = torch.argmax(logits_except_top_1, dim=-1)
-        top_2_expert_index = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
-        top_2_token_priority = torch.cumsum(top_2_expert_index, dim=-2)
+        top_2_max_probs, top_2_expert_index = torch.max(logits_except_top_1, dim=-1)
+        top_2_mask = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
         
+
         if self.normalize_router_prob_before_dropping:
             # Normalize gate probabilities
-            denom_s = top_1_token_priority + top_2_token_priority
-            # Avoid divide-by-zero
-            denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
-            top_1_token_priority = top_1_token_priority / denom_s
-            top_2_token_priority = top_2_token_priority / denom_s
+            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(denom_s.dtype).eps)
+            top_1_max_probs = top_1_max_probs / denom_s
+            top_2_max_probs = top_2_max_probs / denom_s
         
         if self.second_expert_policy == "random":
-            sampled = (2 * top_2_token_priority) > torch.rand_like(top_2_token_priority)
-            mask2 = mask2 * sampled.repeat(self.num_experts, 1).transpose(1, 0)
+            sampled = (2 * top_2_mask) > torch.rand_like(top_2_mask)
+            top_2_mask = top_2_mask * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
         if padding_mask is not None:
             nonpadding = ~padding_mask
-            mask1 = mask1 * nonpadding.unsqueeze(-1).to(mask1.dtype)
-            mask2 = mask2 * nonpadding.unsqueeze(-1).to(mask1.dtype)
+            top_1_mask = top_1_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
+            top_2_mask = top_2_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
                 
         if self.batch_prioritized_routing:
-            # if batch_prioritized_routing:
-            importance_scores = -1 * router_probs.max(dim=1)[0]
-            sorted_mask1 = mask1[importance_scores.argsort(dim=0)]
-            sorted_cumsum1 = torch.cumsum(sorted_mask1) * sorted_mask1
-            importance_sorted_locations1 = sorted_cumsum1[
-                importance_scores.argsort(dim=0).argsort(dim=0)
-            ]
+            # sort tokens based on their routing probability
+            # to make sure important tokens are routed, even 
+            # if they appear last in the sequence. TODO explain with a bit more 
+            # details for each operations
+            importance_scores = (-1 * top_1_max_probs).argsort(dim=0)
+            sorted_top_1_mask = top_1_mask[importance_scores]
+            sorted_cumsum1 = (torch.cumsum(sorted_top_1_mask) -1 ) * sorted_top_1_mask
+            importance_sorted_locations1 = sorted_cumsum1[importance_scores.argsort(dim=0)]
 
-            sorted_mask2 = mask2[importance_scores.argsort(dim=0)]
-            sorted_cumsum2 = torch.cumsum(sorted_mask2) * sorted_mask2
-            importance_sorted_locations2 = sorted_cumsum2[
-                importance_scores.argsort(dim=0).argsort(dim=0)
-            ]
+            sorted_top_2_mask = top_2_mask[importance_scores]
+            sorted_cumsum2 = (torch.cumsum(sorted_top_2_mask)-1) * sorted_top_2_mask
+            importance_sorted_locations2 = sorted_cumsum2[importance_scores.argsort(dim=0)]
+            # Update 2nd's location by accounting for locations of 1st
+            importance_sorted_locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
-            importance_sorted_locations2 += torch.sum(mask1, dim=0, keepdim=True)
-
-            locations1 = importance_sorted_locations1,
-            locations2 = importance_sorted_locations2,
+            locations1 = importance_sorted_locations1
+            locations2 = importance_sorted_locations2
     
         else:
-            locations1 = torch.cumsum(mask1)
-            locations2 = torch.cumsum(mask2)
+            locations1 = torch.cumsum(top_1_mask) - 1
+            locations2 = torch.cumsum(top_2_mask) - 1
             # Update 2nd's location by accounting for locations of 1st
-            locations2 += torch.sum(mask1, dim=0, keepdim=True)
+            locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
-            # Remove locations outside capacity from
-            mask1 = mask1 * torch.lt(locations1, capacity)
-            mask2 = mask2 * torch.lt(locations2, capacity)
+        # Remove locations outside capacity from ( cumsum < capacity = False will not be routed)
+        top_1_mask = top_1_mask * torch.lt(locations1, self.expert_capacity)
+        top_2_mask = top_2_mask * torch.lt(locations2, self.expert_capacity)
             
         if not self.normalize_router_prob_before_dropping:
             # Normalize gate probabilities
-            gates1_s = (router_probs * mask1).sum(dim=1)
-            gates2_s = (router_probs * mask2).sum(dim=1)
-            denom_s = gates1_s + gates2_s
+            top_1_max_probs = (router_probs * top_1_mask).sum(dim=1)
+            top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
+            denom_s = top_1_max_probs + top_2_max_probs
             # Avoid divide-by-zero
             denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
-            gates1_s /= denom_s
-            gates2_s /= denom_s
+            top_1_max_probs /= denom_s
+            top_2_max_probs /= denom_s
 
             # Store the capacity location for each token
-        locations1_s = torch.sum(locations1 * mask1, dim=1)
-        locations2_s = torch.sum(locations2 * mask2, dim=1)
+        locations1_s = torch.sum(locations1 * top_1_mask, dim=1)
+        locations2_s = torch.sum(locations2 * top_2_mask, dim=1)
 
         # Calculate combine_weights and dispatch_mask
-        gates1 = gates1_s.unsqueeze(-1) * mask1.to(gates1_s.dtype)  # einsum("s,se->se")
-        gates2 = gates2_s.unsqueeze(-1) * mask2.to(gates2_s.dtype)  # einsum("s,se->se")
-        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=capacity, unsqueeze_indices=True)
-        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=capacity, unsqueeze_indices=True)
-        combine1_sec = torch.bmm(
-            # einsum("se,sc->sec")
-            gates1.unsqueeze(-1),
-            locations1_sc.to(gates1.dtype).unsqueeze(1),
-        )
-        combine2_sec = torch.bmm(
-            # einsum("se,sc->sec")
-            gates2.unsqueeze(-1),
-            locations2_sc.to(gates2.dtype).unsqueeze(1),
-        )
+        gates1 = top_1_max_probs.unsqueeze(-1) * top_1_mask.to(top_1_max_probs.dtype)  # einsum("s,se->se")
+        gates2 = top_2_max_probs.unsqueeze(-1) * top_2_mask.to(top_2_max_probs.dtype)  # einsum("s,se->se")
+        locations1_sc = torch.nn.functional.one_hot(locations1_s, num_classes=self.expert_capacity, unsqueeze_indices=True)
+        locations2_sc = torch.nn.functional.one_hot(locations2_s, num_classes=self.expert_capacity, unsqueeze_indices=True)
+        
+        # einsum("se,sc->sec")
+        combine1_sec = torch.bmm(gates1.unsqueeze(-1),locations1_sc.to(gates1.dtype).unsqueeze(1))
+        combine2_sec = torch.bmm(gates2.unsqueeze(-1),locations2_sc.to(gates2.dtype).unsqueeze(1))
         combine_weights = combine1_sec + combine2_sec
         dispatch_mask = combine_weights.bool()
     
-        # Check if we need to implement the prefix tokens (normal this is if one expert is responsible of 1 language)
-        # dispatch masks are probably useless as they are required for data/model parallelism?
-        # Mask tokens outside expert capacity. Sum over each sequence
-
-        # mask if the token routed to to the expert will overflow
-        expert_capacity_mask = top_1_token_priority <= self.expert_capacity
-        top_1_expert_index = top_1_expert_index * expert_capacity_mask
-
-        expert_capacity_mask = top_2_token_priority <= self.expert_capacity
-        top_2_expert_index = top_2_expert_index * expert_capacity_mask
-
-        dipatch_mask = torch.cat([top_1_expert_index, top_2_expert_index])
-        # check that the next forward supports one more dimension (for both top1 gate and top2)
-        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        
-        # dipatch_mask should be of shape batch, seq_len, expert, capacity
-        # then # S,E,C -> E,C,S
-        # then
-        # dispatched_input = torch.mm(
-        #         dispatch_mask.view(E * C, S), reshaped_input
-        #     )  # -> (E*C),M 
-        
-        # then 
-        # chunks = dispatched_input.chunk(self.num_local_experts, dim=1)
-        # expert_outputs = []
-        # for chunk, expert in zip(chunks, self.experts):
-        #     expert_outputs += [expert(chunk)]
-        # expert_output = torch.cat(expert_outputs, dim=1)
-        combine_weights = None
-        return dipatch_mask, combine_weights, router_logits
+        return dispatch_mask, combine_weights, router_logits
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->NllbMoe
@@ -610,6 +572,8 @@ class NllbMoeSparseMLP(nn.Module):
         self.router_type = config.router_type
         # TODO handle the type of router chosen
         self.router = NllbMoeTop2Router(config)
+        self.moe_token_dropout = config.moe_token_dropout
+        self.token_droput = nn.Dropout2d(self.moe_token_dropout)
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
         for idx in range(config.num_experts):
@@ -639,11 +603,17 @@ class NllbMoeSparseMLP(nn.Module):
             token_indices = router_mask[:, :, idx].bool()
             # original code multiplies the hidden states by the dispatch mask
             # then chunks the dispatched input after some reshaping, then feeds each chunk to the corresponding
-            # expert. Which is better in terms of performances?
+            # expert. Which is better in terms of performances? Chunks are then concatenated together
+            # chunk size = torch.Size([1, 1, capacity, d_model])
             next_states[token_indices] = expert(hidden_states[token_indices])
 
         # TODO, they added dropout here, by randomly masking the outputs (Dropout2D can be used)
-        
+        if self.moe_token_dropout>0:
+            if self.trainig:
+                next_states = self.token_dropout(next_states)
+            else:
+                next_states *= (1 - self.moe_token_dropout)
+    
         # TODO to combine the expert states, they use the `combining_weights` not the router_logits
         # combined_output = combine_weights.view(S, E * C).mm(
         #     expert_output.view(E * C, M)
