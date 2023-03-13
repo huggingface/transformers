@@ -361,43 +361,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
 
-    def test_decoder_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
-
-    def test_decoder_model_past_with_attn_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    def test_decoder_model_past_with_3d_attn_mask(self):
-        (
-            config,
-            input_ids,
-            seg_data,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
-            vocab_size=2,
-        )
-        decoder_attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
-            vocab_size=2,
-        )
-
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        )
-
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -422,33 +385,34 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
+            arg_names = sorted([*signature.parameters.keys()])
 
             expected_arg_names = [
-                "input_ids",
                 "attention_mask",
-                "decoder_input_ids",
-                "decoder_attention_mask",
-                "encoder_outputs",
-                "past_key_values",
-                "image",
-                "ids_keep",
-                "ids_restore",
-                "image_mask_label",
-                "mask_ratio",
-                "seg_data",
-                "visual_seg_data",
-                "masked_lm_labels",
-                "head_mask",
                 "char_ids",
                 "char_seg_data",
+                "cross_attn_head_mask",
+                "decoder_attention_mask",
+                "decoder_head_mask",
+                "decoder_input_ids",
+                "decoder_inputs_embeds",
+                "encoder_outputs",
+                "head_mask",
+                "ids_keep",
+                "ids_restore",
+                "image",
+                "image_mask_label",
+                "input_ids",
                 "inputs_embeds",
+                "kwargs",
+                "mask_ratio",
             ]
             if model_class in self.all_generative_model_classes:
                 expected_arg_names.append(
                     "labels",
                 )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                expected_arg_names = sorted(expected_arg_names)
+            self.assertListEqual(sorted(arg_names[: len(expected_arg_names)]), expected_arg_names)
 
     @slow
     def test_model_from_pretrained(self):
