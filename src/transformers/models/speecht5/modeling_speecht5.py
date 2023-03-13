@@ -1919,6 +1919,65 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         return outputs
 
 
+class SpeechT5GuidedMultiheadAttentionLoss(torch.nn.Module):
+    """
+    Guided attention loss from the paper [Efficiently Trainable Text-to-Speech System Based on Deep Convolutional
+    Networks with Guided Attention](https://arxiv.org/abs/1710.08969), adapted for multi-head attention.
+    """
+
+    def __init__(self, sigma=0.4, scale=1.0):
+        super().__init__()
+        self.sigma = sigma
+        self.scale = scale
+
+    def forward(
+        self, attentions: torch.FloatTensor, input_masks: torch.BoolTensor, output_masks: torch.BoolTensor
+    ) -> torch.Tensor:
+        """
+        Compute the attention loss.
+
+        Args:
+            attentions (`torch.FloatTensor` of shape `(batch_size, layers * heads, output_sequence_length, input_sequence_length)`):
+                Batch of multi-head attention weights
+            input_masks (`torch.BoolTensor` of shape `(batch_size, input_sequence_length)`):
+                Input attention mask as booleans.
+            output_masks (`torch.BoolTensor` of shape `(batch_size, output_sequence_length)`):
+                Target attention mask as booleans.
+
+        Returns:
+            `torch.Tensor` with the loss value
+        """
+        guided_attn_masks = self._make_guided_attention_masks(input_masks, output_masks, attentions.device)
+        masks = output_masks.unsqueeze(-1) & input_masks.unsqueeze(-2)
+        masks = masks.to(attentions.device).unsqueeze(1)
+
+        losses = guided_attn_masks * attentions
+        loss = torch.mean(losses.masked_select(masks))
+        return self.scale * loss
+
+    def _make_guided_attention_masks(self, input_masks, output_masks, device):
+        input_lengths = input_masks.sum(-1)
+        output_lengths = output_masks.sum(-1)
+
+        guided_attn_masks = torch.zeros((len(input_masks), output_masks.shape[1], input_masks.shape[1]), device=device)
+
+        for idx, (ilen, olen) in enumerate(zip(input_lengths, output_lengths)):
+            guided_attn_masks[idx, :olen, :ilen] = self._make_guided_attention_mask(ilen, olen, self.sigma, device)
+
+        return guided_attn_masks.unsqueeze(1)
+
+    @staticmethod
+    def _make_guided_attention_mask(input_length, output_length, sigma, device):
+        grid_y, grid_x = torch.meshgrid(
+            torch.arange(input_length, device=device),
+            torch.arange(output_length, device=device),
+            indexing="xy",
+        )
+        grid_x = grid_x.float() / output_length
+        grid_y = grid_y.float() / input_length
+        return 1.0 - torch.exp(-((grid_y - grid_x) ** 2) / (2 * (sigma**2)))
+
+
 SPEECHT5_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -2623,7 +2682,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             speaker_embeddings=speaker_embeddings,
-            output_attentions=output_attentions,
+            output_attentions=output_attentions or labels is not None,
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
@@ -2633,9 +2692,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         loss = None
         if labels is not None:
             loss = self._compute_loss(
+                attention_mask,
                 outputs_before_postnet,
                 outputs_after_postnet,
                 logits,
+                outputs.cross_attentions,
                 labels,
             )
 
@@ -2657,9 +2718,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
     def _compute_loss(
         self,
+        attention_mask: torch.Tensor,
         outputs_before_postnet: torch.FloatTensor,
         outputs_after_postnet: torch.FloatTensor,
         logits: torch.FloatTensor,
+        cross_attentions: torch.FloatTensor,
         labels: torch.FloatTensor,
     ):
         padding_mask = labels != -100.0
@@ -2684,6 +2747,21 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         bce_loss = bce_criterion(logits, stop_labels)
 
         loss = l1_loss + bce_loss
+
+        # guided attention loss
+        if self.config.use_guided_attention_loss:
+            attn_criterion = SpeechT5GuidedMultiheadAttentionLoss(
+                sigma=self.config.guided_attention_loss_sigma,
+                scale=self.config.guided_attention_loss_scale,
+            )
+            attn = torch.cat([x[:, : self.config.guided_attention_loss_num_heads] for x in cross_attentions], dim=1)
+            input_masks = attention_mask == 1
+            output_masks = padding_mask[:, :, 0]
+            if self.config.reduction_factor > 1:
+                output_masks = output_masks[:, self.config.reduction_factor - 1 :: self.config.reduction_factor]
+            attn_loss = attn_criterion(attn, input_masks, output_masks)
+            loss += attn_loss
+
         return loss
 
     @torch.no_grad()
