@@ -2300,7 +2300,7 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`,`"adamw_apex_fused"`,
+                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.
