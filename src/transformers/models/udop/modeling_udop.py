@@ -325,13 +325,13 @@ class UdopPreTrainedModel(PreTrainedModel):
             module.y_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, RelativePositionBiasBase):
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, MaskedAutoencoderViT):
+        elif isinstance(module, UdopMaskedAutoencoderViT):
             pos_embed = get_2d_sincos_pos_embed(
                 module.pos_embed.shape[-1], int(module.patch_embed.num_patches**0.5), cls_token=True
             )
             module.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
             module.patch_embed.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, Attention):
+        elif isinstance(module, UdopMAEAttention):
             module.qkv.weight.data.normal_(mean=0.0, std=factor * 1.0)
             module.proj.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
@@ -433,7 +433,7 @@ class UdopMlp(nn.Module):
         return x
 
 
-class Attention(UdopPreTrainedModel):
+class UdopMAEAttention(UdopPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_heads = config.mae_config["num_heads"]
@@ -481,7 +481,7 @@ class UdopMaeBlock(UdopPreTrainedModel):
     ):
         super().__init__(config)
         self.norm1 = nn.LayerNorm(config.mae_config["embed_dim"])
-        self.attn = Attention(config)
+        self.attn = UdopMAEAttention(config)
 
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = nn.Identity()
@@ -501,7 +501,7 @@ class UdopMaeBlock(UdopPreTrainedModel):
         return x
 
 
-class MaskedAutoencoderViT(UdopPreTrainedModel):
+class UdopMaskedAutoencoderViT(UdopPreTrainedModel):
     """Masked Autoencoder with VisionTransformer backbone"""
 
     def __init__(self, config):
@@ -627,7 +627,7 @@ class MaskedAutoencoderViT(UdopPreTrainedModel):
 
 
 def mae_model(config):
-    return MaskedAutoencoderViT(config)
+    return UdopMaskedAutoencoderViT(config)
 
 
 def get_relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -1608,7 +1608,7 @@ class UdopDualStack(UdopPreTrainedModel):
         # self.init_weights()
 
         if not self.is_decoder:
-            self.vision_encoder = MaskedAutoencoderViT(config)
+            self.vision_encoder = UdopMaskedAutoencoderViT(config)
         else:
             self.vision_fc = nn.Linear(config.d_model, config.d_model)
             self.vision_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)

@@ -54,6 +54,9 @@ PRIVATE_MODELS = [
     "UdopDualStack",
     "UdopUniStack",
     "UdopCellEmbeddings",
+    "UdopMAEAttention",
+    "UdopMaeBlock",
+    "UdopMaskedAutoencoderViT",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -160,6 +163,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
     "UdopDualStack",  # Building part of bigger (tested) model.
     "UdopUniStack",  # Building part of bigger (tested) model.
+    "UdopCellEmbeddings",  # Building part of bigger (tested) model.
+    "UdopMAEAttention",  # Building part of bigger (tested) model.
+    "UdopMaskedAutoencoderViT",  # Building part of bigger (tested) model.
     "UdopCellEmbeddings",  # Building part of bigger (tested) model.
 ]
 
