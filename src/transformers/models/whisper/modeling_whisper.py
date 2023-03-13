@@ -767,6 +767,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.conv1
+
     def forward(
         self,
         input_features,
@@ -1330,6 +1333,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
+
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
@@ -1634,6 +1640,9 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         not be updated during training. Only the projection layers and classification head will be updated.
         """
         self.encoder._freeze_parameters()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.encoder.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(WHISPER_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
