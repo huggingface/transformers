@@ -2575,11 +2575,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
-            device_map = infer_auto_device_map(
-                model,
-                dtype=torch_dtype if not load_in_8bit else torch.int8,
-                **kwargs
-            )
+            device_map = infer_auto_device_map(model, dtype=torch_dtype if not load_in_8bit else torch.int8, **kwargs)
 
             if load_in_8bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
