@@ -1,0 +1,78 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# VGCN-BERT
+
+## Overview
+
+The VGCN-BERT model was proposed in [VGCN-BERT: Augmenting BERT with Graph Embedding for Text Classification](https://arxiv.org/abs/2004.05707) by Zhibin Lu, Pan Du, Jian-Yun Nie.
+
+The abstract from the paper is the following:
+
+*Much progress has been made recently on text classification with methods based on neural networks. In particular, 
+models using attention mechanism such as BERT have shown to have the capability of capturing the contextual information 
+within a sentence or document. However, their ability of capturing the global information about the vocabulary of a 
+language is more limited. This latter is the strength of Graph Convolutional Networks (GCN). In this paper, we propose 
+VGCN-BERT model which combines the capability of BERT with a Vocabulary Graph Convolutional Network (VGCN). Local 
+information and global information interact through different layers of BERT, allowing them to influence mutually and 
+to build together a final representation for classification. In our experiments on several text classification datasets, 
+our approach outperforms BERT and GCN alone, and achieve higher effectiveness than that reported in previous studies.*
+
+Tips:
+
+<INSERT TIPS ABOUT MODEL HERE>
+
+This model was contributed by [Zhibin Lu](https://huggingface.co/zhibinlu).
+The original code can be found [here](https://github.com/Louis-udm/VGCN-BERT).
+
+
+## VGCNBertConfig
+
+[[autodoc]] VGCNBertConfig
+
+## VGCNBertTokenizer
+
+[[autodoc]] VGCNBertTokenizer
+
+## VGCNBertTokenizerFast
+
+[[autodoc]] VGCNBertTokenizerFast
+
+## VGCNBertModel
+
+[[autodoc]] VGCNBertModel
+    - forward
+
+## VGCNBertForMaskedLM
+
+[[autodoc]] VGCNBertForMaskedLM
+    - forward
+
+## VGCNBertForSequenceClassification
+
+[[autodoc]] VGCNBertForSequenceClassification
+    - forward
+
+## VGCNBertForMultipleChoice
+
+[[autodoc]] VGCNBertForMultipleChoice
+    - forward
+
+## VGCNBertForTokenClassification
+
+[[autodoc]] VGCNBertForTokenClassification
+    - forward
+
+## VGCNBertForQuestionAnswering
+
+[[autodoc]] VGCNBertForQuestionAnswering
+    - forward
