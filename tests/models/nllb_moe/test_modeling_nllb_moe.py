@@ -44,8 +44,6 @@ if is_torch_available():
         NllbMoeDecoder,
         NllbMoeEncoder,
         NllbMoeTop2Router,
-        load_balancing_loss_func,
-        router_z_loss_func,
     )
 
 
@@ -471,7 +469,11 @@ class NllbMoeRouterTest(unittest.TestCase):
     def test_top_2_routing(self):
         # test routing with minimal reproduction
         batch_size = 2
-        sequence_length = 20 # exceeds the expert capacity
+        sequence_length = 20  # exceeds the expert capacity
+        mask = torch.ones((batch_size, sequence_length), dtype=torch.bool)
+        mask[0][0] = False
+        mask[1][0] = False
+        mask = mask.reshape(-1)
         set_seed(0)
         # test routing with minimal reproduction
         hidden_states = torch.rand((batch_size, sequence_length, self.config.hidden_size))
@@ -479,39 +481,45 @@ class NllbMoeRouterTest(unittest.TestCase):
 
         hf_router = NllbMoeTop2Router(self.config)
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        logits = classfier( hidden_states.reshape((batch_size * sequence_length), hidden_dim))
-        dispatch_mask, router_probs, router_logits = hf_router.route_tokens(logits, sequence_length = sequence_length)
+        logits = classfier(hidden_states.reshape((batch_size * sequence_length), hidden_dim))
+        dispatch_mask, router_probs, router_logits = hf_router.route_tokens(
+            logits, sequence_length=sequence_length, padding_mask=mask
+        )
         dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.config.num_experts))
         router_probs = router_probs.reshape((batch_size, sequence_length, self.config.num_experts))
         set_seed(0)
-        experts = [torch.nn.Linear(hidden_dim, hidden_dim),torch.nn.Linear(hidden_dim, hidden_dim), torch.nn.Linear(hidden_dim, hidden_dim), torch.nn.Linear(hidden_dim, hidden_dim)]
-        
-        next_states = hidden_states.clone()
+        experts = [
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+        ]
+
+        expert_outputs = []
         for idx, expert in enumerate(experts):
             token_indices = dispatch_mask[:, :, idx].bool()
-            expert_contribution = router_probs[:, :, idx][token_indices]
-            # original code multiplies the hidden states by the dispatch mask
-            # then chunks the dispatched input after some reshaping, then feeds each chunk to the corresponding
-            # expert. Which is better in terms of performances? Chunks are then concatenated together
-            # chunk size = torch.Size([1, 1, capacity, d_model])
-            next_states[token_indices] = expert_contribution[:, None] * expert(hidden_states[token_indices])
+            expert_outputs.append(expert(hidden_states[token_indices]))
+        expert_outputs = torch.cat(expert_outputs, dim=0)
 
         self.training = False
         if self.config.moe_token_dropout > 0:
             if self.training:
-                next_states = torch.nn.Dropout2d(self.config.moe_token_dropout)(next_states)
+                expert_outputs = torch.nn.Dropout2d(self.config.moe_token_dropout)(expert_outputs)
             else:
-                next_states *= 1 - self.config.moe_token_dropout
+                expert_outputs *= 1 - self.config.moe_token_dropout
 
+        combined_output = router_probs.mm(expert_outputs.view(self.config.num_expert, self.config.hidden_dim))[:, 0]
         # Now test that the next states are correct
+        # fmt: off
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
             [
-                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
-            ]
+                [
+                    -1.1620e-01, 1.7170e-01, -2.0238e-01, -1.0510e-01, -1.0427e-02, -6.7572e-02, 1.5150e-01, 5.2377e-02, 1.2958e-01, -5.8975e-01, -2.1205e-01, 1.6905e-01, -2.9141e-01, -3.5747e-01, 7.0752e-02, -1.5030e-01, -6.7922e-02, 1.8135e-01, -1.5806e-01, -2.8438e-02, 1.7408e-01, 4.8298e-02, -1.1792e-02, -3.3192e-01, 1.5980e-01, 1.6762e-01, 2.0164e-01, -1.5490e-01, 9.5776e-02, 2.2973e-01, -1.4285e-02, -1.0743e-01,
+                ],
+                [
+                    -8.9075e-02, 6.2051e-02, 2.8243e-03, -9.6243e-02, -1.1256e-01, 1.4499e-01, 7.9538e-02, 2.2229e-01, -3.1332e-02, -4.6955e-01, 1.7454e-01, 2.6892e-01, -5.7691e-04, -3.4575e-01, 1.7524e-01, -9.0632e-02, -2.4328e-01, 1.1492e-01, -9.1722e-02, -1.8781e-01, 5.9616e-01, 1.7841e-02, -1.5246e-02, -2.8347e-01, 6.0415e-02, 3.0621e-01, 1.9543e-01, 6.2028e-02, 1.5608e-01, 1.6039e-01, 6.9567e-02, -1.4346e-01,
+                ],
+            ],
         )
-        EXPECTED_L_AUX = 1
+        # fmt: on 
+        self.assert_equal(combined_output, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES)

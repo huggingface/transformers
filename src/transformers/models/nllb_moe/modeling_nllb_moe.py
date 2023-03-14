@@ -280,7 +280,6 @@ class NllbMoeTop2Router(nn.Module):
         self.batch_prioritized_routing = config.batch_prioritized_routing
         self.moe_eval_capacity_token_fraction = config.moe_eval_capacity_token_fraction
 
-
     def _cast_classifier(self):
         r"""
         `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
@@ -289,7 +288,13 @@ class NllbMoeTop2Router(nn.Module):
         if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
             self.classifier = self.classifier.to(self.dtype)
 
-    def route_tokens(self, router_logits, sequence_length, input_dtype = torch.float32, padding_mask: Optional[torch.LongTensor] = None) -> Tuple:
+    def route_tokens(
+        self,
+        router_logits,
+        sequence_length,
+        input_dtype=torch.float32,
+        padding_mask: Optional[torch.LongTensor] = None,
+    ) -> Tuple:
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(input_dtype)
         top_1_max_probs, top_1_expert_index = torch.max(router_probs, dim=-1)
@@ -308,7 +313,7 @@ class NllbMoeTop2Router(nn.Module):
 
         if self.normalize_router_prob_before_dropping:
             # Normalize gate probabilities
-            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(input_dtype ).eps)
+            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(input_dtype).eps)
             top_1_max_probs = top_1_max_probs / denom_s
             top_2_max_probs = top_2_max_probs / denom_s
 
@@ -349,7 +354,11 @@ class NllbMoeTop2Router(nn.Module):
         if not self.training and self.moe_eval_capacity_token_fraction > 0:
             self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * sequence_length)
         else:
-            self.expert_capacity = 2 * math.ceil(sequence_length / self.num_experts) if self.expert_capacity is None else self.expert_capacity
+            self.expert_capacity = (
+                2 * math.ceil(sequence_length / self.num_experts)
+                if self.expert_capacity is None
+                else self.expert_capacity
+            )
 
         # Remove locations outside capacity from ( cumsum < capacity = False will not be routed)
         top_1_mask = top_1_mask * torch.lt(locations1, self.expert_capacity)
@@ -401,11 +410,14 @@ class NllbMoeTop2Router(nn.Module):
         # Shape: [num_groups, tokens_per_group, num_experts]
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
-        
-        dispatch_mask, router_probs, router_logits = self.route_tokens(router_logits, sequence_length, self.input_dtype, padding_mask)
+
+        dispatch_mask, router_probs, router_logits = self.route_tokens(
+            router_logits, sequence_length, self.input_dtype, padding_mask
+        )
         dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.num_experts))
         router_probs = router_probs.reshape((batch_size, sequence_length, self.num_experts))
         return dispatch_mask, router_probs, router_logits
+
 
 # Adapted from transformers.models.t5.modeling_t5.T5DenseActDense with T5->NllbMoe
 class NllbMoeDenseActDense(nn.Module):
@@ -468,18 +480,19 @@ class NllbMoeSparseMLP(nn.Module):
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
         # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
 
-        next_states = hidden_states.clone()
-        for idx, expert in enumerate(self.experts.values()):
+        expert_outputs = []
+        for idx, expert in enumerate(self.experts):
             token_indices = router_mask[:, :, idx].bool()
-            expert_contribution = router_probs[:, :, idx][token_indices]
-            next_states[token_indices] = expert_contribution[:, None] * expert(hidden_states[token_indices])
+            expert_outputs.append(expert(hidden_states[token_indices]))
+        expert_outputs = torch.cat(expert_outputs, dim=0)
 
         if self.moe_token_dropout > 0:
             if self.training:
-                next_states = self.token_dropout(next_states)
+                expert_outputs = self.token_dropout(expert_outputs)
             else:
-                next_states *= 1 - self.moe_token_dropout
+                expert_outputs *= 1 - self.moe_token_dropout
 
+        hidden_states = router_probs.mm(expert_outputs.view(self.num_expert, self.hidden_dim))
         return hidden_states, (router_logits, expert_index)
 
 
