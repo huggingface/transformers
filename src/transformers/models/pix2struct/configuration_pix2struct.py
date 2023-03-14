@@ -202,8 +202,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
@@ -251,7 +249,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         dense_act_fn="gelu_new",
         layer_norm_eps=1e-6,
         dropout_rate=0.0,
-        hidden_dropout_prob=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
         initializer_factor=1.0,
@@ -268,7 +265,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.d_ff = d_ff
         self.projection_dim = projection_dim
         self.dropout_rate = dropout_rate
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
@@ -365,14 +361,6 @@ class Pix2StructConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
-
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the Pix2StructTextConfig with default values.")
@@ -381,15 +369,8 @@ class Pix2StructConfig(PretrainedConfig):
             vision_config = {}
             logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
 
-        if not isinstance(text_config, Pix2StructTextConfig):
-            self.text_config = Pix2StructTextConfig(**text_config)
-        else:
-            self.text_config = text_config
-
-        if not isinstance(vision_config, Pix2StructVisionConfig):
-            self.vision_config = Pix2StructVisionConfig(**vision_config)
-        else:
-            self.vision_config = vision_config
+        self.text_config = Pix2StructTextConfig(**text_config)
+        self.vision_config = Pix2StructVisionConfig(**vision_config)
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
         self.decoder_start_token_id = self.text_config.decoder_start_token_id

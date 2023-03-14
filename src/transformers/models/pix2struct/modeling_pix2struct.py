@@ -113,7 +113,7 @@ class Pix2StructVisionEmbeddings(nn.Module):
         self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
         self.column_embedder = nn.Embedding(config.seq_len, config.hidden_size)
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, pixel_embeds: torch.Tensor) -> torch.Tensor:
         # the row and column indices are stored in the first and second position of the pixel_embeds
@@ -229,14 +229,14 @@ class Pix2StructVisionAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->hidden_dropout_prob
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
 class Pix2StructVisionMlp(nn.Module):
     def __init__(self, config: Pix2StructVisionConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
     def forward(self, hidden_states):
