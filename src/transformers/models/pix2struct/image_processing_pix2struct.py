@@ -85,12 +85,12 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Dict[str, int] = {"height": 16, "width": 16},
+        patch_size: Dict[str, int] = None,
         max_patches: int = 2048,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.patch_size = patch_size
+        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = max_patches
