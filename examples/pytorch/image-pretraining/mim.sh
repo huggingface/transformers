@@ -11,7 +11,7 @@
     --do_eval \
     --learning_rate 2e-5 \
     --weight_decay 0.05 \
-    --num_train_epochs 1 \
+    --num_train_epochs 5 \
     --per_device_train_batch_size 128 \
     --per_device_eval_batch_size 128 \
     --logging_strategy steps \
@@ -20,4 +20,5 @@
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
-    --seed 42
+    --seed 42 \
+    --disable_tqdm True 2>&1 | tee mim.log

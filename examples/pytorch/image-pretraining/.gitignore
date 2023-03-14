@@ -1,2 +1,3 @@
 outputs/
 vit-mae-demo/
+*.log
