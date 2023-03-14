@@ -15,6 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The Pix2Struct model was proposed in [Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding](https://arxiv.org/abs/2210.03347) by Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova.
+
 The abstract from the paper is the following:
 
 > Visually-situated language is ubiquitous -- sources range from textbooks with diagrams to web pages with images and tables, to mobile apps with buttons and forms. Perhaps due to this diversity, previous work has typically relied on domain-specific recipes with limited sharing of the underlying data, model architectures, and objectives. We present Pix2Struct, a pretrained image-to-text model for purely visual language understanding, which can be finetuned on tasks containing visually-situated language. Pix2Struct is pretrained by learning to parse masked screenshots of web pages into simplified HTML. The web, with its richness of visual elements cleanly reflected in the HTML structure, provides a large source of pretraining data well suited to the diversity of downstream tasks. Intuitively, this objective subsumes common pretraining signals such as OCR, language modeling, image captioning. In addition to the novel pretraining strategy, we introduce a variable-resolution input representation and a more flexible integration of language and vision inputs, where language prompts such as questions are rendered directly on top of the input image. For the first time, we show that a single pretrained model can achieve state-of-the-art results in six out of nine tasks across four domains: documents, illustrations, user interfaces, and natural images.
@@ -45,24 +46,20 @@ The original code can be found [here](https://github.com/google-research/pix2str
 
 [[autodoc]] Pix2StructProcessor
 
-
 ## Pix2StructImageProcessor
 
 [[autodoc]] Pix2StructImageProcessor
     - preprocess
-
 
 ## Pix2StructTextModel
 
 [[autodoc]] Pix2StructTextModel
     - forward
 
-
 ## Pix2StructVisionModel
 
 [[autodoc]] Pix2StructVisionModel
     - forward
-
 
 ## Pix2StructForConditionalGeneration
 

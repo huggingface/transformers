@@ -48,7 +48,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        max_patches (`int`, *optional*, defaults to `2048`):
+        max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
             paper](https://arxiv.org/pdf/2210.03347.pdf).
     """
@@ -57,9 +57,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        patch_size: Dict[str, int] = {"height": 16, "width": 16},
-        do_normalize: bool = True,
         do_convert_rgb: bool = True,
+        do_normalize: bool = True,
+        patch_size: Dict[str, int] = {"height": 16, "width": 16},
         max_patches: int = 2048,
         **kwargs,
     ) -> None:
