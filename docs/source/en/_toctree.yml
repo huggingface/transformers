@@ -430,6 +430,8 @@
         title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
       - local: model_doc/deformable_detr
