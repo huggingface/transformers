@@ -3,7 +3,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import UdopConfig, UdopForConditionalGeneration, UdopImageProcessor, UdopTokenizer
+from transformers import UdopConfig, UdopForConditionalGeneration, UdopImageProcessor, UdopProcessor, UdopTokenizer
 
 
 def transform(image, image_size=224):
@@ -19,15 +19,21 @@ def transform(image, image_size=224):
     return image
 
 
+def get_image():
+    filepath = hf_hub_download(
+        repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+    )
+    image = Image.open(filepath).convert("RGB")
+
+    return image
+
+
 def prepare_dummy_inputs(tokenizer, image_processor):
     prompt = "Question answering. What is the name of the company?"
     prompt = "Question answering. In which year is the report made?"
     prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
 
-    filepath = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-    )
-    image = Image.open(filepath).convert("RGB")
+    image = get_image()
     # words, boxes = apply_tesseract(image, lang=None)
     # fmt: off
     words = ['7', 'ITC', 'Limited', 'REPORT', 'AND', 'ACCOUNTS', '2013', 'ITC’s', 'Brands:', 'An', 'Asset', 'for', 'the', 'Nation', 'The', 'consumer', 'needs', 'and', 'aspirations', 'they', 'fulfil,', 'the', 'benefit', 'they', 'generate', 'for', 'millions', 'across', 'ITC’s', 'value', 'chains,', 'the', 'future-ready', 'capabilities', 'that', 'support', 'them,', 'and', 'the', 'value', 'that', 'they', 'create', 'for', 'the', 'country,', 'have', 'made', 'ITC’s', 'brands', 'national', 'assets,', 'adding', 'to', 'India’s', 'competitiveness.', 'It', 'is', 'ITC’s', 'aspiration', 'to', 'be', 'the', 'No', '1', 'FMCG', 'player', 'in', 'the', 'country,', 'driven', 'by', 'its', 'new', 'FMCG', 'businesses.', 'A', 'recent', 'Nielsen', 'report', 'has', 'highlighted', 'that', "ITC's", 'new', 'FMCG', 'businesses', 'are', 'the', 'fastest', 'growing', 'among', 'the', 'top', 'consumer', 'goods', 'companies', 'operating', 'in', 'India.', 'ITC', 'takes', 'justifiable', 'pride', 'that,', 'along', 'with', 'generating', 'economic', 'value,', 'these', 'celebrated', 'Indian', 'brands', 'also', 'drive', 'the', 'creation', 'of', 'larger', 'societal', 'capital', 'through', 'the', 'virtuous', 'cycle', 'of', 'sustainable', 'and', 'inclusive', 'growth.', 'DI', 'WILLS', '*', ';', 'LOVE', 'DELIGHTFULLY', 'SOFT', 'SKIN?', 'aia', 'Ans', 'Source:', 'https://www.industrydocuments.ucsf.edu/docs/snbx0223']
@@ -80,12 +86,23 @@ def convert():
     print("Unexpected keys:", unexpected_keys)
     assert missing_keys == ["udop.encoder.embed_patches.proj.weight", "udop.encoder.embed_patches.proj.bias"]
     assert unexpected_keys == ["udop.pos_embed"]
-    print("Looks ok!")
 
     # prepare dummy inputs
     tokenizer = UdopTokenizer.from_pretrained("t5-base")
     image_processor = UdopImageProcessor()
-    input_ids, seg_data, image = prepare_dummy_inputs(tokenizer, image_processor)
+    processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    # input_ids, seg_data, image = prepare_dummy_inputs(tokenizer, image_processor)
+    prompt = "Question answering. In which year is the report made?"
+    encoding = processor(images=get_image(), text=prompt, return_tensors="pt")
+    for k, v in encoding.items():
+        print(k, v.shape)
+
+    for id, box in zip(encoding.input_ids.squeeze()[:20], encoding.bbox.squeeze().tolist()[:20]):
+        print(tokenizer.decode(id), box)
+
+    input_ids = encoding.input_ids
+    seg_data = encoding.bbox.float()
+    image = encoding.image
 
     # single forward pass
     print("Testing single forward pass..")
@@ -94,7 +111,8 @@ def convert():
         outputs = model(input_ids=input_ids, seg_data=seg_data, image=image, decoder_input_ids=decoder_input_ids)
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
-    assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-18.5262, 1.5086, -15.7051]]), atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-20.0254, 0.8438, -17.1796]]), atol=1e-4)
+    print("Looks ok!")
 
     # autoregressive decoding
     print("Testing generation...")

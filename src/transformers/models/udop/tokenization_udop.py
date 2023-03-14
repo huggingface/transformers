@@ -929,7 +929,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             # text = question
             # text_pair = words
             tokens = self.tokenize(text)
-            token_boxes = [self.pad_token_box for _ in range(len(tokens))] + [self.sep_token_box]
+            token_boxes = [self.pad_token_box for _ in range(len(tokens))]
 
             for word, box in zip(text_pair, boxes):
                 if len(word) < 1:  # skip empty words
