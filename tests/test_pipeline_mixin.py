@@ -436,14 +436,3 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
                 f"(`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is greater than "
                 f"`config_vocab_size` ({config_vocab_size}). Something is wrong."
             )
-
-
-def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer_name, processor_name):
-    """Some tests are just not working"""
-
-    to_skip = False
-    if test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
-        # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
-        to_skip = True
-
-    return to_skip
