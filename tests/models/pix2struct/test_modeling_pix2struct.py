@@ -683,3 +683,29 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs)
         self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
+
+    def test_vqa_model_batched(self):
+        model_id = "ybelkada/pix2struct-ai2d-base"
+
+        image_urls = [
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo-2.png",
+        ]
+
+        images = [Image.open(requests.get(image_url, stream=True).raw) for image_url in image_urls]
+
+        texts = [
+            "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud",
+            "What is the producer in the diagram? (1) Phytoplankton (2) Zooplankton (3) Large fish (4) Small fish",
+        ]
+
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+        processor = Pix2StructProcessor.from_pretrained(model_id)
+
+        inputs = processor(images=images, return_tensors="pt", text=texts).to(torch_device, torch.bfloat16)
+
+        predictions = model.generate(**inputs)
+        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
+        self.assertEqual(processor.decode(predictions[1], skip_special_tokens=True), "Phytoplankton")

@@ -376,8 +376,13 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 raise ValueError("A header text must be provided for VQA models.")
             font_bytes = kwargs.pop("font_bytes", None)
             font_path = kwargs.pop("font_path", None)
+
+            if isinstance(header_text, str):
+                header_text = [header_text] * len(images)
+
             images = [
-                self.render_header(image, header_text, font_bytes=font_bytes, font_path=font_path) for image in images
+                self.render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
+                for i, image in enumerate(images)
             ]
 
         # All transformations expect numpy arrays.
