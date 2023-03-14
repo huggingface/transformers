@@ -88,7 +88,7 @@ class NllbMoeModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=2,
+        num_hidden_layers=4,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="relu",
@@ -100,10 +100,10 @@ class NllbMoeModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
-        sparse_step=1,
+        num_experts=4,
         use_attention_mask=True,
-        num_sparse_decoder_layers=2,
-        num_sparse_encoder_layers=2,
+        encoder_sparse_step=2,
+        decoder_sparse_step=1,
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
@@ -126,11 +126,11 @@ class NllbMoeModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        self.sparse_step = sparse_step
-        self.num_sparse_decoder_layers = num_sparse_decoder_layers
-        self.num_sparse_encoder_layers = num_sparse_encoder_layers
+        self.encoder_sparse_step = encoder_sparse_step
+        self.decoder_sparse_step = decoder_sparse_step
         self.expert_capacity = expert_capacity
         self.router_jitter_noise = router_jitter_noise
+        self.num_experts = num_experts
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -171,9 +171,9 @@ class NllbMoeModelTester:
             pad_token_id=self.pad_token_id,
             expert_capacity=self.expert_capacity,
             router_jitter_noise=self.router_jitter_noise,
-            sparse_step=self.sparse_step,
-            num_sparse_encoder_layers=self.num_sparse_encoder_layers,
-            num_sparse_decoder_layers=self.num_sparse_decoder_layers,
+            decoder_sparse_step=self.decoder_sparse_step,
+            encoder_sparse_step=self.encoder_sparse_step,
+            num_experts=self.num_experts,
         )
 
     def prepare_config_and_inputs_for_common(self):

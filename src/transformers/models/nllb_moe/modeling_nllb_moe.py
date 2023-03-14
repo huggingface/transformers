@@ -414,7 +414,8 @@ class NllbMoeTop2Router(nn.Module):
         dispatch_mask, router_probs, router_logits = self.route_tokens(
             router_logits, sequence_length, self.input_dtype, padding_mask
         )
-        dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.num_experts))
+        # dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.num_experts))
+        # router_probs = router_probs.reshape((batch_size, sequence_length, self.num_experts))
         return dispatch_mask, router_probs, router_logits
 
 
@@ -454,10 +455,11 @@ class NllbMoeSparseMLP(nn.Module):
         # TODO handle the type of router chosen
         self.router = NllbMoeTop2Router(config)
         self.moe_token_dropout = config.moe_token_dropout
-        self.token_droput = nn.Dropout2d(self.moe_token_dropout)
+        self.num_experts = config.num_experts
+        self.token_dropout = nn.Dropout(self.moe_token_dropout)
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
-        for idx in range(config.num_experts):
+        for idx in range(self.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
     def forward(self, hidden_states):
@@ -476,23 +478,24 @@ class NllbMoeSparseMLP(nn.Module):
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
-
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         expert_outputs = []
-        for idx, expert in enumerate(self.experts):
-            token_indices = router_mask[:, :, idx].bool()
-            expert_outputs.append(expert(hidden_states[token_indices]))
-        expert_outputs = torch.cat(expert_outputs, dim=0)
+        for idx, expert in enumerate(self.experts.values()):
+            next_states = hidden_states.clone()
+            token_indices = router_mask[:, idx].bool()
+            combining_weights = router_probs[:, idx]
+            next_states[token_indices] = expert(hidden_states[token_indices])
+            if self.moe_token_dropout > 0:
+                if self.training:
+                    next_states = self.token_dropout(next_states)
+                else:
+                    next_states *= 1 - self.moe_token_dropout
+            next_states = combining_weights[:, None] * next_states
+            expert_outputs += [next_states]
 
-        if self.moe_token_dropout > 0:
-            if self.training:
-                expert_outputs = self.token_dropout(expert_outputs)
-            else:
-                expert_outputs *= 1 - self.moe_token_dropout
-
-        next_states = router_probs.mm(expert_outputs)
-        hidden_states = next_states.reshape(hidden_states.shape)
+        expert_outputs = sum(expert_outputs)
+        hidden_states = next_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, (router_logits, expert_index)
 
 
