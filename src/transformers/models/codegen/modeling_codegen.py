@@ -27,6 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_codegen import CodeGenConfig
 
+torch.fx.wrap('len')
 
 logger = logging.get_logger(__name__)
 
@@ -68,7 +69,9 @@ def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
 
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor: torch.Tensor, sincos: torch.Tensor) -> torch.Tensor:
-    sin, cos = (torch.repeat_interleave(t[:, :, None, :], 2, 3) for t in sincos)
+    sin, cos = sincos
+    sin = torch.repeat_interleave(sin[:, :, None, :], 2, 3)
+    cos = torch.repeat_interleave(cos[:, :, None, :], 2, 3)
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
