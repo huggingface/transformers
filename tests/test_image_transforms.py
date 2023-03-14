@@ -101,11 +101,6 @@ class ImageTransformsTester(unittest.TestCase):
         with self.assertRaises(ValueError):
             to_pil_image(image)
 
-        # Make sure binary mask remains a binary mask
-        image = np.random.randint(0, 2, image_shape).astype(np.uint8)
-        pil_image = to_pil_image(image)
-        self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (5, 4))
 
     @require_vision
     def test_to_pil_image_from_mask(self):
