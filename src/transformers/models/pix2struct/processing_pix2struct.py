@@ -76,7 +76,7 @@ class Pix2StructProcessor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         # Get only text
-        if images is None:
+        if images is None and not self.image_processor.is_vqa:
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,
@@ -98,12 +98,18 @@ class Pix2StructProcessor(ProcessorMixin):
             )
             return text_encoding
 
-        # add pixel_values
-        encoding_image_processor = self.image_processor(
-            images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
-        )
+        if not self.image_processor.is_vqa:
+            # add pixel_values
+            encoding_image_processor = self.image_processor(
+                images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
+            )
+        else:
+            # add pixel_values and bbox
+            encoding_image_processor = self.image_processor(
+                images, return_tensors=return_tensors, max_patches=max_patches, header_text=text, **kwargs
+            )
 
-        if text is not None:
+        if text is not None and not self.image_processor.is_vqa:
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,

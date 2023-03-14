@@ -1789,13 +1789,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                 torch.LongTensor([[self.decoder_start_token_id]]).repeat(batch_size, 1).to(image_embeds.device)
             )
 
-            if self.is_vqa:
-                # warn users that they should pass `input_ids` if they want to use `generate` for VQA
-                logger.warning(
-                    "You are using `generate` for a model that has been fine-tuned on Visual Question Answering.",
-                    "For better results, make sure to pass an input text question to `Pix2StructProcessor`",
-                )
-
         if decoder_attention_mask is None:
             decoder_attention_mask = torch.ones_like(decoder_input_ids).to(image_embeds.device)
 

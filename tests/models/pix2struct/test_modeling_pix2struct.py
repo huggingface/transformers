@@ -595,7 +595,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of a stop sign
 def prepare_img():
-    url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -647,9 +647,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = (
-            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
-        )
+        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
         texts = ["A picture of", "An photography of"]
 
@@ -666,3 +664,22 @@ class Pix2StructIntegrationTest(unittest.TestCase):
             processor.decode(predictions[1], skip_special_tokens=True),
             "An photography of the Temple Bar and a few other places.",
         )
+
+    def test_vqa_model(self):
+        model_id = "ybelkada/pix2struct-ai2d-base"
+
+        image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+        image = Image.open(requests.get(image_url, stream=True).raw)
+
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+        processor = Pix2StructProcessor.from_pretrained(model_id)
+
+        # image only
+        text = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
+
+        inputs = processor(images=image, return_tensors="pt", text=text).to(torch_device, torch.bfloat16)
+
+        predictions = model.generate(**inputs)
+        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")

@@ -103,7 +103,7 @@ def rename_and_convert_flax_params(flax_dict):
 
 
 def convert_pix2struct_original_pytorch_checkpoint_to_hf(
-    t5x_checkpoint_path, pytorch_dump_folder_path, use_large=False
+    t5x_checkpoint_path, pytorch_dump_folder_path, use_large=False, is_vqa=False
 ):
     flax_params = get_flax_param(t5x_checkpoint_path)
 
@@ -129,6 +129,9 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
     if use_large:
         processor.image_processor.max_patches = 4096
 
+    if is_vqa:
+        processor.image_processor.is_vqa = False
+
     # mkdir if needed
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
 
@@ -143,6 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("--t5x_checkpoint_path", default=None, type=str, help="Path to the original T5x checkpoint.")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--use_large", action="store_true", help="Use large model.")
+    parser.add_argument("--is_vqa", action="store_true", help="Use large model.")
     args = parser.parse_args()
 
     convert_pix2struct_original_pytorch_checkpoint_to_hf(

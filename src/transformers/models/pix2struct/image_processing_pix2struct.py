@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for PIX2STRUCT."""
+import io
 import math
 from typing import Dict, Optional, Union
 
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format
@@ -26,13 +28,17 @@ from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
+    import textwrap
+
     import PIL
+    from PIL import Image, ImageDraw, ImageFont
 
 if is_torch_available():
     import torch
 
 
 logger = logging.get_logger(__name__)
+DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
@@ -88,6 +94,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         patch_size: Dict[str, int] = None,
         max_patches: int = 2048,
+        is_vqa: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -95,6 +102,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = max_patches
+        self.is_vqa = is_vqa
 
     def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: dict, **kwargs) -> np.ndarray:
         """
@@ -192,10 +200,105 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         return normalize(image, mean=mean, std=adjusted_stddev, data_format=data_format, **kwargs)
 
+    def render_text(
+        self,
+        text: str,
+        text_size: int = 36,
+        text_color: str = "black",
+        background_color: str = "white",
+        left_padding: int = 5,
+        right_padding: int = 5,
+        top_padding: int = 5,
+        bottom_padding: int = 5,
+        font_bytes: Optional[bytes] = None,
+        font_path: Optional[str] = None,
+    ) -> Image.Image:
+        """
+        Render text. This script is entirely adapted from the original script that can be found here:
+        https://github.com/google-research/pix2struct/blob/main/pix2struct/preprocessing/preprocessing_utils.py
+
+        Args:
+            text (`str`):
+                Text to render.
+            text_size (`int`):
+                Size of the text.
+            text_color (`str`):
+                Color of the text.
+            background_color (`str`):
+                Color of the background.
+            left_padding (`int`):
+                Padding on the left.
+            right_padding (`int`):
+                Padding on the right.
+            top_padding (`int`):
+                Padding on the top.
+            bottom_padding (`int`):
+                Padding on the bottom.
+            font_bytes (`bytes`):
+                Bytes of the font to use. If `None`, the default font will be used.
+            font_path (`str`):
+                Path to the font to use. If `None`, the default font will be used.
+        """
+        requires_backends(self.render_text, "vision")
+        # Add new lines so that each line is no more than 80 characters.
+
+        wrapper = textwrap.TextWrapper(width=80)
+        lines = wrapper.wrap(text=text)
+        wrapped_text = "\n".join(lines)
+
+        if font_bytes is not None and font_path is None:
+            font = io.BytesIO(font_bytes)
+        elif font_path is not None:
+            font = font_path
+        else:
+            font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
+        font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
+
+        # Use a temporary canvas to determine the width and height in pixels when
+        # rendering the text.
+        temp_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), background_color))
+        _, _, text_width, text_height = temp_draw.textbbox((0, 0), wrapped_text, font)
+
+        # Create the actual image with a bit of padding around the text.
+        image_width = text_width + left_padding + right_padding
+        image_height = text_height + top_padding + bottom_padding
+        image = Image.new("RGB", (image_width, image_height), background_color)
+        draw = ImageDraw.Draw(image)
+        draw.text(xy=(left_padding, top_padding), text=wrapped_text, fill=text_color, font=font)
+        return image
+
+    def render_header(self, image: ImageInput, header: str, **kwargs):
+        """
+        Renders a header on a PIL image and returns a new PIL image.
+
+        Args:
+            image (`PIL.Image`):
+                The image to render the header on.
+            header (`str`):
+                The header text.
+
+        Returns:
+            `PIL.Image`: The image with the header rendered.
+        """
+        requires_backends(self.render_header, "vision")
+
+        header_image = self.render_text(header, **kwargs)
+        new_width = max(header_image.width, image.width)
+
+        new_height = int(image.height * (new_width / image.width))
+        new_header_height = int(header_image.height * (new_width / header_image.width))
+
+        new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
+        new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
+        new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
+
+        return new_image
+
     def preprocess(
         self,
         images: ImageInput,
         max_patches: Optional[int] = None,
+        header_text: Optional[str] = None,
         patch_size: Optional[Dict[str, int]] = None,
         do_normalize: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -216,6 +319,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             max_patches (`int`, *optional*):
                 Maximum number of patches to extract.
+            header_text (`str`, *optional*):
+                Text to render as a header.
             patch_size (`dict`, *optional*):
                 Dictionary containing the patch height and width.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
@@ -238,6 +343,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
         max_patches = max_patches if max_patches is not None else self.max_patches
+        is_vqa = self.is_vqa
 
         if not is_batched(images):
             images = [images]
@@ -251,6 +357,15 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
+
+        if is_vqa:
+            if header_text is None:
+                raise ValueError("A header text must be provided for VQA models.")
+            font_bytes = kwargs.pop("font_bytes", None)
+            font_path = kwargs.pop("font_path", None)
+            images = [
+                self.render_header(image, header_text, font_bytes=font_bytes, font_path=font_path) for image in images
+            ]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
