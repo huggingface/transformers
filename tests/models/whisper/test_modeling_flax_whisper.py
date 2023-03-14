@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import functools
 import inspect
 import tempfile
@@ -938,7 +937,6 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
 
     # input embeds is meaningless for an encoder-only acoustic model
     def test_inputs_embeds(self):

@@ -1618,7 +1618,6 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         )
 
 
-
 FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     Returns:
 
