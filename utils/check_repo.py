@@ -820,6 +820,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "AutoBackbone",
     "BitBackbone",
     "ConvNextBackbone",
+    "ConvNextV2Backbone",
     "DinatBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
