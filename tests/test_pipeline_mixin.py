@@ -463,56 +463,6 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
             # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
             # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
             to_skip = True
-        elif test_casse_name == "ZeroShotClassificationPipelineTests" and config_class.__name__ in [
-            "CTRLConfig",
-            "OpenAIGPTConfig",
-        ]:
-            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
-            # `CTRLConfig` and `OpenAIGPTConfig` were never used in pipeline tests, either because of a missing
-            # checkpoint or because a tiny config could not be created
-            to_skip = True
-        elif test_casse_name == "TranslationPipelineTests" and config_class.__name__ in [
-            "M2M100Config",
-            "PLBartConfig",
-        ]:
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `M2M100Config` and `PLBartConfig` were never used in pipeline tests: cannot create a simple tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and config_class.__name__ in [
-            "ProphetNetConfig",
-            "TransfoXLConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `TransfoXLConfig` and `ProphetNetConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer.
-            to_skip = True
-        elif test_casse_name == "FillMaskPipelineTests" and config_class.__name__ in [
-            "FlaubertConfig",
-            "XLMConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `FlaubertConfig` and `TransfoXLConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and model_architecture.__name__ in [
-            "TFRoFormerForCausalLM"
-        ]:
-            # TODO: add `prepare_inputs_for_generation` for `TFRoFormerForCausalLM`
-            to_skip = True
-        elif test_casse_name == "QAPipelineTests" and model_architecture.__name__ in ["FNetForQuestionAnswering"]:
-            # TODO: The change in `base.py` in the PR #21132 (https://github.com/huggingface/transformers/pull/21132)
-            #       fails this test case. Skip for now - a fix for this along with the initial changes in PR #20426 is
-            #       too much. Let `ydshieh` to fix it ASAP once #20426 is merged.
-            to_skip = True
-        elif config_class.__name__ == "LayoutLMv2Config" and test_casse_name in [
-            "QAPipelineTests",
-            "TextClassificationPipelineTests",
-            "TokenClassificationPipelineTests",
-            "ZeroShotClassificationPipelineTests",
-        ]:
-            # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
-            # config. With new tiny model creation, it is available, but we need to fix the failed tests.
-            to_skip = True
         elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
             # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
             to_skip = True
