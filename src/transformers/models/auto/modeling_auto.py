@@ -56,6 +56,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
+        ("convnextv2", "ConvNextV2Model"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
@@ -410,6 +411,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitForImageClassification"),
         ("bit", "BitForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
+        ("convnextv2", "ConvNextV2ForImageClassification"),
         ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
@@ -938,6 +940,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         # Backbone mapping
         ("bit", "BitBackbone"),
         ("convnext", "ConvNextBackbone"),
+        ("convnextv2", "ConvNextV2Backbone"),
         ("dinat", "DinatBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
