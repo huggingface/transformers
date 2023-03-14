@@ -481,6 +481,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
 
         batch_size, sequence_length = input_ids.shape
 
+        # TODO Flax GPT2 also does not seems to mask the position ids based on the padding
         if position_ids is None:
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")

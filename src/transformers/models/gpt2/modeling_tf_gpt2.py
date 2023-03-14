@@ -379,9 +379,13 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         else:
             past_length = shape_list(past_key_values[0][0])[-2]
 
-        if position_ids is None:
+        if attention_mask is not None and position_ids is None:
+            position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
+            if past_key_values:
+                position_ids = tf.expand_dims(position_ids[:, -1], -1)
+        elif position_ids is None:
             position_ids = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length), axis=0)
-
+    
         if attention_mask is not None:
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
