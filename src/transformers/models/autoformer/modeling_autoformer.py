@@ -19,6 +19,7 @@ import math
 import random
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -48,7 +49,7 @@ AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Autoformer
-class FeatureEmbedder(nn.Module):
+class AutoformerFeatureEmbedder(nn.Module):
     """
     Embed a sequence of categorical features.
 
