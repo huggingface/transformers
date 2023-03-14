@@ -14,8 +14,9 @@
 # limitations under the License.
 """ DETR model configuration"""
 
+import copy
 from collections import OrderedDict
-from typing import Mapping
+from typing import Dict, Mapping
 
 from packaging import version
 
@@ -161,8 +162,6 @@ class DetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        classifier_dropout=0.0,
-        scale_embedding=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
@@ -176,7 +175,7 @@ class DetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
@@ -189,6 +188,8 @@ class DetrConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            # set timm attributes to None
+            dilation, backbone, use_pretrained_backbone = None, None, None
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
@@ -210,7 +211,6 @@ class DetrConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
@@ -236,9 +236,31 @@ class DetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+        Returns:
+            [`DetrConfig`]: An instance of a configuration object
+        """
+        return cls(backbone_config=backbone_config, **kwargs)
+
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        if output["backbone_config"] is not None:
+            output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
+
 
 class DetrOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

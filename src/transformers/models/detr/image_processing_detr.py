@@ -22,8 +22,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
@@ -35,7 +35,7 @@ from transformers.image_transforms import (
     rgb_to_id,
     to_channel_dimension_format,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
@@ -49,7 +49,9 @@ from transformers.image_utils import (
     valid_coco_panoptic_annotations,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
+    ExplicitEnum,
+    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_scipy_available,
@@ -59,7 +61,6 @@ from transformers.utils import (
     is_torch_tensor,
     is_vision_available,
 )
-from transformers.utils.generic import ExplicitEnum, TensorType
 
 
 if is_torch_available():
@@ -74,6 +75,9 @@ if is_vision_available():
 if is_scipy_available():
     import scipy.special
     import scipy.stats
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 class AnnotionFormat(ExplicitEnum):
@@ -587,7 +591,7 @@ def binary_mask_to_rle(mask):
     pixels = np.concatenate([[0], pixels, [0]])
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     runs[1::2] -= runs[::2]
-    return [x for x in runs]
+    return list(runs)
 
 
 # TODO - (Amy) make compatible with other frameworks
@@ -767,7 +771,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -872,7 +876,7 @@ class DetrImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -1037,7 +1041,7 @@ class DetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
@@ -1052,7 +1056,7 @@ class DetrImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -1060,13 +1064,13 @@ class DetrImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotionation is for object
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
@@ -1139,7 +1143,7 @@ class DetrImageProcessor(BaseImageProcessor):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
         images = make_list_of_images(images)
-        if annotations is not None and isinstance(annotations[0], dict):
+        if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
@@ -1308,6 +1312,7 @@ class DetrImageProcessor(BaseImageProcessor):
             FutureWarning,
         )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
+        empty_label = out_logits.shape[-1] - 1
         preds = []
 
         def to_tuple(tup):
@@ -1317,16 +1322,15 @@ class DetrImageProcessor(BaseImageProcessor):
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
+            keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
             cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
+            cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
 
-            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
+            predictions = {"scores": cur_scores, "labels": cur_labels, "masks": cur_masks}
             preds.append(predictions)
         return preds
 
@@ -1420,6 +1424,7 @@ class DetrImageProcessor(BaseImageProcessor):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
             )
+        empty_label = out_logits.shape[-1] - 1
         preds = []
 
         def to_tuple(tup):
@@ -1431,24 +1436,23 @@ class DetrImageProcessor(BaseImageProcessor):
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
         ):
             # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
+            keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
             cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
+            cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            if len(cur_boxes) != len(cur_classes):
+            if len(cur_boxes) != len(cur_labels):
                 raise ValueError("Not as many boxes as there are classes")
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
             cur_masks = cur_masks.flatten(1)
             stuff_equiv_classes = defaultdict(lambda: [])
-            for k, label in enumerate(cur_classes):
+            for k, label in enumerate(cur_labels):
                 if not is_thing_map[label.item()]:
                     stuff_equiv_classes[label.item()].append(k)
 
@@ -1488,28 +1492,28 @@ class DetrImageProcessor(BaseImageProcessor):
                 return area, seg_img
 
             area, seg_img = get_ids_area(cur_masks, cur_scores, dedup=True)
-            if cur_classes.numel() > 0:
+            if cur_labels.numel() > 0:
                 # We know filter empty masks as long as we find some
                 while True:
                     filtered_small = torch.as_tensor(
-                        [area[i] <= 4 for i, c in enumerate(cur_classes)], dtype=torch.bool, device=keep.device
+                        [area[i] <= 4 for i, c in enumerate(cur_labels)], dtype=torch.bool, device=keep.device
                     )
                     if filtered_small.any().item():
                         cur_scores = cur_scores[~filtered_small]
-                        cur_classes = cur_classes[~filtered_small]
+                        cur_labels = cur_labels[~filtered_small]
                         cur_masks = cur_masks[~filtered_small]
                         area, seg_img = get_ids_area(cur_masks, cur_scores)
                     else:
                         break
 
             else:
-                cur_classes = torch.ones(1, dtype=torch.long, device=cur_classes.device)
+                cur_labels = torch.ones(1, dtype=torch.long, device=cur_labels.device)
 
             segments_info = []
             for i, a in enumerate(area):
-                cat = cur_classes[i].item()
+                cat = cur_labels[i].item()
                 segments_info.append({"id": i, "isthing": is_thing_map[cat], "category_id": cat, "area": a})
-            del cur_classes
+            del cur_labels
 
             with io.BytesIO() as out:
                 seg_img.save(out, format="PNG")
@@ -1559,7 +1563,7 @@ class DetrImageProcessor(BaseImageProcessor):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []

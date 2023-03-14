@@ -23,7 +23,6 @@ from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
-
     # to overwrite at feature extractactor specific tests
     feat_extract_tester = None
     feature_extraction_class = None
@@ -418,7 +417,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         )
         self.assertIn("attention_mask", processed_pad)
         self.assertListEqual(
-            list(processed_pad.attention_mask.shape), list((processed_pad[input_name].shape[0], max_length))
+            list(processed_pad.attention_mask.shape), [processed_pad[input_name].shape[0], max_length]
         )
         self.assertListEqual(
             processed_pad.attention_mask[:, :max_length].sum(-1).tolist(), [max_length for x in speech_inputs]

@@ -22,7 +22,6 @@ from transformers.testing_utils import TestCasePlus, require_torch
 class OfflineTests(TestCasePlus):
     @require_torch
     def test_offline_mode(self):
-
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
@@ -108,7 +107,6 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_sharded_checkpoint(self):
-
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program

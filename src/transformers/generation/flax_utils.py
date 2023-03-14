@@ -19,13 +19,12 @@ import copy
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
-
-import numpy as np
+from typing import Any, Dict, Optional, Union
 
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import lax
 
 from ..models.auto import (
@@ -38,8 +37,11 @@ from .configuration_utils import GenerationConfig
 from .flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
+    FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxSuppressTokensAtBeginLogitsProcessor,
+    FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
@@ -138,7 +140,7 @@ class FlaxGenerationMixin:
               `do_sample=False`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
-    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -164,6 +166,50 @@ class FlaxGenerationMixin:
         }
         model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
         return model_kwargs
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+    ) -> jnp.ndarray:
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            # Only use this arg if not None, otherwise just remove from model_kwargs
+            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
+            if decoder_input_ids is not None:
+                return decoder_input_ids
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        # retrieve decoder_start_token_id for encoder-decoder models
+        # fall back to bos_token_id if necessary
+        decoder_start_token_id = (
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
 
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
@@ -225,6 +271,7 @@ class FlaxGenerationMixin:
         prng_key: Optional[jnp.ndarray] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
+        logits_processor: Optional[FlaxLogitsProcessorList] = None,
         **kwargs,
     ):
         r"""
@@ -245,6 +292,10 @@ class FlaxGenerationMixin:
                 considerably slower runtime.
             params (`Dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
+            logits_processor (`FlaxLogitsProcessorList `, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -275,7 +326,10 @@ class FlaxGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
+
+        logits_processor = logits_processor if logits_processor is not None else FlaxLogitsProcessorList()
 
         # set init values
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
@@ -306,33 +360,40 @@ class FlaxGenerationMixin:
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
 
+        batch_size = input_ids.shape[0]
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
-            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * generation_config.decoder_start_token_id
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size,
+                decoder_start_token_id=generation_config.decoder_start_token_id,
+                bos_token_id=generation_config.bos_token_id,
+                model_kwargs=model_kwargs,
+            )
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
                 " recommend using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
-        elif has_default_max_length and generation_config.max_new_tokens is not None:
+        elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        elif not has_default_max_length and generation_config.max_new_tokens is not None:
-            raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
-                " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information. "
-                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-            )
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -347,7 +408,11 @@ class FlaxGenerationMixin:
                 " increasing`max_new_tokens`."
             )
 
-        logits_processor = self._get_logits_processor(generation_config=generation_config)
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_seq_length,
+            logits_processor=logits_processor,
+        )
 
         if not generation_config.do_sample and generation_config.num_beams == 1:
             return self._greedy_search(
@@ -383,10 +448,11 @@ class FlaxGenerationMixin:
                     model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
                 )
 
-            if "attention_mask" in model_kwargs:
-                model_kwargs["attention_mask"] = self._expand_to_num_beams(
-                    model_kwargs["attention_mask"], num_beams=generation_config.num_beams
-                )
+            for kwarg in ["attention_mask", "decoder_attention_mask"]:
+                if kwarg in model_kwargs:
+                    model_kwargs[kwarg] = self._expand_to_num_beams(
+                        model_kwargs[kwarg], num_beams=generation_config.num_beams
+                    )
 
             return self._beam_search(
                 input_ids,
@@ -419,7 +485,12 @@ class FlaxGenerationMixin:
 
         return warpers
 
-    def _get_logits_processor(self, generation_config: GenerationConfig) -> FlaxLogitsProcessorList:
+    def _get_logits_processor(
+        self,
+        generation_config: GenerationConfig,
+        input_ids_seq_length: int,
+        logits_processor: Optional[FlaxLogitsProcessorList],
+    ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
         instances used to modify the scores of the language model head.
@@ -440,8 +511,50 @@ class FlaxGenerationMixin:
             processors.append(
                 FlaxForcedEOSTokenLogitsProcessor(generation_config.max_length, generation_config.forced_eos_token_id)
             )
+        if generation_config.suppress_tokens is not None:
+            processors.append(FlaxSuppressTokensLogitsProcessor(generation_config.suppress_tokens))
+        if generation_config.begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = (
+                begin_index
+                if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
+                else begin_index + 1
+            )
+            if generation_config.forced_decoder_ids is not None and len(generation_config.forced_decoder_ids) > 0:
+                # generation starts after the last token that is forced
+                begin_index += generation_config.forced_decoder_ids[-1][0]
+            processors.append(
+                FlaxSuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
+            )
+        if generation_config.forced_decoder_ids is not None:
+            forced_decoder_ids = [
+                [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
+            ]
+            processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
+        processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         return processors
+
+    def _merge_criteria_processor_list(
+        self,
+        default_list: FlaxLogitsProcessorList,
+        custom_list: FlaxLogitsProcessorList,
+    ) -> FlaxLogitsProcessorList:
+        if len(custom_list) == 0:
+            return default_list
+        for default in default_list:
+            for custom in custom_list:
+                if type(custom) is type(default):
+                    object_type = "logits processor"
+                    raise ValueError(
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
+                        f" `generate`, but it has already been created with the values {default}. {default} has been"
+                        " created by passing the corresponding arguments to generate or by the model's config default"
+                        f" values. If you just want to change the default values of {object_type} consider passing"
+                        f" them as arguments to `generate` instead of using a custom {object_type}."
+                    )
+        default_list.extend(custom_list)
+        return default_list
 
     def _greedy_search(
         self,
@@ -633,7 +746,7 @@ class FlaxGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
-        early_stopping: Optional[bool] = None,
+        early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
@@ -709,8 +822,9 @@ class FlaxGenerationMixin:
             model_kwargs["encoder_outputs"]["last_hidden_state"] = flatten_beam_dim(
                 model_kwargs["encoder_outputs"]["last_hidden_state"]
             )
-        if "attention_mask" in model_kwargs:
-            model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
+        for kwarg in ["attention_mask", "decoder_attention_mask"]:
+            if kwarg in model_kwargs:
+                model_kwargs[kwarg] = flatten_beam_dim(model_kwargs[kwarg])
 
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
@@ -733,14 +847,22 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`. See the discussion
+            # below for more details.
+            # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+            # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
+            #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_running_score = state.running_scores[:, :1] / (max_length**length_penalty)
+            else:
+                best_running_score = state.running_scores[:, :1] / (state.cur_len**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
-            improvement_still_possible = jnp.all(worst_finished_score < best_running_score)
+            improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping)
+            still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
@@ -813,7 +935,7 @@ class FlaxGenerationMixin:
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = jnp.flip(lax.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
+            next_topk_indices = lax.top_k(running_topk_log_probs, k=num_beams)[1]
             next_running_sequences, next_running_scores = gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
             )
@@ -824,10 +946,9 @@ class FlaxGenerationMixin:
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
-            beams_in_batch_are_full = (
-                jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
-                & early_stopping
-            )
+            beams_in_batch_are_full = jnp.broadcast_to(
+                state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape
+            ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += add_penalty * np.array(-1.0e7)
 
@@ -838,7 +959,7 @@ class FlaxGenerationMixin:
             merged_sequences = jnp.concatenate([state.sequences, topk_sequences], axis=1)
             merged_scores = jnp.concatenate([state.scores, topk_log_probs], axis=1)
             merged_is_sent_finished = jnp.concatenate([state.is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = jnp.flip(lax.top_k(merged_scores, k=num_beams)[1], axis=1)
+            topk_merged_indices = lax.top_k(merged_scores, k=num_beams)[1]
             next_sequences, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
             )
@@ -877,7 +998,7 @@ class FlaxGenerationMixin:
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
         # take best beam for each batch
-        sequences = sequences[:, -1]
-        scores = scores[:, -1]
+        sequences = sequences[:, 0]
+        scores = scores[:, 0]
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)

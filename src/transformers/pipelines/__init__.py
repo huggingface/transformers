@@ -1,11 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-import io
-import json
-import os
-
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -20,13 +12,15 @@ import os
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
+import json
+import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from numpy import isin
-
 from huggingface_hub import model_info
+from numpy import isin
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -84,6 +78,7 @@ from .token_classification import (
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
@@ -108,6 +103,7 @@ if is_tf_available():
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelForVision2Seq,
+        TFAutoModelForZeroShotImageClassification,
     )
 
 if is_torch_available():
@@ -140,6 +136,7 @@ if is_torch_available():
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
@@ -295,12 +292,23 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
-        "pt": (AutoModel,) if is_torch_available() else (),
+        "tf": (TFAutoModelForZeroShotImageClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
                 "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
+        "type": "multimodal",
+    },
+    "zero-shot-audio-classification": {
+        "impl": ZeroShotAudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",
@@ -387,8 +395,11 @@ for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
-    elif values["type"] in {"audio", "image", "video"}:
+    elif values["type"] in {"image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
+    elif values["type"] in {"audio"}:
+        NO_TOKENIZER_TASKS.add(task)
+        NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
@@ -404,7 +415,7 @@ def get_supported_tasks() -> List[str]:
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     if is_offline_mode():
-        raise RuntimeError(f"You cannot infer task automatically within `pipeline` when using offline mode")
+        raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=use_auth_token)
     except Exception as e:
@@ -537,6 +548,7 @@ def pipeline(
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
@@ -741,6 +753,11 @@ def pipeline(
                 'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if device is not None:
+            logger.warning(
+                "Both `device` and `device_map` are specified. `device` will override `device_map`. You"
+                " will most likely encounter unexpected behavior. Please remove `device` and keep `device_map`."
+            )
         model_kwargs["device_map"] = device_map
     if torch_dtype is not None:
         if "torch_dtype" in model_kwargs:
@@ -773,6 +790,14 @@ def pipeline(
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
+    # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
+    # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
+    # vision tasks when calling `pipeline()` with `model` and only one of the `image_processor` and `feature_extractor`.
+    # TODO: we need to make `NO_IMAGE_PROCESSOR_TASKS` and `NO_FEATURE_EXTRACTOR_TASKS` more robust to avoid such issue.
+    # This block is only temporarily to make CI green.
+    if load_image_processor and load_feature_extractor:
+        load_feature_extractor = False
+
     if (
         tokenizer is None
         and not load_tokenizer
@@ -784,6 +809,18 @@ def pipeline(
         # so the model_config might not define a tokenizer, but it seems to be
         # necessary for the task, so we're force-trying to load it.
         load_tokenizer = True
+    if (
+        image_processor is None
+        and not load_image_processor
+        and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and normalized_task != "automatic-speech-recognition"
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_image_processor = True
     if (
         feature_extractor is None
         and not load_feature_extractor
@@ -844,6 +881,10 @@ def pipeline(
                 image_processor = model_name
             elif isinstance(config, str):
                 image_processor = config
+            # Backward compatibility, as `feature_extractor` used to be the name
+            # for `ImageProcessor`.
+            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
+                image_processor = feature_extractor
             else:
                 # Impossible to guess what is the right image_processor here
                 raise Exception(

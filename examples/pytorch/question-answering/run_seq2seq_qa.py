@@ -25,11 +25,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import datasets
-from datasets import load_dataset
-
 import evaluate
-import transformers
+from datasets import load_dataset
 from trainer_seq2seq_qa import QuestionAnsweringSeq2SeqTrainer
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -282,6 +282,10 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
 
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)

@@ -136,7 +136,7 @@ class RoCBertConfig(PretrainedConfig):
         shape_embed_dim=512,
         shape_vocab_size=24858,
         concat_input=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

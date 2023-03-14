@@ -100,7 +100,7 @@ class GroupViTTextConfig(PretrainedConfig):
         num_attention_heads=4,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
@@ -108,7 +108,7 @@ class GroupViTTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -127,7 +127,6 @@ class GroupViTTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from GroupViTConfig
@@ -221,7 +220,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         initializer_factor=1.0,
         assign_eps=1.0,
         assign_mlp_ratio=[0.5, 4],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -251,7 +250,6 @@ class GroupViTVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from GroupViTConfig
@@ -303,25 +301,85 @@ class GroupViTConfig(PretrainedConfig):
         projection_dim=256,
         projection_intermediate_dim=4096,
         logit_scale_init_value=2.6592,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(**kwargs)
-
         # If `_config_dict` exist, we use them for the backward compatibility.
+        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
+        # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
+
+        super().__init__(**kwargs)
+
+        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
+        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
+        # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
         if text_config_dict is not None:
-            text_config = text_config_dict
+            if text_config is None:
+                text_config = {}
+
+            # This is the complete result when using `text_config_dict`.
+            _text_config_dict = GroupViTTextConfig(**text_config_dict).to_dict()
+
+            # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
+            for key, value in _text_config_dict.items():
+                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                    # If specified in `text_config_dict`
+                    if key in text_config_dict:
+                        message = (
+                            f"`{key}` is found in both `text_config_dict` and `text_config` but with different values. "
+                            f'The value `text_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`text_config_dict` is provided which will be used to initialize `GroupViTTextConfig`. "
+                            f'The value `text_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `text_config` with the ones in `_text_config_dict`.
+            text_config.update(_text_config_dict)
+
         if vision_config_dict is not None:
-            vision_config = vision_config_dict
+            if vision_config is None:
+                vision_config = {}
+
+            # This is the complete result when using `vision_config_dict`.
+            _vision_config_dict = GroupViTVisionConfig(**vision_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
+            for key, value in _vision_config_dict.items():
+                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                    # If specified in `vision_config_dict`
+                    if key in vision_config_dict:
+                        message = (
+                            f"`{key}` is found in both `vision_config_dict` and `vision_config` but with different "
+                            f'values. The value `vision_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`vision_config_dict` is provided which will be used to initialize `GroupViTVisionConfig`."
+                            f' The value `vision_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `vision_config` with the ones in `_vision_config_dict`.
+            vision_config.update(_vision_config_dict)
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the GroupViTTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `GroupViTTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the GroupViTVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. initializing the `GroupViTVisionConfig` with default values.")
 
         self.text_config = GroupViTTextConfig(**text_config)
         self.vision_config = GroupViTVisionConfig(**vision_config)
@@ -392,7 +450,6 @@ class GroupViTOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
-
         text_input_dict = super().generate_dummy_inputs(
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )

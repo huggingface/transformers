@@ -17,9 +17,17 @@ import unittest
 
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -40,15 +48,15 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
+class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
-        depth_estimator = DepthEstimationPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor)
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

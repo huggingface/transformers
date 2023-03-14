@@ -17,13 +17,16 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 from transformers import GraphormerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -38,7 +41,7 @@ class GraphormerModelTester:
     def __init__(
         self,
         parent,
-        num_classes=2,
+        num_classes=1,
         num_atoms=512 * 9,
         num_edges=512 * 3,
         num_in_degree=512,
@@ -241,9 +244,10 @@ class GraphormerModelTester:
 
 
 @require_torch
-class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
+class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GraphormerForGraphClassification, GraphormerModel) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = {"feature-extraction": GraphormerModel} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False
@@ -254,6 +258,92 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = GraphormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GraphormerConfig, has_text_modality=False)
+
+    # overwrite from common as `Graphormer` requires more input arguments
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            try:
+                required_keys = (
+                    "input_nodes",
+                    "input_edges",
+                    "attn_bias",
+                    "in_degree",
+                    "out_degree",
+                    "spatial_pos",
+                    "attn_edge_type",
+                )
+                required_inputs = tuple(inputs[k] for k in required_keys)
+                model(*required_inputs)
+                traced_model = torch.jit.trace(model, required_inputs)
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                if layer_name in loaded_model_state_dict:
+                    p2 = loaded_model_state_dict[layer_name]
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
+
+            self.assertTrue(models_equal)
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -380,7 +470,7 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
 class GraphormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_graph_classification(self):
-        model = GraphormerForGraphClassification.from_pretrained("graphormer-base-pcqm4mv2")
+        model = GraphormerForGraphClassification.from_pretrained("clefourrier/graphormer-base-pcqm4mv2")
 
         # Actual real graph data from the MUTAG dataset
         # fmt: off
@@ -526,7 +616,7 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
                     [3, 3, 4, 3, 3, 3, 3, 4, 4, 3, 4, 2, 2, 0, 0, 0, 0],
                 ]
             ),
-            "x": tensor(
+            "input_nodes": tensor(
                 [
                     [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3]],
                     [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [0], [0], [0], [0]],
@@ -1191,15 +1281,11 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
 
         output = model(**model_input)["logits"]
 
-        print(output.shape)
-        print(output)
-
-        expected_shape = torch.Size(())
+        expected_shape = torch.Size((2, 1))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        expected_logs = torch.tensor(
+            [[7.6060], [7.4126]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output, expected_logs, atol=1e-4))

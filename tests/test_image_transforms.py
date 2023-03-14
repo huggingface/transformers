@@ -16,8 +16,8 @@
 import unittest
 
 import numpy as np
-
 from parameterized import parameterized
+
 from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
@@ -95,6 +95,11 @@ class ImageTransformsTester(unittest.TestCase):
 
         # make sure image is correctly rescaled
         self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+        # Make sure that an exception is raised if image is not in [0, 1]
+        image = np.random.randn(*image_shape).astype(dtype)
+        with self.assertRaises(ValueError):
+            to_pil_image(image)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):

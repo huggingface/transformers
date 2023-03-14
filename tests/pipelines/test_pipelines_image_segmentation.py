@@ -18,14 +18,13 @@ from typing import Dict
 
 import datasets
 import numpy as np
+import requests
 from datasets import load_dataset
 
-import requests
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-    AutoFeatureExtractor,
     AutoImageProcessor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
@@ -35,9 +34,17 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -68,10 +75,11 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
     return {"shape": shape}
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageSegmentationPipelineTests(unittest.TestCase):
     model_mapping = {
         k: v
         for k, v in (
@@ -81,10 +89,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
-        image_segmenter = ImageSegmentationPipeline(
-            model=model, feature_extractor=feature_extractor, image_processor=image_processor
-        )
+    def get_test_pipeline(self, model, tokenizer, processor):
+        image_segmenter = ImageSegmentationPipeline(model=model, image_processor=processor)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -557,9 +563,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "facebook/maskformer-swin-base-ade"
 
         model = AutoModelForInstanceSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
+        image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
         image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         file = image[0]["file"]

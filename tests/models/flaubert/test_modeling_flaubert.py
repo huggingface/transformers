@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -362,8 +363,7 @@ class FlaubertModelTester(object):
 
 
 @require_torch
-class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaubertModel,
@@ -376,6 +376,18 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FlaubertModel,
+            "fill-mask": FlaubertWithLMHeadModel,
+            "question-answering": FlaubertForQuestionAnsweringSimple,
+            "text-classification": FlaubertForSequenceClassification,
+            "token-classification": FlaubertForTokenClassification,
+            "zero-shot": FlaubertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     # Flaubert has 2 QA models -> need to manually set the correct labels for one of them here
@@ -439,7 +451,6 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == FlaubertForMultipleChoice:
                 return

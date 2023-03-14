@@ -27,9 +27,7 @@ from transformers import (
     is_torch_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch
-
-from .test_pipelines_common import PipelineTestCaseMeta
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 if is_torch_available():
@@ -39,7 +37,8 @@ if is_tf_available():
     import tensorflow as tf
 
 
-class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING
 
@@ -175,7 +174,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
             self.skipTest("No tokenizer")
             return
@@ -196,9 +195,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             )
 
             return
-        feature_extractor = FeatureExtractionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
-        )
+        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer, feature_extractor=processor)
         return feature_extractor, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):

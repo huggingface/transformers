@@ -231,7 +231,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
         self.assertSequenceEqual(
             sorted(tuple(VOCAB_FILES_NAMES.values()) + ("special_tokens_map.json", "added_tokens.json")),
-            sorted(tuple(x.split(os.path.sep)[-1] for x in tokenizer_files)),
+            sorted(x.split(os.path.sep)[-1] for x in tokenizer_files),
         )
 
         # Checks everything loads correctly in the same way
@@ -456,7 +456,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_characters_in_vocab(self):
         sent = "ʈʰ æ æ̃ ˧ kʰ"
 
-        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
+        vocab_dict = {k: v for v, k in enumerate(set(sent.split()))}
         vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
 
         with open(vocab_file, "w") as f:

@@ -145,7 +145,7 @@ class TFWhisperAttention(tf.keras.layers.Layer):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
@@ -1286,7 +1286,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
 
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> generated_ids = model.generate(input_features=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
@@ -1421,7 +1421,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         encoder_outputs=None,
         attention_mask=None,
         decoder_attention_mask=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:

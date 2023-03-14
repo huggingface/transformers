@@ -115,7 +115,6 @@ class YolosImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class YolosImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = YolosImageProcessor if is_vision_available() else None
 
     def setUp(self):
