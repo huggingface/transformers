@@ -19,7 +19,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import NllbMoeConfig, is_torch_available
+from transformers import NllbMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -43,7 +43,7 @@ if is_torch_available():
     from transformers.models.nllb_moe.modeling_nllb_moe import (
         NllbMoeDecoder,
         NllbMoeEncoder,
-        NllbMoeTop1Router,
+        NllbMoeTop2Router,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -462,119 +462,56 @@ class NllbMoeRouterTest(unittest.TestCase):
 
     """
     config = NllbMoeConfig(
-        num_experts=2,
-        hidden_size=8,
+        num_experts=4,
+        hidden_size=32,
         d_ff=16,
-        router_jitter_noise=0,
         expert_capacity=4,
     )
 
-    def test_equivalency_balancy_loss(self):
-        r"""
-        This test checks if the balancy loss is correctly implemented
-        as in the original implementation of the Switch Transformer .
-        """
-        router_probs = torch.Tensor(
+    def test_top_2_routing(self):
+        # test routing with minimal reproduction
+        batch_size = 2
+        sequence_length = 20 # exceeds the expert capacity
+        set_seed(0)
+        # test routing with minimal reproduction
+        hidden_states = torch.rand((batch_size, sequence_length, self.config.hidden_size))
+        classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
+
+        hf_router = NllbMoeTop2Router(self.config)
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        logits = classfier( hidden_states.reshape((batch_size * sequence_length), hidden_dim))
+        dispatch_mask, router_probs, router_logits = hf_router.route_tokens(logits, sequence_length = sequence_length)
+        dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.config.num_experts))
+        router_probs = router_probs.reshape((batch_size, sequence_length, self.config.num_experts))
+        set_seed(0)
+        experts = [torch.nn.Linear(hidden_dim, hidden_dim),torch.nn.Linear(hidden_dim, hidden_dim), torch.nn.Linear(hidden_dim, hidden_dim), torch.nn.Linear(hidden_dim, hidden_dim)]
+        
+        next_states = hidden_states.clone()
+        for idx, expert in enumerate(experts):
+            token_indices = dispatch_mask[:, :, idx].bool()
+            expert_contribution = router_probs[:, :, idx][token_indices]
+            # original code multiplies the hidden states by the dispatch mask
+            # then chunks the dispatched input after some reshaping, then feeds each chunk to the corresponding
+            # expert. Which is better in terms of performances? Chunks are then concatenated together
+            # chunk size = torch.Size([1, 1, capacity, d_model])
+            next_states[token_indices] = expert_contribution[:, None] * expert(hidden_states[token_indices])
+
+        self.training = False
+        if self.config.moe_token_dropout > 0:
+            if self.training:
+                next_states = torch.nn.Dropout2d(self.config.moe_token_dropout)(next_states)
+            else:
+                next_states *= 1 - self.config.moe_token_dropout
+
+        # Now test that the next states are correct
+        EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
             [
-                [0.35490513, 0.60419905],
-                [0.4275843, 0.23061597],
-                [0.32985854, 0.43953657],
-                [0.25099766, 0.27730572],
-                [0.7678207, 0.71474564],
+                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
             ]
         )
-
-        expert_indices = torch.Tensor([[0], [1], [1], [0], [0]]).to(torch.int32)
-
-        loss = load_balancing_loss_func(router_probs, expert_indices)
-        self.assertAlmostEqual(loss.item(), 0.8741045, places=5)
-
-    def test_equivalency_router_z_loss(self):
-        r"""
-        This test checks if the router z loss is correctly implemented
-        as in the original implementation of the Switch Transformer .
-        """
-        logits = torch.Tensor(
-            [
-                [
-                    [-4.2124424, 3.891939, -3.6481273, 1.8849981],
-                    [0.32625437, 2.918651, 0.84758997, -4.556842],
-                    [-3.32062, 4.6977115, -0.15439987, 0.44086337],
-                    [3.4467149, 4.3436565, -4.7224274, -4.264637],
-                    [-2.224406, -2.5318158, -1.3832569, 1.1891162],
-                    [-2.320062, -0.44705987, 4.289819, -0.00662684],
-                ],
-                [
-                    [0.99470854, -0.6992364, 0.25503993, 4.2952085],
-                    [3.5937333, -3.2408535, -4.298278, 4.426601],
-                    [0.7669008, 2.6588762, 2.4505413, 4.6051874],
-                    [0.23330331, -3.0845237, 0.6262374, -2.9865491],
-                    [0.7595146, -2.1099675, -4.155346, -2.8326452],
-                    [2.3771453, 1.004138, -3.1781673, 0.7581556],
-                ],
-            ]
-        )
-
-        loss = router_z_loss_func(logits)
-        self.assertAlmostEqual(loss.item(), 13.786719, places=5)
-
-    def test_equivalency_token_chose_masked_router(self):
-        r"""
-        This test tests the equivalency between the `NllbMoeTop1Router`
-        originally implemented from here: TODO: provide link
-        """
-
-        input_tokens = torch.Tensor(
-            [
-                [
-                    [0.6433916, 0.18188512, 0.02240455, 0.563781],
-                    [0.5526401, 0.0958724, 0.34253013, 0.03644359],
-                    [0.08744538, 0.7909105, 0.35205448, 0.53364205],
-                ],
-                [
-                    [0.02900076, 0.4168595, 0.5802449, 0.91486526],
-                    [0.27414513, 0.14991808, 0.9383501, 0.5209162],
-                    [0.51207185, 0.90618336, 0.7309413, 0.95533276],
-                ],
-            ]
-        )
-
-        model = NllbMoeTop1Router(self.config)
-
-        model.classifier.weight = torch.nn.Parameter(
-            torch.Tensor(
-                [
-                    [0.02008116, 0.00620062],
-                    [-0.00811031, -0.00031623],
-                    [-0.03542127, 0.02703803],
-                    [0.02335377, -0.02971946],
-                ],
-            ).t()
-        )
-
-        expert_index, _, router_logits = model(input_tokens)
-        router_probs = torch.softmax(router_logits, dim=-1)
-
-        router_z_loss = router_z_loss_func(router_logits)
-        auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
-
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
-        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
-
-        # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
-
-    def test_max_routing_capacity(self):
-        model = NllbMoeTop1Router(self.config)
-        seq_len = 128
-        batch_size = 4
-        hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
-
-        router_probs, router_logits = model._compute_router_probabilities(hidden_states)
-        expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
-
-        token_priority = torch.cumsum(expert_index, dim=-2)
-        expert_capacity_mask = token_priority <= self.config.expert_capacity
-        expert_index = expert_index * expert_capacity_mask
-
-        assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
+        EXPECTED_L_AUX = 1
