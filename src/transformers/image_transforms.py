@@ -160,8 +160,14 @@ def to_pil_image(
     if do_rescale is None:
         if image.dtype == np.uint8:
             do_rescale = False
-        elif np.allclose(image, image.astype(int)) and np.all(0 <= image) and np.all(image <= 255):
-            do_rescale = False
+        elif np.allclose(image, image.astype(int)):
+            if np.all(0 <= image) and np.all(image <= 255):
+                do_rescale = False
+            else:
+                raise ValueError(
+                    "The image to be converted to a PIL image contains values outside the range [0, 255], "
+                    f"got [{image.min()}, {image.max()}] which cannot be converted to uint8."
+                )
         elif np.all(0 <= image) and np.all(image <= 1):
             do_rescale = True
         else:
