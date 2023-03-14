@@ -34,6 +34,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
