@@ -115,7 +115,7 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
             hidden_size=1536, d_ff=3968, num_attention_heads=24, num_hidden_layers=18
         )
         decoder_config = Pix2StructTextConfig(hidden_size=1536, d_ff=3968, num_heads=24, num_layers=18)
-    config = Pix2StructConfig(vision_config=encoder_config, text_config=decoder_config)
+    config = Pix2StructConfig(vision_config=encoder_config.to_dict(), text_config=decoder_config.to_dict())
 
     model = Pix2StructForConditionalGeneration(config)
 
