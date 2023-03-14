@@ -1349,7 +1349,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         return_timestamps=None,
         task=None,
         language=None,
-        is_multilingual=None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
         if generation_config is None:
@@ -1411,12 +1410,15 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             forced_decoder_ids = self.generation_config.forced_decoder_ids
 
         if generation_config.return_timestamps:
-            logits_processor = [TFWhisperTimeStampLogitsProcessor(generation_config)]
+            if logits_processor is not None:
+                logits_processor += [TFWhisperTimeStampLogitsProcessor(generation_config)]
+            else:
+                logits_processor = [TFWhisperTimeStampLogitsProcessor(generation_config)]
 
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        return super().generate(input_ids, generation_config, seed, logits_processor=logits_processor, **kwargs)
+        return super().generate(input_ids, generation_config, logits_processor, seed, **kwargs)
 
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
