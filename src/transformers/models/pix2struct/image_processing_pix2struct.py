@@ -86,7 +86,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             paper](https://arxiv.org/pdf/2210.03347.pdf).
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["flattened_patches"]
 
     def __init__(
         self,
