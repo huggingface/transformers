@@ -101,7 +101,6 @@ class ImageTransformsTester(unittest.TestCase):
         with self.assertRaises(ValueError):
             to_pil_image(image)
 
-
     @require_vision
     def test_to_pil_image_from_mask(self):
         # Make sure binary mask remains a binary mask
