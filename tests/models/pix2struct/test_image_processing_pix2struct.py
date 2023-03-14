@@ -22,7 +22,7 @@ import requests
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -46,7 +46,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         size=None,
         do_normalize=True,
         do_convert_rgb=True,
-        patch_size=16,
+        patch_size=None,
     ):
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
@@ -59,7 +59,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = [512, 1024, 2048, 4096]
-        self.patch_size = patch_size
+        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
 
     def prepare_image_processor_dict(self):
         return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
@@ -68,40 +68,6 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         img_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
         return raw_image
-
-    # Copied from transformers.tests.test_image_processing_common.prepare_image_inputs
-    def prepare_image_inputs(image_processor_tester, equal_resolution=False, numpify=False, torchify=False):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-
-        One can specify whether the images are of the same resolution or not.
-        """
-
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-        image_inputs = []
-        for i in range(image_processor_tester.batch_size):
-            if equal_resolution:
-                width = height = image_processor_tester.max_resolution
-            else:
-                # To avoid getting image width/height 0
-                min_resolution = image_processor_tester.min_resolution
-                if getattr(image_processor_tester, "size_divisor", None):
-                    # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-                    min_resolution = max(image_processor_tester.size_divisor, min_resolution)
-                width, height = np.random.choice(np.arange(min_resolution, image_processor_tester.max_resolution), 2)
-            image_inputs.append(
-                np.random.randint(255, size=(image_processor_tester.num_channels, width, height), dtype=np.uint8)
-            )
-
-        if not numpify and not torchify:
-            # PIL expects the channel dimension as last dimension
-            image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
-
-        if torchify:
-            image_inputs = [torch.from_numpy(image) for image in image_inputs]
-
-        return image_inputs
 
 
 @require_torch
@@ -134,13 +100,14 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
         expected_hidden_dim = (
-            (self.image_processor_tester.patch_size**2) * self.image_processor_tester.num_channels
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * self.image_processor_tester.num_channels
         ) + 2
 
         for max_patch in self.image_processor_tester.max_patches:
@@ -162,12 +129,13 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
         expected_hidden_dim = (
-            (self.image_processor_tester.patch_size**2) * self.image_processor_tester.num_channels
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * self.image_processor_tester.num_channels
         ) + 2
 
         for max_patch in self.image_processor_tester.max_patches:
@@ -189,13 +157,14 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
         expected_hidden_dim = (
-            (self.image_processor_tester.patch_size**2) * self.image_processor_tester.num_channels
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * self.image_processor_tester.num_channels
         ) + 2
 
         for max_patch in self.image_processor_tester.max_patches:
@@ -236,13 +205,14 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
         expected_hidden_dim = (
-            (self.image_processor_tester.patch_size**2) * (self.image_processor_tester.num_channels - 1)
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * (self.image_processor_tester.num_channels - 1)
         ) + 2
 
         for max_patch in self.image_processor_tester.max_patches:
