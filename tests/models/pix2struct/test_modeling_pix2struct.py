@@ -593,7 +593,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of a stop sign
 def prepare_img():
     url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
