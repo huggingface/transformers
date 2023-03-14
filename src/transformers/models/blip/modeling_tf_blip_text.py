@@ -13,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO Check whether 'training' is propagated correctly without us manually specifying it
 
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import tensorflow as tf
 
-from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
+from ...modeling_tf_outputs import (
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFBaseModelOutputWithPoolingAndCrossAttentions,
+    TFCausalLMOutputWithCrossAttentions,
 )
-from ...modeling_tf_utils import TFPreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, get_tf_activation, shape_list
 
 from tensorflow.keras.layers import Embedding, Layer, Dense, LayerNormalization, Dropout
 
@@ -42,8 +42,8 @@ class TFBlipTextEmbeddings(Layer):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id, name="word_embeddings")
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, name="position_embeddings")
+        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id, kernel_initializer=get_initializer(config.initializer_range), name="word_embeddings")
+        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="position_embeddings")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -94,9 +94,9 @@ class TFBlipTextSelfAttention(Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Dense(self.all_head_size)
-        self.key = Dense(self.all_head_size)
-        self.value = Dense(self.all_head_size)
+        self.query = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query")
+        self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
+        self.value = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value")
 
         self.dropout = Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -190,9 +190,9 @@ class TFBlipTextSelfAttention(Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert -> BlipText, BertConfig -> BlipTextConfig
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BlipText,BertConfig->BlipTextConfig
 class TFBlipTextSelfOutput(Layer):
-    def __init__(self, config: BertConfig, **kwargs):
+    def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -214,7 +214,7 @@ class TFBlipTextAttention(Layer):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
         self.self = TFBlipTextSelfAttention(config, is_cross_attention)
-        self.output = BlipTextSelfOutput(config)
+        self.output = TFBlipTextSelfOutput(config)
         self.pruned_heads = set()
 
     def call(
@@ -241,9 +241,9 @@ class TFBlipTextAttention(Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert -> BlipText
-class BlipTextIntermediate(nn.Module):
-    def __init__(self, config: BertConfig, **kwargs):
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->BlipText
+class TFBlipTextIntermediate(Layer):
+    def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -290,7 +290,7 @@ class TFBlipTextLayer(Layer):
         self.layer_num = layer_num
         if self.config.is_decoder:
             self.crossattention = TFBlipTextAttention(config, is_cross_attention=self.config.is_decoder)
-        self.intermediate = BlipTextIntermediate(config)
+        self.intermediate = TFBlipTextIntermediate(config)
         self.output = TFBlipTextOutput(config)
 
     def call(
@@ -338,13 +338,13 @@ class TFBlipTextLayer(Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
-class BlipTextEncoder(Layer):
-    def __init__(self, config):
-        super().__init__()
+class TFBlipTextEncoder(Layer):
+    def __init__(self, config, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
         self.config = config
         self.layer = [TFBlipTextLayer(config, i) for i in range(config.num_hidden_layers)]
 
-    def forward(
+    def call(
         self,
         hidden_states,
         attention_mask=None,
@@ -413,7 +413,7 @@ class BlipTextEncoder(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->BlipText
-class BlipTextPooler(nn.Module):
+class TFBlipTextPooler(Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -434,7 +434,7 @@ class BlipTextPooler(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->BlipText
-class BlipTextPredictionHeadTransform(nn.Module):
+class TFBlipTextPredictionHeadTransform(Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -460,7 +460,7 @@ class BlipTextPredictionHeadTransform(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->BlipText
-class BlipTextLMPredictionHead(nn.Module):
+class TFBlipTextLMPredictionHead(Layer):
     def __init__(self, config: BlipTextConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
@@ -503,7 +503,7 @@ class BlipTextLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class BlipTextOnlyMLMHead(Layer):
+class TFBlipTextOnlyMLMHead(Layer):
     def __init__(self, config):
         super().__init__()
         self.predictions = TFBlipTextLMPredictionHead(config)
@@ -514,7 +514,7 @@ class BlipTextOnlyMLMHead(Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L548
-class BlipTextPreTrainedModel(PreTrainedModel):
+class TFBlipTextPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -524,21 +524,9 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
-class BlipTextModel(BlipTextPreTrainedModel):
+class TFBlipTextModel(TFBlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
@@ -547,13 +535,13 @@ class BlipTextModel(BlipTextPreTrainedModel):
     `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
+    def __init__(self, config, add_pooling_layer=True, name=None, **kwargs):
+        super().__init__(config, name=name, **kwargs)
         self.config = config
 
-        self.embeddings = BlipTextEmbeddings(config)
-        self.encoder = BlipTextEncoder(config)
-        self.pooler = BlipTextPooler(config) if add_pooling_layer else None
+        self.embeddings = TFBlipTextEmbeddings(config)
+        self.encoder = TFBlipTextEncoder(config)
+        self.pooler = TFBlipTextPooler(config) if add_pooling_layer else None
 
         self.post_init()
 
@@ -563,31 +551,20 @@ class BlipTextModel(BlipTextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel._prune_heads
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: device, is_decoder: bool
-    ) -> Tensor:
+        self, attention_mask: tf.Tensor, input_shape: Tuple[int], is_decoder: bool
+    ) -> tf.Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
         Arguments:
-            attention_mask (`torch.Tensor`):
+            attention_mask (`tf.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (`torch.device`):
-                The device of the input to the model.
 
         Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
+            `tf.Tensor` The extended attention mask, with the same dtype as `attention_mask.dtype`.
         """
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -600,18 +577,17 @@ class BlipTextModel(BlipTextPreTrainedModel):
             if is_decoder:
                 batch_size, seq_length = input_shape
 
-                seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
+                seq_ids = tf.range(seq_length, dtype=attention_mask.dtype)
+                causal_mask = tf.broadcast_to(seq_ids[None, None, :], (batch_size, seq_length, seq_length)) <= seq_ids[None, :, None]
+                breakpoint()  # TODO Make sure this is right
                 # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-                # causal and attention masks must have same type with pytorch version < 1.3
-                causal_mask = causal_mask.to(attention_mask.dtype)
 
                 if causal_mask.shape[1] < attention_mask.shape[1]:
                     prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-                    causal_mask = torch.cat(
+                    causal_mask = tf.concat(
                         [
-                            torch.ones(
-                                (batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype
+                            tf.ones(
+                                (batch_size, seq_length, prefix_seq_len), dtype=causal_mask.dtype
                             ),
                             causal_mask,
                         ],
@@ -633,11 +609,11 @@ class BlipTextModel(BlipTextPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = tf.cast(extended_attention_mask, self.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def forward(
+    def call(
         self,
         input_ids=None,
         attention_mask=None,
@@ -704,12 +680,12 @@ class BlipTextModel(BlipTextPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length))).to(device)
+            attention_mask = tf.ones(((batch_size, seq_length + past_key_values_length)))
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, device, is_decoder
+        extended_attention_mask: tf.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape, is_decoder
         )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
@@ -724,7 +700,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
             if type(encoder_attention_mask) == list:
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                encoder_attention_mask = tf.ones(encoder_hidden_shape)
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
             else:
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
@@ -766,7 +742,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
@@ -777,15 +753,15 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
-class BlipTextLMHeadModel(BlipTextPreTrainedModel):
+class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BlipTextModel(config, add_pooling_layer=False)
-        self.cls = BlipTextOnlyMLMHead(config)
+        self.bert = TFBlipTextModel(config, add_pooling_layer=False, name="bert")
+        self.cls = TFBlipTextOnlyMLMHead(config)
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -793,7 +769,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    def forward(
+    def call(
         self,
         input_ids=None,
         attention_mask=None,
@@ -863,9 +839,10 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
         lm_loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
-            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.1)
+            shifted_prediction_scores = prediction_scores[:, :-1, :]
+            labels = labels[:, 1:]
+            # TODO How do we get label smoothing in Keras for sparse CE?
+            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=reduction, label_smoothing=0.1)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
@@ -874,7 +851,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return CausalLMOutputWithCrossAttentions(
+        return TFCausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
             past_key_values=outputs.past_key_values,
