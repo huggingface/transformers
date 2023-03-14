@@ -34,6 +34,32 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+# adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
+def torch_extract_patches(image_tensor, patch_height, patch_width):
+    """
+    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
+    `patch_width`, `num_channels`x `patch_height` x `patch_width`)
+
+    Args:
+        image_tensor (torch.Tensor):
+            The image tensor to extract patches from.
+        patch_height (int):
+            The height of the patches to extract.
+        patch_width (int):
+            The width of the patches to extract.
+    """
+    requires_backends(torch_extract_patches, ["torch"])
+
+    image_tensor = image_tensor.unsqueeze(0)
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        image_tensor.size(2) // patch_height,
+        image_tensor.size(3) // patch_width,
+        image_tensor.size(1) * patch_height * patch_width,
+    )
+    return patches.unsqueeze(0)
+
 
 class Pix2StructImageProcessor(BaseImageProcessor):
     r"""
@@ -68,34 +94,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = max_patches
-
-    # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
-    def torch_extract_patches(self, image_tensor, patch_height, patch_width):
-        """
-        Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
-        `patch_width`, `num_channels`x `patch_height` x `patch_width`)
-
-        Args:
-            image_tensor (torch.Tensor):
-                The image tensor to extract patches from.
-            patch_height (int):
-                The height of the patches to extract.
-            patch_width (int):
-                The width of the patches to extract.
-        """
-        requires_backends(self.torch_extract_patches, ["torch"])
-
-        image_tensor = image_tensor.unsqueeze(0)
-        patches = torch.nn.functional.unfold(
-            image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width)
-        )
-        patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
-        patches = patches.permute(0, 4, 2, 3, 1).reshape(
-            image_tensor.size(2) // patch_height,
-            image_tensor.size(3) // patch_width,
-            image_tensor.size(1) * patch_height * patch_width,
-        )
-        return patches.unsqueeze(0)
 
     def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: dict, **kwargs) -> np.ndarray:
         """
@@ -134,7 +132,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         ).squeeze(0)
 
         # [1, rows, columns, patch_height * patch_width * image_channels]
-        patches = self.torch_extract_patches(image, patch_height, patch_width)
+        patches = torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
         rows = patches_shape[1]
@@ -172,6 +170,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
+
+        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
+        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
 
         Args:
             image (`np.ndarray`):
