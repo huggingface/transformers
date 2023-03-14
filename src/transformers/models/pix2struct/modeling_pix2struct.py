@@ -676,6 +676,7 @@ class Pix2StructTextLayerFF(nn.Module):
         self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    # Copied from transformers.models.t5.modeling_t5.T5LayerFF.forward
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.DenseReluDense(forwarded_states)
