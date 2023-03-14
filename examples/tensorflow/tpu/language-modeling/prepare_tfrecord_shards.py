@@ -99,7 +99,7 @@ def group_texts(block_size=128):
 
 def get_serialized_examples(tokenized_data):
     records = []
-    for i in range(len(tokenized_data)):
+    for i in range(len(tokenized_data["input_ids"])):
         features = {
             "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=tokenized_data["input_ids"][i])),
             "attention_mask": tf.train.Feature(
@@ -151,19 +151,24 @@ def main(args):
     grouped_dataset = wikitext_tokenized.map(group_texts_fn, batched=True, batch_size=1000, num_proc=4)
 
     shard_count = 0
+    total_records = 0
     for shard in range(0, len(grouped_dataset), args.shard_size):
         dataset_snapshot = grouped_dataset[shard : shard + args.shard_size]
-        shard_size = len(dataset_snapshot)
-        filename = os.path.join(split_dir, f"wikitext-{args.limit}-{shard_count}-{shard_size}.tfrecord")
+        records_containing = len(dataset_snapshot["input_ids"])
+        filename = os.path.join(split_dir, f"wikitext-{shard_count}-{records_containing}.tfrecord")
         serialized_examples = get_serialized_examples(dataset_snapshot)
 
         with tf.io.TFRecordWriter(filename) as out_file:
-            for i in range(shard_size):
+            for i in range(len(serialized_examples)):
                 example = serialized_examples[i]
                 out_file.write(example)
-            print("Wrote file {} containing {} records".format(filename, shard_size))
+            print("Wrote file {} containing {} records".format(filename, records_containing))
 
         shard_count += 1
+        total_records += records_containing
+
+    with open(f"split-{args.split}-records-count.txt", "w") as f:
+        print(f"Total {args.split} records: {total_records}", file=f)
 
 
 if __name__ == "__main__":
