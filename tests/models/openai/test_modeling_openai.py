@@ -216,8 +216,8 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     ):
         if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
             # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
-            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
-            # config could not be created.
+            # `OpenAIGPTConfig` was never used in pipeline tests, either because of a missing checkpoint or because a
+            # tiny config could not be created.
             return True
 
         return False
