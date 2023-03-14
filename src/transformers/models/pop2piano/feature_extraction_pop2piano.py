@@ -116,37 +116,27 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as tempo in bpm for an audio signal.
         For more information please visit https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
         """
-        bpm, beat_times, confidence, estimates, essentia_beat_intervals = [], [], [], [], []
-        for seq in range(len(raw_audio)):
-            essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
-            seq_bpm, seq_beat_times, seq_confidence, seq_estimates, seq_essentia_beat_intervals = essentia_tracker(raw_audio[seq])
-            bpm.append(seq_bpm)
-            beat_times.append(np.array(seq_beat_times))
-            confidence.append(seq_confidence)
-            estimates.append(seq_estimates)
-            essentia_beat_intervals.append(seq_essentia_beat_intervals)
+        essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
+        bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(raw_audio)
 
         return bpm, beat_times, confidence, estimates, essentia_beat_intervals
 
-    def interpolate_beat_times(self, beat_times_arr, steps_per_beat, extend=False):
-        beat_steps_8th_arr = []
-        for beat_times in beat_times_arr:
-            beat_times_function = scipy.interpolate.interp1d(
-                np.arange(beat_times.size),
-                beat_times,
-                bounds_error=False,
-                fill_value="extrapolate",
+    def interpolate_beat_times(self, beat_times, steps_per_beat, extend=False):
+        beat_times_function = scipy.interpolate.interp1d(
+            np.arange(beat_times.size),
+            beat_times,
+            bounds_error=False,
+            fill_value="extrapolate",
+        )
+        if extend:
+            beat_steps_8th = beat_times_function(
+                np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1)
             )
-            if extend:
-                beat_steps_8th = beat_times_function(
-                    np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1)
-                )
-            else:
-                beat_steps_8th = beat_times_function(
-                    np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
-                )
-            beat_steps_8th_arr.append(beat_steps_8th)
-        return beat_steps_8th_arr
+        else:
+            beat_steps_8th = beat_times_function(
+                np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
+            )
+        return beat_steps_8th
 
     def extrapolate_beat_times(self, beat_times, n_extend=1):
         beat_times_function = scipy.interpolate.interp1d(
@@ -245,50 +235,89 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             steps_per_beat (`int`, *optional*, defaults to 2):
                 Denotes Steps per beat.
         """
-        warnings.warn("If you are trying to pass multiple raw_audio then please use list not np.ndarray. eg. [a, b, ...]")
-        if isinstance(raw_audio, np.ndarray):
-            raw_audio = [raw_audio]
+        warnings.warn("Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract"
+                      "features from more than a single audio then you might need to call it multiple times.")
 
         bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
         beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
-        if self.use_mel is not None:
-            if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
-                _audio, fzs = [], []
-                for i in range(len(raw_audio)):
-                    # Change `raw_audio_sr` to `self.sample_rate`
-                    raw_audio[i] = librosa.core.resample(
-                        raw_audio[i], orig_sr=audio_sr, target_sr=self.sample_rate, res_type='kaiser_best'
-                    )
-                    audio_sr = self.sample_rate
-                    start_sample = int(beatsteps[i][0] * audio_sr)
-                    end_sample = int(beatsteps[i][-1] * audio_sr)
-                    _audio.append(torch.from_numpy(raw_audio[i])[start_sample:end_sample])
-                    fzs.append(None)
-        else:
-            raise NotImplementedError("use_mel must be True")
-
-        _audio_t = torch.zeros([len(_audio), max([len(a) for a in _audio])])
-        for i, a in enumerate(_audio):
-            _audio_t[i, :len(a)] = a
-
-        batch_arr, ext_beatstep_arr = [], []
-        for i in range(len(_audio)):
-            batch, ext_beatstep = self.single_preprocess(
-                feature_tokens=fzs[i],
-                audio=_audio_t[i],
-                beatstep=beatsteps[i] - beatsteps[i][0],
-                n_bars=self.n_bars,
+        if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
+            # Change `raw_audio_sr` to `self.sample_rate`
+            raw_audio = librosa.core.resample(
+                raw_audio, orig_sr=audio_sr, target_sr=self.sample_rate, res_type='kaiser_best'
             )
-            batch_arr.append(batch)
-            ext_beatstep_arr.append(ext_beatstep)
+        audio_sr = self.sample_rate
+        start_sample = int(beatsteps[0] * audio_sr)
+        end_sample = int(beatsteps[-1] * audio_sr)
+        _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
+        fzs = None
 
-        batch_arr = BatchFeature({"input_features": batch_arr,
-                                  "beatsteps" : beatsteps,
-                                  "ext_beatstep" : ext_beatstep_arr
-                                  })
-        return batch_arr
+        batch, ext_beatstep = self.single_preprocess(
+            feature_tokens=fzs,
+            audio=_audio,
+            beatstep=beatsteps - beatsteps[0],
+            n_bars=self.n_bars,
+        )
 
+        return BatchFeature({"input_features": batch,
+                             "beatsteps": torch.from_numpy(beatsteps),
+                             "ext_beatstep": torch.from_numpy(ext_beatstep),
+                             "raw_audio":torch.from_numpy(raw_audio),
+                             })
+
+
+        #
+        #
+        #
+        #
+        #
+        #
+        #
+        #
+        # warnings.warn("If you are trying to pass multiple raw_audio then please use list not np.ndarray. eg. [a, b, ...]")
+        # if isinstance(raw_audio, np.ndarray):
+        #     raw_audio = [raw_audio]
+        #
+        # bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
+        # beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
+        #
+        # if self.use_mel is not None:
+        #     if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
+        #         _audio, fzs = [], []
+        #         for i in range(len(raw_audio)):
+        #             # Change `raw_audio_sr` to `self.sample_rate`
+        #             raw_audio[i] = librosa.core.resample(
+        #                 raw_audio[i], orig_sr=audio_sr, target_sr=self.sample_rate, res_type='kaiser_best'
+        #             )
+        #             audio_sr = self.sample_rate
+        #             start_sample = int(beatsteps[i][0] * audio_sr)
+        #             end_sample = int(beatsteps[i][-1] * audio_sr)
+        #             _audio.append(torch.from_numpy(raw_audio[i])[start_sample:end_sample])
+        #             fzs.append(None)
+        # else:
+        #     raise NotImplementedError("use_mel must be True")
+        #
+        # _audio_t = torch.zeros([len(_audio), max([len(a) for a in _audio])])
+        # for i, a in enumerate(_audio):
+        #     _audio_t[i, :len(a)] = a
+        #
+        # batch_arr, ext_beatstep_arr = [], []
+        # for i in range(len(_audio)):
+        #     batch, ext_beatstep = self.single_preprocess(
+        #         feature_tokens=fzs[i],
+        #         audio=_audio_t[i],
+        #         beatstep=beatsteps[i] - beatsteps[i][0],
+        #         n_bars=self.n_bars,
+        #     )
+        #     batch_arr.append(batch)
+        #     ext_beatstep_arr.append(ext_beatstep)
+        #
+        # batch_arr = BatchFeature({"input_features": batch_arr,
+        #                           "beatsteps" : beatsteps,
+        #                           "ext_beatstep" : ext_beatstep_arr
+        #                           })
+        # return batch_arr
+        #
 
     def detokenize(self, token, time_idx_offset):
         if token >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity):

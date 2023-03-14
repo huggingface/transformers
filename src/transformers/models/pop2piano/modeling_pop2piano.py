@@ -138,10 +138,10 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     """
 
     config_class = Pop2PianoConfig
-    # load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = False
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
+    # main_input_name = "input_features"
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
     
@@ -152,12 +152,15 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(module, ConcatEmbeddingToMel):
             module.embedding.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, Pop2PianoForConditionalGeneration):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        ## TODO
+        # Uncommit it
+        ## TODO
+        # elif isinstance(module, Pop2PianoForConditionalGeneration):
+        #     # Mesh TensorFlow embeddings initialization
+        #     # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+        #     module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        #     if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+        #         module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -566,42 +569,6 @@ class Pop2PianoAttention(nn.Module):
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
-        return outputs
-
-# Copied from transformers.models.t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
-class T5LayerCrossAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.EncDecAttention = Pop2PianoAttention(config, has_relative_attention_bias=False)
-        self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(
-        self,
-        hidden_states,
-        key_value_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        query_length=None,
-        output_attentions=False,
-    ):
-        normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.EncDecAttention(
-            normed_hidden_states,
-            mask=attention_mask,
-            key_value_states=key_value_states,
-            position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            query_length=query_length,
-            output_attentions=output_attentions,
-        )
-        layer_output = hidden_states + self.dropout(attention_output[0])
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 # Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
@@ -1096,7 +1063,23 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
     def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)
+        self.config = config
         self.model_dim = config.d_model
+
+        self.spectrogram = LogMelSpectrogram(sample_rate=config.dataset.get("sample_rate"),
+                                             n_fft=config.n_fft,
+                                             hop_length=config.hop_length,
+                                             f_min=config.f_min,
+                                             n_mels=config.n_mels
+                                             )
+        if config.dataset.get("mel_is_conditioned", True):
+            n_dim = 512
+            composer_n_vocab = len(config.composer_to_feature_token)
+            embedding_offset = min(config.composer_to_feature_token.values())
+            self.mel_conditioner = ConcatEmbeddingToMel(embedding_offset=embedding_offset,
+                                                        n_vocab=composer_n_vocab,
+                                                        n_dim=n_dim
+                                                        )
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1104,6 +1087,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
+
         self.encoder = Pop2PianoStack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
@@ -1262,6 +1246,189 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+        )
+
+    @torch.no_grad()
+    def generate(
+            self,
+            inputs_embeds=None,
+            composer="composer1",
+            max_batch_size:int = None,
+            n_bars:int = 2,
+            return_dict: Optional[bool] = False,
+            inputs: Optional[torch.Tensor] = None,
+            generation_config=None,
+            logits_processor=None,
+            stopping_criteria=None,
+            prefix_allowed_tokens_fn=None,
+            synced_gpus=False,
+            return_timestamps=None,
+            task=None,
+            language=None,
+            is_multilingual=None,
+            **kwargs,
+    ):
+        """
+        Generates sequences of token ids for models with a language modeling head.
+        <Tip warning={true}>
+        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+        </Tip>
+        Parameters:
+            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            stopping_criteria (`StoppingCriteriaList`, *optional*):
+                Custom stopping criteria that complement the default stopping criteria built from arguments and a
+                generation config. If a stopping criteria is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+                If provided, this function constraints the beam search to allowed tokens only at each step. If not
+                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
+                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+                Retrieval](https://arxiv.org/abs/2010.00904).
+            synced_gpus (`bool`, *optional*, defaults to `False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            return_timestamps (`bool`, *optional*):
+                Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+            task (`bool`, *optional*):
+                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
+                will be updated accordingly.
+            language (`bool`, *optional*):
+                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
+                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
+            is_multilingual (`bool`, *optional*):
+                Whether or not the model is multilingual.
+            kwargs:
+                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
+                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
+        Return:
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~utils.ModelOutput`] types are:
+                    - [`~generation.GreedySearchDecoderOnlyOutput`],
+                    - [`~generation.SampleDecoderOnlyOutput`],
+                    - [`~generation.BeamSearchDecoderOnlyOutput`],
+                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
+                [`~utils.ModelOutput`] types are:
+                    - [`~generation.GreedySearchEncoderDecoderOutput`],
+                    - [`~generation.SampleEncoderDecoderOutput`],
+                    - [`~generation.BeamSearchEncoderDecoderOutput`],
+                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+        """
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        if return_timestamps is not None:
+            if not hasattr(generation_config, "no_timestamps_token_id"):
+                raise ValueError(
+                    "You are trying to return timestamps, but the generation config is not properly set."
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
+                    "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
+                )
+
+            generation_config.return_timestamps = return_timestamps
+        else:
+            generation_config.return_timestamps = False
+
+        if language is not None:
+            generation_config.language = language
+        if task is not None:
+            generation_config.task = task
+
+        forced_decoder_ids = []
+        if task is not None or language is not None:
+            if hasattr(generation_config, "language"):
+                if generation_config.language in generation_config.lang_to_id.keys():
+                    language_token = generation_config.language
+                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                    language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
+                else:
+                    raise ValueError(
+                        f"Unsupported language: {self.language}. Language should be one of:"
+                        f" {list(TO_LANGUAGE_CODE.keys()) if generation_config.language in TO_LANGUAGE_CODE.keys() else list(TO_LANGUAGE_CODE.values())}."
+                    )
+                forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
+            else:
+                forced_decoder_ids.append((1, None))  # automatically detect the language
+
+            if hasattr(generation_config, "task"):
+                if generation_config.task in TASK_IDS:
+                    forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+                else:
+                    raise ValueError(
+                        f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
+                    )
+            else:
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
+            if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        # Legacy code for backward compatibility
+        elif hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
+            forced_decoder_ids = self.config.forced_decoder_ids
+        elif (
+                hasattr(self.generation_config, "forced_decoder_ids")
+                and self.generation_config.forced_decoder_ids is not None
+        ):
+            forced_decoder_ids = self.generation_config.forced_decoder_ids
+
+        if generation_config.return_timestamps:
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+
+        if len(forced_decoder_ids) > 0:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        # select composer randomly if not already given
+        composer_to_feature_token = self.config.composer_to_feature_token
+        if composer is None:
+            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
+        elif composer not in composer_to_feature_token.keys():
+            raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
+
+        n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
+        max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
+        max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
+
+        inputs_embeds = self.spectrogram(inputs_embeds["input_features"]).transpose(-1, -2)
+        if self.config.dataset.get("mel_is_conditioned", None):
+            composer_value = composer_to_feature_token[composer]
+            composer_value = torch.tensor(composer_value, device=self.device)
+            composer_value = composer_value.repeat(inputs_embeds.shape[0])
+            inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
+
+        return super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            stopping_criteria,
+            prefix_allowed_tokens_fn,
+            synced_gpus,
+            inputs_embeds=inputs_embeds,
+            max_length=max_length,
+            **kwargs,
         )
 
     def prepare_inputs_for_generation(
