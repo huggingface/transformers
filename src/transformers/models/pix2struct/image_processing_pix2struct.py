@@ -282,6 +282,17 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         requires_backends(self.render_header, "vision")
 
+        return_framework = None
+
+        # Convert to PIL image if necessary
+        if not isinstance(image, Image.Image):
+            if isinstance(image, torch.Tensor):
+                image = image.permute(1, 2, 0).numpy()
+                return_framework = "torch"
+            elif isinstance(image, np.ndarray):
+                return_framework = "numpy"
+            image = Image.fromarray(image)
+
         header_image = self.render_text(header, **kwargs)
         new_width = max(header_image.width, image.width)
 
@@ -291,6 +302,13 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
         new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
         new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
+
+        # Convert back to the original framework if necessary
+        if return_framework is not None:
+            if return_framework == "torch":
+                new_image = torch.from_numpy(np.array(new_image)).permute(2, 0, 1)
+            elif return_framework == "numpy":
+                new_image = np.array(new_image)
 
         return new_image
 
