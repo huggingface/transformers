@@ -635,23 +635,9 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
 
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores = _un_force_token(self.no_timestamps_token_id)  # scores[:, self.no_timestamps_token_id] = -float("inf")
-        scores = tf.cond(
-            tf.equal(cur_len, self.begin_index - 1),
-            lambda: _force_tokens(self.timestamp_begin),
-            lambda: tf.identity(scores),
-        )
         if cur_len == self.begin_index - 1:
+            scores = _force_tokens(self.timestamp_begin)
             return scores
-
-        not_eos = (
-            tf.math.count_nonzero(((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id)), axis=-1) >= 1
-        )
-        last_was_timestamps = not_eos & (input_ids[:, cur_len - 1] >= self.timestamp_begin)
-
-        not_eos = (
-            tf.math.count_nonzero((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id), axis=-1) < 2
-        )
-        penultimate_was_timestamp = not_eos | (input_ids[:, cur_len - 2] >= self.timestamp_begin)
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         # for k in range(input_ids.shape[0]):
@@ -664,39 +650,59 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         #          else:  # cannot be normal text tokens
         #               scores[k, : self.eos_token_id] = -float("inf")
 
-        def _update_slices(batch_idx_to_modify, idx0, idx1):
-            batch_idx_to_modify = tf.where(batch_idx_to_modify)
-            new_scores = tf.identity(scores)
-            if batch_idx_to_modify.shape[0] is not None:
-                if batch_idx_to_modify.shape[0] > 0:
-                    batches = batch_idx_to_modify.shape[0]
-                    mod = tf.tile(range(idx0, idx1), [batches])
-                    batch = tf.repeat(batch_idx_to_modify, (idx1 - idx0))
-                    final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
-                    updates = tf.ones(((idx1 - idx0) * batches,), dtype=scores.dtype) * -float("inf")
-                    new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
-            return new_scores
+        # def _update_slices(batch_idx_to_modify, idx0, idx1):
+        #     batch_idx_to_modify = tf.where(batch_idx_to_modify)
+        #     new_scores = tf.identity(scores)
+        #     if batch_idx_to_modify.shape[0] is not None:
+        #         if batch_idx_to_modify.shape[0] > 0:
+        #             batches = batch_idx_to_modify.shape[0]
+        #             mod = tf.tile(range(idx0, idx1), [batches])
+        #             batch = tf.repeat(batch_idx_to_modify, (idx1 - idx0))
+        #             final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
+        #             updates = tf.ones(((idx1 - idx0) * batches,), dtype=scores.dtype) * -float("inf")
+        #             new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
+        #     return new_scores
 
-        max_idx = scores.shape[1]
-        indices_1 = last_was_timestamps & penultimate_was_timestamp
-        indices_2 = last_was_timestamps & tf.math.logical_not(penultimate_was_timestamp)
+        # Code based on Joao's recommendations
+        # len(seq) == 1 corresponds to cur_len == self.begin_index + 2
+        last_was_timestamp = (cur_len >= self.begin_index + 2) & (input_ids[:, cur_len - 1] >= self.timestamp_begin)
+        penultimate_was_timestamp = (cur_len < self.begin_index + 3) | (
+            input_ids[:, cur_len - 2] >= self.timestamp_begin
+        )
 
-        scores = _update_slices(indices_1, self.timestamp_begin, max_idx)
-        scores = _update_slices(indices_2, 0, self.eos_token_id)
+        # build mask for scores[k, self.timestamp_begin :] = -float("inf") when last_was_timestamp and penultimate_was_timestamp
+        row_mask_cannot_be_timestamp = last_was_timestamp & penultimate_was_timestamp
+        col_mask_cannot_be_timestamp = tf.concat(
+            (tf.zeros((self.timestamp_begin,)), tf.ones((scores.shape[1] - self.timestamp_begin,))), axis=0
+        )
+        mask_cannot_be_timestamp = tf.broadcast_to(
+            tf.expand_dims(row_mask_cannot_be_timestamp, axis=1), scores.shape
+        ) & tf.broadcast_to(tf.expand_dims(col_mask_cannot_be_timestamp, axis=0), scores.shape)
+
+        # build mask for scores[k, : self.eos_token_id] = -float("inf") when last_was_timestamp and not penultimate_was_timestamp
+        row_mask_cannot_be_text = last_was_timestamp & ~penultimate_was_timestamp
+        col_mask_cannot_be_text = tf.concat(
+            (tf.ones((self.eos_token_id,)), tf.zeros((scores.shape[1] - self.eos_token_id,))), axis=0
+        )
+        mask_cannot_be_text = tf.broadcast_to(
+            tf.expand_dims(row_mask_cannot_be_text, axis=1), scores.shape
+        ) & tf.broadcast_to(tf.expand_dims(col_mask_cannot_be_text, axis=0), scores.shape)
+
+        # merge masks and apply them
+        mask = mask_cannot_be_timestamp | mask_cannot_be_text
+        scores = tf.where(condition=mask, x=-float("inf"), y=scores)
 
         # if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
         #     last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
         #     scores[:, last_allowed + 1 :] = -float("inf")
-
-        scores = tf.cond(
-            tf.equal(cur_len, self.begin_index) and self.max_initial_timestamp_index is not None,
-            lambda: _update_slices(
-                tf.ones((scores.shape[0],), dtype=tf.bool),
-                self.timestamp_begin + self.max_initial_timestamp_index + 1,
-                max_idx,
-            ),
-            lambda: tf.identity(scores),
-        )
+        if cur_len == self.begin_index and self.max_initial_timestamp_index is not None:
+            last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+            mask = tf.concat(
+                tf.zeros((scores.shape[0], last_allowed)),
+                tf.ones((scores.shape[0], scores.shape[1] - last_allowed)),
+                axis=0,
+            )
+            scores = tf.where(condition=mask, x=-float("inf"), y=scores)
 
         ####################################################################################################
         # Still left to do: TODO this does not seem to properly update the scores
@@ -707,14 +713,22 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         #     if timestamp_logprob > max_text_token_logprob:
         #         scores[k, : self.timestamp_begin] = -float("inf")
 
-        logprobs = tf.nn.log_softmax(tf.cast(scores, dtype=tf.float32), axis=-1)
+        logprobs = tf.math.log(stable_softmax(tf.cast(scores, dtype=tf.float32), axis=-1))
         timestamp_logprob = tf.reduce_logsumexp(logprobs[:, self.timestamp_begin :], axis=-1)
         max_text_token_logprob = tf.reduce_max(logprobs[:, : self.timestamp_begin], axis=-1)
         indices_3 = timestamp_logprob > max_text_token_logprob
-        scores = tf.cond(
-            tf.greater(tf.shape(indices_3)[0], 0),
-            lambda: _update_slices(indices_3, 0, self.timestamp_begin),
-            lambda: tf.identity(scores),
+        mask = tf.concat(
+            tf.ones((scores.shape[0], self.timestamp_begin)),
+            tf.zeros((scores.shape[0], scores.shape[1] - self.timestamp_begin)),
+            axis=0,
         )
+
+        scores = tf.where(condition=indices_3 & mask, x=-float("inf"), y=scores)
+
+        # scores = tf.cond(
+        #     tf.greater(tf.shape(indices_3)[0], 0),
+        #     lambda: _update_slices(indices_3, 0, self.timestamp_begin),
+        #     lambda: tf.identity(scores),
+        # )
 
         return scores

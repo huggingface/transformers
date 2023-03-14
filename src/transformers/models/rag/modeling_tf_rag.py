@@ -1001,7 +1001,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         n_docs=None,
         generation_config=None,
         logits_processor: Optional[TFLogitsProcessorList] = TFLogitsProcessorList(),
-        **kwargs
+        **kwargs,
     ):
         """
         Implements TFRAG token decoding.
