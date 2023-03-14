@@ -41,8 +41,8 @@ class XmodConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [xmod-base](https://huggingface.co/facebook/xmod-base)
-    architecture.
+    defaults will yield a similar configuration to that of the
+    [facebook/xmod-base](https://huggingface.co/facebook/xmod-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

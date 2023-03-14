@@ -33,6 +33,8 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
+  - local: big_models
+    title: Istanziare un big model
   - local: debugging
     title: Debugging
   title: Guide pratiche
@@ -45,5 +47,7 @@
     title: Hardware ottimizzato per l'addestramento
   - local: community
     title: Risorse della comunità
+  - local: pr_checks
+    title: Controlli su una Pull Request
   title: Guide How-to
   

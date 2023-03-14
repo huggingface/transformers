@@ -148,6 +148,7 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
 )
@@ -671,7 +672,7 @@ class Trainer:
 
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires a nightly install of PyTorch.")
+            raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
     def add_callback(self, callback):
         """
@@ -1537,6 +1538,8 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
+            if is_torch_neuroncore_available():
+                return model
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
@@ -1808,7 +1811,7 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        model.zero_grad()
+        model.zero_grad(set_to_none=True)
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -1828,6 +1831,7 @@ class Trainer:
                     # AT THE VERY END!
                     _ = list(train_dataloader.sampler)
 
+        total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -1864,6 +1868,7 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
+                total_batched_samples += 1
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -1884,7 +1889,7 @@ class Trainer:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                 if (
-                    ((step + 1) % args.gradient_accumulation_steps != 0)
+                    (total_batched_samples % args.gradient_accumulation_steps != 0)
                     and args.local_rank != -1
                     and args._no_sync_in_gradient_accumulation
                 ):
@@ -1910,7 +1915,7 @@ class Trainer:
                 if self.deepspeed:
                     self.deepspeed.step()
 
-                if (step + 1) % args.gradient_accumulation_steps == 0 or (
+                if total_batched_samples % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
@@ -1964,7 +1969,7 @@ class Trainer:
                     if optimizer_was_run and not self.deepspeed:
                         self.lr_scheduler.step()
 
-                    model.zero_grad()
+                    model.zero_grad(set_to_none=True)
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
@@ -2489,7 +2494,8 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run.
+            [`trainer_utils.BestRun`]: All the information about the best run. Experiment summary can be found in
+            `run_summary` attribute for Ray backend.
         """
         if backend is None:
             backend = default_hp_search_backend()
