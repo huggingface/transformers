@@ -486,7 +486,6 @@ class NllbMoeRouterTest(unittest.TestCase):
             logits, sequence_length=sequence_length, padding_mask=mask
         )
         dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.config.num_experts))
-        router_probs = router_probs.reshape((batch_size, sequence_length, self.config.num_experts))
         set_seed(0)
         experts = [
             torch.nn.Linear(hidden_dim, hidden_dim),
@@ -508,7 +507,8 @@ class NllbMoeRouterTest(unittest.TestCase):
             else:
                 expert_outputs *= 1 - self.config.moe_token_dropout
 
-        combined_output = router_probs.mm(expert_outputs.view(self.config.num_experts, self.config.hidden_dim))[:, 0]
+        combined_output = router_probs.mm(expert_outputs.reshape(self.config.num_experts, hidden_dim))
+        combined_output = combined_output.reshape(batch_size, sequence_length, hidden_dim)[:, 0]
         # Now test that the next states are correct
         # fmt: off
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
@@ -521,5 +521,5 @@ class NllbMoeRouterTest(unittest.TestCase):
                 ],
             ],
         )
-        # fmt: on 
-        self.assert_equal(combined_output, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES)
+        # fmt: on
+        self.assertTrue(torch.allclose(combined_output, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))

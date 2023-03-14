@@ -43,7 +43,6 @@ else:
         "NllbMoeForConditionalGeneration",
         "NllbMoeModel",
         "NllbMoePreTrainedModel",
-        "NllbMoeTop1Router",
         "NllbMoeTop2Router",
         "NllbMoeSparseMLP",
     ]
@@ -67,7 +66,6 @@ if TYPE_CHECKING:
             NllbMoeModel,
             NllbMoePreTrainedModel,
             NllbMoeSparseMLP,
-            NllbMoeTop1Router,
             NllbMoeTop2Router,
         )
 

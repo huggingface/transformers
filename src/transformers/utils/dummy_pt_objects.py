@@ -4661,13 +4661,6 @@ class NllbMoeSparseMLP(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class NllbMoeTop1Router(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class NllbMoeTop2Router(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -415,7 +415,6 @@ class NllbMoeTop2Router(nn.Module):
             router_logits, sequence_length, self.input_dtype, padding_mask
         )
         dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.num_experts))
-        router_probs = router_probs.reshape((batch_size, sequence_length, self.num_experts))
         return dispatch_mask, router_probs, router_logits
 
 
@@ -492,7 +491,8 @@ class NllbMoeSparseMLP(nn.Module):
             else:
                 expert_outputs *= 1 - self.moe_token_dropout
 
-        hidden_states = router_probs.mm(expert_outputs.view(self.num_expert, self.hidden_dim))
+        next_states = router_probs.mm(expert_outputs)
+        hidden_states = next_states.reshape(hidden_states.shape)
         return hidden_states, (router_logits, expert_index)
 
 
@@ -740,7 +740,7 @@ class NllbMoeEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        
+
         hidden_states = self.ffn(hidden_states, output_router_logits)
 
         if output_router_logits:

@@ -2005,7 +2005,6 @@ else:
             "NllbMoeModel",
             "NllbMoePreTrainedModel",
             "NllbMoeSparseMLP",
-            "NllbMoeTop1Router",
             "NllbMoeTop2Router",
         ]
     )
@@ -5339,7 +5338,6 @@ if TYPE_CHECKING:
             NllbMoeModel,
             NllbMoePreTrainedModel,
             NllbMoeSparseMLP,
-            NllbMoeTop1Router,
             NllbMoeTop2Router,
         )
         from .models.nystromformer import (
