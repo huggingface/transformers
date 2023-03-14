@@ -61,7 +61,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
             be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
             `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
             be overriden by `size` in the `preprocess` method.
-        crop_pct (`float` *optional*, defaults to 244 / 256):
+        crop_pct (`float` *optional*, defaults to 224 / 256):
             Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
             overriden by `crop_pct` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
