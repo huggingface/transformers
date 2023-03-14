@@ -741,7 +741,6 @@ class NllbMoeEncoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.ffn = NllbMoeLayerFF(config, ffn_dim=config.encoder_ffn_dim, is_sparse=self.is_sparse)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -774,8 +773,7 @@ class NllbMoeEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
+        
         hidden_states = self.ffn(hidden_states, output_router_logits)
 
         if output_router_logits:
@@ -825,7 +823,6 @@ class NllbMoeDecoderLayer(nn.Module):
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
         self.ffn = NllbMoeLayerFF(config, config.decoder_ffn_dim, is_sparse=self.is_sparse)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
