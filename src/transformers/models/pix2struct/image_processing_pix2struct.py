@@ -203,28 +203,22 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> PIL.Image.Image:
         """
-        Preprocess an image or batch of images.
+        Preprocess an image or batch of images. The processor first computes the maximum possible number of
+        aspect-ration preserving patches of size `patch_size` that can be extracted from the image. It then padds the
+        image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
+        images are standardized following the tensorflow implementation of `per_image_standardization`
+        (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
+
 
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Controls the size of the image after `resize`. The shortest edge of the image is resized to
-                `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
-                is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
-                edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            max_patches (`int`, *optional*):
+                Maximum number of patches to extract.
+            patch_size (`dict`, *optional*):
+                Dictionary containing the patch height and width.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -232,6 +226,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format considered by the normalization function:
                     - `ChannelDimension.FIRST` or `'channels_first'`: The channel dimension is the first dimension.
