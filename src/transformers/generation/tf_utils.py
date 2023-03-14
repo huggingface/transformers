@@ -669,7 +669,6 @@ class TFGenerationMixin:
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
-        logits_processor: Optional[TFLogitsProcessorList] = None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
         r"""
@@ -913,7 +912,6 @@ class TFGenerationMixin:
             logits_processor=logits_processor,
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
-            logits_processor=logits_processor,
         )
 
         # 10. go into different generation modes
