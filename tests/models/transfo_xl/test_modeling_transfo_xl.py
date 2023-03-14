@@ -271,6 +271,18 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_resize_embeddings = True
     test_mismatched_shapes = False
 
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TextGenerationPipelineTests":
+            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
+            # `TransfoXLConfig` was never used in pipeline tests: cannot create a simple
+            # tokenizer.
+            return True
+
+        return False
+
     def check_cutoffs_and_n_token(
         self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
     ):

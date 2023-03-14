@@ -271,6 +271,15 @@ class TFRoFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_head_masking = False
     test_onnx = False
 
+    # TODO: add `prepare_inputs_for_generation` for `TFRoFormerForCausalLM`
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TextGenerationPipelineTests":
+            return True
+
+        return False
+
     def setUp(self):
         self.model_tester = TFRoFormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=37)

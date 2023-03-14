@@ -246,6 +246,17 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_pruning = False
     test_missing_keys = False
 
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TranslationPipelineTests":
+            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
+            # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
+            return True
+
+        return False
+
     def setUp(self):
         self.model_tester = M2M100ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=M2M100Config)

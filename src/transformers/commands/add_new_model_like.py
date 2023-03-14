@@ -173,6 +173,56 @@ def parse_module_content(content: str) -> List[str]:
     return objects
 
 
+def extract_block(content: str, indent_level: int = 0) -> str:
+    """Return the first block in `content` with the indent level `indent_level`.
+
+    The first line in `content` should be indented at `indent_level` level, otherwise an error will be thrown.
+
+    This method will immediately stop the search when a (non-empty) line with indent level less than `indent_level` is
+    encountered.
+
+    Args:
+        content (`str`): The content to parse
+        indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
+
+    Returns:
+        `str`: The first block in `content` with the indent level `indent_level`.
+    """
+    current_object = []
+    lines = content.split("\n")
+    # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
+    end_markers = [")", "]", "}", '"""']
+
+    for idx, line in enumerate(lines):
+        if idx == 0 and indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
+            raise ValueError(
+                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got "
+                f"{find_indent(line)} instead."
+            )
+
+        if find_indent(line) < indent_level and not is_empty_line(line):
+            break
+
+        # End of an object
+        is_valid_object = len(current_object) > 0
+        if (
+            not is_empty_line(line)
+            and not line.endswith(":")
+            and find_indent(line) == indent_level
+            and is_valid_object
+        ):
+            # Closing parts should be included in current object
+            if line.lstrip() in end_markers:
+                current_object.append(line)
+            return "\n".join(current_object)
+        else:
+            current_object.append(line)
+
+    # Add last object
+    if len(current_object) > 0:
+        return "\n".join(current_object)
+
+
 def add_content_to_text(
     text: str,
     content: str,
@@ -402,12 +452,53 @@ SPECIAL_PATTERNS = {
 _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
 
 
+def remove_attributes(obj, target_attr):
+    """Remove `target_attr` in `obj`."""
+    lines = obj.split(os.linesep)
+
+    target_idx = None
+    for idx, line in enumerate(lines):
+        # search for assignment
+        if line.lstrip().startswith(f"{target_attr} = "):
+            target_idx = idx
+            break
+        # search for function/method definition
+        elif line.lstrip().startswith(f"def {target_attr}("):
+            target_idx = idx
+            break
+
+    # target not found
+    if target_idx is None:
+        return obj
+
+    line = lines[target_idx]
+    indent_level = find_indent(line)
+    # forward pass to find the ending of the block (including empty lines)
+    parsed = extract_block("\n".join(lines[target_idx:]), indent_level)
+    num_lines = len(parsed.split("\n"))
+    for idx in range(num_lines):
+        lines[target_idx + idx] = None
+
+    # backward pass to find comments or decorator
+    for idx in range(target_idx - 1, -1, -1):
+        line = lines[idx]
+        if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
+            lines[idx] = None
+        else:
+            break
+
+    new_obj = os.linesep.join([x for x in lines if x is not None])
+
+    return new_obj
+
+
 def duplicate_module(
     module_file: Union[str, os.PathLike],
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
+    attrs_to_remove: List[str] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
@@ -491,8 +582,14 @@ def duplicate_module(
 
         new_objects.append(obj)
 
+    content = "\n".join(new_objects)
+    # Remove some attributes that we don't want to copy to the new file(s)
+    if attrs_to_remove is not None:
+        for attr in attrs_to_remove:
+            content = remove_attributes(content, target_attr=attr)
+
     with open(dest_file, "w", encoding="utf-8") as f:
-        content = f.write("\n".join(new_objects))
+        f.write(content)
 
 
 def filter_framework_files(
@@ -1294,6 +1391,7 @@ def create_new_model_like(
             new_model_patterns,
             dest_file=dest_file,
             add_copied_from=False,
+            attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
         )
         disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
 
