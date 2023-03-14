@@ -28,9 +28,8 @@ class Pix2StructProcessor(ProcessorMixin):
     Constructs a PIX2STRUCT processor which wraps a BERT tokenizer and PIX2STRUCT image processor into a single
     processor.
 
-    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and
-    [`T5TokenizerFast`]. See the docstring of [`~Pix2StructProcessor.__call__`] and
-    [`~Pix2StructProcessor.decode`] for more information.
+    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and [`T5TokenizerFast`]. See
+    the docstring of [`~Pix2StructProcessor.__call__`] and [`~Pix2StructProcessor.decode`] for more information.
 
     Args:
         image_processor (`Pix2StructImageProcessor`):
