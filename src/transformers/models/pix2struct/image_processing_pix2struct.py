@@ -112,9 +112,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         requires_backends(self.extract_flattened_patches, "torch")
 
         # convert to torch if
-        if not isinstance(image, torch.Tensor):
-            image = to_channel_dimension_format(image, ChannelDimension.FIRST)
-            image = torch.from_numpy(image)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST)
+        image = torch.from_numpy(image)
 
         patch_height, patch_width = patch_size["height"], patch_size["width"]
         image_height, image_width = get_image_size(image)
