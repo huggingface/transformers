@@ -295,6 +295,13 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
             # config. With new tiny model creation, it is available, but we need to fix the failed tests.
             return True
+        elif (
+            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
+            return True
 
         return False
 

@@ -442,29 +442,8 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
     """Some tests are just not working"""
 
     to_skip = False
-
-    # TODO: check and fix if possible
-    if not to_skip and tokenizer_name is not None:
-        if (
-            test_casse_name == "QAPipelineTests"
-            and not tokenizer_name.endswith("Fast")
-            and config_class.__name__
-            in [
-                "FlaubertConfig",
-                "GPTJConfig",
-                "LongformerConfig",
-                "MvpConfig",
-                "OPTConfig",
-                "ReformerConfig",
-                "XLMConfig",
-            ]
-        ):
-            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
-            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
-            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
-            to_skip = True
-        elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
-            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
-            to_skip = True
+    if test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
+        # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
+        to_skip = True
 
     return to_skip
