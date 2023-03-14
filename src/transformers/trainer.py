@@ -1122,11 +1122,13 @@ class Trainer:
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAMW_TORCH:
+        elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
+            if args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
+                optimizer_kwargs.update({"fused": True})
         elif args.optim == OptimizerNames.ADAMW_TORCH_XLA:
             try:
                 from torch_xla.amp.syncfree import AdamW
