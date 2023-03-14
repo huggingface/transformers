@@ -125,7 +125,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_embeds", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
+            list(inputs.keys()), ["flattened_patches", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
         )
 
         # test if it raises when no input is passed
@@ -148,14 +148,14 @@ class Pix2StructProcessorTest(unittest.TestCase):
         # with text
         for i, max_patch in enumerate(max_patches):
             inputs = processor(text=input_str, images=image_input, max_patches=max_patch)
-            self.assertEqual(inputs["pixel_embeds"][0].shape[0], max_patch)
-            self.assertEqual(inputs["pixel_embeds"][0].shape[1], expected_hidden_size[i])
+            self.assertEqual(inputs["flattened_patches"][0].shape[0], max_patch)
+            self.assertEqual(inputs["flattened_patches"][0].shape[1], expected_hidden_size[i])
 
         # without text input
         for i, max_patch in enumerate(max_patches):
             inputs = processor(images=image_input, max_patches=max_patch)
-            self.assertEqual(inputs["pixel_embeds"][0].shape[0], max_patch)
-            self.assertEqual(inputs["pixel_embeds"][0].shape[1], expected_hidden_size[i])
+            self.assertEqual(inputs["flattened_patches"][0].shape[0], max_patch)
+            self.assertEqual(inputs["flattened_patches"][0].shape[1], expected_hidden_size[i])
 
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
@@ -181,12 +181,12 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        # For now the processor supports only ["pixel_embeds", "input_ids", "attention_mask", "decoder_attention_mask"]
+        # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_embeds", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
+            list(inputs.keys()), ["flattened_patches", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
         )
 
         inputs = processor(text=input_str)
 
-        # For now the processor supports only ["pixel_embeds", "input_ids", "attention_mask", "decoder_attention_mask"]
+        # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])

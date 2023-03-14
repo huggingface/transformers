@@ -383,7 +383,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
 
         encoded_outputs = BatchFeature(
-            data={"pixel_embeds": images, "attention_mask": attention_masks}, tensor_type=return_tensors
+            data={"flattened_patches": images, "attention_mask": attention_masks}, tensor_type=return_tensors
         )
 
         return encoded_outputs

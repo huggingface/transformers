@@ -115,15 +115,15 @@ class Pix2StructVisionEmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, pixel_embeds: torch.Tensor) -> torch.Tensor:
-        # the row and column indices are stored in the first and second position of the pixel_embeds
-        # pixel_embeds: `batch_size`, `seq_len`, `hidden_size` + 2
-        row_indices = pixel_embeds[:, :, 0].long()
-        col_indices = pixel_embeds[:, :, 1].long()
+    def forward(self, flattened_patches: torch.Tensor) -> torch.Tensor:
+        # the row and column indices are stored in the first and second position of the flattened_patches
+        # flattened_patches: `batch_size`, `seq_len`, `hidden_size` + 2
+        row_indices = flattened_patches[:, :, 0].long()
+        col_indices = flattened_patches[:, :, 1].long()
 
-        pixel_embeds = pixel_embeds[:, :, 2:]
+        flattened_patches = flattened_patches[:, :, 2:]
 
-        embeddings = self.patch_projection(pixel_embeds)
+        embeddings = self.patch_projection(flattened_patches)
         row_embeddings = self.row_embedder(row_indices)
         col_embeddings = self.column_embedder(col_indices)
 
@@ -499,7 +499,7 @@ PIX2STRUCT_VISION_START_DOCSTRING = r"""
 
 PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
             Flattened and padded pixel values. These values can be obtained using [`AutoImageProcessor`]. See
             [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
             paper](https://arxiv.org/abs/2210.03347) (figure 5) for more details.
@@ -527,7 +527,7 @@ PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
 )
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructVisionConfig
-    main_input_name = "pixel_embeds"
+    main_input_name = "flattened_patches"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
@@ -562,7 +562,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_embeds: Optional[torch.Tensor] = None,
+        flattened_patches: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -600,12 +600,12 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_embeds is None:
-            raise ValueError("You have to specify pixel_embeds")
+        if flattened_patches is None:
+            raise ValueError("You have to specify flattened_patches")
 
         if attention_mask is None:
-            # check where `pixel_embeds` is not 0
-            attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
+            # check where `flattened_patches` is not 0
+            attention_mask = (flattened_patches.sum(dim=-1) != 0).float()
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -614,7 +614,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_embeds)
+        embedding_output = self.embeddings(flattened_patches)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1202,7 +1202,7 @@ PIX2STRUCT_TEXT_INPUTS_DOCSTRING = r"""
 
 PIX2STRUCT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_embeds (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
             Flattened pixel patches. the `hidden_size` is obtained by the following formula: `hidden_size` =
             `num_channels` * `patch_size` * `patch_size`
 
@@ -1580,7 +1580,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
-    main_input_name = "pixel_embeds"
+    main_input_name = "flattened_patches"
 
     _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
@@ -1622,7 +1622,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_embeds: Optional[torch.FloatTensor] = None,
+        flattened_patches: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
@@ -1667,7 +1667,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                pixel_embeds=pixel_embeds,
+                flattened_patches=flattened_patches,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
@@ -1723,7 +1723,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        pixel_embeds: torch.FloatTensor,
+        flattened_patches: torch.FloatTensor,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1753,9 +1753,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         ['A stop sign the street with a sign that says yes']
         ```"""
-        batch_size, _, _ = pixel_embeds.shape
+        batch_size, _, _ = flattened_patches.shape
 
-        vision_outputs = self.encoder(pixel_embeds=pixel_embeds, attention_mask=attention_mask)
+        vision_outputs = self.encoder(flattened_patches=flattened_patches, attention_mask=attention_mask)
 
         image_embeds = vision_outputs[0]
 

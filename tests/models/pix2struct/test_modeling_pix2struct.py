@@ -97,10 +97,10 @@ class Pix2StructVisionModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_embeds = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
+        flattened_patches = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
         config = self.get_config()
 
-        return config, pixel_embeds
+        return config, flattened_patches
 
     def get_config(self):
         return Pix2StructVisionConfig(
@@ -118,19 +118,19 @@ class Pix2StructVisionModelTester:
             patch_embed_hidden_size=self.patch_embed_hidden_size,
         )
 
-    def create_and_check_model(self, config, pixel_embeds):
+    def create_and_check_model(self, config, flattened_patches):
         model = Pix2StructVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_embeds)
+            result = model(flattened_patches)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_embeds = config_and_inputs
+        config, flattened_patches = config_and_inputs
         inputs_dict = {
-            "pixel_embeds": pixel_embeds,
+            "flattened_patches": flattened_patches,
             "attention_mask": torch.randint(0, 2, (self.batch_size, self.max_patches)),
         }
         return config, inputs_dict
@@ -180,7 +180,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_embeds"]
+            expected_arg_names = ["flattened_patches"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -365,26 +365,26 @@ class Pix2StructTextImageModelsModelTester:
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_embeds = self.vision_model_tester.prepare_config_and_inputs()
+        vision_config, flattened_patches = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config(text_config, vision_config)
 
-        return config, input_ids, attention_mask, pixel_embeds
+        return config, input_ids, attention_mask, flattened_patches
 
     def get_config(self, text_config, vision_config):
         return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, decoder_attention_mask, pixel_embeds = config_and_inputs
+        config, input_ids, decoder_attention_mask, flattened_patches = config_and_inputs
 
-        attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
+        attention_mask = (flattened_patches.sum(dim=-1) != 0).float()
 
         inputs_dict = {
             "decoder_input_ids": input_ids,
             "labels": input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "pixel_embeds": pixel_embeds,
+            "flattened_patches": flattened_patches,
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
@@ -458,7 +458,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = (
-                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_embeds"]
+                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["flattened_patches"]
                 )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
@@ -540,8 +540,8 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_embeds = inputs_dict["pixel_embeds"]  # Pix2Struct needs pixel_embeds
-                traced_model = torch.jit.trace(model, (input_ids, pixel_embeds))
+                flattened_patches = inputs_dict["flattened_patches"]  # Pix2Struct needs flattened_patches
+                traced_model = torch.jit.trace(model, (input_ids, flattened_patches))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 

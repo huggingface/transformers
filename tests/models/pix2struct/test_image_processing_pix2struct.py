@@ -94,7 +94,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         max_patch = 2048
 
         inputs = image_processor(dummy_image, return_tensors="pt", max_patches=max_patch)
-        self.assertTrue(torch.allclose(inputs.pixel_embeds.mean(), torch.tensor(0.0606), atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(inputs.flattened_patches.mean(), torch.tensor(0.0606), atol=1e-3, rtol=1e-3))
 
     def test_call_pil(self):
         # Initialize image_processor
@@ -112,14 +112,18 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
 
         for max_patch in self.image_processor_tester.max_patches:
             # Test not batched input
-            encoded_images = image_processor(image_inputs[0], return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (1, max_patch, expected_hidden_dim),
             )
 
             # Test batched
-            encoded_images = image_processor(image_inputs, return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
@@ -140,14 +144,18 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
 
         for max_patch in self.image_processor_tester.max_patches:
             # Test not batched input
-            encoded_images = image_processor(image_inputs[0], return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (1, max_patch, expected_hidden_dim),
             )
 
             # Test batched
-            encoded_images = image_processor(image_inputs, return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
@@ -169,14 +177,18 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
 
         for max_patch in self.image_processor_tester.max_patches:
             # Test not batched input
-            encoded_images = image_processor(image_inputs[0], return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (1, max_patch, expected_hidden_dim),
             )
 
             # Test batched
-            encoded_images = image_processor(image_inputs, return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
@@ -217,14 +229,18 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
 
         for max_patch in self.image_processor_tester.max_patches:
             # Test not batched input
-            encoded_images = image_processor(image_inputs[0], return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (1, max_patch, expected_hidden_dim),
             )
 
             # Test batched
-            encoded_images = image_processor(image_inputs, return_tensors="pt", max_patches=max_patch).pixel_embeds
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch
+            ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
