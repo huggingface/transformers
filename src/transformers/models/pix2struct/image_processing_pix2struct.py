@@ -21,8 +21,15 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, get_image_size, is_batched, to_numpy_array, valid_images
+from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    get_image_size,
+    is_batched,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -282,16 +289,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         requires_backends(self.render_header, "vision")
 
-        return_framework = None
-
         # Convert to PIL image if necessary
-        if not isinstance(image, Image.Image):
-            if isinstance(image, torch.Tensor):
-                image = image.permute(1, 2, 0).numpy()
-                return_framework = "torch"
-            elif isinstance(image, np.ndarray):
-                return_framework = "numpy"
-            image = Image.fromarray(image)
+        image = to_pil_image(image)
 
         header_image = self.render_text(header, **kwargs)
         new_width = max(header_image.width, image.width)
@@ -304,11 +303,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
 
         # Convert back to the original framework if necessary
-        if return_framework is not None:
-            if return_framework == "torch":
-                new_image = torch.from_numpy(np.array(new_image)).permute(2, 0, 1)
-            elif return_framework == "numpy":
-                new_image = np.array(new_image)
+        image = to_numpy_array(image)
 
         return new_image
 
