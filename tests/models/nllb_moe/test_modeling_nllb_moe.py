@@ -508,7 +508,7 @@ class NllbMoeRouterTest(unittest.TestCase):
             else:
                 expert_outputs *= 1 - self.config.moe_token_dropout
 
-        combined_output = router_probs.mm(expert_outputs.view(self.config.num_expert, self.config.hidden_dim))[:, 0]
+        combined_output = router_probs.mm(expert_outputs.view(self.config.num_experts, self.config.hidden_dim))[:, 0]
         # Now test that the next states are correct
         # fmt: off
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
