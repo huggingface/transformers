@@ -460,7 +460,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("led", "LED"),
         ("levit", "LeViT"),
         ("lilt", "LiLT"),
-        ("llama", "Llama"),
+        ("llama", "LLaMA"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
