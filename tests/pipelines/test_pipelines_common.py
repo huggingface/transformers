@@ -484,6 +484,14 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
 
+    def test_pipeline_negative_device(self):
+        # To avoid regressing, pipeline used to accept device=-1
+        classifier = pipeline("text-generation", "hf-internal-testing/tiny-random-bert", device=-1)
+
+        expected_output = [{"generated_text": ANY(str)}]
+        actual_output = classifier("Test input.")
+        self.assertEqual(expected_output, actual_output)
+
     @slow
     @require_torch
     def test_load_default_pipelines_pt(self):
