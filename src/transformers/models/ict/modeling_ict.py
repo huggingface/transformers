@@ -834,10 +834,28 @@ class ICTGuidedUpsampler(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class ICTModel(ICTPretrainedGuidedUpsampler):
+    config_class = ICTConfig
+    
     def __init__(self, config: ICTConfig):
         super().__init__(config)
+        
+        if not isinstance(config.transformer_config, ICTTransformerConfig):
+            raise ValueError(
+                "config.transformer_config is expected to be of type ICTTransformerConfig but is of type"
+                f" {type(config.transformer_config)}."
+            )
+
+        if not isinstance(config.guided_upsampler_config, ICTGuidedUpsamplerConfig):
+            raise ValueError(
+                "config.guided_upsampler_config is expected to be of type ICTGuidedUpsamplerConfig but is of type"
+                f" {type(config.guided_upsampler_config)}."
+            )
+
+        transformer_config = config.transformer_config
+        guided_upsampler_config = config.guided_upsampler_config
         self.config = config
-        self.inpaint_model = ICTInpaintingModel(config)
+        self.transformer = ICTTransformerModel(transformer_config)
+        self.guided_upsampler = ICTGuidedUpsampler(guided_upsampler_config)
 
         # Initialize weights and apply final processing
         # self.post_init()
@@ -851,54 +869,52 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+        r"""
+        Returns:
 
+        Example:
+         ```python
+         >>> import torch
+         >>> import numpy as np
+         >>> from PIL import Image
+         >>> import requests
+
+         >>> from transformers import AutoImageProcessor, ICTModel
+
+         >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-32")
+         >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-32")
+
+         >>> url = "TODO"
+         >>> image = Image.open(requests.get(url, stream=True).raw)
+         >>> # prepare image for the model
+         >>> inputs = processor(image, return_tensors="pt")
+
+         >>> # forward pass
+         >>> with torch.no_grad():
+         ...     outputs = model(**inputs)
+
+         >>> output = TODO
+         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
+        
+        height, width = pixel_values.shape[2:]
 
-        pixel_values = pixel_values.to(torch.long)
-        _, t = pixel_values.size()
+        outputs = self.tranformer(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-        inputs_embeds = self.token_embedding(pixel_values)
+        sequence_output = outputs[0]
 
-        if masks:
-            masks = masks.unsqueeze(2)
-            inputs_embeds = inputs_embeds * (1 - masks)
-
-        position_embeds = self.position_embedding[:, :t, :]
-        hidden_states = inputs_embeds + position_embeds
-        hidden_states = self.drop(hidden_states)
-
-        for _, block in enumerate(self.blocks):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                )
-            else:
-                layer_outputs = block(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+        image_output = self.guided_upsampler()
+        
+        return ImageSuperResolutionOutput(
+            loss=loss,
+            reconstruction=reconstruction,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
