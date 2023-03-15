@@ -63,7 +63,7 @@ class MegaConfig(PretrainedConfig):
         chunk_size (`int`, *optional*, defaults to -1):
             If `use_chunking` is True, determines the size of the chunks to apply to the input sequence. If chunking is
             used, input sequences must be padded to a multiple of `chunk_size`
-        truncation (`int`, *optional*, defaults to None):
+        truncation (`int`, *optional*):
             If specified, the sequence length for which to truncate MultiHeadEMA
         normalize_before_mega (`bool`, *optional*, defaults to `True`):
             Whether to normalize before (True) or after (False) passing through Mega encoder blocks
@@ -125,8 +125,8 @@ class MegaConfig(PretrainedConfig):
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         add_lm_hidden_dense_layer (`bool`, *optional*, defaults to `True`):
-            Whether to include a hidden layer for projection between encoder outputs and LM heads (True) or pass hidden
-            states directly to LM head (False). Remains optional for compatibility with original implementation
+            Whether to include a hidden layer for projection between encoder outputs and LM heads (`True`) or pass hidden
+            states directly to LM head (`False`). Remains optional for compatibility with original implementation
 
     Examples:
 
