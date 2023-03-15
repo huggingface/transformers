@@ -14,14 +14,14 @@
 # limitations under the License.
 import json
 import sys
+import requests
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
-
-import requests
 import torch
+import torchvision
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import CfgNode as CN
@@ -233,7 +233,7 @@ def setup_video_cfg(args: Args):
 
 
 class OriginalMask2FormerConfigToOursConverter:
-    def __call__(self, original_config: object, video_ckpt: bool) -> Mask2FormerConfig:
+    def __call__(self, original_config: object, dataset_name: str, is_video_ckpt: bool) -> Mask2FormerConfig:
         model = original_config.MODEL
 
         repo_id = "huggingface/label-files"
@@ -253,8 +253,10 @@ class OriginalMask2FormerConfigToOursConverter:
             filename = "cityscapes-instance-id2label.json"
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 65:
             filename = "mapillary-vistas-id2label.json"
-        elif model.SEM_SEG_HEAD.NUM_CLASSES == 40:
-            filename = "youtubevis_2021-id2label.json"
+        elif dataset_name == "youtubevis-2021" and model.SEM_SEG_HEAD.NUM_CLASSES == 40:
+            filename = "youtubevis_2021-instance-id2label.json"
+        elif dataset_name == "youtubevis-2019" and model.SEM_SEG_HEAD.NUM_CLASSES == 40:
+            filename = "youtubevis_2019-instance-id2label.json"
         
         id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
@@ -315,11 +317,11 @@ class OriginalMask2FormerConfigToOursConverter:
             enforce_input_proj=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
             common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
         )
-        if video_ckpt:
+        if is_video_ckpt:
             config.num_frames = original_config.INPUT.SAMPLING_FRAME_NUM
             config.frame_range = original_config.INPUT.SAMPLING_FRAME_RANGE
             config.frame_shuffle = original_config.INPUT.SAMPLING_FRAME_SHUFFLE
-            config.input_augmentations = original_config.INPUT.AUGMENTATIONS,
+            config.is_video = True
 
         return config
 
@@ -953,7 +955,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         return mask2former
 
     @staticmethod
-    def using_dirs(checkpoints_dir: Path, config_dir: Path, video_ckpt: bool) -> Iterator[Tuple[object, Path, Path]]:
+    def using_dirs(checkpoints_dir: Path, config_dir: Path, is_video_ckpt: bool) -> Iterator[Tuple[object, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
@@ -969,7 +971,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
             # config file corresponding to checkpoint
             config_file_name = f"{checkpoint.parents[0].stem}.yaml"
 
-            if not video_ckpt:
+            if not is_video_ckpt:
                 config: Path = config_dir / dataset_name / segmentation_task / "swin" / config_file_name
             else:
                 config: Path = config_dir / dataset_name / "swin" / config_file_name
@@ -980,28 +982,27 @@ class OriginalMask2FormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: Mask2FormerForUniversalSegmentation,
-    feature_extractor: Mask2FormerImageProcessor,
-    video_ckpt: bool,
+    image_processor: Mask2FormerImageProcessor,
+    is_video_ckpt: bool,
     tolerance: float,
 ):
     with torch.no_grad():
         original_model = original_model.eval()
         our_model = our_model.eval()
         
-        if not video_ckpt:
+        if not is_video_ckpt:
+            image_size = (384, 384)
             im = prepare_img()
-            x = feature_extractor(images=im, return_tensors="pt")["pixel_values"]
+            img_processor_output = image_processor(images=im, return_tensors="pt")["pixel_values"]
         else:
-            video_tensor = torchvision.io.read_video(VIDEO_FILE_NAME)[0]
-            processed_inputs = []
-            for frame in video_tensor:
-                inputs = processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640))
-                processed_inputs.append(inputs.pixel_values)
+            image_size = (480, 640)
+            file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
+            video = torchvision.io.read_video(file_path)[0]
+            video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values for frame in video]
+            img_processor_output = torch.cat(video_frames)
 
-            x = torch.cat(processed_inputs)
-
-        original_model_backbone_features = original_model.backbone(x.clone())
-        our_model_output: Mask2FormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
+        original_model_backbone_features = original_model.backbone(img_processor_output.clone())
+        our_model_output: Mask2FormerModelOutput = our_model.model(img_processor_output.clone(), output_hidden_states=True)
 
         # Test backbone
         for original_model_feature, our_model_feature in zip(
@@ -1024,15 +1025,21 @@ def test(
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
-        tr_complete = T.Compose(
-            [T.Resize((384, 384)), T.ToTensor()],
-        )
-        y = (tr_complete(im) * 255.0).to(torch.int).float()
+
+        if not is_video_ckpt:
+            tr_complete = T.Compose(
+                [T.Resize(image_size), T.ToTensor()],
+            )
+            original_model_input = (tr_complete(im) * 255.0).to(torch.int).float()
+        else:
+            image_size = (480, 640)
+            resize = T.Resize(image_size)
+            original_model_input = [resize(frame.permute(2, 0, 1)) for frame in video] 
 
         # modify original Mask2Former code to return mask and class logits
-        original_class_logits, original_mask_logits = original_model([{"image": y.clone().squeeze(0)}])
+        original_class_logits, original_mask_logits = original_model([{"image": original_model_input}]) #y.clone().squeeze(0)}])
 
-        our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x.clone())
+        our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(img_processor_output.clone())
         our_mask_logits = our_model_out.masks_queries_logits
         our_class_logits = our_model_out.class_queries_logits
 
@@ -1048,7 +1055,7 @@ def test(
         logger.info("✅ Test passed!")
 
 
-def get_model_name(checkpoint_file: Path, video_ckpt: bool):
+def get_model_and_dataset_name(checkpoint_file: Path, is_video_ckpt: bool):
     # model_name_raw is something like maskformer2_swin_small_bs16_50ep
     model_name_raw: str = checkpoint_file.parents[0].stem
 
@@ -1068,17 +1075,18 @@ def get_model_name(checkpoint_file: Path, video_ckpt: bool):
             f"{dataset_name} must be wrong since we didn't find 'coco' or 'ade' or 'cityscapes' or 'mapillary-vistas'"
             " in it "
         )
+    dataset_name = dataset_name.replace("_", "-")
 
     backbone = "swin"
     backbone_types = ["tiny", "small", "base_IN21k", "base", "large"]
     backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0].replace("_", "-")
     
-    if not video_ckpt:
+    if not is_video_ckpt:
         model_name = f"mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
     else:
-        model_name = f"video_maskformer2-{backbone}-{backbone_type}-{dataset_name}"
+        model_name = f"video-mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
 
-    return model_name
+    return model_name, dataset_name
 
 
 if __name__ == "__main__":
@@ -1113,7 +1121,7 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
-        "--video_ckpt",
+        "--is_video_ckpt",
         type=bool,
         const=False,
         nargs='?',
@@ -1127,43 +1135,47 @@ if __name__ == "__main__":
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     mask2former_dir: Path = args.mask2former_dir
-    video_ckpt: bool = args.video_ckpt
+    is_video_ckpt: bool = args.is_video_ckpt
     # append the path to the parents to mask2former dir
     sys.path.append(str(mask2former_dir.parent))
     sys.path.append(str(mask2former_dir))
     
     # import original Mask2Former config and model from original source code repo
 
-    if not video_ckpt:
+    if not is_video_ckpt:
         from Mask2Former.mask2former.config import add_maskformer2_config
         from Mask2Former.mask2former.maskformer_model import MaskFormer as OriginalMask2Former
     else:
         from Mask2Former.mask2former_video.video_maskformer_model import VideoMaskFormer as OriginalVideoMask2Former
 
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
-        checkpoints_dir, config_dir, video_ckpt
+        checkpoints_dir, config_dir, is_video_ckpt
     ):
 
-        model_name = get_model_name(checkpoint_file, video_ckpt)
-
-        if not video_ckpt:
-            original_config = setup_cfg(Args(config_file=config_file))
-        else:
-            original_config = setup_video_cfg(Args(config_file=config_file))
-            
-        feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(original_config)
-        feature_extractor.size = {"height": 384, "width": 384}
+        model_name, dataset_name = get_model_and_dataset_name(checkpoint_file, is_video_ckpt)
+        print("model_name:",model_name)
         
-        if not video_ckpt:
+        if not is_video_ckpt:
+            height_width = (384,384)
+            # load default mask2former config
+            original_config = setup_cfg(Args(config_file=config_file))
+            # load original mask2former model
             mask2former_kwargs = OriginalMask2Former.from_config(original_config)
             original_model = OriginalMask2Former(**mask2former_kwargs).eval()
         else:
+            height_width = (480,640)
+            # load video mask2former config
+            original_config = setup_video_cfg(Args(config_file=config_file))
+            # load original video mask2former model
             video_mask2former_kwargs = OriginalVideoMask2Former.from_config(original_config)
             original_model = OriginalVideoMask2Former(**video_mask2former_kwargs).eval()
+        
+        image_processor = OriginalMask2FormerConfigToFeatureExtractorConverter()(original_config)
+        image_processor.size = {"height": height_width[0], "width": height_width[1]}
 
         DetectionCheckpointer(original_model).load(str(checkpoint_file))
 
-        config: Mask2FormerConfig = OriginalMask2FormerConfigToOursConverter()(original_config, video_ckpt)
+        config: Mask2FormerConfig = OriginalMask2FormerConfigToOursConverter()(original_config, dataset_name, is_video_ckpt)
         mask2former = Mask2FormerModel(config=config).eval()
 
         converter = OriginalMask2FormerCheckpointToOursConverter(original_model, config)
@@ -1174,7 +1186,7 @@ if __name__ == "__main__":
 
         mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
 
-        tolerance = 3e-1
+        tolerance = 3e-3
         high_tolerance_models = [
             "mask2former-swin-base-IN21k-coco-instance",
             "mask2former-swin-base-coco-instance",
@@ -1185,8 +1197,8 @@ if __name__ == "__main__":
             tolerance = 3e-1
 
         logger.info(f"🪄 Testing {model_name}...")
-        test(original_model, mask2former_for_segmentation, feature_extractor, video_ckpt, tolerance)
+        test(original_model, mask2former_for_segmentation, image_processor, is_video_ckpt, tolerance)
         logger.info(f"🪄 Pushing {model_name} to hub...")
 
-        feature_extractor.push_to_hub(model_name)
+        image_processor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)
