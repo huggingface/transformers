@@ -2677,6 +2677,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )[0]["segmentation"]
         >>> print(pred_panoptic_map.shape)
         torch.Size([338, 676])
+        ```
 
         Video instance segmentation example:
 
