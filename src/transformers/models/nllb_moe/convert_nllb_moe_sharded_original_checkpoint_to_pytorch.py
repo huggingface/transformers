@@ -49,9 +49,13 @@ def rename_fairseq_keys(state_dict, expert_idx=None):
     new_dict = {}
     for old_key in state_dict.keys():
         key = old_key
-        if "experts" in key:
-            key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
-        elif "gate" in key:
+        if "moe_layer.experts.0" in key:
+            if expert_idx is not None:
+                key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
+            else:
+                key = key.replace("moe_layer.experts.", f"ffn.mlp.experts.expert_")
+            
+        if "gate" in key:
             key = key.replace(".moe_layer.gate.wg", ".ffn.mlp.router.classifier")
         if "fc2" and "experts" not in key:
             key = key.replace(".fc2.", ".ffn.mlp.fc2.")
@@ -74,32 +78,34 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
 
     for expert in range(num_experts):
         expert_path = switch_checkpoint_path + f"-rank-{expert}.pt"
-        expert_state = torch.load(expert_path)["model"]
-        remove_ignore_keys_(expert_state)
-        expert_state = rename_fairseq_keys(expert_state, expert)
-        save_path = os.path.join(
-            dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
-        )
-        torch.save(expert_state, save_path)
-        sharded_state_dicts.append(expert_state.keys())
-        total_size += sum([value.numel() for key, value in expert_state.items()]) * dtype_byte_size(
-            expert_state[list(expert_state)[0]].dtype
-        )
+        if os.path.isfile(expert_path):
+            expert_state = torch.load(expert_path)["model"]
+            remove_ignore_keys_(expert_state)
+            expert_state = rename_fairseq_keys(expert_state, expert)
+            save_path = os.path.join(
+                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
+            )
+            torch.save(expert_state, save_path)
+            sharded_state_dicts.append(expert_state.keys())
+            total_size += sum([value.numel() for key, value in expert_state.items()]) * dtype_byte_size(
+                expert_state[list(expert_state)[0]].dtype
+            )
 
     # Add the last block
     save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
     shared_weights = torch.load(switch_checkpoint_path + "-shared.pt")["model"]
     remove_ignore_keys_(shared_weights)
-    shared_weights = rename_fairseq_keys(shared_weights)
+    shared_weights = rename_fairseq_keys(shared_weights, None)
     shared_weights["shared.weight"] = shared_weights["decoder.embed_tokens.weight"]
-
-    torch.save(shared_weights, save_path)
     sharded_state_dicts.append(shared_weights.keys())
 
-    # If we only have one shard, we return it
+    # If we only have the shared weights (dummy model/experts saved on the same file)
     if len(sharded_state_dicts) == 1:
+        save_path = os.path.join(dump_path, weights_name)
+        torch.save(shared_weights, save_path)
         return {weights_name: sharded_state_dicts[0]}, None
-
+    else:
+        torch.save(shared_weights, save_path)
     # Otherwise, let's build the index
     weight_map = {}
     for idx, shard in enumerate(sharded_state_dicts):
