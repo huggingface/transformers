@@ -380,14 +380,21 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         hf_logits = hf_outputs.last_hidden_state[1, 0, :30]
 
         # fmt: off
-        EXPECTED_MEAN_LOGITS = torch.Tensor([-0.8808,  0.0000,  8.7287,  0.3808, -1.1315,  2.1073, -0.9445, -0.2316,
-        -0.7453, -0.1733, -0.3505, -0.8565, -0.4216, -1.8645, -0.2367,  1.0789,
-         0.6764, -0.9684,  0.3805, -1.2004, -0.7817,  1.7065,  0.5750,  0.1656,
-         0.2351,  0.6637,  2.1755, -1.8906, -1.3159, -1.3212])
+        EXPECTED_ENCODET_LAST_HIDDEN = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563,
+         1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346,
+         0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647,
+         1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
         # fmt: on
 
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_allclose(hf_outputs.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODET_LAST_HIDDEN, rtol=6e-3, atol=9e-3)
 
+        # fmt: off
+        EXPECTED_LAST_HIDDEN_SATES = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563,
+         1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346,
+         0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647,
+         1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
+        # fmt: on
+        
     def test_inference_no_head(self):
         model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])

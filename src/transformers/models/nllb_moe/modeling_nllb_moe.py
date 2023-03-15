@@ -387,11 +387,9 @@ class NllbMoeTop2Router(nn.Module):
         # Calculate combine_weights and dispatch_mask
         gates1 = top_1_max_probs[:, None] * top_1_mask
         gates2 = top_2_max_probs[:, None] * top_2_mask
-
-        dispatch_mask = top_1_mask + top_2_mask
         router_probs = gates1 + gates2
 
-        return dispatch_mask, router_probs, router_logits
+        return top_1_mask, router_probs, router_logits
 
     def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> Tuple:
         r"""
@@ -474,27 +472,23 @@ class NllbMoeSparseMLP(nn.Module):
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
-        expert_index = torch.argmax(router_mask, dim=-1) # TODO should only take the top1 mask, not both
-
+        top_1_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
+        expert_index = torch.argmax(top_1_mask, dim=-1) # TODO should only take the top1 mask, not both
+        router_mask = router_probs.bool()
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
-        expert_outputs = []
+        masked_hidden_states = torch.einsum("bm,be->ebm",hidden_states, router_mask)
         for idx, expert in enumerate(self.experts.values()):
-            next_states = hidden_states.clone()
-            token_indices = router_mask[:, idx].bool()
-            combining_weights = router_probs[:, idx]
-            next_states[token_indices] = expert(hidden_states[token_indices])
+            token_indices = router_mask[:, idx]
+            combining_weights = router_probs[token_indices, idx]
+            expert_output = expert(masked_hidden_states[idx,token_indices])
             if self.moe_token_dropout > 0:
                 if self.training:
-                    next_states = self.token_dropout(next_states)
+                    expert_output = self.token_dropout(expert_output)
                 else:
-                    next_states *= 1 - self.moe_token_dropout
-            next_states = combining_weights[:, None] * next_states
-            expert_outputs += [next_states]
-
-        expert_outputs = sum(expert_outputs)
-        hidden_states = next_states.reshape(batch_size, sequence_length, hidden_dim)
+                    expert_output *= 1 - self.moe_token_dropout
+            masked_hidden_states[idx,token_indices] = torch.einsum("b,be->be",combining_weights, expert_output)
+        hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, (router_logits, expert_index)
 
 
