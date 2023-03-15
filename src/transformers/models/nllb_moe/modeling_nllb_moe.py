@@ -53,7 +53,7 @@ _CHECKPOINT_FOR_DOC = "facebook/nllb-moe"
 # for the pretrained weights provided with the models
 ####################################################
 NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/nllb-moe",
+    "facebook/nllb-moe-54b",
     # See all NLLB-MOE models at https://huggingface.co/models?filter=nllb-moe
 ]
 
@@ -259,10 +259,11 @@ class NllbMoeTop2Router(nn.Module):
     """
     Router using tokens choose top-2 experts assignment.
 
-    This router uses the same mechanism as in NLLB-MoE from the fairseq repository, but it is also based on the
-    implementation of Switch Transformers by the HuggingFace team Tokens choose their top experts. Items are sorted by
-    router_probs and then routed to their choice of expert until the expert's expert_capacity is reached. **There is no
-    guarantee that each token is processed by an expert**, or that each expert receives at least one token.
+    This router uses the same mechanism as in NLLB-MoE from the fairseq repository. Items are sorted by router_probs
+    and then routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee
+    that each token is processed by an expert**, or that each expert receives at least one token.
+
+    The router combining weights are also returned to make sure that the states that are not updated will be masked.
 
     """
 
@@ -290,11 +291,17 @@ class NllbMoeTop2Router(nn.Module):
 
     def route_tokens(
         self,
-        router_logits,
-        sequence_length,
-        input_dtype=torch.float32,
+        router_logits: torch.Tensor,
+        sequence_length: int,
+        input_dtype: torch.dtype = torch.float32,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple:
+        """
+        Computes the `dispatch_mask` and the `dispatch_weights` for each experts.
+
+
+
+        """
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(input_dtype)
         top_1_max_probs, top_1_expert_index = torch.max(router_probs, dim=-1)
@@ -322,7 +329,8 @@ class NllbMoeTop2Router(nn.Module):
             top_2_mask = top_2_mask * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
         if padding_mask is not None:
-            nonpadding = ~padding_mask
+            padding_mask = padding_mask[:, :, :, -1]  # only get the last causal mask
+            nonpadding = ~padding_mask.reshape(top_1_mask.shape[0]).bool()
             top_1_mask = top_1_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
             top_2_mask = top_2_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
 
@@ -406,7 +414,6 @@ class NllbMoeTop2Router(nn.Module):
         # 1. hide the batch
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         hidden_states = hidden_states.to(self.dtype)
-
         # Shape: [num_groups, tokens_per_group, num_experts]
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
@@ -450,19 +457,16 @@ class NllbMoeSparseMLP(nn.Module):
 
     def __init__(self, config: NllbMoeConfig, ffn_dim: int, expert_class: nn.Module = NllbMoeDenseActDense):
         super().__init__()
-        # Step 1: Get the correct router according to its class
-        self.router_type = config.router_type
-        # TODO handle the type of router chosen
         self.router = NllbMoeTop2Router(config)
         self.moe_token_dropout = config.moe_token_dropout
-        self.num_experts = config.num_experts
         self.token_dropout = nn.Dropout(self.moe_token_dropout)
-        # Step 2: Get the experts
+        self.num_experts = config.num_experts
+
         self.experts = nn.ModuleDict()
         for idx in range(self.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, padding_mask):
         r"""
         Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
 
@@ -475,7 +479,7 @@ class NllbMoeSparseMLP(nn.Module):
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, router_probs, router_logits = self.router(hidden_states)
+        router_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -525,14 +529,13 @@ class NllbMoeLayerFF(nn.Module):
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.dropout = nn.Dropout(config.activation_dropout)
 
-    def forward(self, hidden_states, output_router_logits):
+    def forward(self, hidden_states, attention_mask, output_router_logits):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.mlp(forwarded_states)
 
-        if isinstance(forwarded_states, tuple):
-            forwarded_states, router_tuple = forwarded_states
+        if self.is_sparse:
+            forwarded_states, router_tuple = self.mlp(forwarded_states, attention_mask)
         else:
-            router_tuple = None  # layer is not sparse
+            forwarded_states = self.mlp(forwarded_states)
 
         output = hidden_states + self.dropout(forwarded_states)
 
@@ -746,7 +749,7 @@ class NllbMoeEncoderLayer(nn.Module):
 
         residual = hidden_states
 
-        hidden_states = self.ffn(hidden_states, output_router_logits)
+        hidden_states = self.ffn(hidden_states, attention_mask, output_router_logits)
 
         if output_router_logits:
             hidden_states, router_states = hidden_states
@@ -872,7 +875,8 @@ class NllbMoeDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.ffn(hidden_states, output_router_logits)
+        # TODO make sure which one we have to use; attention_mask or encoder_attention_mask
+        hidden_states = self.ffn(hidden_states, attention_mask, output_router_logits)
 
         if output_router_logits:
             hidden_states, router_states = hidden_states

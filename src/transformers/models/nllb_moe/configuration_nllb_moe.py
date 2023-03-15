@@ -118,7 +118,6 @@ class NllbMoeConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         scale_embedding=True,
-        router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
@@ -162,7 +161,6 @@ class NllbMoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.decoder_sparse_step = decoder_sparse_step
         self.encoder_sparse_step = encoder_sparse_step
-        self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias
