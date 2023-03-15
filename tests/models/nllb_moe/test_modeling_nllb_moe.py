@@ -352,7 +352,7 @@ TOLERANCE = 1e-4
 class NllbMoeModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return NllbTokenizer.from_pretrained("facebook/nllb-moe_418M")
+        return NllbTokenizer.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts")
 
     @require_torch_gpu
     def test_small_logits(self):
@@ -361,7 +361,9 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(torch_device)
+        model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts", torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
@@ -383,7 +385,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
     def test_inference_no_head(self):
-        model = NllbMoeModel.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
+        model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
         decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
         inputs_dict = prepare_nllb_moe_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -398,7 +400,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
@@ -415,8 +417,8 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
-        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe_418M", src_lang="fr", tgt_lang="en")
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
+        tokenizer = NllbTokenizer.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts", src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
