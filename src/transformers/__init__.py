@@ -1834,6 +1834,14 @@ else:
             "IBertPreTrainedModel",
         ]
     )
+    _import_structure["models.ict"].extend(
+        [
+            "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ICTForMaskedImageModeling",
+            "ICTModel",
+            "ICTPreTrainedModel",
+        ]
+    )
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2742,14 +2750,6 @@ else:
             "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
-        ]
-    )
-    _import_structure["models.ict"].extend(
-        [
-            "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ICTForMaskedImageModeling",
-            "ICTModel",
-            "ICTPreTrainedModel",
         ]
     )
     _import_structure["models.vit_hybrid"].extend(

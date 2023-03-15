@@ -256,8 +256,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("onnxconverter-common", "tf2onnx", "keras-nlp")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "keras-nlp")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
@@ -296,7 +296,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("av")
+extras["video"] = deps_list("decord", "av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
