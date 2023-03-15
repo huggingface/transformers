@@ -331,7 +331,7 @@ class NllbMoeTop2Router(nn.Module):
         if padding_mask is not None:
             if len(padding_mask.shape) == 4:
                 # only get the last causal mask
-                padding_mask = padding_mask[:, :, -1, :].reshape(top_1_mask.shape[0])  
+                padding_mask = padding_mask[:, :, -1, :].reshape(top_1_mask.shape[0])
             non_padding = ~padding_mask.bool()
             top_1_mask = top_1_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
             top_2_mask = top_2_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
@@ -365,9 +365,7 @@ class NllbMoeTop2Router(nn.Module):
             self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * nb_tokens)
         else:
             self.expert_capacity = (
-                2 * math.ceil(nb_tokens / self.num_experts)
-                if self.expert_capacity is None
-                else self.expert_capacity
+                2 * math.ceil(nb_tokens / self.num_experts) if self.expert_capacity is None else self.expert_capacity
             )
 
         # Remove locations outside capacity from ( cumsum < capacity = False will not be routed)
@@ -410,8 +408,7 @@ class NllbMoeTop2Router(nn.Module):
         """
         self.input_dtype = hidden_states.dtype
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)\
-
+        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         hidden_states = hidden_states.to(self.dtype)
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
@@ -473,21 +470,21 @@ class NllbMoeSparseMLP(nn.Module):
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
         top_1_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
-        expert_index = torch.argmax(top_1_mask, dim=-1) # TODO should only take the top1 mask, not both
+        expert_index = torch.argmax(top_1_mask, dim=-1)  # TODO should only take the top1 mask, not both
         router_mask = router_probs.bool()
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
-        masked_hidden_states = torch.einsum("bm,be->ebm",hidden_states, router_mask)
+        masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, idx]
             combining_weights = router_probs[token_indices, idx]
-            expert_output = expert(masked_hidden_states[idx,token_indices])
+            expert_output = expert(masked_hidden_states[idx, token_indices])
             if self.moe_token_dropout > 0:
                 if self.training:
                     expert_output = self.token_dropout(expert_output)
                 else:
                     expert_output *= 1 - self.moe_token_dropout
-            masked_hidden_states[idx,token_indices] = torch.einsum("b,be->be",combining_weights, expert_output)
+            masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, (router_logits, expert_index)
 
