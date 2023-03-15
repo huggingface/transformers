@@ -1,3 +1,5 @@
 outputs/
 vit-mae-demo/
+swin_config/
+swin_outputs/
 *.log
