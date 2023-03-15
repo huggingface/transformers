@@ -27,7 +27,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFImageClassifierOutput,
-    TFMaskedLMOutput,
+    TFMaskedImageCompletionOutput,
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
@@ -765,7 +765,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFMaskedImageCompletionOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -775,7 +775,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[tuple, TFMaskedLMOutput]:
+    ) -> Union[tuple, TFMaskedImageCompletionOutput]:
         r"""
         bool_masked_pos (`tf.Tensor` of type bool and shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -856,18 +856,20 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return TFMaskedLMOutput(
+        return TFMaskedImageCompletionOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+    def serving_output(self, output: TFMaskedImageCompletionOutput) -> TFMaskedImageCompletionOutput:
         hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+        return TFMaskedImageCompletionOutput(
+            reconstruction=output.reconstruction, hidden_states=hidden_states, attentions=attentions
+        )
 
 
 @add_start_docstrings(
