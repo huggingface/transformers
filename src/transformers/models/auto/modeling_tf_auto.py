@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("codegeex", "TFCodeGeeXModel"),
         ("albert", "TFAlbertModel"),
         ("bart", "TFBartModel"),
         ("bert", "TFBertModel"),
@@ -127,6 +128,8 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+
+        ("codegeex", "TFCodeGeeXForConditionalGeneration"),
         ("albert", "TFAlbertForMaskedLM"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForMaskedLM"),
@@ -264,6 +267,8 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+
+        ("codegeex", "TFCodeGeeXForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
