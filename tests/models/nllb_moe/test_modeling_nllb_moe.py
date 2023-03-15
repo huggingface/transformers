@@ -361,26 +361,31 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts", torch_dtype=torch.bfloat16).to(
-            torch_device
+        model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").eval()
+        tokenizer = NllbTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn"
         )
-        input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
-        decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
+
+        src_text = "Life is like a box of chocolates."
+        tgt_text = "La vie est comme une boîte de chocolat."
+
+        model_inputs = tokenizer(
+            [src_text, "I just want to code."], text_target=tgt_text, return_tensors="pt", padding=True
+        )
+        model_inputs.pop("labels")
+
+        with torch.no_grad():
+            hf_outputs = model(
+                **model_inputs, decoder_input_ids=torch.tensor([[2, tokenizer.lang_code_to_id["fra_Latn"]]] * 2)
+            )
+        hf_logits = hf_outputs.last_hidden_state[1, 0, :30]
 
         # fmt: off
-        EXPECTED_MEAN_LOGITS = torch.Tensor(
-            [
-                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
-            ]
-        ).to(torch.bfloat16)
+        EXPECTED_MEAN_LOGITS = torch.Tensor([-0.8808,  0.0000,  8.7287,  0.3808, -1.1315,  2.1073, -0.9445, -0.2316,
+        -0.7453, -0.1733, -0.3505, -0.8565, -0.4216, -1.8645, -0.2367,  1.0789,
+         0.6764, -0.9684,  0.3805, -1.2004, -0.7817,  1.7065,  0.5750,  0.1656,
+         0.2351,  0.6637,  2.1755, -1.8906, -1.3159, -1.3212])
         # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
-        hf_logits = hf_logits[0, 0, :30]
 
         torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
