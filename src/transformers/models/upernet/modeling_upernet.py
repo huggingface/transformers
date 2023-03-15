@@ -20,8 +20,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import AutoBackbone
-
+from ... import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -301,6 +300,12 @@ class UperNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        if isinstance(module, UperNetPreTrainedModel):
+            module.backbone.init_weights()
+            module.decode_head.init_weights()
+            module.auxiliary_head.init_weights()
+
     def init_weights(self):
         """Initialize the weights"""
         self.backbone.init_weights()
@@ -326,7 +331,7 @@ UPERNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
             `attentions` under returned tensors for more detail.

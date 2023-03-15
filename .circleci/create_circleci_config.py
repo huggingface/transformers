@@ -24,7 +24,14 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 
-COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120}
+COMMON_ENV_VARIABLES = {
+    "OMP_NUM_THREADS": 1,
+    "TRANSFORMERS_IS_CI": True,
+    "PYTEST_TIMEOUT": 120,
+    "RUN_PIPELINE_TESTS": False,
+    "RUN_PT_TF_CROSS_TESTS": False,
+    "RUN_PT_FLAX_CROSS_TESTS": False,
+}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
 
@@ -64,10 +71,12 @@ class CircleCIJob:
             self.parallelism = 1
 
     def to_dict(self):
+        env = COMMON_ENV_VARIABLES.copy()
+        env.update(self.additional_env)
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
-            "environment": {**COMMON_ENV_VARIABLES, **self.additional_env},
+            "environment": env,
         }
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
@@ -239,25 +248,27 @@ flax_job = CircleCIJob(
 
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
 pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
@@ -359,6 +370,7 @@ exotic_models_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[torch,testing,vision]",
         "pip install torchvision",
+        "pip install scipy",
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
@@ -367,6 +379,7 @@ exotic_models_job = CircleCIJob(
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
+        "tests/models/deta",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
@@ -377,11 +390,11 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[quality,testing]",
+        "pip install .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
-    resource_class=None,
+    resource_class="large",
     tests_to_run="tests/repo_utils",
 )
 
@@ -434,7 +447,7 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
-    
+
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)

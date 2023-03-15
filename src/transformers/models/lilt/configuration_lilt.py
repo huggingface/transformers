@@ -111,7 +111,7 @@ class LiltConfig(PretrainedConfig):
         classifier_dropout=None,
         channel_shrink_ratio=4,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

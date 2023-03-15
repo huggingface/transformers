@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "weiweishi/roc-bert-base-zh"
 _CONFIG_FOR_DOC = "RoCBertConfig"
-_TOKENIZER_FOR_DOC = "RoCBertTokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
@@ -627,6 +626,13 @@ class RoCBertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -636,12 +642,6 @@ class RoCBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -816,21 +816,21 @@ ROC_BERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         input_shape_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the shape vocabulary.
 
-            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input_shape_ids)
         input_pronunciation_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the pronunciation vocabulary.
 
-            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input_pronunciation_ids)
@@ -936,7 +936,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ROC_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1163,10 +1162,10 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RoCBertTokenizer, RoCBertForPreTraining
+        >>> from transformers import AutoTokenizer, RoCBertForPreTraining
         >>> import torch
 
-        >>> tokenizer = RoCBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> tokenizer = AutoTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> model = RoCBertForPreTraining.from_pretrained("weiweishi/roc-bert-base-zh")
 
         >>> inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
@@ -1243,7 +1242,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
                 sim_matrix = torch.matmul(pooled_output_norm, attack_pooled_output_norm.T)  # batch_size * hidden_dim
                 sim_matrix_target = torch.matmul(labels_pooled_output_norm, attack_pooled_output_norm.T)
-                batch_labels = torch.tensor([i for i in range(batch_size)], device=device)
+                batch_labels = torch.tensor(list(range(batch_size)), device=device)
                 contrastive_loss = (
                     loss_fct(100 * sim_matrix.view(batch_size, -1), batch_labels.view(-1))
                     + loss_fct(100 * sim_matrix_target.view(batch_size, -1), batch_labels.view(-1))
@@ -1320,10 +1319,10 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
 
         Example:
         ```python
-        >>> from transformers import RoCBertTokenizer, RoCBertForMaskedLM
+        >>> from transformers import AutoTokenizer, RoCBertForMaskedLM
         >>> import torch
 
-        >>> tokenizer = RoCBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> tokenizer = AutoTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> model = RoCBertForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh")
 
         >>> inputs = tokenizer("法国是首都[MASK].", return_tensors="pt")
@@ -1488,10 +1487,10 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RoCBertTokenizer, RoCBertForCausalLM, RoCBertConfig
+        >>> from transformers import AutoTokenizer, RoCBertForCausalLM, RoCBertConfig
         >>> import torch
 
-        >>> tokenizer = RoCBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> tokenizer = AutoTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> config = RoCBertConfig.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> config.is_decoder = True
         >>> model = RoCBertForCausalLM.from_pretrained("weiweishi/roc-bert-base-zh", config=config)
@@ -1553,7 +1552,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         input_pronunciation_ids=None,
         past_key_values=None,
         attention_mask=None,
-        **model_kwargs
+        **model_kwargs,
     ):
         input_shape = input_ids.shape
 
@@ -1578,9 +1577,9 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
@@ -1609,7 +1608,6 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ROC_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1716,7 +1714,6 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
         ROC_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1823,7 +1820,6 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ROC_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1908,7 +1904,6 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ROC_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

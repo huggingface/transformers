@@ -17,8 +17,8 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-
 from huggingface_hub import snapshot_download
+
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -28,12 +28,12 @@ from transformers import (
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
-    WhisperProcessor,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
+    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -43,7 +43,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -54,14 +54,15 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     model_mapping = {
         k: v
         for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
@@ -70,7 +71,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             # return None, None
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            model=model, tokenizer=tokenizer, feature_extractor=processor
         )
 
         # test with a raw waveform
@@ -124,7 +125,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio, return_timestamps=True)
             self.assertIsInstance(outputs["chunks"], list)
             nb_chunks = len(outputs["chunks"])
-            self.assertGreaterThan(nb_chunks, 0)
+            self.assertGreater(nb_chunks, 0)
             self.assertEqual(
                 outputs,
                 {
@@ -134,7 +135,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             )
         else:
             # Non CTC models cannot use return_timestamps
-            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+            with self.assertRaisesRegex(
+                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+            ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch
@@ -201,8 +204,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy")
-        filename = dataset["test"][3]["file"]
+        dataset = load_dataset("Narsil/asr_dummy", streaming=True)
+        third_item = next(iter(dataset["test"].skip(3)))
+        filename = third_item["file"]
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -275,7 +279,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @slow
     def test_torch_large(self):
-
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-base-960h",
@@ -522,14 +525,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 "chunks": [{"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 4.26)}],
             },
         )
-        pipe = pipeline(
-            model="openai/whisper-small",
-            return_timestamps=True,
-        )
 
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
-            output,
+            nested_simplify(output),
             {
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
@@ -539,7 +538,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.94),
+                        "timestamp": (5.5, 11.95),
                     },
                     {
                         "text": (
@@ -547,15 +546,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.94, 19.6),
+                        "timestamp": (11.95, 19.61),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 24.98),
+                        "timestamp": (19.61, 25.0),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.98, 30.98),
+                        "timestamp": (25.0, 29.4),
                     },
                 ],
                 "text": (
@@ -647,7 +646,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_torchaudio
     def test_simple_s2t(self):
-
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         tokenizer = AutoTokenizer.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/s2t-small-mustc-en-it-st")
@@ -686,6 +684,21 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             output,
             {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
         )
+        output = speech_recognizer(filename, return_timestamps=True)
+        self.assertEqual(
+            output,
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "chunks": [
+                    {
+                        "text": (
+                            " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+                        ),
+                        "timestamp": (0.0, 5.44),
+                    }
+                ],
+            },
+        )
 
     @slow
     @require_torch
@@ -711,10 +724,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output_2 = speech_recognizer_2(filename)
         self.assertEqual(output, output_2)
 
-        processor = WhisperProcessor(feature_extractor, tokenizer)
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", language="it")
+        # either use generate_kwargs or set the model's generation_config
+        # model.generation_config.task = "transcribe"
+        # model.generation_config.lang = "<|it|>"
         speech_translator = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            generate_kwargs={"task": "transcribe", "language": "<|it|>"},
         )
         output_3 = speech_translator(filename)
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
@@ -1094,6 +1111,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
+
+        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6, ratio))
+        self.assertEqual(len(outs), 4)
+        self.assertEqual([o["stride"] for o in outs], [(36, 0, 6), (36, 6, 6), (36, 6, 6), (28, 6, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 36), (1, 36), (1, 36), (1, 28)])
 
         inputs = torch.LongTensor([i % 2 for i in range(100)])
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[

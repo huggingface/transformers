@@ -19,12 +19,14 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import ConvNextConfig, UperNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -137,13 +139,14 @@ class UperNetModelTester:
 
 
 @require_torch
-class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
+class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as UperNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-segmentation": UperNetForSemanticSegmentation} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -197,6 +200,11 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="UperNet does not have a base model")
     def test_save_load_fast_init_to_base(self):
+        pass
+
+    @require_torch_multi_gpu
+    @unittest.skip(reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_hidden_states_output(self):

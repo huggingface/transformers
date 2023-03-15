@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -55,6 +56,7 @@ class OneFormerModelTester:
         parent,
         batch_size=2,
         is_training=True,
+        vocab_size=99,
         use_auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
@@ -68,6 +70,7 @@ class OneFormerModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
+        self.vocab_size = vocab_size
         self.use_auxiliary_loss = use_auxiliary_loss
         self.num_queries = num_queries
         self.num_channels = num_channels
@@ -83,12 +86,16 @@ class OneFormerModelTester:
             torch_device
         )
 
-        task_inputs = torch.randint(high=49408, size=(self.batch_size, self.sequence_length)).to(torch_device).long()
+        task_inputs = (
+            torch.randint(high=self.vocab_size, size=(self.batch_size, self.sequence_length)).to(torch_device).long()
+        )
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
         text_inputs = (
-            torch.randint(high=49408, size=(self.batch_size, self.num_queries - self.n_ctx, self.sequence_length))
+            torch.randint(
+                high=self.vocab_size, size=(self.batch_size, self.num_queries - self.n_ctx, self.sequence_length)
+            )
             .to(torch_device)
             .long()
         )
@@ -103,6 +110,7 @@ class OneFormerModelTester:
 
     def get_config(self):
         config = OneFormerConfig(
+            text_encoder_vocab_size=self.vocab_size,
             hidden_size=self.hidden_dim,
         )
 
@@ -214,8 +222,9 @@ class OneFormerModelTester:
 
 
 @require_torch
-class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
+class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
     test_pruning = False
@@ -301,8 +310,10 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         size = (self.model_tester.min_size,) * 2
         inputs = {
             "pixel_values": torch.randn((2, 3, *size), device=torch_device),
-            "task_inputs": torch.randint(high=49408, size=(2, 77), device=torch_device).long(),
-            "text_inputs": torch.randint(high=49408, size=(2, 134, 77), device=torch_device).long(),
+            "task_inputs": torch.randint(high=self.model_tester.vocab_size, size=(2, 77), device=torch_device).long(),
+            "text_inputs": torch.randint(
+                high=self.model_tester.vocab_size, size=(2, 134, 77), device=torch_device
+            ).long(),
             "mask_labels": torch.randn((2, 150, *size), device=torch_device),
             "class_labels": torch.zeros(2, 150, device=torch_device).long(),
         }
@@ -451,7 +462,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.2724, 0.8287, 0.6025], [1.2706, 1.1252, 1.1445], [1.1357, 0.6150, 0.4185]]
+            [[0.2723, 0.8280, 0.6026], [1.2699, 1.1257, 1.1444], [1.1344, 0.6153, 0.4177]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -460,7 +471,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[1.0581, 1.2275, 1.2000], [1.1901, 1.2925, 1.2861], [1.1578, 1.2558, 1.3212]]
+            [[1.0581, 1.2276, 1.2003], [1.1903, 1.2925, 1.2862], [1.158, 1.2559, 1.3216]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -469,7 +480,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
+            [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -495,7 +506,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             masks_queries_logits.shape,
             (1, model.config.num_queries, inputs_shape[-2] // 4, (inputs_shape[-1] + 2) // 4),
         )
-        expected_slice = [[[3.1215, 4.1250, 4.1106], [2.8183, 3.4623, 3.5512], [2.4550, 2.9841, 3.5081]]]
+        expected_slice = [[[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
@@ -505,7 +516,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             (1, model.config.num_queries, model.config.num_labels + 1),
         )
         expected_slice = torch.tensor(
-            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
+            [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 

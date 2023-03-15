@@ -33,7 +33,7 @@ def clean_model_doc_toc(model_doc):
 
     new_doc = []
     for duplicate_key in duplicates:
-        titles = list(set(doc["title"] for doc in model_doc if doc["local"] == duplicate_key))
+        titles = list({doc["title"] for doc in model_doc if doc["local"] == duplicate_key})
         if len(titles) > 1:
             raise ValueError(
                 f"{duplicate_key} is present several times in the documentation table of content at "

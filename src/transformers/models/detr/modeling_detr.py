@@ -868,7 +868,7 @@ DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`DetrImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1252,14 +1252,14 @@ class DetrModel(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrImageProcessor, DetrModel
+        >>> from transformers import AutoImageProcessor, DetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
 
         >>> # prepare image for the model
@@ -1419,7 +1419,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrImageProcessor, DetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DetrForObjectDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -1427,7 +1427,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1597,13 +1597,13 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> import torch
         >>> import numpy
 
-        >>> from transformers import DetrImageProcessor, DetrForSegmentation
+        >>> from transformers import AutoImageProcessor, DetrForSegmentation
         >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         >>> # prepare image for the model
@@ -1612,7 +1612,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # Use the `post_process_panoptic_segmentation` method of `DetrImageProcessor` to retrieve post-processed panoptic segmentation maps
+        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
         >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
 

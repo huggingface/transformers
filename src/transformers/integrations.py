@@ -119,6 +119,10 @@ def is_mlflow_available():
     return importlib.util.find_spec("mlflow") is not None
 
 
+def is_dagshub_available():
+    return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
+
+
 def is_fairscale_available():
     return importlib.util.find_spec("fairscale") is not None
 
@@ -342,7 +346,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         **kwargs,
     )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
-    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
+    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
@@ -350,6 +354,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
+
     from transformers.utils.versions import importlib_metadata
 
     if trainer.args.process_index == 0:
@@ -360,7 +365,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 name="huggingface-tune",
                 type="offline",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 budget=n_trials,
             )
@@ -397,7 +402,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             experiment = conn.experiments().create(
                 name="huggingface-tune",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 observation_budget=n_trials,
                 project="huggingface",
@@ -420,7 +425,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     metrics = trainer.evaluate()
                     trainer.objective = trainer.compute_objective(metrics)
 
-                values = [dict(name="objective", value=trainer.objective)]
+                values = [{"name": "objective", "value": trainer.objective}]
                 obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
                 logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
                 experiment = conn.experiments(experiment.id).fetch()
@@ -522,6 +527,8 @@ def get_available_reporting_integrations():
         integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
+    if is_dagshub_available():
+        integrations.append("dagshub")
     if is_mlflow_available():
         integrations.append("mlflow")
     if is_neptune_available():
@@ -717,7 +724,6 @@ class WandbCallback(TrainerCallback):
                     init_args["name"] = args.run_name
 
             if self._wandb.run is None:
-
                 self._wandb.init(
                     project=os.getenv("WANDB_PROJECT", "huggingface"),
                     **init_args,
@@ -1045,6 +1051,55 @@ class MLflowCallback(TrainerCallback):
             self._ml_flow.end_run()
 
 
+class DagsHubCallback(MLflowCallback):
+    """
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/). Extends [`MLflowCallback`]
+    """
+
+    def __init__(self):
+        super().__init__()
+        if not is_dagshub_available():
+            raise ImportError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
+
+        from dagshub.upload import Repo
+
+        self.Repo = Repo
+
+    def setup(self, *args, **kwargs):
+        """
+        Setup the DagsHub's Logging integration.
+
+        Environment:
+        - **HF_DAGSHUB_LOG_ARTIFACTS** (`str`, *optional*):
+                Whether to save the data and model artifacts for the experiment. Default to `False`.
+        """
+
+        self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self.name = os.getenv("HF_DAGSHUB_MODEL_NAME") or "main"
+        self.remote = os.getenv("MLFLOW_TRACKING_URI")
+        self.repo = self.Repo(
+            owner=self.remote.split(os.sep)[-2],
+            name=self.remote.split(os.sep)[-1].split(".")[0],
+            branch=os.getenv("BRANCH") or "main",
+        )
+        self.path = Path("artifacts")
+
+        if self.remote is None:
+            raise RuntimeError(
+                "DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run"
+                " `dagshub.init()`?"
+            )
+
+        super().setup(*args, **kwargs)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.log_artifacts:
+            if getattr(self, "train_dataloader", None):
+                torch.save(self.train_dataloader.dataset, os.path.join(args.output_dir, "dataset.pt"))
+
+            self.repo.directory(str(self.path)).add_dir(args.output_dir)
+
+
 class NeptuneMissingConfiguration(Exception):
     def __init__(self):
         super().__init__(
@@ -1103,7 +1158,7 @@ class NeptuneCallback(TrainerCallback):
         run: Optional["Run"] = None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
-        **neptune_run_kwargs
+        **neptune_run_kwargs,
     ):
         if not is_neptune_available():
             raise ValueError(
@@ -1375,17 +1430,26 @@ class ClearMLCallback(TrainerCallback):
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
+        if self._initialized:
+            return
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                    output_uri=True,
-                )
-                self._initialized = True
-                logger.info("ClearML Task has been initialized.")
+                # This might happen when running inside of a pipeline, where the task is already initialized
+                # from outside of Hugging Face
+                if self._clearml.Task.current_task():
+                    self._clearml_task = self._clearml.Task.current_task()
+                    self._initialized = True
+                    logger.info("External ClearML Task has been connected.")
+                else:
+                    self._clearml_task = self._clearml.Task.init(
+                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        output_uri=True,
+                    )
+                    self._initialized = True
+                    logger.info("ClearML Task has been initialized.")
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:
@@ -1465,6 +1529,7 @@ INTEGRATION_TO_CALLBACK = {
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,
+    "dagshub": DagsHubCallback,
 }
 
 

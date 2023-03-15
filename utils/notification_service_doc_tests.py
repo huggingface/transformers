@@ -323,7 +323,6 @@ def retrieve_available_artifacts():
 
 
 if __name__ == "__main__":
-
     github_actions_job_links = get_job_links()
     available_artifacts = retrieve_available_artifacts()
 
@@ -359,7 +358,6 @@ if __name__ == "__main__":
         all_failures = extract_first_line_failure(artifact["failures_short"])
         for line in artifact["summary_short"].split("\n"):
             if re.search("FAILED", line):
-
                 line = line.replace("FAILED ", "")
                 line = line.split()[0].replace("\n", "")
 

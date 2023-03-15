@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
@@ -387,7 +387,15 @@ def main():
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.
-        embedding_size = model.get_input_embeddings().weight.shape[0]
+        embeddings = model.get_input_embeddings()
+
+        # Matt: This is a temporary workaround as we transition our models to exclusively using Keras embeddings.
+        #       As soon as the transition is complete, all embeddings should be keras.Embeddings layers, and
+        #       the weights will always be in embeddings.embeddings.
+        if hasattr(embeddings, "embeddings"):
+            embedding_size = embeddings.embeddings.shape[0]
+        else:
+            embedding_size = embeddings.weight.shape[0]
         if len(tokenizer) > embedding_size:
             model.resize_token_embeddings(len(tokenizer))
         # endregion
@@ -396,7 +404,7 @@ def main():
 
         # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
         # well as inputs.
-        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
+        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="np")
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
 
@@ -512,9 +520,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )

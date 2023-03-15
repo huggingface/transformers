@@ -105,7 +105,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class BeitImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = BeitImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -353,7 +352,7 @@ class BeitImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        image_processing.reduce_labels = True
+        image_processing.do_reduce_labels = True
         encoding = image_processing(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)

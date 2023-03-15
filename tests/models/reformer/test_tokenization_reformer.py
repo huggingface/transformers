@@ -27,7 +27,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = ReformerTokenizer
     rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True

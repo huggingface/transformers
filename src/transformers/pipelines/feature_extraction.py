@@ -53,6 +53,8 @@ class FeatureExtractionPipeline(Pipeline):
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
+        tokenize_kwargs (`dict`, *optional*):
+            Additional dictionary of keyword arguments passed along to the tokenizer.
     """
 
     def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
