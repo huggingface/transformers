@@ -115,8 +115,6 @@ class BridgeTowerModelTester:
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
-        text_config = {"vocab_size": self.vocab_size}
-
         return BridgeTowerConfig(
             share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,
             drop_rate=self.drop_rate,
@@ -137,7 +135,6 @@ class BridgeTowerModelTester:
             output_hidden_states=self.output_hidden_states,
             contrastive_hidden_size=self.contrastive_hidden_size,
             logit_scale_init_value=self.logit_scale_init_value,
-            text_config=text_config,
         )
 
     def create_and_check_model(
@@ -191,7 +188,7 @@ class BridgeTowerModelTester:
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, 50265))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
