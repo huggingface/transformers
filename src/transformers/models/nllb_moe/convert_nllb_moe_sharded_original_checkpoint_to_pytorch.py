@@ -49,12 +49,12 @@ def rename_fairseq_keys(state_dict, expert_idx=None):
     new_dict = {}
     for old_key in state_dict.keys():
         key = old_key
-        if "moe_layer.experts.0" in key:
+        if "moe_layer.experts." in key:
             if expert_idx is not None:
                 key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
             else:
-                key = key.replace("moe_layer.experts.", f"ffn.mlp.experts.expert_")
-            
+                key = key.replace("moe_layer.experts.", "ffn.mlp.experts.expert_")
+
         if "gate" in key:
             key = key.replace(".moe_layer.gate.wg", ".ffn.mlp.router.classifier")
         if "fc2" and "experts" not in key:
