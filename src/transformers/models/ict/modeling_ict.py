@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Authors at City University of Hong Kong, Microsoft Cloud + AI, 
+# Copyright 2023 Authors at City University of Hong Kong, Microsoft Cloud + AI,
 # The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +20,9 @@ import math
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.optim as optim
 import torch.utils.checkpoint
 from torch import nn
-import torch.optim as optim
-
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
@@ -35,7 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_ict import ICTTransformerConfig, ICTGuidedUpsamplerConfig
+from .configuration_ict import ICTConfig, ICTGuidedUpsamplerConfig, ICTTransformerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -308,30 +307,31 @@ class ICTTransformerModel(ICTTransformerPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-    
+
+
 class BaseNetwork(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def init_weights(self, init_type='normal', gain=0.02):
-        '''
+    def init_weights(self, init_type="normal", gain=0.02):
+        """
         initialize network's weights
         init_type: normal | xavier | kaiming | orthogonal
         https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
-        '''
+        """
 
         def init_func(module):
             if isinstance(module, (nn.Linear, nn.Conv2d)):
-                if init_type == 'normal':
+                if init_type == "normal":
                     nn.init.normal_(module.weight.data, 0.0, gain)
-                elif init_type == 'xavier':
+                elif init_type == "xavier":
                     nn.init.xavier_normal_(module.weight.data, gain=gain)
-                elif init_type == 'kaiming':
-                    nn.init.kaiming_normal_(module.weight.data, a=0, mode='fan_in')
-                elif init_type == 'orthogonal':
+                elif init_type == "kaiming":
+                    nn.init.kaiming_normal_(module.weight.data, a=0, mode="fan_in")
+                elif init_type == "orthogonal":
                     nn.init.orthogonal_(module.weight.data, gain=gain)
 
-                if hasattr(module, 'bias') and module.bias is not None:
+                if hasattr(module, "bias") and module.bias is not None:
                     module.bias.data.zero_()
 
         self.apply(init_func)
@@ -342,10 +342,14 @@ class ResnetBlock(nn.Module):
         super().__init__()
         self.conv_block = nn.Sequential(
             nn.ReflectionPad2d(2),
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=2, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=2, bias=False)
+            ),
             nn.ReLU(True),
             nn.ReflectionPad2d(1),
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=1, bias=False)
+            ),
         )
 
     def forward(self, x):
@@ -354,6 +358,7 @@ class ResnetBlock(nn.Module):
         # http://torch.ch/blog/2016/02/04/resnets.html
 
         return out
+
 
 class InpaintGenerator(BaseNetwork):
     def __init__(self, residual_blocks=8):
@@ -366,7 +371,7 @@ class InpaintGenerator(BaseNetwork):
             nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(True),
             nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(True)
+            nn.ReLU(True),
         )
 
         blocks = [ResnetBlock(256) for _ in range(residual_blocks)]
@@ -381,7 +386,7 @@ class InpaintGenerator(BaseNetwork):
             nn.ReflectionPad2d(3),
             nn.Conv2d(in_channels=64, out_channels=3, kernel_size=7, padding=0),
         )
-        
+
         self.init_weights()
 
     def forward(self, x):
@@ -391,33 +396,44 @@ class InpaintGenerator(BaseNetwork):
         x = (torch.tanh(x) + 1) / 2
 
         return x
-    
+
+
 class Discriminator(BaseNetwork):
     def __init__(self, in_channels):
         super().__init__()
 
         self.conv1 = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.conv2 = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1, bias=False)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.conv3 = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1, bias=False)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.conv4 = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=1, padding=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=1, padding=1, bias=False)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.conv5 = nn.Sequential(
-            nn.utils.spectral_norm(nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1, bias=False)),
+            nn.utils.spectral_norm(
+                nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1, bias=False)
+            ),
         )
 
         self.init_weights()
@@ -434,33 +450,34 @@ class Discriminator(BaseNetwork):
 
         return outputs, [conv1, conv2, conv3, conv4, conv5]
 
+
 class AdversarialLoss(nn.Module):
     r"""
     Adversarial loss
     https://arxiv.org/abs/1711.10337
     """
 
-    def __init__(self, gan_loss_function='nsgan', target_real_label=1.0, target_fake_label=0.0):
+    def __init__(self, gan_loss_function="nsgan", target_real_label=1.0, target_fake_label=0.0):
         r"""
         gan_loss_function = nsgan | lsgan | hinge
         """
         super().__init__()
 
         self.gan_loss_function = gan_loss_function
-        self.register_buffer('real_label', torch.tensor(target_real_label))
-        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        self.register_buffer("real_label", torch.tensor(target_real_label))
+        self.register_buffer("fake_label", torch.tensor(target_fake_label))
 
-        if gan_loss_function == 'nsgan':
+        if gan_loss_function == "nsgan":
             self.criterion = nn.BCELoss()
 
-        elif gan_loss_function == 'lsgan':
+        elif gan_loss_function == "lsgan":
             self.criterion = nn.MSELoss()
 
-        elif gan_loss_function == 'hinge':
+        elif gan_loss_function == "hinge":
             self.criterion = nn.ReLU()
 
     def __call__(self, outputs, is_real, is_discriminator=None):
-        if self.gan_loss_function == 'hinge':
+        if self.gan_loss_function == "hinge":
             if is_discriminator:
                 if is_real:
                     outputs = -outputs
@@ -483,7 +500,7 @@ class StyleLoss(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.add_module('vgg', VGG19())
+        self.add_module("vgg", VGG19())
         self.criterion = torch.nn.L1Loss()
 
     def compute_gram_matrix(self, x):
@@ -499,13 +516,20 @@ class StyleLoss(nn.Module):
 
         # Compute loss
         style_loss = 0.0
-        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu2_2']), self.compute_gram_matrix(y_vgg['relu2_2']))
-        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu3_4']), self.compute_gram_matrix(y_vgg['relu3_4']))
-        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu4_4']), self.compute_gram_matrix(y_vgg['relu4_4']))
-        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu5_2']), self.compute_gram_matrix(y_vgg['relu5_2']))
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu2_2"]), self.compute_gram_matrix(y_vgg["relu2_2"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu3_4"]), self.compute_gram_matrix(y_vgg["relu3_4"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu4_4"]), self.compute_gram_matrix(y_vgg["relu4_4"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu5_2"]), self.compute_gram_matrix(y_vgg["relu5_2"])
+        )
 
         return style_loss
-
 
 
 class PerceptualLoss(nn.Module):
@@ -517,7 +541,7 @@ class PerceptualLoss(nn.Module):
 
     def __init__(self, weights=[1.0, 1.0, 1.0, 1.0, 1.0]):
         super().__init__()
-        self.add_module('vgg', VGG19())
+        self.add_module("vgg", VGG19())
         self.criterion = torch.nn.L1Loss()
         self.weights = weights
 
@@ -526,15 +550,13 @@ class PerceptualLoss(nn.Module):
         x_vgg, y_vgg = self.vgg(x), self.vgg(y)
 
         content_loss = 0.0
-        content_loss += self.weights[0] * self.criterion(x_vgg['relu1_1'], y_vgg['relu1_1'])
-        content_loss += self.weights[1] * self.criterion(x_vgg['relu2_1'], y_vgg['relu2_1'])
-        content_loss += self.weights[2] * self.criterion(x_vgg['relu3_1'], y_vgg['relu3_1'])
-        content_loss += self.weights[3] * self.criterion(x_vgg['relu4_1'], y_vgg['relu4_1'])
-        content_loss += self.weights[4] * self.criterion(x_vgg['relu5_1'], y_vgg['relu5_1'])
-
+        content_loss += self.weights[0] * self.criterion(x_vgg["relu1_1"], y_vgg["relu1_1"])
+        content_loss += self.weights[1] * self.criterion(x_vgg["relu2_1"], y_vgg["relu2_1"])
+        content_loss += self.weights[2] * self.criterion(x_vgg["relu3_1"], y_vgg["relu3_1"])
+        content_loss += self.weights[3] * self.criterion(x_vgg["relu4_1"], y_vgg["relu4_1"])
+        content_loss += self.weights[4] * self.criterion(x_vgg["relu5_1"], y_vgg["relu5_1"])
 
         return content_loss
-
 
 
 class VGG19(torch.nn.Module):
@@ -637,28 +659,25 @@ class VGG19(torch.nn.Module):
         relu5_4 = self.relu5_4(relu5_3)
 
         out = {
-            'relu1_1': relu1_1,
-            'relu1_2': relu1_2,
-
-            'relu2_1': relu2_1,
-            'relu2_2': relu2_2,
-
-            'relu3_1': relu3_1,
-            'relu3_2': relu3_2,
-            'relu3_3': relu3_3,
-            'relu3_4': relu3_4,
-
-            'relu4_1': relu4_1,
-            'relu4_2': relu4_2,
-            'relu4_3': relu4_3,
-            'relu4_4': relu4_4,
-
-            'relu5_1': relu5_1,
-            'relu5_2': relu5_2,
-            'relu5_3': relu5_3,
-            'relu5_4': relu5_4,
+            "relu1_1": relu1_1,
+            "relu1_2": relu1_2,
+            "relu2_1": relu2_1,
+            "relu2_2": relu2_2,
+            "relu3_1": relu3_1,
+            "relu3_2": relu3_2,
+            "relu3_3": relu3_3,
+            "relu3_4": relu3_4,
+            "relu4_1": relu4_1,
+            "relu4_2": relu4_2,
+            "relu4_3": relu4_3,
+            "relu4_4": relu4_4,
+            "relu5_1": relu5_1,
+            "relu5_2": relu5_2,
+            "relu5_3": relu5_3,
+            "relu5_4": relu5_4,
         }
         return out
+
 
 class ICTPretrainedGuidedUpsampler(PreTrainedModel):
     """
@@ -679,6 +698,7 @@ class ICTPretrainedGuidedUpsampler(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
         if isinstance(module, ICTGuidedUpsampler):
             module.gradient_checkpointing = value
+
 
 ICT_GUIDED_UP_SAMPLER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -714,12 +734,14 @@ ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
 class ICTGuidedUpsampler(nn.Module):
     def __init__(self, config: ICTGuidedUpsamplerConfig):
         super().__init__(config)
 
         generator = InpaintGenerator(config.residual_blocks)
-        discriminator = Discriminator(in_channels=3, use_sigmoid=config.gan_loss != 'hinge')
+        discriminator = Discriminator(in_channels=3, use_sigmoid=config.gan_loss != "hinge")
 
         # TODO How to load weights for G and D?
         # if len(config.GPU) > 1:
@@ -731,24 +753,22 @@ class ICTGuidedUpsampler(nn.Module):
         style_loss = StyleLoss()
         adversarial_loss = AdversarialLoss(type=config.gan_loss)
 
-        self.add_module('generator', generator)
-        self.add_module('discriminator', discriminator)
+        self.add_module("generator", generator)
+        self.add_module("discriminator", discriminator)
 
-        self.add_module('l1_loss', l1_loss)
-        self.add_module('perceptual_loss', perceptual_loss)
-        self.add_module('style_loss', style_loss)
-        self.add_module('adversarial_loss', adversarial_loss)
+        self.add_module("l1_loss", l1_loss)
+        self.add_module("perceptual_loss", perceptual_loss)
+        self.add_module("style_loss", style_loss)
+        self.add_module("adversarial_loss", adversarial_loss)
 
         self.gen_optimizer = optim.Adam(
-            params=generator.parameters(),
-            lr=float(config.learning_rate),
-            betas=(config.adam_beta1, config.adam_beta2)
+            params=generator.parameters(), lr=float(config.learning_rate), betas=(config.adam_beta1, config.adam_beta2)
         )
 
         self.dis_optimizer = optim.Adam(
             params=discriminator.parameters(),
             lr=float(config.learning_rate) * float(config.dis_gen_learning_rate),
-            betas=(config.adam_beta1, config.adam_beta2)
+            betas=(config.adam_beta1, config.adam_beta2),
         )
 
     def process(self, images, edges, masks):
@@ -766,8 +786,8 @@ class ICTGuidedUpsampler(nn.Module):
         # discriminator loss
         dis_input_real = images
         dis_input_fake = outputs.detach()
-        dis_real, _ = self.discriminator(dis_input_real)                   
-        dis_fake, _ = self.discriminator(dis_input_fake)                  
+        dis_real, _ = self.discriminator(dis_input_real)
+        dis_fake, _ = self.discriminator(dis_input_fake)
         dis_real_loss = self.adversarial_loss(dis_real, True)
         dis_fake_loss = self.adversarial_loss(dis_fake, False)
         dis_loss += (dis_real_loss + dis_fake_loss) / 2
@@ -777,7 +797,7 @@ class ICTGuidedUpsampler(nn.Module):
 
         # generator adversarial loss
         gen_input_fake = outputs
-        gen_fake, _ = self.discriminator(gen_input_fake)                 
+        gen_fake, _ = self.discriminator(gen_input_fake)
         gen_gan_loss = self.adversarial_loss(gen_fake, True) * self.config.INPAINT_ADV_LOSS_WEIGHT
         gen_loss += gen_gan_loss
 
@@ -882,4 +902,3 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-    

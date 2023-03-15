@@ -173,11 +173,7 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"feature-extraction": ICTModel}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": ICTModel} if is_torch_available() else {}
     fx_compatible = False
 
     test_pruning = False

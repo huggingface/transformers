@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Authors at City University of Hong Kong, Microsoft Cloud + AI, 
+# Copyright 2023 Authors at City University of Hong Kong, Microsoft Cloud + AI,
 # The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +15,11 @@
 # limitations under the License.
 """ ICT model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
 
-from packaging import version
 
 import copy
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -36,8 +32,8 @@ ICT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ICTGuidedUpsamplerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ICTGuidedUpsampler`]. It is used to instantiate an 
-    [`ICTGuidedUpsampler`] model according to the specified arguments, defining the model architecture. Instantiating a 
+    This is the configuration class to store the configuration of a [`ICTGuidedUpsampler`]. It is used to instantiate an
+    [`ICTGuidedUpsampler`] model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the [ICTGuidedUpsampler model trained with the ImageNet dataset](https://huggingface.co/sheonhan/ict-imagenet-32).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -70,7 +66,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
         inpaint_adv_loss_weight (`float`, *optional*, defaults to 0.1):
             The weight of the adversial loss module.
         gan_loss (`str`, *optional*, defaults to`"nsgan"`):
-            GAN's loss function can be either "nsgan", "lsgan", or "hinge". 
+            GAN's loss function can be either "nsgan", "lsgan", or "hinge".
 
 
     Example:
@@ -121,6 +117,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
         self.content_loss_weight = content_loss_weight
         self.inpaint_adv_loss_weight = inpaint_adv_loss_weight
         self.gan_loss = gan_loss
+
 
 class ICTTransformerConfig(PretrainedConfig):
     r"""
@@ -216,6 +213,7 @@ class ICTTransformerConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
 
+
 class ICTConfig(PretrainedConfig):
     r"""
     [`ICTConfig`] is the configuration class to store the configuration of a [`ICTMdel`]. It is used to
@@ -264,14 +262,17 @@ class ICTConfig(PretrainedConfig):
 
         if guided_upsampler_config is None:
             guided_upsampler_config = {}
-            logger.info("guided_upsampler_config is None. Initializing the ICTGuidedUpsamplerConfig with default values.")
+            logger.info(
+                "guided_upsampler_config is None. Initializing the ICTGuidedUpsamplerConfig with default values."
+            )
 
         self.transformer_config = ICTTransformerConfig(**transformer_config)
         self.guided_upsampler_config = ICTGuidedUpsamplerConfig(**guided_upsampler_config)
 
-
     @classmethod
-    def from_transformer_and_guided_upsampler_configs(cls, transformer_config: ICTTransformerConfig, guided_upsampler_config: ICTGuidedUpsamplerConfig, **kwargs):
+    def from_transformer_and_guided_upsampler_configs(
+        cls, transformer_config: ICTTransformerConfig, guided_upsampler_config: ICTGuidedUpsamplerConfig, **kwargs
+    ):
         r"""
         Instantiate a [`ICTConfig`] (or a derived class) from align text model configuration and align vision model
         configuration.
@@ -279,7 +280,11 @@ class ICTConfig(PretrainedConfig):
             [`ICTConfig`]: An instance of a configuration object
         """
 
-        return cls(transformer_config=transformer_config.to_dict(), guided_upsampler_config=guided_upsampler_config.to_dict(), **kwargs)
+        return cls(
+            transformer_config=transformer_config.to_dict(),
+            guided_upsampler_config=guided_upsampler_config.to_dict(),
+            **kwargs,
+        )
 
     def to_dict(self):
         """
