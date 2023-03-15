@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import LLaMAConfig, is_torch_available
+from transformers import LlamaConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -27,10 +27,10 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import LLaMAForCausalLM, LLaMAModel
+    from transformers import LlamaForCausalLM, LlamaModel
 
 
-class LLaMAModelTester:
+class LlamaModelTester:
     def __init__(
         self,
         parent,
@@ -103,7 +103,7 @@ class LLaMAModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return LLaMAConfig(
+        return LlamaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -121,7 +121,7 @@ class LLaMAModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = LLaMAModel(config=config)
+        model = LlamaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -141,7 +141,7 @@ class LLaMAModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = LLaMAModel(config)
+        model = LlamaModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -170,7 +170,7 @@ class LLaMAModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = LLaMAForCausalLM(config=config)
+        model = LlamaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -190,7 +190,7 @@ class LLaMAModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = LLaMAForCausalLM(config=config)
+        model = LlamaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -254,21 +254,21 @@ class LLaMAModelTester:
 
 
 @require_torch
-class LLaMAModelTest(ModelTesterMixin, unittest.TestCase):
+class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            LLaMAModel,
-            LLaMAForCausalLM,
+            LlamaModel,
+            LlamaForCausalLM,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (LLaMAForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
 
     def setUp(self):
-        self.model_tester = LLaMAModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LLaMAConfig, hidden_size=37)
+        self.model_tester = LlamaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

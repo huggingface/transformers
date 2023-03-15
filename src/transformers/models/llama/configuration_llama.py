@@ -28,9 +28,9 @@ logger = logging.get_logger(__name__)
 LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class LLaMAConfig(PretrainedConfig):
+class LlamaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~LLaMAModel`]. It is used to instantiate an LLaMA
+    This is the configuration class to store the configuration of a [`~LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B.
 
@@ -41,7 +41,7 @@ class LLaMAConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LLaMAModel`]
+            `inputs_ids` passed when calling [`~LlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -64,13 +64,13 @@ class LLaMAConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import LLaMAModel, LLaMAConfig
+    >>> from transformers import LlamaModel, LlamaConfig
 
     >>> # Initializing a LLaMA llama-7b style configuration
-    >>> configuration = LLaMAConfig()
+    >>> configuration = LlamaConfig()
 
     >>> # Initializing a model from the llama-7b style configuration
-    >>> model = LLaMAModel(configuration)
+    >>> model = LlamaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -3603,21 +3603,21 @@ class LiltPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LLaMAForCausalLM(metaclass=DummyObject):
+class LlamaForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class LLaMAModel(metaclass=DummyObject):
+class LlamaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class LLaMAPreTrainedModel(metaclass=DummyObject):
+class LlamaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

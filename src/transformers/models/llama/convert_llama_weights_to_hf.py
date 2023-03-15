@@ -31,9 +31,9 @@ Sample usage:
 Thereafter, models can be loaded via:
 
     ```
-    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/")
+    tokenizer = transformers.LlamaTokenizer.from_pretrained("/output/path/tokenizer/")
 
-    model = transformers.LLaMAForCausalLM.from_pretrained("/output/path/llama-7b/")
+    model = transformers.LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
     ```
 """
 
@@ -200,7 +200,7 @@ def write_model(model_path, input_base_path, model_size):
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(model_path, "pytorch_model.bin.index.json"))
     config_out = {
-        "architectures": ["LLaMAForCausalLM"],
+        "architectures": ["LlamaForCausalLM"],
         "bos_token_id": 1,
         "eos_token_id": 2,
         "hidden_act": "silu",
@@ -243,7 +243,7 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path):
             "bos_token": "",
             "eos_token": "",
             "model_max_length": int(1e30),
-            "tokenizer_class": "LLaMATokenizer",
+            "tokenizer_class": "LlamaTokenizer",
             "unk_token": "",
         },
         os.path.join(tokenizer_path, "tokenizer_config.json"),

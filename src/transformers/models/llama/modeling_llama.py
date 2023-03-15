@@ -37,12 +37,12 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_llama import LLaMAConfig
+from .configuration_llama import LlamaConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "LLaMAConfig"
+_CONFIG_FOR_DOC = "LlamaConfig"
 
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
@@ -141,7 +141,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     return q_embed, k_embed
 
 
-class LLaMAMLP(nn.Module):
+class LlamaMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -158,7 +158,7 @@ class LLaMAMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-class LLaMAAttention(nn.Module):
+class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -269,15 +269,15 @@ class LLaMAAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class LLaMADecoderLayer(nn.Module):
-    def __init__(self, config: LLaMAConfig):
+class LlamaDecoderLayer(nn.Module):
+    def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = LLaMAAttention(
+        self.self_attn = LlamaAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
         )
-        self.mlp = LLaMAMLP(
+        self.mlp = LlamaMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
@@ -347,7 +347,7 @@ LLAMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LLaMAConfig`]):
+        config ([`LlamaConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -358,11 +358,11 @@ LLAMA_START_DOCSTRING = r"""
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class LLaMAPreTrainedModel(PreTrainedModel):
-    config_class = LLaMAConfig
+class LlamaPreTrainedModel(PreTrainedModel):
+    config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LLaMADecoderLayer"]
+    _no_split_modules = ["LlamaDecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
@@ -377,7 +377,7 @@ class LLaMAPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (LLaMADecoderLayer)):
+        if isinstance(module, (LlamaDecoderLayer)):
             module.gradient_checkpointing = value
 
 
@@ -445,21 +445,21 @@ LLAMA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class LLaMAModel(LLaMAPreTrainedModel):
+class LlamaModel(LlamaPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LLaMADecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
     Args:
-        config: LLaMAConfig
+        config: LlamaConfig
     """
 
-    def __init__(self, config: LLaMAConfig):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([LLaMADecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -649,12 +649,12 @@ class LLaMAModel(LLaMAPreTrainedModel):
         )
 
 
-class LLaMAForCausalLM(LLaMAPreTrainedModel):
+class LlamaForCausalLM(LlamaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LLaMAModel(config)
+        self.model = LlamaModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -746,9 +746,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LLaMAForCausalLM
+        >>> from transformers import AutoTokenizer, LlamaForCausalLM
 
-        >>> model = LLaMAForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
