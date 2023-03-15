@@ -22,6 +22,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.optim as optim
 import torch.utils.checkpoint
+import torchvision.models as models
 from torch import nn
 
 from ...activations import ACT2FN
@@ -267,9 +268,9 @@ class ICTTransformerModel(ICTTransformerPreTrainedModel):
 
         inputs_embeds = self.token_embedding(pixel_values)
 
-        if masks:
-            masks = masks.unsqueeze(2)
-            inputs_embeds = inputs_embeds * (1 - masks)
+        # if masks:
+        #     masks = masks.unsqueeze(2)
+        #     inputs_embeds = inputs_embeds * (1 - masks)
 
         position_embeds = self.position_embedding[:, :t, :]
         hidden_states = inputs_embeds + position_embeds
@@ -315,8 +316,7 @@ class BaseNetwork(nn.Module):
 
     def init_weights(self, init_type="normal", gain=0.02):
         """
-        initialize network's weights
-        init_type: normal | xavier | kaiming | orthogonal
+        initialize network's weights init_type: normal | xavier | kaiming | orthogonal
         https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
         """
 
@@ -453,8 +453,7 @@ class Discriminator(BaseNetwork):
 
 class AdversarialLoss(nn.Module):
     r"""
-    Adversarial loss
-    https://arxiv.org/abs/1711.10337
+    Adversarial loss https://arxiv.org/abs/1711.10337
     """
 
     def __init__(self, gan_loss_function="nsgan", target_real_label=1.0, target_fake_label=0.0):
@@ -493,8 +492,7 @@ class AdversarialLoss(nn.Module):
 
 class StyleLoss(nn.Module):
     r"""
-    Perceptual loss, VGG-based
-    https://arxiv.org/abs/1603.08155
+    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
     """
 
@@ -534,8 +532,7 @@ class StyleLoss(nn.Module):
 
 class PerceptualLoss(nn.Module):
     r"""
-    Perceptual loss, VGG-based
-    https://arxiv.org/abs/1603.08155
+    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
     """
 
@@ -831,14 +828,12 @@ class ICTGuidedUpsampler(nn.Module):
     "The ICTGuidedUpsampler outputting the completed images.",
     ICT_GUIDED_UP_SAMPLER_START_DOCSTRING,
 )
-
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class ICTModel(ICTPretrainedGuidedUpsampler):
     config_class = ICTConfig
-    
+
     def __init__(self, config: ICTConfig):
         super().__init__(config)
-        
+
         if not isinstance(config.transformer_config, ICTTransformerConfig):
             raise ValueError(
                 "config.transformer_config is expected to be of type ICTTransformerConfig but is of type"
@@ -898,7 +893,7 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-        
+
         height, width = pixel_values.shape[2:]
 
         outputs = self.tranformer(
@@ -908,13 +903,6 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        self.guided_upsampler(outputs)
 
-        image_output = self.guided_upsampler()
-        
-        return ImageSuperResolutionOutput(
-            loss=loss,
-            reconstruction=reconstruction,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        pass

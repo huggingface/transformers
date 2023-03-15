@@ -251,8 +251,8 @@ class ICTImageProcessor(BaseImageProcessor):
             do_discretize (`bool`, *optional*, defaults to `self.do_color_quantize`):
                 Whether to discretize the image.
             clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
-                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
-                `do_discretize` is set to `True`.
+                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_discretize`
+                is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
