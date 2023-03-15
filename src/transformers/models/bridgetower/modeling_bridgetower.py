@@ -166,7 +166,7 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     Output type of ['BridgeTowerForContrastiveLearning']
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss=True`:
             Image-text contrastive loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -176,13 +176,13 @@ class BridgeTowerContrastiveOutput(ModelOutput):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         cross_embeds  (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
             The text-image cross-modal embeddings obtained by applying the projection layer to the pooler_output.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -190,8 +190,8 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     text_embeds: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[Tuple[torch.FloatTensor]] = None
     cross_embeds: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class BridgeTowerResidualAttention(nn.Module):
@@ -1789,11 +1789,11 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-        return_loss: Optional[bool] = True,
+        return_loss: Optional[bool] = None,
     ) -> Union[BridgeTowerContrastiveOutput, Tuple[torch.FloatTensor]]:
         r"""
         return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss. Default is True.
+            Whether or not to return the contrastive loss.
         Returns:
 
         Examples:
@@ -1815,16 +1815,16 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
         >>> inputs = processor(images, texts, padding=True, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> loss = model(**inputs, return_loss=True).loss
 
         >>> inputs = processor(images, texts[::-1], padding=True, return_tensors="pt")
-        >>> outputs_swapped = model(**inputs)
+        >>> loss_swapped = model(**inputs, return_loss=True).loss
 
-        >>> print("Loss", outputs.loss.item())
-        Loss 0.00191505195107311
+        >>> print("Loss", round(loss.item(), 4))
+        Loss 0.0019
 
-        >>> print("Loss with swapped images", outputs_swapped.loss.item())
-        Loss with swapped images 2.1259872913360596
+        >>> print("Loss with swapped images", round(loss_swapped.item(), 4))
+        Loss with swapped images 2.126
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1879,22 +1879,15 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             itc_loss = (text_to_image_loss + text_to_cross_loss + image_to_cross_loss) / 3.0
 
         if not return_dict:
-            output = (logits, text_embeds, image_embeds, cross_embeds)
-            if output_attentions:
-                output = output + (outputs[4],)
-                if output_hidden_states:
-                    output = output + (outputs[3],)
-            elif output_hidden_states:
-                output = output + (outputs[3],)
-
+            output = (logits, text_embeds, image_embeds, cross_embeds) + outputs[3:]
             return ((itc_loss,) + output) if itc_loss is not None else output
 
         return BridgeTowerContrastiveOutput(
-            attentions=outputs.attentions,
-            hidden_states=outputs.hidden_states,
+            loss=itc_loss,
+            logits=logits,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
             cross_embeds=cross_embeds,
-            logits=logits,
-            loss=itc_loss,
+            attentions=outputs.attentions,
+            hidden_states=outputs.hidden_states,
         )

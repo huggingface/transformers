@@ -491,7 +491,7 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
         text = "a bunch of cats laying on a tower."
         inputs = processor(image, text, padding=True, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True)
+            outputs = model(**inputs, output_hidden_states=True, return_loss=True)
 
         # verify the logits
         expected_shape = torch.Size([1, 3, 512])
