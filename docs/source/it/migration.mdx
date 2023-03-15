@@ -112,7 +112,7 @@ model = BertModel.from_pretrained("bert-base-cased")
 outputs = model(**inputs) 
 ``` 
 per ottenere lo stesso nella versione `v4.x`: 
-` ``bash 
+```bash 
 model = BertModel.from_pretrained("bert-base-cased") 
 outputs = model(**inputs, return_dict=False) 
 ``` 
@@ -291,7 +291,7 @@ optimizer = BertAdam(
    warmup=warmup_proportion, 
    num_training_steps=num_training_steps, 
 ) 
-# ## e usato in questo modo: 
+### e usato in questo modo: 
 for batch in train_data: 
    loss = model(batch) 
    loss.backward() 
@@ -299,7 +299,7 @@ for batch in train_data:
 
 ### In 🤗 Transformers, ottimizzatore e schedule sono divisi e usati in questo modo: 
 optimizer = AdamW( 
-   model .parameters(), lr=lr, correct_bias=False 
+   model.parameters(), lr=lr, correct_bias=False 
 ) # Per riprodurre il comportamento specifico di BertAdam impostare correct_bias=False 
 scheduler = get_linear_schedule_with_warmup( 
    optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps 
@@ -309,8 +309,8 @@ for batch in train_data:
    loss = model(batch) 
    loss.backward() 
    torch.nn.utils.clip_grad_norm_( 
-   model.parameters(), max_grad_norm 
+   model.parameters(), max_grad_norm
    ) # Gradient clipping non è più in AdamW (quindi puoi usare amp senza problemi) 
-   ottimizzatore .step() 
-   programmatore.step() 
+   optimizer.step() 
+   scheduler.step() 
 ```
