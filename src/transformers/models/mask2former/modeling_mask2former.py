@@ -2221,17 +2221,15 @@ class Mask2FormerVideoTransformerModule(nn.Module):
             size_list.append(multi_scale_features[i].shape[-2:])            
             position_embeddings_3d = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
             multi_stage_positional_embeddings.append(position_embeddings_3d)
-
-            multi_stage_features.append(
-                self.input_projections[i](multi_scale_features[i]).flatten(2) 
-                    + self.level_embed.weight[i][None, :, None]
-                )
+            
+            input_projection = self.input_projections[i](multi_scale_features[i]).flatten(2) 
+            level_embed = self.level_embed.weight[i][None, :, None]
+            multi_stage_features.append(input_projection + level_embed)
 
             _, channels, height_width = multi_stage_features[-1].shape
             
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)            
             multi_stage_features[-1] = multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
-        
 
         # [num_queries, batch_size, num_channels]
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
@@ -2483,7 +2481,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
         self.model = Mask2FormerModel(config)
-
+        self.config = config
         self.weight_dict: Dict[str, float] = {
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,
@@ -2657,35 +2655,23 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         Video instance segmentation example:
 
         ```python
-        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation, Mask2FormerConfig
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> import torch
         >>> import torchvision
         >>> from huggingface_hub import hf_hub_download
 
-        >>> # Load Mask2former config
-        >>> config = Mask2FormerConfig()
-
-        >>> # set `is_video` config option to true
-        >>> config.is_video = True
-
         >>> # Load Mask2Former trained on YouTubeVIS 2021 dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/video-mask2former-swin-small-youtubevis21-instance")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
-        ...     "video-mask2former-swin-small-youtubevis21-instance", config=config
-        ... )
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
 
-        >>> file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
-        >>> video_input = torchvision.io.read_video(file_path)[0]
+        >>> file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
+        >>> video = torchvision.io.read_video(file_path)[0]
 
-        >>> video_images = []
-        >>> for frame in video_input:
-        >>>     inputs = processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640))
-        >>>     video_images.append(inputs.pixel_values)
-
-        >>> processed_video = torch.cat(video_images)
+        >>> video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640)).pixel_values for frame in video]
+        >>> video_input = torch.cat(video_frames)
 
         >>> with torch.no_grad():
-        ...     outputs = model(processed_video)
+        ...     outputs = model(video_input)
 
         >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
         >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
@@ -2694,7 +2680,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         >>> # Perform post-processing to get video instance segmentation map
         >>> pred_video_instance_map = image_processor.post_process_video_instance_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[tuple(video.shape[1:3])]
         ... )[0]["segmentation"]
         >>> print(pred_video_instance_map.shape)
         ```
@@ -2704,7 +2690,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         outputs = self.model(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
@@ -2723,11 +2709,17 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         masks_queries_logits = outputs.masks_queries_logits
 
         auxiliary_logits = self.get_auxiliary_logits(class_queries_logits, masks_queries_logits)
+        class_logits = class_queries_logits[-1]
+        
+        if self.config.is_video:
+            mask_logits = masks_queries_logits[-1][0].transpose(1, 0)
+        else:
+            mask_logits = masks_queries_logits[-1]
 
         if mask_labels is not None and class_labels is not None:
             loss_dict = self.get_loss_dict(
-                masks_queries_logits=masks_queries_logits[-1],
-                class_queries_logits=class_queries_logits[-1],
+                masks_queries_logits=mask_logits,
+                class_queries_logits=class_logits,
                 mask_labels=mask_labels,
                 class_labels=class_labels,
                 auxiliary_predictions=auxiliary_logits,
@@ -2748,11 +2740,12 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None
+        
 
         output = Mask2FormerForUniversalSegmentationOutput(
             loss=loss,
-            class_queries_logits=class_queries_logits[-1],
-            masks_queries_logits=masks_queries_logits[-1],
+            class_queries_logits=class_logits,
+            masks_queries_logits=mask_logits,
             auxiliary_logits=auxiliary_logits,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             pixel_decoder_last_hidden_state=outputs.pixel_decoder_last_hidden_state,
