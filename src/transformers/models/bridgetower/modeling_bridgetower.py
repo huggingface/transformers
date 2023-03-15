@@ -1889,5 +1889,5 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             image_embeds=image_embeds,
             cross_embeds=cross_embeds,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,            
+            attentions=outputs.attentions,
         )
