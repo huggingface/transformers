@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2023 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Authors at City University of Hong Kong, Microsoft Cloud + AI, 
+# The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +22,11 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import torch.optim as optim
+
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -32,7 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_ict import ICTConfig
+from .configuration_ict import ICTTransformerConfig, ICTGuidedUpsamplerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -47,13 +50,15 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]  # TODO
 
 ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sheonhan/ict-imagenet-32",
+    "sheonhan/ict-ffhq-32",
+    "sheonhan/ict-imagenet-32",
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class ICTSelfAttention(nn.Module):
-    def __init__(self, config: ICTConfig) -> None:
+    def __init__(self, config: ICTTransformerConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -143,13 +148,13 @@ class ICTBlock(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ICT,vit->ict
-class ICTPreTrainedModel(PreTrainedModel):
+class ICTTransformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ICTConfig
+    config_class = ICTTransformerConfig
     base_model_prefix = "ict"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -170,25 +175,25 @@ class ICTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
-        if isinstance(module, ICTModel):
+        if isinstance(module, ICTTransformerModel):
             module.gradient_checkpointing = value
 
 
-ICT_START_DOCSTRING = r"""
+ICT_TRANSFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ICTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ICTTransformerConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-ICT_INPUTS_DOCSTRING = r"""
+ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -211,12 +216,12 @@ ICT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ICT Model transformer outputting raw hidden-states without any specific head on top.",
-    ICT_START_DOCSTRING,
+    "The ICT Model transformer outputting raw hidden-states without any specific head on top.",
+    ICT_TRANSFORMER_START_DOCSTRING,
 )
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
-class ICTModel(ICTPreTrainedModel):
-    def __init__(self, config: ICTConfig, use_mask_token: bool = False):
+class ICTTransformerModel(ICTTransformerPreTrainedModel):
+    def __init__(self, config: ICTTransformerConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
@@ -237,7 +242,7 @@ class ICTModel(ICTPreTrainedModel):
     def get_input_embeddings(self):
         return self.token_embedding
 
-    @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ICT_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -303,119 +308,578 @@ class ICTModel(ICTPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+    
+class BaseNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def init_weights(self, init_type='normal', gain=0.02):
+        '''
+        initialize network's weights
+        init_type: normal | xavier | kaiming | orthogonal
+        https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
+        '''
+
+        def init_func(module):
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
+                if init_type == 'normal':
+                    nn.init.normal_(module.weight.data, 0.0, gain)
+                elif init_type == 'xavier':
+                    nn.init.xavier_normal_(module.weight.data, gain=gain)
+                elif init_type == 'kaiming':
+                    nn.init.kaiming_normal_(module.weight.data, a=0, mode='fan_in')
+                elif init_type == 'orthogonal':
+                    nn.init.orthogonal_(module.weight.data, gain=gain)
+
+                if hasattr(module, 'bias') and module.bias is not None:
+                    module.bias.data.zero_()
+
+        self.apply(init_func)
+
+
+class ResnetBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.ReflectionPad2d(2),
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=2, bias=False)),
+            nn.ReLU(True),
+            nn.ReflectionPad2d(1),
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=1, bias=False)),
+        )
+
+    def forward(self, x):
+        out = x + self.conv_block(x)
+        # Remove ReLU at the end of the residual block
+        # http://torch.ch/blog/2016/02/04/resnets.html
+
+        return out
+
+class InpaintGenerator(BaseNetwork):
+    def __init__(self, residual_blocks=8):
+        super().__init__()
+
+        self.encoder = nn.Sequential(
+            nn.ReflectionPad2d(3),
+            nn.Conv2d(in_channels=6, out_channels=64, kernel_size=7, padding=0),
+            nn.ReLU(True),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(True)
+        )
+
+        blocks = [ResnetBlock(256) for _ in range(residual_blocks)]
+
+        self.middle = nn.Sequential(*blocks)
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(True),
+            nn.ReflectionPad2d(3),
+            nn.Conv2d(in_channels=64, out_channels=3, kernel_size=7, padding=0),
+        )
+        
+        self.init_weights()
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.middle(x)
+        x = self.decoder(x)
+        x = (torch.tanh(x) + 1) / 2
+
+        return x
+    
+class Discriminator(BaseNetwork):
+    def __init__(self, in_channels):
+        super().__init__()
+
+        self.conv1 = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv2 = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv3 = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1, bias=False)),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv4 = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=1, padding=1, bias=False)),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv5 = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1, bias=False)),
+        )
+
+        self.init_weights()
+
+    def forward(self, x):
+        conv1 = self.conv1(x)
+        conv2 = self.conv2(conv1)
+        conv3 = self.conv3(conv2)
+        conv4 = self.conv4(conv3)
+        conv5 = self.conv5(conv4)
+
+        outputs = conv5
+        outputs = torch.sigmoid(conv5)
+
+        return outputs, [conv1, conv2, conv3, conv4, conv5]
+
+class AdversarialLoss(nn.Module):
+    r"""
+    Adversarial loss
+    https://arxiv.org/abs/1711.10337
+    """
+
+    def __init__(self, gan_loss_function='nsgan', target_real_label=1.0, target_fake_label=0.0):
+        r"""
+        gan_loss_function = nsgan | lsgan | hinge
+        """
+        super().__init__()
+
+        self.gan_loss_function = gan_loss_function
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+
+        if gan_loss_function == 'nsgan':
+            self.criterion = nn.BCELoss()
+
+        elif gan_loss_function == 'lsgan':
+            self.criterion = nn.MSELoss()
+
+        elif gan_loss_function == 'hinge':
+            self.criterion = nn.ReLU()
+
+    def __call__(self, outputs, is_real, is_discriminator=None):
+        if self.gan_loss_function == 'hinge':
+            if is_discriminator:
+                if is_real:
+                    outputs = -outputs
+                return self.criterion(1 + outputs).mean()
+            else:
+                return (-outputs).mean()
+
+        else:
+            labels = (self.real_label if is_real else self.fake_label).expand_as(outputs)
+            loss = self.criterion(outputs, labels)
+            return loss
+
+
+class StyleLoss(nn.Module):
+    r"""
+    Perceptual loss, VGG-based
+    https://arxiv.org/abs/1603.08155
+    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.add_module('vgg', VGG19())
+        self.criterion = torch.nn.L1Loss()
+
+    def compute_gram_matrix(self, x):
+        batch_size, channels, height, width = x.size()
+        f = x.view(batch_size, channels, width * height)
+        G = f.bmm(f.transpose(1, 2)) / (height * width * channels)
+
+        return G
+
+    def __call__(self, x, y):
+        # Compute features
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+
+        # Compute loss
+        style_loss = 0.0
+        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu2_2']), self.compute_gram_matrix(y_vgg['relu2_2']))
+        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu3_4']), self.compute_gram_matrix(y_vgg['relu3_4']))
+        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu4_4']), self.compute_gram_matrix(y_vgg['relu4_4']))
+        style_loss += self.criterion(self.compute_gram_matrix(x_vgg['relu5_2']), self.compute_gram_matrix(y_vgg['relu5_2']))
+
+        return style_loss
+
+
+
+class PerceptualLoss(nn.Module):
+    r"""
+    Perceptual loss, VGG-based
+    https://arxiv.org/abs/1603.08155
+    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
+    """
+
+    def __init__(self, weights=[1.0, 1.0, 1.0, 1.0, 1.0]):
+        super().__init__()
+        self.add_module('vgg', VGG19())
+        self.criterion = torch.nn.L1Loss()
+        self.weights = weights
+
+    def __call__(self, x, y):
+        # Compute features
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+
+        content_loss = 0.0
+        content_loss += self.weights[0] * self.criterion(x_vgg['relu1_1'], y_vgg['relu1_1'])
+        content_loss += self.weights[1] * self.criterion(x_vgg['relu2_1'], y_vgg['relu2_1'])
+        content_loss += self.weights[2] * self.criterion(x_vgg['relu3_1'], y_vgg['relu3_1'])
+        content_loss += self.weights[3] * self.criterion(x_vgg['relu4_1'], y_vgg['relu4_1'])
+        content_loss += self.weights[4] * self.criterion(x_vgg['relu5_1'], y_vgg['relu5_1'])
+
+
+        return content_loss
+
+
+
+class VGG19(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        features = models.vgg19(pretrained=True).features
+        self.relu1_1 = torch.nn.Sequential()
+        self.relu1_2 = torch.nn.Sequential()
+
+        self.relu2_1 = torch.nn.Sequential()
+        self.relu2_2 = torch.nn.Sequential()
+
+        self.relu3_1 = torch.nn.Sequential()
+        self.relu3_2 = torch.nn.Sequential()
+        self.relu3_3 = torch.nn.Sequential()
+        self.relu3_4 = torch.nn.Sequential()
+
+        self.relu4_1 = torch.nn.Sequential()
+        self.relu4_2 = torch.nn.Sequential()
+        self.relu4_3 = torch.nn.Sequential()
+        self.relu4_4 = torch.nn.Sequential()
+
+        self.relu5_1 = torch.nn.Sequential()
+        self.relu5_2 = torch.nn.Sequential()
+        self.relu5_3 = torch.nn.Sequential()
+        self.relu5_4 = torch.nn.Sequential()
+
+        for x in range(2):
+            self.relu1_1.add_module(str(x), features[x])
+
+        for x in range(2, 4):
+            self.relu1_2.add_module(str(x), features[x])
+
+        for x in range(4, 7):
+            self.relu2_1.add_module(str(x), features[x])
+
+        for x in range(7, 9):
+            self.relu2_2.add_module(str(x), features[x])
+
+        for x in range(9, 12):
+            self.relu3_1.add_module(str(x), features[x])
+
+        for x in range(12, 14):
+            self.relu3_2.add_module(str(x), features[x])
+
+        for x in range(14, 16):
+            self.relu3_3.add_module(str(x), features[x])
+
+        for x in range(16, 18):
+            self.relu3_4.add_module(str(x), features[x])
+
+        for x in range(18, 21):
+            self.relu4_1.add_module(str(x), features[x])
+
+        for x in range(21, 23):
+            self.relu4_2.add_module(str(x), features[x])
+
+        for x in range(23, 25):
+            self.relu4_3.add_module(str(x), features[x])
+
+        for x in range(25, 27):
+            self.relu4_4.add_module(str(x), features[x])
+
+        for x in range(27, 30):
+            self.relu5_1.add_module(str(x), features[x])
+
+        for x in range(30, 32):
+            self.relu5_2.add_module(str(x), features[x])
+
+        for x in range(32, 34):
+            self.relu5_3.add_module(str(x), features[x])
+
+        for x in range(34, 36):
+            self.relu5_4.add_module(str(x), features[x])
+
+        # don't need the gradients, just want the features
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, x):
+        relu1_1 = self.relu1_1(x)
+        relu1_2 = self.relu1_2(relu1_1)
+
+        relu2_1 = self.relu2_1(relu1_2)
+        relu2_2 = self.relu2_2(relu2_1)
+
+        relu3_1 = self.relu3_1(relu2_2)
+        relu3_2 = self.relu3_2(relu3_1)
+        relu3_3 = self.relu3_3(relu3_2)
+        relu3_4 = self.relu3_4(relu3_3)
+
+        relu4_1 = self.relu4_1(relu3_4)
+        relu4_2 = self.relu4_2(relu4_1)
+        relu4_3 = self.relu4_3(relu4_2)
+        relu4_4 = self.relu4_4(relu4_3)
+
+        relu5_1 = self.relu5_1(relu4_4)
+        relu5_2 = self.relu5_2(relu5_1)
+        relu5_3 = self.relu5_3(relu5_2)
+        relu5_4 = self.relu5_4(relu5_3)
+
+        out = {
+            'relu1_1': relu1_1,
+            'relu1_2': relu1_2,
+
+            'relu2_1': relu2_1,
+            'relu2_2': relu2_2,
+
+            'relu3_1': relu3_1,
+            'relu3_2': relu3_2,
+            'relu3_3': relu3_3,
+            'relu3_4': relu3_4,
+
+            'relu4_1': relu4_1,
+            'relu4_2': relu4_2,
+            'relu4_3': relu4_3,
+            'relu4_4': relu4_4,
+
+            'relu5_1': relu5_1,
+            'relu5_2': relu5_2,
+            'relu5_3': relu5_3,
+            'relu5_4': relu5_4,
+        }
+        return out
+
+class ICTPretrainedGuidedUpsampler(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = ICTGuidedUpsamplerConfig
+    # base_model_prefix = "ict"
+    # main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+    _no_split_modules = []
+
+    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm]) -> None:
+        """Initialize the weights"""
+        pass
+
+    def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
+        if isinstance(module, ICTGuidedUpsampler):
+            module.gradient_checkpointing = value
+
+ICT_GUIDED_UP_SAMPLER_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`ICTGuidedUpsamplerConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+class ICTGuidedUpsampler(nn.Module):
+    def __init__(self, config: ICTGuidedUpsamplerConfig):
+        super().__init__(config)
+
+        generator = InpaintGenerator(config.residual_blocks)
+        discriminator = Discriminator(in_channels=3, use_sigmoid=config.gan_loss != 'hinge')
+
+        # TODO How to load weights for G and D?
+        # if len(config.GPU) > 1:
+        #     generator = nn.DataParallel(generator, config.GPU)
+        #     discriminator = nn.DataParallel(discriminator , config.GPU)
+
+        l1_loss = nn.L1Loss()
+        perceptual_loss = PerceptualLoss()
+        style_loss = StyleLoss()
+        adversarial_loss = AdversarialLoss(type=config.gan_loss)
+
+        self.add_module('generator', generator)
+        self.add_module('discriminator', discriminator)
+
+        self.add_module('l1_loss', l1_loss)
+        self.add_module('perceptual_loss', perceptual_loss)
+        self.add_module('style_loss', style_loss)
+        self.add_module('adversarial_loss', adversarial_loss)
+
+        self.gen_optimizer = optim.Adam(
+            params=generator.parameters(),
+            lr=float(config.learning_rate),
+            betas=(config.adam_beta1, config.adam_beta2)
+        )
+
+        self.dis_optimizer = optim.Adam(
+            params=discriminator.parameters(),
+            lr=float(config.learning_rate) * float(config.dis_gen_learning_rate),
+            betas=(config.adam_beta1, config.adam_beta2)
+        )
+
+    def process(self, images, edges, masks):
+        self.iteration += 1
+
+        # zero optimizers
+        self.gen_optimizer.zero_grad()
+        self.dis_optimizer.zero_grad()
+
+        # process outputs
+        outputs = self(images, edges, masks)
+        gen_loss = 0
+        dis_loss = 0
+
+        # discriminator loss
+        dis_input_real = images
+        dis_input_fake = outputs.detach()
+        dis_real, _ = self.discriminator(dis_input_real)                   
+        dis_fake, _ = self.discriminator(dis_input_fake)                  
+        dis_real_loss = self.adversarial_loss(dis_real, True)
+        dis_fake_loss = self.adversarial_loss(dis_fake, False)
+        dis_loss += (dis_real_loss + dis_fake_loss) / 2
+
+        dis_loss.backward()
+        self.dis_optimizer.step()
+
+        # generator adversarial loss
+        gen_input_fake = outputs
+        gen_fake, _ = self.discriminator(gen_input_fake)                 
+        gen_gan_loss = self.adversarial_loss(gen_fake, True) * self.config.INPAINT_ADV_LOSS_WEIGHT
+        gen_loss += gen_gan_loss
+
+        # generator l1 loss
+        gen_l1_loss = self.l1_loss(outputs, images) * self.config.L1_LOSS_WEIGHT / torch.mean(masks)
+        gen_loss += gen_l1_loss
+
+        # generator perceptual loss
+        gen_content_loss = self.perceptual_loss(outputs, images)
+        gen_content_loss = gen_content_loss * self.config.CONTENT_LOSS_WEIGHT
+        gen_loss += gen_content_loss
+
+        # generator style loss
+        gen_style_loss = self.style_loss(outputs * masks, images * masks)
+        gen_style_loss = gen_style_loss * self.config.STYLE_LOSS_WEIGHT
+        gen_loss += gen_style_loss
+
+        gen_loss.backward()
+        self.gen_optimizer.step()
+
+        return outputs, gen_loss, dis_loss
+
+    def forward(self, images, edges, masks):
+        images_masked = (images * (1 - masks).float()) + masks
+        inputs = torch.cat((images_masked, edges), dim=1)
+        outputs = self.generator(inputs)
+        return outputs
 
 
 @add_start_docstrings(
-    """ICT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
-    """,
-    ICT_START_DOCSTRING,
+    "The ICTGuidedUpsampler outputting the completed images.",
+    ICT_GUIDED_UP_SAMPLER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForMaskedImageModeling with VIT->ICT,ViT->ICT,vit->ict,google/vit-base-patch16-224-in21k->sheonhan/image-completion-transformer
-class ICTForMaskedImageModeling(ICTPreTrainedModel):
-    def __init__(self, config: ICTConfig) -> None:
+
+# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
+class ICTModel(ICTPretrainedGuidedUpsampler):
+    def __init__(self, config: ICTConfig):
         super().__init__(config)
-
-        self.ict = ICTModel(config, add_pooling_layer=False, use_mask_token=True)
-
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
-        )
+        self.config = config
+        self.inpaint_model = ICTInpaintingModel(config)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()
 
-    @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+    ) -> Union[Tuple, BaseModelOutput]:
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
-        Returns:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, ICTForMaskedImageModeling
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
+        pixel_values = pixel_values.to(torch.long)
+        _, t = pixel_values.size()
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        inputs_embeds = self.token_embedding(pixel_values)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("sheonhan/image-completion-transformer")
-        >>> model = ICTForMaskedImageModeling.from_pretrained("sheonhan/image-completion-transformer")
+        if masks:
+            masks = masks.unsqueeze(2)
+            inputs_embeds = inputs_embeds * (1 - masks)
 
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+        position_embeds = self.position_embedding[:, :t, :]
+        hidden_states = inputs_embeds + position_embeds
+        hidden_states = self.drop(hidden_states)
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        for _, block in enumerate(self.blocks):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = self.ict(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+            if self.gradient_checkpointing and self.training:
 
-        sequence_output = outputs[0]
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
 
-        # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+                    return custom_forward
 
-        # Reconstruct pixel values
-        reconstructed_pixel_values = self.decoder(sequence_output)
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                )
+            else:
+                layer_outputs = block(hidden_states, output_attentions)
 
-        masked_im_loss = None
-        if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-            mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return MaskedLMOutput(
-            loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
+    
