@@ -1030,14 +1030,14 @@ def test(
             tr_complete = T.Compose(
                 [T.Resize(image_size), T.ToTensor()],
             )
-            original_model_input = (tr_complete(im) * 255.0).to(torch.int).float()
+            original_model_input = (tr_complete(im) * 255.0).to(torch.int).float().squeeze(0)
         else:
             image_size = (480, 640)
             resize = T.Resize(image_size)
             original_model_input = [resize(frame.permute(2, 0, 1)) for frame in video] 
 
         # modify original Mask2Former code to return mask and class logits
-        original_class_logits, original_mask_logits = original_model([{"image": original_model_input}]) #y.clone().squeeze(0)}])
+        original_class_logits, original_mask_logits = original_model([{"image": original_model_input}])
 
         our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(img_processor_output.clone())
         our_mask_logits = our_model_out.masks_queries_logits
