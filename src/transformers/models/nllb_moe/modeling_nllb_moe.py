@@ -292,7 +292,6 @@ class NllbMoeTop2Router(nn.Module):
     def route_tokens(
         self,
         router_logits: torch.Tensor,
-        sequence_length: int,
         input_dtype: torch.dtype = torch.float32,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple:
@@ -303,6 +302,7 @@ class NllbMoeTop2Router(nn.Module):
 
         """
         # Apply Softmax and cast back to the original `dtype`
+        nb_tokens = router_logits.shape[0]
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(input_dtype)
         top_1_max_probs, top_1_expert_index = torch.max(router_probs, dim=-1)
         # ((batch_size * sequence_length), self.num_experts)
@@ -329,10 +329,12 @@ class NllbMoeTop2Router(nn.Module):
             top_2_mask = top_2_mask * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
         if padding_mask is not None:
-            padding_mask = padding_mask[:, :, :, -1]  # only get the last causal mask
-            nonpadding = ~padding_mask.reshape(top_1_mask.shape[0]).bool()
-            top_1_mask = top_1_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
-            top_2_mask = top_2_mask * nonpadding.unsqueeze(-1).to(top_1_mask.dtype)
+            if len(padding_mask.shape) == 4:
+                # only get the last causal mask
+                padding_mask = padding_mask[:, :, -1, :].reshape(top_1_mask.shape[0])  
+            non_padding = ~padding_mask.bool()
+            top_1_mask = top_1_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
+            top_2_mask = top_2_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
 
         if self.batch_prioritized_routing:
             # sort tokens based on their routing probability
@@ -360,10 +362,10 @@ class NllbMoeTop2Router(nn.Module):
             locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
         if not self.training and self.moe_eval_capacity_token_fraction > 0:
-            self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * sequence_length)
+            self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * nb_tokens)
         else:
             self.expert_capacity = (
-                2 * math.ceil(sequence_length / self.num_experts)
+                2 * math.ceil(nb_tokens / self.num_experts)
                 if self.expert_capacity is None
                 else self.expert_capacity
             )
@@ -410,19 +412,12 @@ class NllbMoeTop2Router(nn.Module):
         """
         self.input_dtype = hidden_states.dtype
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)\
 
-        # 1. hide the batch
-        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         hidden_states = hidden_states.to(self.dtype)
-        # Shape: [num_groups, tokens_per_group, num_experts]
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
-
-        dispatch_mask, router_probs, router_logits = self.route_tokens(
-            router_logits, sequence_length, self.input_dtype, padding_mask
-        )
-        # dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.num_experts))
-        # router_probs = router_probs.reshape((batch_size, sequence_length, self.num_experts))
+        dispatch_mask, router_probs, router_logits = self.route_tokens(router_logits, self.input_dtype, padding_mask)
         return dispatch_mask, router_probs, router_logits
 
 
@@ -480,7 +475,7 @@ class NllbMoeSparseMLP(nn.Module):
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
         router_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
-        expert_index = torch.argmax(router_mask, dim=-1)
+        expert_index = torch.argmax(router_mask, dim=-1) # TODO should only take the top1 mask, not both
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
@@ -501,48 +496,6 @@ class NllbMoeSparseMLP(nn.Module):
         expert_outputs = sum(expert_outputs)
         hidden_states = next_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, (router_logits, expert_index)
-
-
-# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->NllbMoe,NllbMoeLayerNorm->nn.LayerNorm
-class NllbMoeLayerFF(nn.Module):
-    r"""
-    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
-
-    Parameters:
-        config : ([`NllbMoeConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        is_sparse (`bool`):
-            Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
-    """
-
-    def __init__(self, config: NllbMoeConfig, ffn_dim, is_sparse=False):
-        super().__init__()
-        self.is_sparse = is_sparse
-
-        # Check if it is a sparse layer, if not then it is a dense layer
-        if not self.is_sparse:
-            self.mlp = NllbMoeDenseActDense(config, ffn_dim)
-        else:
-            self.mlp = NllbMoeSparseMLP(config, ffn_dim)
-
-        self.layer_norm = nn.LayerNorm(config.d_model)
-        self.dropout = nn.Dropout(config.activation_dropout)
-
-    def forward(self, hidden_states, attention_mask, output_router_logits):
-        forwarded_states = self.layer_norm(hidden_states)
-
-        if self.is_sparse:
-            forwarded_states, router_tuple = self.mlp(forwarded_states, attention_mask)
-        else:
-            forwarded_states = self.mlp(forwarded_states)
-
-        output = hidden_states + self.dropout(forwarded_states)
-
-        if output_router_logits:
-            output = (output, router_tuple)
-
-        return output
 
 
 # Adapted from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
@@ -711,9 +664,14 @@ class NllbMoeEncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
         )
+        self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.ffn = NllbMoeLayerFF(config, ffn_dim=config.encoder_ffn_dim, is_sparse=self.is_sparse)
+        if not self.is_sparse:
+            self.ffn = NllbMoeDenseActDense(config, ffn_dim=config.encoder_ffn_dim)
+        else:
+            self.ffn = NllbMoeSparseMLP(config, ffn_dim=config.encoder_ffn_dim)
+        self.ff_layer_norm = nn.LayerNorm(config.d_model)
+        self.ff_dropout = nn.Dropout(config.activation_dropout)
 
     def forward(
         self,
@@ -744,15 +702,17 @@ class NllbMoeEncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
 
-        hidden_states = self.ffn(hidden_states, attention_mask, output_router_logits)
-
-        if output_router_logits:
-            hidden_states, router_states = hidden_states
+        hidden_states = self.ff_layer_norm(hidden_states)
+        if self.is_sparse:
+            hidden_states, router_states = self.ffn(hidden_states, attention_mask)
+        else:
+            hidden_states = self.ffn(hidden_states)
+        hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
 
@@ -787,7 +747,7 @@ class NllbMoeDecoderLayer(nn.Module):
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.attn_dropout = nn.Dropout(config.dropout)
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.cross_attention = NllbMoeAttention(
@@ -797,7 +757,12 @@ class NllbMoeDecoderLayer(nn.Module):
             is_decoder=True,
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.ffn = NllbMoeLayerFF(config, config.decoder_ffn_dim, is_sparse=self.is_sparse)
+        if not self.is_sparse:
+            self.ffn = NllbMoeDenseActDense(config, ffn_dim=config.decoder_ffn_dim)
+        else:
+            self.ffn = NllbMoeSparseMLP(config, ffn_dim=config.decoder_ffn_dim)
+        self.ff_layer_norm = nn.LayerNorm(config.d_model)
+        self.ff_dropout = nn.Dropout(config.activation_dropout)
 
     def forward(
         self,
@@ -847,7 +812,7 @@ class NllbMoeDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
@@ -867,7 +832,7 @@ class NllbMoeDecoderLayer(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 output_attentions=output_attentions,
             )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = self.attn_dropout(hidden_states)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -875,11 +840,13 @@ class NllbMoeDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        # TODO make sure which one we have to use; attention_mask or encoder_attention_mask
-        hidden_states = self.ffn(hidden_states, attention_mask, output_router_logits)
 
-        if output_router_logits:
-            hidden_states, router_states = hidden_states
+        hidden_states = self.ff_layer_norm(hidden_states)
+        if self.is_sparse:
+            hidden_states, router_states = self.ffn(hidden_states, attention_mask)
+        else:
+            hidden_states = self.ffn(hidden_states)
+        hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
 
@@ -888,16 +855,10 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (
-            hidden_states,
-            present_key_value,
-        )
+        outputs = (hidden_states, present_key_value)
 
         if output_attentions:
-            outputs += (
-                self_attn_weights,
-                cross_attn_weights,
-            )
+            outputs += (self_attn_weights, cross_attn_weights)
 
         if output_router_logits:
             outputs += (router_states,)

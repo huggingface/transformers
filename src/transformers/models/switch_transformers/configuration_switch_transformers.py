@@ -60,8 +60,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
             Number of experts for each SwitchTransformer layer.
-        router_type (`str`, *optional*, defaults to `"tokens_masked"`):
-            Router type - choose between `"tokens_masked", `"tokens_scatter"` and `"experts_masked"`.
         router_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the router.
         router_jitter_noise (`float`, *optional*, defaults to 0.1):
@@ -111,7 +109,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_sparse_decoder_layers=3,
         num_heads=12,
         num_experts=8,
-        router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
@@ -157,7 +154,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
 
         self.num_heads = num_heads
-        self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias

@@ -361,7 +361,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").eval()
+        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
         tokenizer = NllbTokenizer.from_pretrained(
             "facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn"
         )
@@ -373,7 +373,6 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             [src_text, "I just want to code."], text_target=tgt_text, return_tensors="pt", padding=True
         )
         model_inputs.pop("labels")
-
         with torch.no_grad():
             hf_outputs = model(
                 **model_inputs, decoder_input_ids=torch.tensor([[2, tokenizer.lang_code_to_id["fra_Latn"]]] * 2)
