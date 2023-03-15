@@ -27,10 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import (
-        LLaMAForCausalLM,
-        LLaMAModel,
-    )
+    from transformers import LLaMAForCausalLM, LLaMAModel
 
 
 class LLaMAModelTester:
