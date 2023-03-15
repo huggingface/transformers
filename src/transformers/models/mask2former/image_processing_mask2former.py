@@ -1211,7 +1211,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
-        
+
         # Loop over items in batch size
         results: List[Dict[str, TensorType]] = []
 
@@ -1230,7 +1230,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             mask_pred = mask_pred[topk_indices]
 
             pred_masks = mask_pred[:, : img_size[0], : img_size[1]]
-            
+
             segmentation = torch.zeros(img_size) - 1
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1

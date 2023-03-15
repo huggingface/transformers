@@ -316,11 +316,10 @@ def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
+
 # We will verify our results on a video of cars
 def prepare_video():
-    filepath = hf_hub_download(
-        repo_id="shivi/video_demo", filename="cars.mp4", repo_type="dataset"
-    )
+    filepath = hf_hub_download(repo_id="shivi/video_demo", filename="cars.mp4", repo_type="dataset")
     video = torchvision.io.read_video(filepath)[0]
     return video
 
@@ -436,28 +435,30 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
-
     def test_video_mask2former_inference_no_head(self):
-        #load model and processor
+        # load model and processor
         model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
         img_size = {"height": 480, "width": 640}
-        
+
         video = prepare_video()
-        video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values for frame in video]
+        video_frames = [
+            image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
+            for frame in video
+        ]
         video_frame_shape = video_frames[0].shape
 
-        #check size is divisible by 32
+        # check size is divisible by 32
         self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
-        #check size
+        # check size
         self.assertTrue(video_frame_shape, (10, 3, 480, 640))
 
         video_input = torch.cat(video_frames)
 
         with torch.no_grad():
             outputs = model(video_input)
-        
-        # check if we are getting expected hidden states from backbone, pixel_decoder and transformer_decoder            
+
+        # check if we are getting expected hidden states from backbone, pixel_decoder and transformer_decoder
         expected_slice_hidden_state = torch.tensor(
             [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
         ).to(torch_device)
@@ -486,20 +487,23 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
 
     def test_video_mask2former_universal_segmentation_head_model(self):
-        #load model and processor
+        # load model and processor
         model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
         img_size = {"height": 480, "width": 640}
-        
+
         video = prepare_video()
-        video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values for frame in video]
+        video_frames = [
+            image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
+            for frame in video
+        ]
         video_frame_shape = video_frames[0].shape
 
         # check size is divisible by 32
         self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
         # check size
         self.assertEqual(video_frame_shape, (10, 3, 480, 640))
-        
+
         video_input = torch.cat(video_frames)
 
         with torch.no_grad():
@@ -508,7 +512,8 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         masks_queries_logits = outputs.masks_queries_logits
 
         self.assertEqual(
-            masks_queries_logits.shape, (1, model.config.num_queries, video_frame_shape[-2] // 4, video_frame_shape[-1] // 4)
+            masks_queries_logits.shape,
+            (1, model.config.num_queries, video_frame_shape[-2] // 4, video_frame_shape[-1] // 4),
         )
         expected_slice = [
             [-8.7839, -9.0056, -8.8121],
@@ -517,11 +522,11 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
-        
+
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
-        
+
         expected_slice = torch.tensor(
             [
                 [1.8324, -8.0835, -4.1922],
@@ -530,8 +535,3 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
-
-
-
-
-

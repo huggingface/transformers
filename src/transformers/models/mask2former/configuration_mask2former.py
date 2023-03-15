@@ -109,7 +109,7 @@ class Mask2FormerConfig(PretrainedConfig):
             Number of frames in the video.
         frame_range (`int`, *optional*, defaults to 20):
             The range of the frames in the video.
-        frame_shuffle (`boolean`, *optional*, defaults to False): 
+        frame_shuffle (`boolean`, *optional*, defaults to False):
             Whether to shuffle the frames in the video or not.
 
     Examples:

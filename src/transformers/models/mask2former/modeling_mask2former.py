@@ -405,7 +405,12 @@ class Mask2FormerHungarianMatcher(nn.Module):
     """
 
     def __init__(
-        self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0, num_points: int = 12544, is_video: bool = False,
+        self,
+        cost_class: float = 1.0,
+        cost_mask: float = 1.0,
+        cost_dice: float = 1.0,
+        num_points: int = 12544,
+        is_video: bool = False,
     ):
         """Creates the matcher
 
@@ -472,7 +477,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, class_labels[i]]
             target_mask = mask_labels[i].to(pred_mask)
-            
+
             if not self.is_video:
                 target_mask = target_mask[:, None]
                 pred_mask = pred_mask[:, None]
@@ -482,10 +487,10 @@ class Mask2FormerHungarianMatcher(nn.Module):
 
             target_coordinates = point_coordinates.repeat(target_mask.shape[0], 1, 1)
             target_mask = sample_point(target_mask, target_coordinates, align_corners=False)
-                
+
             pred_coordinates = point_coordinates.repeat(pred_mask.shape[0], 1, 1)
             pred_mask = sample_point(pred_mask, pred_coordinates, align_corners=False)
-            
+
             if self.is_video:
                 target_mask = target_mask.flatten(1)
                 pred_mask = pred_mask.flatten(1)
@@ -638,10 +643,10 @@ class Mask2FormerLoss(nn.Module):
         tgt_idx = self._get_targets_permutation_indices(indices)
         # shape (batch_size * num_queries, height, width)
         pred_masks = masks_queries_logits[src_idx]
-        
+
         if self.is_video:
-            target_masks = torch.cat([t['masks'][i] for t, (_, i) in zip(targets, indices)]).to(pred_masks)
-            
+            target_masks = torch.cat([t["masks"][i] for t, (_, i) in zip(targets, indices)]).to(pred_masks)
+
             # No need to upsample predictions as we are using normalized coordinates
             pred_masks = pred_masks.flatten(0, 1)[:, None]
             target_masks = target_masks.flatten(0, 1)[:, None]
@@ -883,9 +888,13 @@ class Mask2Former3DSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self,  hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    def forward(self, hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
-            mask = torch.zeros((hidden_states.size(0), hidden_states.size(1), hidden_states.size(3), hidden_states.size(4)), device=hidden_states.device, dtype=torch.bool)
+            mask = torch.zeros(
+                (hidden_states.size(0), hidden_states.size(1), hidden_states.size(3), hidden_states.size(4)),
+                device=hidden_states.device,
+                dtype=torch.bool,
+            )
         not_mask = ~mask
         y_embed = not_mask.cumsum(2, dtype=torch.float32)
         x_embed = not_mask.cumsum(3, dtype=torch.float32)
@@ -914,6 +923,7 @@ class Mask2Former3DSinePositionEmbedding(nn.Module):
 
         return pos
 
+
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->Mask2Former
 class Mask2FormerSinePositionEmbedding(nn.Module):
     """
@@ -934,7 +944,11 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
 
     def forward(self, hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
-            mask = torch.zeros((hidden_states.size(0), hidden_states.size(2), hidden_states.size(3)), device=hidden_states.device, dtype=torch.bool)
+            mask = torch.zeros(
+                (hidden_states.size(0), hidden_states.size(2), hidden_states.size(3)),
+                device=hidden_states.device,
+                dtype=torch.bool,
+            )
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
@@ -2093,7 +2107,9 @@ class Mask2FormerMaskPredictor(nn.Module):
             outputs_mask = torch.einsum("bqc,btchw->bqthw", mask_embeddings, pixel_embeddings)
             b, q, t, _, _ = outputs_mask.shape
             # [B, Q, T, H, W] -> [B, Q, T*H*W] -> [B, h, Q, T*H*W] -> [B*h, Q, T*HW]
-            attention_mask = nn.functional.interpolate(outputs_mask.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False)
+            attention_mask = nn.functional.interpolate(
+                outputs_mask.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False
+            )
             attention_mask = attention_mask.view(b, q, t, attention_mask_target_size[0], attention_mask_target_size[1])
         else:
             # Sum up over the channels
@@ -2176,6 +2192,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
         return decoder_output
 
+
 class Mask2FormerVideoTransformerModule(nn.Module):
     """
     The Mask2Former's video transformer module.
@@ -2207,29 +2224,38 @@ class Mask2FormerVideoTransformerModule(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
     ) -> Mask2FormerMaskedAttentionDecoderOutput:
-        
+
         multi_stage_features = []
         multi_stage_positional_embeddings = []
         size_list = []
-        
-        m_batch_size,  m_channels, m_height, m_width = mask_features.shape
+
+        m_batch_size, m_channels, m_height, m_width = mask_features.shape
         batch_size = (m_batch_size // self.num_frames) if self.training else 1
         t = m_batch_size // batch_size
         mask_features = mask_features.view(batch_size, t, m_channels, m_height, m_width)
-        
+
         for i in range(self.num_feature_levels):
-            size_list.append(multi_scale_features[i].shape[-2:])            
-            position_embeddings_3d = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
+            size_list.append(multi_scale_features[i].shape[-2:])
+            position_embeddings_3d = self.position_embedder(
+                multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None
+            ).flatten(3)
             multi_stage_positional_embeddings.append(position_embeddings_3d)
-            
-            input_projection = self.input_projections[i](multi_scale_features[i]).flatten(2) 
+
+            input_projection = self.input_projections[i](multi_scale_features[i]).flatten(2)
             level_embed = self.level_embed.weight[i][None, :, None]
             multi_stage_features.append(input_projection + level_embed)
 
             _, channels, height_width = multi_stage_features[-1].shape
-            
-            multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)            
-            multi_stage_features[-1] = multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
+
+            multi_stage_positional_embeddings[-1] = (
+                multi_stage_positional_embeddings[-1]
+                .view(batch_size, t, channels, height_width)
+                .permute(1, 3, 0, 2)
+                .flatten(0, 1)
+            )
+            multi_stage_features[-1] = (
+                multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
+            )
 
         # [num_queries, batch_size, num_channels]
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
@@ -2710,7 +2736,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         auxiliary_logits = self.get_auxiliary_logits(class_queries_logits, masks_queries_logits)
         class_logits = class_queries_logits[-1]
-        
+
         if self.config.is_video:
             mask_logits = masks_queries_logits[-1][0].transpose(1, 0)
         else:
@@ -2740,7 +2766,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None
-        
 
         output = Mask2FormerForUniversalSegmentationOutput(
             loss=loss,
