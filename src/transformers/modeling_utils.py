@@ -673,7 +673,15 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
+            if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
+                fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
+            else:
+                fp16_statistics = None
+
+            if "SCB" not in param_name:
+                set_module_8bit_tensor_to_device(
+                    model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
+                )
 
     return error_msgs, offload_index, state_dict_index
 
@@ -3004,6 +3012,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        if load_in_8bit:
+            unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
+            missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
             logger.warning(

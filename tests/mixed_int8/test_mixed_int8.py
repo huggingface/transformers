@@ -219,6 +219,50 @@ class MixedInt8Test(BaseMixedInt8Test):
         model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
+    def test_int8_serialization(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit.
+        """
+        from bitsandbytes.nn import Int8Params
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+
+            self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+
+            # generate
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+            self.assertEqual(
+                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
+            )
+
+    def test_int8_serialization_sharded(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit - sharded version.
+        """
+        from bitsandbytes.nn import Int8Params
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname, max_shard_size="200MB")
+
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+
+            self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+
+            # generate
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+            self.assertEqual(
+                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
+            )
+
 
 @require_bitsandbytes
 @require_accelerate
