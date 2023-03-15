@@ -684,7 +684,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstructed_pixel_values
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 224, 224]
         ```"""
