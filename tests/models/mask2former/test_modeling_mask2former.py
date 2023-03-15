@@ -133,7 +133,7 @@ class Mask2FormerModelTester:
         if output_hidden_states:
             self.check_output_hidden_state(output, config)
 
-    def create_and_check_mask2former_instance_segmentation_head_model(
+    def create_and_check_mask2former_universal_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
         model = Mask2FormerForUniversalSegmentation(config=config)
@@ -193,9 +193,9 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_mask2former_model(config, **inputs, output_hidden_states=False)
 
-    def test_mask2former_instance_segmentation_head_model(self):
+    def test_mask2former_universal_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mask2former_instance_segmentation_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_mask2former_universal_segmentation_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Mask2Former does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -316,6 +316,14 @@ def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
+# We will verify our results on a video of cars
+def prepare_video():
+    filepath = hf_hub_download(
+        repo_id="shivi/video_demo", filename="cars.mp4", repo_type="dataset"
+    )
+    video = torchvision.io.read_video(filepath)[0]
+    return video
+
 
 @require_vision
 @slow
@@ -324,13 +332,16 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
     def model_checkpoints(self):
         return "facebook/mask2former-swin-small-coco-instance"
 
+    def video_model_checkpoints(self):
+        return "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        feature_extractor = self.default_image_processor
         image = prepare_img()
         inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
@@ -371,7 +382,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_universal_segmentation_head(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
+        feature_extractor = self.default_image_processor
         image = prepare_img()
         inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
@@ -408,7 +419,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_with_segmentation_maps_and_loss(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
+        feature_extractor = self.default_image_processor
 
         inputs = feature_extractor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
@@ -424,3 +435,103 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
+
+
+    def test_video_mask2former_inference_no_head(self):
+        #load model and processor
+        model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
+        image_processor = self.default_image_processor
+        img_size = {"height": 480, "width": 640}
+        
+        video = prepare_video()
+        video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values for frame in video]
+        video_frame_shape = video_frames[0].shape
+
+        #check size is divisible by 32
+        self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
+        #check size
+        self.assertTrue(video_frame_shape, (10, 3, 480, 640))
+
+        video_input = torch.cat(video_frames)
+
+        with torch.no_grad():
+            outputs = model(video_input)
+        
+        # check if we are getting expected hidden states from backbone, pixel_decoder and transformer_decoder            
+        expected_slice_hidden_state = torch.tensor(
+            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
+        ).to(torch_device)
+        self.assertTrue(
+            torch.allclose(
+                outputs.encoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+            )
+        )
+
+        expected_slice_hidden_state = torch.tensor(
+            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
+        ).to(torch_device)
+        self.assertTrue(
+            torch.allclose(
+                outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+            )
+        )
+
+        expected_slice_hidden_state = torch.tensor(
+            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
+        ).to(torch_device)
+        self.assertTrue(
+            torch.allclose(
+                outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+            )
+        )
+
+    def test_video_mask2former_universal_segmentation_head_model(self):
+        #load model and processor
+        model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
+        image_processor = self.default_image_processor
+        img_size = {"height": 480, "width": 640}
+        
+        video = prepare_video()
+        video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values for frame in video]
+        video_frame_shape = video_frames[0].shape
+
+        # check size is divisible by 32
+        self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
+        # check size
+        self.assertEqual(video_frame_shape, (10, 3, 480, 640))
+        
+        video_input = torch.cat(video_frames)
+
+        with torch.no_grad():
+            outputs = model(video_input)
+
+        masks_queries_logits = outputs.masks_queries_logits
+
+        self.assertEqual(
+            masks_queries_logits.shape, (1, model.config.num_queries, video_frame_shape[-2] // 4, video_frame_shape[-1] // 4)
+        )
+        expected_slice = [
+            [-8.7839, -9.0056, -8.8121],
+            [-7.4104, -7.0313, -6.5401],
+            [-6.6105, -6.3427, -6.4675],
+        ]
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
+        
+        # class_queries_logits
+        class_queries_logits = outputs.class_queries_logits
+        self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
+        
+        expected_slice = torch.tensor(
+            [
+                [1.8324, -8.0835, -4.1922],
+                [0.8450, -9.0050, -3.6053],
+                [0.3045, -7.7293, -3.0275],
+            ]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+
+
+
+
