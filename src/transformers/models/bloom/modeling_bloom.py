@@ -638,6 +638,8 @@ class BloomModel(BloomPreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self.build_alibi_tensor = build_alibi_tensor
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -750,7 +752,7 @@ class BloomModel(BloomPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
