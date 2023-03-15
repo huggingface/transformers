@@ -53,5 +53,7 @@
     title: Risorse della comunità
   - local: pr_checks
     title: Controlli su una Pull Request
+  - local: migration
+    title: Passaggio da pacchetti precedenti
   title: Guide How-to
   
