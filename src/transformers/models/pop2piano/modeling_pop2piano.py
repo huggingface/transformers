@@ -42,7 +42,7 @@ from ...modeling_outputs import (
     BackboneOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, is_torch_fx_proxy
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -141,8 +141,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = False
     supports_gradient_checkpointing = False
-    # main_input_name = "input_features"
-    _no_split_modules = ["Pop2PianoBlock"]
+    _no_split_modules = None
     _keep_in_fp32_modules = ["wo"]
     
     def _init_weights(self, module):
@@ -152,15 +151,12 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(module, ConcatEmbeddingToMel):
             module.embedding.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        ## TODO
-        # Uncommit it
-        ## TODO
-        # elif isinstance(module, Pop2PianoForConditionalGeneration):
-        #     # Mesh TensorFlow embeddings initialization
-        #     # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-        #     module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        #     if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-        #         module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, Pop2PianoForConditionalGeneration):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -1251,6 +1247,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     @torch.no_grad()
     def generate(
             self,
+            input_features:BatchFeature,
             inputs_embeds=None,
             composer="composer1",
             max_batch_size:int = None,
@@ -1337,6 +1334,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+        if input_features is not None and inputs_embeds is not None:
+            raise ValueError("Both input_features and inputs_embeds received. Please give only input_features")
+
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -1412,7 +1412,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
         max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
 
-        inputs_embeds = self.spectrogram(inputs_embeds["input_features"]).transpose(-1, -2)
+        inputs_embeds = self.spectrogram(input_features["input_features"]).transpose(-1, -2)
         if self.config.dataset.get("mel_is_conditioned", None):
             composer_value = composer_to_feature_token[composer]
             composer_value = torch.tensor(composer_value, device=self.device)
@@ -1485,112 +1485,112 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
 
-
-class Pop2PianoModel(Pop2PianoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
-    def __init__(self, config: Pop2PianoConfig):
-        super(Pop2PianoModel, self).__init__(config)
-        self.config = config
-        self.spectrogram = LogMelSpectrogram(sample_rate=self.config.dataset.get("sample_rate"),
-                                             n_fft=self.config.n_fft,
-                                             hop_length=self.config.hop_length,
-                                             f_min=self.config.f_min,
-                                             n_mels=self.config.n_mels
-                                             )
-        if self.config.dataset.get("mel_is_conditioned", None):
-            n_dim = 512
-            composer_n_vocab = len(config.composer_to_feature_token)
-            embedding_offset = min(config.composer_to_feature_token.values())
-            self.mel_conditioner = ConcatEmbeddingToMel(embedding_offset=embedding_offset,
-                                                        n_vocab=composer_n_vocab,
-                                                        n_dim=n_dim
-                                                        )
-        self.transformer = Pop2PianoForConditionalGeneration(config)
-        self.transformer.config.bos_token_id = self.config.eos_token_id
-
-        self.post_init()
-
-    def get_encoder(self):
-        return self.transformer.encoder
-
-    def get_decoder(self):
-        return self.transformer.decoder
-
-    def get_input_embeddings(self):
-        return self.transformer.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.transformer.decoder.embed_tokens = value
-
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
-        not be updated during training.
-        """
-        self.transformer.encoder._freeze_parameters()
-
-    def freeze_decoder(self):
-        """
-        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
-        not be updated during training.
-        """
-        self.transformer.decoder._freeze_parameters()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = self.transformer.resize_token_embeddings(new_num_tokens)
-        self.config.vocab_size = new_num_tokens
-        return new_embeddings
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
-
-    def forward(self,
-                inputs: BatchFeature,
-                composer="composer1",
-                max_batch_size:int = None,
-                n_bars:int = 2,
-                return_dict:Optional[bool] = False,
-                **kwargs
-                ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput] :
-
-        # select composer randomly if not already given
-        composer_to_feature_token = self.config.composer_to_feature_token
-        if composer is None:
-            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
-        elif composer not in composer_to_feature_token.keys():
-            raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
-
-        n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
-        max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
-        max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
-
-        relative_tokens_arr = []
-        # For multiple audios(batch, seq_len, seq_dim)
-        for i, input_embeds in enumerate(inputs["input_features"]):
-            input_embeds = self.spectrogram(input_embeds).transpose(-1, -2)
-            if self.config.dataset.get("mel_is_conditioned", None):
-                composer_value = composer_to_feature_token[composer]
-                composer_value = torch.tensor(composer_value, device=self.device)
-                composer_value = composer_value.repeat(input_embeds.shape[0])
-                input_embeds = self.mel_conditioner(input_embeds, composer_value)
-
-            # As described in the official pop2piano implementation
-            relative_tokens = self.transformer.generate(inputs_embeds=input_embeds,
-                                                        max_length=max_length,
-                                                        **kwargs
-                                                        )
-            relative_tokens_arr.append(relative_tokens)
-
-        if return_dict:
-            return BackboneOutput(feature_maps=relative_tokens_arr)
-        return relative_tokens_arr
+#
+# class Pop2PianoModel(Pop2PianoPreTrainedModel):
+#     _keys_to_ignore_on_load_missing = [
+#         r"encoder.embed_tokens.weight",
+#         r"decoder.embed_tokens.weight",
+#     ]
+#     _keys_to_ignore_on_load_unexpected = [
+#         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+#     ]
+#     def __init__(self, config: Pop2PianoConfig):
+#         super(Pop2PianoModel, self).__init__(config)
+#         self.config = config
+#         self.spectrogram = LogMelSpectrogram(sample_rate=self.config.dataset.get("sample_rate"),
+#                                              n_fft=self.config.n_fft,
+#                                              hop_length=self.config.hop_length,
+#                                              f_min=self.config.f_min,
+#                                              n_mels=self.config.n_mels
+#                                              )
+#         if self.config.dataset.get("mel_is_conditioned", None):
+#             n_dim = 512
+#             composer_n_vocab = len(config.composer_to_feature_token)
+#             embedding_offset = min(config.composer_to_feature_token.values())
+#             self.mel_conditioner = ConcatEmbeddingToMel(embedding_offset=embedding_offset,
+#                                                         n_vocab=composer_n_vocab,
+#                                                         n_dim=n_dim
+#                                                         )
+#         self.transformer = Pop2PianoForConditionalGeneration(config)
+#         self.transformer.config.bos_token_id = self.config.eos_token_id
+#
+#         self.post_init()
+#
+#     def get_encoder(self):
+#         return self.transformer.encoder
+#
+#     def get_decoder(self):
+#         return self.transformer.decoder
+#
+#     def get_input_embeddings(self):
+#         return self.transformer.get_input_embeddings()
+#
+#     def set_input_embeddings(self, value):
+#         self.transformer.decoder.embed_tokens = value
+#
+#     def freeze_encoder(self):
+#         """
+#         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+#         not be updated during training.
+#         """
+#         self.transformer.encoder._freeze_parameters()
+#
+#     def freeze_decoder(self):
+#         """
+#         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+#         not be updated during training.
+#         """
+#         self.transformer.decoder._freeze_parameters()
+#
+#     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+#         new_embeddings = self.transformer.resize_token_embeddings(new_num_tokens)
+#         self.config.vocab_size = new_num_tokens
+#         return new_embeddings
+#
+#     def _freeze_parameters(self):
+#         for param in self.parameters():
+#             param.requires_grad = False
+#         self._requires_grad = False
+#
+#     def forward(self,
+#                 inputs: BatchFeature,
+#                 composer="composer1",
+#                 max_batch_size:int = None,
+#                 n_bars:int = 2,
+#                 return_dict:Optional[bool] = False,
+#                 **kwargs
+#                 ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput] :
+#
+#         # select composer randomly if not already given
+#         composer_to_feature_token = self.config.composer_to_feature_token
+#         if composer is None:
+#             composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
+#         elif composer not in composer_to_feature_token.keys():
+#             raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
+#
+#         n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
+#         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
+#         max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
+#
+#         relative_tokens_arr = []
+#         # For multiple audios(batch, seq_len, seq_dim)
+#         for i, input_embeds in enumerate(inputs["input_features"]):
+#             input_embeds = self.spectrogram(input_embeds).transpose(-1, -2)
+#             if self.config.dataset.get("mel_is_conditioned", None):
+#                 composer_value = composer_to_feature_token[composer]
+#                 composer_value = torch.tensor(composer_value, device=self.device)
+#                 composer_value = composer_value.repeat(input_embeds.shape[0])
+#                 input_embeds = self.mel_conditioner(input_embeds, composer_value)
+#
+#             # As described in the official pop2piano implementation
+#             relative_tokens = self.transformer.generate(inputs_embeds=input_embeds,
+#                                                         max_length=max_length,
+#                                                         **kwargs
+#                                                         )
+#             relative_tokens_arr.append(relative_tokens)
+#
+#         if return_dict:
+#             return BackboneOutput(feature_maps=relative_tokens_arr)
+#         return relative_tokens_arr
 
 
