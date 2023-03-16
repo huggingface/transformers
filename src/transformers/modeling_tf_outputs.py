@@ -55,8 +55,8 @@ class TFBaseModelOutputWithNoAttention(ModelOutput):
         last_hidden_state (`tf.Tensor` shape `(batch_size, num_channels, height, width)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings, if the model has an embedding layer, + one for
+            the output of each layer) of shape `(batch_size, num_channels, height, width)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
@@ -949,3 +949,34 @@ class TFImageClassifierOutputWithNoAttention(ModelOutput):
     loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+
+
+@dataclass
+class TFMaskedImageModelingOutput(ModelOutput):
+    """
+    Args:
+    Base class for outputs of masked image completion / in-painting models.
+        loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Reconstruction loss.
+        reconstruction (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+           Reconstructed / completed images.
+        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when
+        `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings, if the model has an embedding layer, + one for
+            the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called
+            feature maps) of the model at the output of each stage.
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when
+        `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, patch_size, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[tf.Tensor] = None
+    reconstruction: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+
+    @property
+    def logits(self):
+        return self.reconstruction
