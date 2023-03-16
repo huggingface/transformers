@@ -1171,6 +1171,7 @@ class NeptuneCallback(TrainerCallback):
 
         try:
             from neptune import Run
+
             try:
                 from neptune.integrations.utils import verify_type
             except ImportError:
