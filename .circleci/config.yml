@@ -12,7 +12,7 @@ jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - run: echo $CIRCLE_PROJECT_USERNAME
@@ -26,7 +26,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - checkout
@@ -85,7 +85,7 @@ jobs:
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         parallelism: 1
         steps:
             - checkout
@@ -111,7 +111,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -121,8 +121,8 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.5-code_quality-{{ checksum "setup.py" }}
-                      - v0.5-code-quality
+                      - v0.6-code_quality-{{ checksum "setup.py" }}
+                      - v0.6-code-quality
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
@@ -144,7 +144,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: cimg/python:3.8.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -154,8 +154,8 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.5-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.5-repository_consistency
+                      - v0.6-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.6-repository_consistency
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
