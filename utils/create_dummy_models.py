@@ -20,13 +20,13 @@ import inspect
 import json
 import os
 import shutil
-import sys
 import tempfile
 import traceback
 from pathlib import Path
 
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
+from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
 from huggingface_hub import Repository, create_repo, upload_folder
 
 from transformers import (
@@ -57,7 +57,6 @@ logging.set_verbosity_error()
 logging.disable_progress_bar()
 logger = logging.get_logger(__name__)
 
-sys.path.append(".")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 if not is_torch_available():
@@ -65,8 +64,6 @@ if not is_torch_available():
 
 if not is_tf_available():
     raise ValueError("Please install TensorFlow.")
-
-from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model  # noqa E402
 
 
 FRAMEWORKS = ["pytorch", "tensorflow"]
