@@ -80,14 +80,14 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     Constructs a Pix2Struct image processor.
 
     Args:
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard
             deviation.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
+        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+            The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
             paper](https://arxiv.org/pdf/2210.03347.pdf).
@@ -125,7 +125,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         requires_backends(self.extract_flattened_patches, "torch")
 
-        # convert to torch if
+        # convert to torch
         image = to_channel_dimension_format(image, ChannelDimension.FIRST)
         image = torch.from_numpy(image)
 
@@ -225,25 +225,25 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         https://github.com/google-research/pix2struct/blob/main/pix2struct/preprocessing/preprocessing_utils.py
 
         Args:
-            text (`str`):
+            text (`str`, *optional*, defaults to ):
                 Text to render.
-            text_size (`int`):
+            text_size (`int`, *optional*, defaults to 36):
                 Size of the text.
-            text_color (`str`):
+            text_color (`str`, *optional*, defaults to `"black"`):
                 Color of the text.
-            background_color (`str`):
+            background_color (`str`, *optional*, defaults to `"white"`):
                 Color of the background.
-            left_padding (`int`):
+            left_padding (`int`, *optional*, defaults to 5):
                 Padding on the left.
-            right_padding (`int`):
+            right_padding (`int`, *optional*, defaults to 5):
                 Padding on the right.
-            top_padding (`int`):
+            top_padding (`int`, *optional*, defaults to 5):
                 Padding on the top.
-            bottom_padding (`int`):
+            bottom_padding (`int`, *optional*, defaults to 5):
                 Padding on the bottom.
-            font_bytes (`bytes`):
+            font_bytes (`bytes`, *optional*):
                 Bytes of the font to use. If `None`, the default font will be used.
-            font_path (`str`):
+            font_path (`str`, *optional*):
                 Path to the font to use. If `None`, the default font will be used.
         """
         requires_backends(self.render_text, "vision")
@@ -274,18 +274,21 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         draw.text(xy=(left_padding, top_padding), text=wrapped_text, fill=text_color, font=font)
         return image
 
-    def render_header(self, image: ImageInput, header: str, **kwargs):
+    def render_header(self, image: np.ndarray, header: str, **kwargs):
         """
-        Renders a header on a PIL image and returns a new PIL image.
+        Renders the input text as a header on the input image.
 
         Args:
-            image (`PIL.Image`):
+            image (`np.ndarray`):
                 The image to render the header on.
             header (`str`):
                 The header text.
+            data_format (`Union[ChannelDimension, str]`, *optional*):
+                The data format of the image. Can be either "ChannelDimension.channels_first" or
+                "ChannelDimension.channels_last".
 
         Returns:
-            `PIL.Image`: The image with the header rendered.
+            `np.ndarray`: The image with the header rendered.
         """
         requires_backends(self.render_header, "vision")
 
@@ -310,18 +313,18 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        max_patches: Optional[int] = None,
         header_text: Optional[str] = None,
-        patch_size: Optional[Dict[str, int]] = None,
-        do_normalize: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: bool = None,
+        do_normalize: Optional[bool] = None,
+        max_patches: Optional[int] = None,
+        patch_size: Optional[Dict[str, int]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
-    ) -> PIL.Image.Image:
+    ) -> ImageInput:
         """
         Preprocess an image or batch of images. The processor first computes the maximum possible number of
-        aspect-ration preserving patches of size `patch_size` that can be extracted from the image. It then padds the
+        aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
         image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
         images are standardized following the tensorflow implementation of `per_image_standardization`
         (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
@@ -330,11 +333,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            max_patches (`int`, *optional*):
+            max_patches (`int`, *optional*, defaults to `self.max_patches`):
                 Maximum number of patches to extract.
-            header_text (`str`, *optional*):
-                Text to render as a header.
-            patch_size (`dict`, *optional*):
+            header_text (`Union[List[str], str]`, *optional*):
+                Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
+            patch_size (`dict`, *optional*, defaults to `self.patch_size`):
                 Dictionary containing the patch height and width.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
