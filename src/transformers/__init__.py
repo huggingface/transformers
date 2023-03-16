@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.27.0.dev0"
+__version__ = "4.28.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -241,6 +241,7 @@ _import_structure = {
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
+    "models.convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextV2Config"],
     "models.cpm": [],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
@@ -347,6 +348,7 @@ _import_structure = {
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
+    "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -370,6 +372,7 @@ _import_structure = {
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
+    "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
@@ -672,6 +675,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
+    _import_structure["models.llama"].append("LlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -1009,6 +1013,7 @@ else:
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_VISION_2_SEQ_MAPPING",
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
@@ -1041,6 +1046,7 @@ else:
             "AutoModelForVideoClassification",
             "AutoModelForVision2Seq",
             "AutoModelForVisualQuestionAnswering",
+            "AutoModelForZeroShotImageClassification",
             "AutoModelForZeroShotObjectDetection",
             "AutoModelWithLMHead",
         ]
@@ -1303,6 +1309,15 @@ else:
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnextv2"].extend(
+        [
+            "CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextV2Backbone",
+            "ConvNextV2ForImageClassification",
+            "ConvNextV2Model",
+            "ConvNextV2PreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -1793,6 +1808,13 @@ else:
             "LiltPreTrainedModel",
         ]
     )
+    _import_structure["models.llama"].extend(
+        [
+            "LlamaForCausalLM",
+            "LlamaModel",
+            "LlamaPreTrainedModel",
+        ]
+    )
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1908,6 +1930,14 @@ else:
             "MegatronBertForTokenClassification",
             "MegatronBertModel",
             "MegatronBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mgp_str"].extend(
+        [
+            "MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MgpstrForSceneTextRecognition",
+            "MgpstrModel",
+            "MgpstrPreTrainedModel",
         ]
     )
     _import_structure["models.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
@@ -2802,6 +2832,7 @@ else:
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
+            "TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
             "TF_MODEL_MAPPING",
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
             "TFAutoModel",
@@ -2820,6 +2851,7 @@ else:
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelForVision2Seq",
+            "TFAutoModelForZeroShotImageClassification",
             "TFAutoModelWithLMHead",
         ]
     )
@@ -3855,6 +3887,7 @@ if TYPE_CHECKING:
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+    from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -3957,6 +3990,7 @@ if TYPE_CHECKING:
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
+    from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -3975,6 +4009,7 @@ if TYPE_CHECKING:
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
+    from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
@@ -4256,6 +4291,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
+        from .models.llama import LlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
@@ -4475,9 +4511,9 @@ if TYPE_CHECKING:
             TypicalLogitsWarper,
             top_k_top_p_filtering,
         )
-        from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4539,6 +4575,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
@@ -4571,6 +4608,7 @@ if TYPE_CHECKING:
             AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
+            AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
@@ -4785,6 +4823,13 @@ if TYPE_CHECKING:
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
+        )
+        from .models.convnextv2 import (
+            CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextV2Backbone,
+            ConvNextV2ForImageClassification,
+            ConvNextV2Model,
+            ConvNextV2PreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5178,6 +5223,11 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -5267,6 +5317,12 @@ if TYPE_CHECKING:
             MegatronBertForTokenClassification,
             MegatronBertModel,
             MegatronBertPreTrainedModel,
+        )
+        from .models.mgp_str import (
+            MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MgpstrForSceneTextRecognition,
+            MgpstrModel,
+            MgpstrPreTrainedModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (
@@ -6003,6 +6059,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+            TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
@@ -6021,6 +6078,7 @@ if TYPE_CHECKING:
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
+            TFAutoModelForZeroShotImageClassification,
             TFAutoModelWithLMHead,
         )
         from .models.bart import (
@@ -6254,7 +6312,6 @@ if TYPE_CHECKING:
         from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
             TFMobileBertForMultipleChoice,
             TFMobileBertForNextSentencePrediction,
@@ -6265,6 +6322,9 @@ if TYPE_CHECKING:
             TFMobileBertMainLayer,
             TFMobileBertModel,
             TFMobileBertPreTrainedModel,
+        )
+        from .models.mobilevit import (
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileViTForImageClassification,
             TFMobileViTForSemanticSegmentation,
             TFMobileViTModel,

@@ -24,7 +24,14 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 
-COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120, "RUN_PIPELINE_TESTS": False}
+COMMON_ENV_VARIABLES = {
+    "OMP_NUM_THREADS": 1,
+    "TRANSFORMERS_IS_CI": True,
+    "PYTEST_TIMEOUT": 120,
+    "RUN_PIPELINE_TESTS": False,
+    "RUN_PT_TF_CROSS_TESTS": False,
+    "RUN_PT_FLAX_CROSS_TESTS": False,
+}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
 
