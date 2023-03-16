@@ -67,6 +67,8 @@ if not is_torch_available():
 if not is_tf_available():
     raise ValueError("Please install TensorFlow.")
 
+from get_test_info import get_model_to_tester_mapping
+
 FRAMEWORKS = ["pytorch", "tensorflow"]
 INVALID_ARCH = []
 TARGET_VOCAB_SIZE = 1024
@@ -360,7 +362,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     return processor
 
 
-def get_tiny_config(config_class, **model_tester_kwargs):
+def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
 
     Args:
@@ -383,9 +385,17 @@ def get_tiny_config(config_class, **model_tester_kwargs):
         module_name = model_type_to_module_name(model_type)
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
-        module = importlib.import_module(f".models.{module_name}.test_modeling_{modeling_name}", package="tests")
-        camel_case_model_name = config_class.__name__.split("Config")[0]
-        model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
+        test_file = os.path.join("tests", "models", module_name, f"test_modeling_{modeling_name}.py")
+        models_to_model_testers = get_model_to_tester_mapping(test_file)
+        # Find the model tester class
+        model_tester_class = None
+        if len(models_to_model_testers) > 0:
+            if model_class is not None and model_class in models_to_model_testers:
+                # If model_class is provided, we use it to find the corresponding model tester class
+                model_tester_class = models_to_model_testers[model_class]
+            else:
+                # Otherwise, let's take the one with shortest name
+                model_tester_class = sorted(models_to_model_testers.values(), key=lambda x: x.__name__)[0]
     except ModuleNotFoundError:
         error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
         raise ValueError(error)
