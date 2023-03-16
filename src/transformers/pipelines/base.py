@@ -769,8 +769,8 @@ class Pipeline(_ScikitCompat):
         self.modelcard = modelcard
         self.framework = framework
 
-        if self.framework == "pt" and device is not None:
-            self.model = self.model.to(device=device)
+        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
+            self.model.to(device)
 
         if device is None:
             # `accelerate` device map
