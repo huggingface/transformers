@@ -26,6 +26,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     get_image_size,
+    infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
     valid_images,
@@ -72,6 +73,115 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
         image_tensor.size(1) * patch_height * patch_width,
     )
     return patches.unsqueeze(0)
+
+
+# Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L106
+def render_text(
+    text: str,
+    text_size: int = 36,
+    text_color: str = "black",
+    background_color: str = "white",
+    left_padding: int = 5,
+    right_padding: int = 5,
+    top_padding: int = 5,
+    bottom_padding: int = 5,
+    font_bytes: Optional[bytes] = None,
+    font_path: Optional[str] = None,
+) -> Image.Image:
+    """
+    Render text. This script is entirely adapted from the original script that can be found here:
+    https://github.com/google-research/pix2struct/blob/main/pix2struct/preprocessing/preprocessing_utils.py
+
+    Args:
+        text (`str`, *optional*, defaults to ):
+            Text to render.
+        text_size (`int`, *optional*, defaults to 36):
+            Size of the text.
+        text_color (`str`, *optional*, defaults to `"black"`):
+            Color of the text.
+        background_color (`str`, *optional*, defaults to `"white"`):
+            Color of the background.
+        left_padding (`int`, *optional*, defaults to 5):
+            Padding on the left.
+        right_padding (`int`, *optional*, defaults to 5):
+            Padding on the right.
+        top_padding (`int`, *optional*, defaults to 5):
+            Padding on the top.
+        bottom_padding (`int`, *optional*, defaults to 5):
+            Padding on the bottom.
+        font_bytes (`bytes`, *optional*):
+            Bytes of the font to use. If `None`, the default font will be used.
+        font_path (`str`, *optional*):
+            Path to the font to use. If `None`, the default font will be used.
+    """
+    requires_backends(render_text, "vision")
+    # Add new lines so that each line is no more than 80 characters.
+
+    wrapper = textwrap.TextWrapper(width=80)
+    lines = wrapper.wrap(text=text)
+    wrapped_text = "\n".join(lines)
+
+    if font_bytes is not None and font_path is None:
+        font = io.BytesIO(font_bytes)
+    elif font_path is not None:
+        font = font_path
+    else:
+        font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
+    font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
+
+    # Use a temporary canvas to determine the width and height in pixels when
+    # rendering the text.
+    temp_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), background_color))
+    _, _, text_width, text_height = temp_draw.textbbox((0, 0), wrapped_text, font)
+
+    # Create the actual image with a bit of padding around the text.
+    image_width = text_width + left_padding + right_padding
+    image_height = text_height + top_padding + bottom_padding
+    image = Image.new("RGB", (image_width, image_height), background_color)
+    draw = ImageDraw.Draw(image)
+    draw.text(xy=(left_padding, top_padding), text=wrapped_text, fill=text_color, font=font)
+    return image
+
+
+# Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L87
+def render_header(image: np.ndarray, header: str, **kwargs):
+    """
+    Renders the input text as a header on the input image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to render the header on.
+        header (`str`):
+            The header text.
+        data_format (`Union[ChannelDimension, str]`, *optional*):
+            The data format of the image. Can be either "ChannelDimension.channels_first" or
+            "ChannelDimension.channels_last".
+
+    Returns:
+        `np.ndarray`: The image with the header rendered.
+    """
+    requires_backends(render_header, "vision")
+
+    # Convert to PIL image if necessary
+    image = to_pil_image(image)
+
+    header_image = render_text(header, **kwargs)
+    new_width = max(header_image.width, image.width)
+
+    new_height = int(image.height * (new_width / image.width))
+    new_header_height = int(header_image.height * (new_width / header_image.width))
+
+    new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
+    new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
+    new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
+
+    # Convert back to the original framework if necessary
+    image = to_numpy_array(image)
+
+    if infer_channel_dimension_format(image) == ChannelDimension.LAST:
+        image = to_channel_dimension_format(image, ChannelDimension.LAST)
+
+    return new_image
 
 
 class Pix2StructImageProcessor(BaseImageProcessor):
@@ -210,109 +320,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         return normalize(image, mean=mean, std=adjusted_stddev, data_format=data_format, **kwargs)
 
-    def render_text(
-        self,
-        text: str,
-        text_size: int = 36,
-        text_color: str = "black",
-        background_color: str = "white",
-        left_padding: int = 5,
-        right_padding: int = 5,
-        top_padding: int = 5,
-        bottom_padding: int = 5,
-        font_bytes: Optional[bytes] = None,
-        font_path: Optional[str] = None,
-    ) -> Image.Image:
-        """
-        Render text. This script is entirely adapted from the original script that can be found here:
-        https://github.com/google-research/pix2struct/blob/main/pix2struct/preprocessing/preprocessing_utils.py
-
-        Args:
-            text (`str`, *optional*, defaults to ):
-                Text to render.
-            text_size (`int`, *optional*, defaults to 36):
-                Size of the text.
-            text_color (`str`, *optional*, defaults to `"black"`):
-                Color of the text.
-            background_color (`str`, *optional*, defaults to `"white"`):
-                Color of the background.
-            left_padding (`int`, *optional*, defaults to 5):
-                Padding on the left.
-            right_padding (`int`, *optional*, defaults to 5):
-                Padding on the right.
-            top_padding (`int`, *optional*, defaults to 5):
-                Padding on the top.
-            bottom_padding (`int`, *optional*, defaults to 5):
-                Padding on the bottom.
-            font_bytes (`bytes`, *optional*):
-                Bytes of the font to use. If `None`, the default font will be used.
-            font_path (`str`, *optional*):
-                Path to the font to use. If `None`, the default font will be used.
-        """
-        requires_backends(self.render_text, "vision")
-        # Add new lines so that each line is no more than 80 characters.
-
-        wrapper = textwrap.TextWrapper(width=80)
-        lines = wrapper.wrap(text=text)
-        wrapped_text = "\n".join(lines)
-
-        if font_bytes is not None and font_path is None:
-            font = io.BytesIO(font_bytes)
-        elif font_path is not None:
-            font = font_path
-        else:
-            font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
-        font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
-
-        # Use a temporary canvas to determine the width and height in pixels when
-        # rendering the text.
-        temp_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), background_color))
-        _, _, text_width, text_height = temp_draw.textbbox((0, 0), wrapped_text, font)
-
-        # Create the actual image with a bit of padding around the text.
-        image_width = text_width + left_padding + right_padding
-        image_height = text_height + top_padding + bottom_padding
-        image = Image.new("RGB", (image_width, image_height), background_color)
-        draw = ImageDraw.Draw(image)
-        draw.text(xy=(left_padding, top_padding), text=wrapped_text, fill=text_color, font=font)
-        return image
-
-    def render_header(self, image: np.ndarray, header: str, **kwargs):
-        """
-        Renders the input text as a header on the input image.
-
-        Args:
-            image (`np.ndarray`):
-                The image to render the header on.
-            header (`str`):
-                The header text.
-            data_format (`Union[ChannelDimension, str]`, *optional*):
-                The data format of the image. Can be either "ChannelDimension.channels_first" or
-                "ChannelDimension.channels_last".
-
-        Returns:
-            `np.ndarray`: The image with the header rendered.
-        """
-        requires_backends(self.render_header, "vision")
-
-        # Convert to PIL image if necessary
-        image = to_pil_image(image)
-
-        header_image = self.render_text(header, **kwargs)
-        new_width = max(header_image.width, image.width)
-
-        new_height = int(image.height * (new_width / image.width))
-        new_header_height = int(header_image.height * (new_width / header_image.width))
-
-        new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
-        new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
-        new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
-
-        # Convert back to the original framework if necessary
-        image = to_numpy_array(image)
-
-        return new_image
-
     def preprocess(
         self,
         images: ImageInput,
@@ -387,7 +394,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 header_text = [header_text] * len(images)
 
             images = [
-                self.render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
+                render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
                 for i, image in enumerate(images)
             ]
 
