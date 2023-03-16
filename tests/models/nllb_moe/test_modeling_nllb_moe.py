@@ -362,77 +362,46 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         of the first batch.
         """
         model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
-        tokenizer = NllbTokenizer.from_pretrained(
-            "facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn"
-        )
+        src_text = ["Life is like a box of chocolates.", "I just want to code."]
+        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
+        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
 
-        src_text = "Life is like a box of chocolates."
-        tgt_text = "La vie est comme une boîte de chocolat."
-
-        model_inputs = tokenizer(
-            [src_text, "I just want to code."], text_target=tgt_text, return_tensors="pt", padding=True
-        )
-        model_inputs.pop("labels")
         with torch.no_grad():
-            hf_outputs = model(
-                **model_inputs, decoder_input_ids=torch.tensor([[2, tokenizer.lang_code_to_id["fra_Latn"]]] * 2)
-            )
-        hf_outputs.last_hidden_state[1, 0, :30]
+            output = model(**model_inputs, decoder_input_ids=decoder_input_ids).logits
 
         # fmt: off
-        EXPECTED_ENCODER_LAST_HIDDEN = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563,
-         1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346,
-         0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647,
-         1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
+        EXPECTED_ENCODER_LAST_HIDDEN = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
         # fmt: on
 
         torch.testing.assert_allclose(
-            hf_outputs.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
         )
 
         # fmt: off
-        EXPECTED_DECODER_LAST_HIDDEN = torch.Tensor([-6.0425e-02, -2.0015e-01,  6.0575e-02, -8.6366e-01, -1.1310e+00,
-         6.8369e-01,  7.5615e-01,  7.3555e-01,  2.3071e-01,  1.5954e+00,
-        -7.0728e-01, -2.2647e-01, -1.3292e+00,  4.8246e-01, -6.9153e-01,
-        -1.8199e-02, -7.3664e-01,  1.5902e-03,  1.0760e-01,  1.0298e-01,
-        -9.3933e-01, -4.6567e-01,  8.0417e-01,  1.5243e+00,  5.5844e-01,
-        -9.9239e-02,  1.4885e+00,  7.1527e-02, -5.2612e-01,  9.4435e-02])
+        EXPECTED_DECODER_LAST_HIDDEN = torch.Tensor([-6.0425e-02, -2.0015e-01,  6.0575e-02, -8.6366e-01, -1.1310e+00, 6.8369e-01,  7.5615e-01,  7.3555e-01,  2.3071e-01,  1.5954e+00, -7.0728e-01, -2.2647e-01, -1.3292e+00,  4.8246e-01, -6.9153e-01, -1.8199e-02, -7.3664e-01,  1.5902e-03,  1.0760e-01,  1.0298e-01, -9.3933e-01, -4.6567e-01,  8.0417e-01,  1.5243e+00,  5.5844e-01, -9.9239e-02,  1.4885e+00,  7.1527e-02, -5.2612e-01,  9.4435e-02])
         # fmt: on
 
         torch.testing.assert_allclose(
-            hf_outputs.decoder_last_hidden_state[1, 0, :30], EXPECTED_DECODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
+            output.decoder_last_hidden_state[1, 0, :30], EXPECTED_DECODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
         )
 
     def test_inference_head(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").to(torch_device)
-        tokenizer = NllbTokenizer.from_pretrained(
-            "facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn"
-        )
+        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
+        src_text = ["Life is like a box of chocolates.", "I just want to code."]
+        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
+        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
 
-        src_text = "Life is like a box of chocolates."
-        tgt_text = "La vie est comme une boîte de chocolat."
-
-        model_inputs = tokenizer(
-            [src_text, "I just want to code."], text_target=tgt_text, return_tensors="pt", padding=True
-        )
-        model_inputs.pop("labels")
         with torch.no_grad():
-            output = model(
-                **model_inputs, decoder_input_ids=torch.tensor([[2, tokenizer.lang_code_to_id["fra_Latn"]]] * 2)
-            ).logits
+            output = model(**model_inputs, decoder_input_ids=decoder_input_ids).logits
 
-        # change to expected output here
         # fmt: off
-        EXPECTED_LOGTIS = torch.Tensor(
-            [
-                -0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,
-            ]
-        )
+        EXPECTED_LOGTIS = torch.Tensor([-0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,])
         # fmt: on
 
-        self.assertTrue(torch.allclose(output[1, 0, :30], EXPECTED_LOGTIS, atol=TOLERANCE))
+        self.assertTrue(torch.allclose(output[1, 0, :30].cpu(), EXPECTED_LOGTIS, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
+        # TODO last test to run!
         model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").to(torch_device)
         tokenizer = NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts", src_lang="fr", tgt_lang="en")
 
@@ -501,7 +470,7 @@ class NllbMoeRouterTest(unittest.TestCase):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         logits = classfier(hidden_states.reshape((batch_size * sequence_length), hidden_dim))
         top_1_mask, router_probs, router_logits = hf_router.route_tokens(logits, padding_mask=mask)
-        expert_index = torch.argmax(top_1_mask, dim=-1) 
+        torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()
         set_seed(0)
         experts = [
