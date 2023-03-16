@@ -88,9 +88,9 @@ class LlamaConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=-1,
-        bos_token_id=0,
-        eos_token_id=1,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
         tie_word_embeddings=False,
         **kwargs,
     ):
