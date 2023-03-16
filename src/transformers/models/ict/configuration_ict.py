@@ -83,7 +83,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = upsampler.config
     ```"""
-    model_type = "ict-guided-upsampler"
+    model_type = "ict_guided_upsampler"
 
     def __init__(
         self,
@@ -176,7 +176,7 @@ class ICTTransformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "ict-transformer"
+    model_type = "ict_transformer"
 
     def __init__(
         self,
