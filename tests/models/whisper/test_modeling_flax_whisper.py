@@ -785,12 +785,19 @@ class FlaxWhisperEncoderModelTester:
             is_decoder=self.is_decoder,
         )
 
+    def prepare_whisper_encoder_inputs_dict(
+        self,
+        input_features,
+    ):
+        return {
+            "input_features": input_features,
+        }
+
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length])
 
         config = self.get_config()
-        inputs_dict = prepare_whisper_encoder_inputs_dict(
-            config,
+        inputs_dict = self.prepare_whisper_encoder_inputs_dict(
             input_features=input_features,
         )
         return config, inputs_dict
@@ -843,7 +850,7 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
     #     self.maxDiff = 3000
 
     def setUp(self):
-        self.model_tester = FlaxWhisperModelTester(self)
+        self.model_tester = FlaxWhisperEncoderModelTester(self)
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
