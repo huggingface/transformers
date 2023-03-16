@@ -363,7 +363,8 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval().to(torch_device)
+        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
+        model = model.eval().to(torch_device)
         src_text = ["Life is like a box of chocolates.", "I just want to code."]
         model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
         decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
@@ -388,11 +389,8 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
 
     def test_inference_head(self):
-        model = (
-            NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
-            .eval()
-            .to(torch_device)
-        )
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
+        model = model.eval().to(torch_device)
         src_text = ["Life is like a box of chocolates.", "I just want to code."]
         model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
         decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
