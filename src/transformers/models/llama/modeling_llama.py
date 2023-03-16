@@ -207,6 +207,7 @@ class LlamaAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -230,7 +231,7 @@ class LlamaAttention(nn.Module):
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        past_key_value = (key_states, value_states)
+        past_key_value = (key_states, value_states) if use_cache else None
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -317,6 +318,7 @@ class LlamaDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            use_cache=use_cache,
         )
         hidden_states = residual + hidden_states
 
