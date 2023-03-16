@@ -718,8 +718,6 @@ class Trainer:
         """
         self.callback_handler.remove_callback(callback)
 
-    #! model
-    # Accelerate handles this automatically in prepare
     def _move_model_to_device(self, model, device):
         model = model.to(device)
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
@@ -869,28 +867,29 @@ class Trainer:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         if isinstance(train_dataset, torch.utils.data.IterableDataset):
-            if self.args.world_size > 1:
-                #! accelerate.prepare
-                # Accelerate can handle this
-                train_dataset = IterableDatasetShard(
-                    train_dataset,
-                    batch_size=self._train_batch_size,
-                    drop_last=self.args.dataloader_drop_last,
-                    num_processes=self.args.world_size,
-                    process_index=self.args.process_index,
-                )
-
-            return DataLoader(
+            if self.args.accelerator is None:
+                if self.args.world_size > 1:
+                    train_dataset = IterableDatasetShard(
+                        train_dataset,
+                        batch_size=self._train_batch_size,
+                        drop_last=self.args.dataloader_drop_last,
+                        num_processes=self.args.world_size,
+                        process_index=self.args.process_index,
+                    )
+            dataloader = DataLoader(
                 train_dataset,
                 batch_size=self._train_batch_size,
                 collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
+            if self.args.accelerator:
+                return self.accelerator.prepare(dataloader)
+            return dataloader
 
         train_sampler = self._get_train_sampler()
 
-        return DataLoader(
+        dataloader = DataLoader(
             train_dataset,
             batch_size=self._train_batch_size,
             sampler=train_sampler,
@@ -900,6 +899,9 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
             worker_init_fn=seed_worker,
         )
+        if self.args.accelerator:
+            return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         # Deprecated code
@@ -952,27 +954,29 @@ class Trainer:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
-            if self.args.world_size > 1:
-                #! accelerate.prepare
-                # Accelerate can handle this
-                eval_dataset = IterableDatasetShard(
-                    eval_dataset,
-                    batch_size=self.args.per_device_eval_batch_size,
-                    drop_last=self.args.dataloader_drop_last,
-                    num_processes=self.args.world_size,
-                    process_index=self.args.process_index,
-                )
-            return DataLoader(
+            if self.args.accelerator is None:
+                if self.args.world_size > 1:
+                    eval_dataset = IterableDatasetShard(
+                        eval_dataset,
+                        batch_size=self.args.per_device_eval_batch_size,
+                        drop_last=self.args.dataloader_drop_last,
+                        num_processes=self.args.world_size,
+                        process_index=self.args.process_index,
+                    )
+            dataloader = DataLoader(
                 eval_dataset,
                 batch_size=self.args.eval_batch_size,
                 collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
+            if self.args.accelerator:
+                return self.accelerator.prepare(dataloader)
+            return dataloader
 
         eval_sampler = self._get_eval_sampler(eval_dataset)
 
-        return DataLoader(
+        dataloader = DataLoader(
             eval_dataset,
             sampler=eval_sampler,
             batch_size=self.args.eval_batch_size,
@@ -981,6 +985,9 @@ class Trainer:
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
         )
+        if self.args.accelerator:
+            return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         """
@@ -1001,9 +1008,7 @@ class Trainer:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="test")
 
         if isinstance(test_dataset, torch.utils.data.IterableDataset):
-            if self.args.world_size > 1:
-                #! accelerate.prepare
-                # Accelerate can handle this
+            if self.args.accelerator is None and self.args.world_size > 1:
                 test_dataset = IterableDatasetShard(
                     test_dataset,
                     batch_size=self.args.eval_batch_size,
@@ -1011,7 +1016,7 @@ class Trainer:
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
                 )
-            return DataLoader(
+            dataloader = DataLoader(
                 test_dataset,
                 batch_size=self.args.eval_batch_size,
                 collate_fn=data_collator,
@@ -1019,10 +1024,14 @@ class Trainer:
                 pin_memory=self.args.dataloader_pin_memory,
             )
 
+            if self.args.accelerator:
+                return self.accelerator.prepare(dataloader)
+            return dataloader
+
         test_sampler = self._get_eval_sampler(test_dataset)
 
         # We use the same batch_size as for eval.
-        return DataLoader(
+        dataloader = DataLoader(
             test_dataset,
             sampler=test_sampler,
             batch_size=self.args.eval_batch_size,
@@ -1031,6 +1040,10 @@ class Trainer:
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
         )
+
+        if self.args.accelerator:
+            return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
@@ -1195,8 +1208,6 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
-    #! accelerator.prepare
-    # Should return the prepared scheduler at the end
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or

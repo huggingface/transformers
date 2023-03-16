@@ -1663,7 +1663,6 @@ class TrainingArguments:
 
         return device
 
-    #* Should not need any changes
     @property
     def device(self) -> "torch.device":
         """
@@ -1672,8 +1671,6 @@ class TrainingArguments:
         requires_backends(self, ["torch"])
         return self._setup_devices
 
-    #! tag: state
-    #* Should passthrough to the `AcceleratorState`
     @property
     def n_gpu(self):
         """
@@ -1688,8 +1685,7 @@ class TrainingArguments:
         _ = self._setup_devices
         return self._n_gpu
 
-    #! tag: state
-    #* Should passthrough to the `AcceleratorState.DISTRIBUTED_MODE`
+
     @property
     def parallel_mode(self):
         """
@@ -1715,14 +1711,14 @@ class TrainingArguments:
         else:
             return ParallelMode.NOT_PARALLEL
 
-    #! tag: state
-    #* Should passthrough to the `AcceleratorState.num_processes`
     @property
     def world_size(self):
         """
         The number of processes used in parallel.
         """
         requires_backends(self, ["torch"])
+        if self.accelerator_state is not None:
+            return self.accelerator_state.num_processes
 
         if is_torch_tpu_available():
             return xm.xrt_world_size()
@@ -1734,14 +1730,14 @@ class TrainingArguments:
             return torch.distributed.get_world_size()
         return 1
 
-    #! tag: state
-    #* Should passthrough to the `AcceleratorState.process_index`
     @property
     def process_index(self):
         """
         The index of the current process used.
         """
         requires_backends(self, ["torch"])
+        if self.accelerator_state is not None:
+            return self.accelerator_state.process_index
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
@@ -1752,14 +1748,14 @@ class TrainingArguments:
             return torch.distributed.get_rank()
         return 0
 
-    #! tag: state
-    #* Should passthrough to the `AcceleratorState.local_process_index`
     @property
     def local_process_index(self):
         """
         The index of the local process used.
         """
         requires_backends(self, ["torch"])
+        if self.accelerator_state is not None:
+            return self.accelerator_state.local_process_index
         if is_torch_tpu_available():
             return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():
@@ -1770,9 +1766,6 @@ class TrainingArguments:
             return self.local_rank
         return 0
 
-    #! state
-    #* Should passthrough to the `AcceleratorState.is_local_main_process`
-    #* `AcceleratorState` might want to check `smp.rank()`?
     @property
     def should_log(self):
         """
@@ -1786,9 +1779,6 @@ class TrainingArguments:
             else:
                 return self.process_index == 0
 
-    #! state
-    #* Should passthrough to the `AcceleratorState.is_local_main_process`
-    #* `AcceleratorState` might want to check `smp.rank()`?
     @property
     def should_save(self):
         """
@@ -1831,8 +1821,6 @@ class TrainingArguments:
         """
         return not is_sagemaker_mp_enabled()
 
-    #! tag: gradient accumulation
-    # See if this is actually still needed, Accelerate may need to support neuroncore
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
@@ -1843,7 +1831,7 @@ class TrainingArguments:
         )
 
     #! tag: state
-    #* Should passthrough to the `AcceleratorState.is_main_process`
+    #* Should passthrough to the `AcceleratorState.main_process_first`
     @contextlib.contextmanager
     def main_process_first(self, local=True, desc="work"):
         """
@@ -1865,6 +1853,11 @@ class TrainingArguments:
                 a work description to be used in debug logs
 
         """
+        if self.accelerator_state is not None:
+            if local:
+                yield self.accelerator_state.local_main_process_first(desc)
+            else:
+                yield self.accelerator_state.main_process_first(desc)
         if is_torch_available() and self.world_size > 1:
             main_process_desc = "main process"
             if local:
