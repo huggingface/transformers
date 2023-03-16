@@ -1089,10 +1089,10 @@ class Pix2StructTextBlock(nn.Module):
 
 PIX2STRUCT_START_DOCSTRING = r"""
 
-    The Pix2Struct model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The Pix2Struct model was proposed in [Pix2Struct: Screenshot Parsing as Pretraining for Visual Language
+    Understanding](https://arxiv.org/abs/2210.03347) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
+    Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw,
+    Ming-Wei Chang, Kristina Toutanova. It's an encoder decoder transformer pre-trained in a image-to-text setting.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1103,9 +1103,10 @@ PIX2STRUCT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`Pix2StructTextConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        config (Union[`Pix2StructConfig`, `Pix2StructTextConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 PIX2STRUCT_TEXT_INPUTS_DOCSTRING = r"""
@@ -1293,7 +1294,7 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
+    "The standalone text decoder of Pix2Struct",
     PIX2STRUCT_START_DOCSTRING,
 )
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
