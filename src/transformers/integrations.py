@@ -55,7 +55,10 @@ if _has_comet:
 
 _has_neptune = importlib.util.find_spec("neptune") is not None
 if TYPE_CHECKING and _has_neptune:
-    from neptune.new.metadata_containers.run import Run
+    try:
+        from neptune import Run
+    except ImportError:
+        from neptune.new import Run
 
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
@@ -1163,15 +1166,22 @@ class NeptuneCallback(TrainerCallback):
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "
-                "To install the library, run `pip install neptune-client`."
+                "To install the library, run `pip install neptune`."
             )
 
-        from neptune.new.metadata_containers.run import Run
-
         try:
-            from neptune.new.integrations.utils import verify_type
+            from neptune import Run
+            try:
+                from neptune.integrations.utils import verify_type
+            except ImportError:
+                from neptune.internal.utils import verify_type
         except ImportError:
-            from neptune.new.internal.utils import verify_type
+            from neptune.new.metadata_containers.run import Run
+
+            try:
+                from neptune.new.integrations.utils import verify_type
+            except ImportError:
+                from neptune.new.internal.utils import verify_type
 
         verify_type("api_token", api_token, (str, type(None)))
         verify_type("project", project, (str, type(None)))
