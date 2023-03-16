@@ -1090,9 +1090,9 @@ class Pix2StructTextBlock(nn.Module):
 PIX2STRUCT_START_DOCSTRING = r"""
 
     The Pix2Struct model was proposed in [Pix2Struct: Screenshot Parsing as Pretraining for Visual Language
-    Understanding](https://arxiv.org/abs/2210.03347) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw,
-    Ming-Wei Chang, Kristina Toutanova. It's an encoder decoder transformer pre-trained in a image-to-text setting.
+    Understanding](https://arxiv.org/abs/2210.03347) by Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu,
+    Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova. It's an encoder decoder
+    transformer pre-trained in a image-to-text setting.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
