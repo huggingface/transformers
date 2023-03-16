@@ -44,14 +44,14 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ICTConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "sheonhan/ict-imagenet-32"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]  # TODO
+_CHECKPOINT_FOR_DOC = "sheonhan/ict-imagenet-256"
+_EXPECTED_OUTPUT_SHAPE = [3, 256, 256]
 
 
 ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sheonhan/ict-imagenet-32",
-    "sheonhan/ict-ffhq-32",
-    "sheonhan/ict-imagenet-32",
+    "sheonhan/ict-imagenet-256",
+    "sheonhan/ict-ffhq-256",
+    "sheonhan/ict-places-256",
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
 
@@ -876,8 +876,8 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
 
          >>> from transformers import AutoImageProcessor, ICTModel
 
-         >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-32")
-         >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-32")
+         >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+         >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
 
          >>> url = "TODO"
          >>> image = Image.open(requests.get(url, stream=True).raw)

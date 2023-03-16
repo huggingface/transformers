@@ -238,7 +238,7 @@ def prepare_img():
 class ICTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("sheonhan/ict-imagenet-32") if is_vision_available() else None
+        return ViTFeatureExtractor.from_pretrained("sheonhan/ict-imagenet-256") if is_vision_available() else None
 
     @slow
     @require_accelerate

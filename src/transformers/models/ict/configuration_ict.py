@@ -25,7 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 ICT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sheonhan/ict-imagenet-32": "https://huggingface.co/sheonhan/ict-imagenet-32/resolve/main/config.json",
+    "sheonhan/ict-imagenet-256": "https://huggingface.co/sheonhan/ict-imagenet-256/resolve/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ICTGuidedUpsampler`]. It is used to instantiate
     an [`ICTGuidedUpsampler`] model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [ICTGuidedUpsampler model trained with the ImageNet dataset](https://huggingface.co/sheonhan/ict-imagenet-32).
+    [ICTGuidedUpsampler model trained with the ImageNet dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -74,10 +74,10 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     ```python
     >>> from transformers import ICTGuidedUpsamplerConfig, ICTGuidedUpsampler
 
-    >>> # Initializing a ICT ict-imagenet-32 style configuration
+    >>> # Initializing a ICT ict-imagenet-256 style configuration
     >>> configuration = ICTGuidedUpsamplerConfig()
 
-    >>> # Initializing a model (with random weights) from the ict-imagenet-32 style configuration
+    >>> # Initializing a model (with random weights) from the ict-imagenet-256 style configuration
     >>> upsampler = ICTGuidedUpsampler(configuration)
 
     >>> # Accessing the model configuration
@@ -124,7 +124,7 @@ class ICTTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ICTTransformer`]. It is used to instantiate an
     ICT model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the [ICT model trained with the ImageNet
-    dataset](https://huggingface.co/sheonhan/ict-imagenet-32).
+    dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -167,10 +167,10 @@ class ICTTransformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import ICTTransformerConfig, ICTTransformer
 
-    >>> # Initializing a ICT ict-imagenet-32 style configuration
+    >>> # Initializing a ICT ict-imagenet-256 style configuration
     >>> configuration = ICTTransformerConfig()
 
-    >>> # Initializing a model (with random weights) from the ict-imagenet-32 style configuration
+    >>> # Initializing a model (with random weights) from the ict-imagenet-256 style configuration
     >>> model = ICTTransformer(configuration)
 
     >>> # Accessing the model configuration
@@ -221,7 +221,7 @@ class ICTConfig(PretrainedConfig):
     [`ICTConfig`] is the configuration class to store the configuration of a [`ICTMdel`]. It is used to instantiate an
     ICT model according to the specified arguments, defining the transformer model and guided upsampler configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ICT
-    [sheonhan/ict-imagenet-32](https://huggingface.co/sheonhan/ict-imagenet-32) architecture. Configuration objects
+    [sheonhan/ict-imagenet-256](https://huggingface.co/sheonhan/ict-imagenet-256) architecture. Configuration objects
     inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
     [`PretrainedConfig`] for more information.
         transformer_config (`dict`, *optional*):
@@ -234,9 +234,9 @@ class ICTConfig(PretrainedConfig):
     ```python
     >>> from transformers import ICTConfig, ICTModel
 
-    >>> # Initializing a ICTConfig with sheonhan/ict-imagenet-32 style configuration
+    >>> # Initializing a ICTConfig with sheonhan/ict-imagenet-256 style configuration
     >>> configuration = ICTConfig()
-    >>> # Initializing a ICTModel (with random weights) from the sheonhan/ict-imagenet-32 style configuration
+    >>> # Initializing a ICTModel (with random weights) from the sheonhan/ict-imagenet-256 style configuration
     >>> model = ICTModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config

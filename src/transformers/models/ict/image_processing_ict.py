@@ -100,7 +100,7 @@ class ICTImageProcessor(BaseImageProcessor):
         self.clusters = np.array(clusters) if clusters is not None else self.get_image_net_clusters()
 
     def get_image_net_clusters(self):
-        kmeans_centers = np.load(hf_hub_download(repo_id="sheonhan/ict-imagenet-32", filename="kmeans_centers.npy"))
+        kmeans_centers = np.load(hf_hub_download(repo_id="sheonhan/ict-imagenet-256", filename="kmeans_centers.npy"))
         return np.rint(127.5 * (kmeans_centers + 1.0))
 
     def resize(
