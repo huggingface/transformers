@@ -19,15 +19,17 @@ from ...utils import (
     is_torch_available,
     is_librosa_available,
     is_scipy_available,
-
+    is_soundfile_availble,
+    is_essentia_available,
+    is_pretty_midi_available,
 )
 
-
+# Config
 _import_structure = {
     "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
-    "feature_extraction_pop2piano": ["Pop2PianoFeatureExtractor"],
 }
 
+# Model
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -37,15 +39,26 @@ else:
     _import_structure["modeling_pop2piano"] = [
         "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Pop2PianoForConditionalGeneration",
-        # "Pop2PianoModel",
         "Pop2PianoPreTrainedModel",
     ]
 
+# Feature Extractor
+try:
+    if not (is_librosa_available() and is_essentia_available() and
+            is_scipy_available() and is_pretty_midi_available() and
+            is_soundfile_availble()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_pop2piano"] = ["Pop2PianoFeatureExtractor"]
+
+
 if TYPE_CHECKING:
-    from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig, Pop2PianoOnnxConfig
+    # Config
+    from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
 
-    from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor # Need to check if dependencies are available or not
-
+    # Model
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -55,11 +68,20 @@ if TYPE_CHECKING:
         from .modeling_pop2piano import (
             POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pop2PianoForConditionalGeneration,
-            # Pop2PianoModel,
             Pop2PianoPreTrainedModel,
         )
 
+    # Feature Extractor
+    try:
+        if not (is_librosa_available() and is_essentia_available() and
+                is_scipy_available() and is_pretty_midi_available() and
+                is_soundfile_availble()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor
+
 else:
     import sys
-
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

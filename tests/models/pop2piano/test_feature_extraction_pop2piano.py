@@ -24,15 +24,20 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import is_speech_available
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
-from transformers.utils.import_utils import is_torch_available
+from transformers.testing_utils import (check_json_file_has_correct_format, require_torch,
+                                        require_essentia, require_librosa, require_scipy,
+                                        require_pretty_midi, require_soundfile)
+from transformers.utils.import_utils import (is_torch_available, is_essentia_available,
+                                             is_scipy_available, is_librosa_available,
+                                             is_soundfile_availble, )
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
+requirements = is_speech_available() and is_torch_available() and is_essentia_available() and is_scipy_available() and \
+        is_librosa_available() and is_soundfile_availble()
 
-if is_speech_available():
-    from transformers import WhisperFeatureExtractor
-
+if requirements:
+    from transformers import Pop2PianoFeatureExtractor
 if is_torch_available():
     import torch
 
@@ -54,70 +59,74 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-@require_torchaudio
-class WhisperFeatureExtractionTester(unittest.TestCase):
+@require_essentia
+@require_librosa
+@require_soundfile
+@require_scipy
+@require_pretty_midi
+class Pop2PianoFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
-        batch_size=7,
-        min_seq_length=400,
-        max_seq_length=2000,
-        feature_size=10,
-        hop_length=160,
-        chunk_length=8,
-        padding_value=0.0,
-        sampling_rate=4_000,
-        return_attention_mask=False,
-        do_normalize=True,
+        n_bars=2,
+        sample_rate=22050,
+        use_mel=True,
+        pad_token_id=0,
+        vocab_size_special=4,
+        vocab_size_note=128,
+        vocab_size_velocity=2,
+        vocab_size_time=100,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.min_seq_length = min_seq_length
-        self.max_seq_length = max_seq_length
-        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
-        self.padding_value = padding_value
-        self.sampling_rate = sampling_rate
-        self.return_attention_mask = return_attention_mask
-        self.do_normalize = do_normalize
-        self.feature_size = feature_size
-        self.chunk_length = chunk_length
-        self.hop_length = hop_length
+        self.n_bars = n_bars
+        self.sample_rate = sample_rate
+        self.use_mel = use_mel
+        self.pad_token_id = pad_token_id
+        self.vocab_size_special = vocab_size_special
+        self.vocab_size_note = vocab_size_note
+        self.vocab_size_velocity = vocab_size_velocity
+        self.vocab_size_time = vocab_size_time
 
     def prepare_feat_extract_dict(self):
         return {
-            "feature_size": self.feature_size,
-            "hop_length": self.hop_length,
-            "chunk_length": self.chunk_length,
-            "padding_value": self.padding_value,
-            "sampling_rate": self.sampling_rate,
-            "return_attention_mask": self.return_attention_mask,
-            "do_normalize": self.do_normalize,
+            "n_bars": self.n_bars,
+            "sample_rate": self.sample_rate,
+            "use_mel": self.use_mel,
+            "pad_token_id": self.pad_token_id,
+            "vocab_size_special": self.vocab_size_special,
+            "vocab_size_note": self.vocab_size_note,
+            "vocab_size_velocity": self.vocab_size_velocity,
+            "vocab_size_time":self.vocab_size_time,
         }
 
-    def prepare_inputs_for_common(self, equal_length=False, numpify=False):
-        def _flatten(list_of_lists):
-            return list(itertools.chain(*list_of_lists))
-
-        if equal_length:
-            speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
-        else:
-            # make sure that inputs increase in size
-            speech_inputs = [
-                floats_list((x, self.feature_size))
-                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
-            ]
-        if numpify:
-            speech_inputs = [np.asarray(x) for x in speech_inputs]
-        return speech_inputs
+    # def prepare_inputs_for_common(self, equal_length=False, numpify=False):
+    #     def _flatten(list_of_lists):
+    #         return list(itertools.chain(*list_of_lists))
+    #
+    #     if equal_length:
+    #         speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
+    #     else:
+    #         # make sure that inputs increase in size
+    #         speech_inputs = [
+    #             floats_list((x, self.feature_size))
+    #             for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+    #         ]
+    #     if numpify:
+    #         speech_inputs = [np.asarray(x) for x in speech_inputs]
+    #     return speech_inputs
 
 
 @require_torch
-@require_torchaudio
-class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = WhisperFeatureExtractor if is_speech_available() else None
+@require_essentia
+@require_librosa
+@require_soundfile
+@require_scipy
+@require_pretty_midi
+class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = Pop2PianoFeatureExtractor if requirements else None
 
     def setUp(self):
-        self.feat_extract_tester = WhisperFeatureExtractionTester(self)
+        self.feat_extract_tester = Pop2PianoFeatureExtractionTester(self)
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
@@ -144,8 +153,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = feat_extract_first.mel_filters
-        mel_2 = feat_extract_second.mel_filters
+        mel_1 = feat_extract_first.use_mel
+        mel_2 = feat_extract_second.use_mel
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
@@ -185,18 +194,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-    def test_double_precision_pad(self):
-        import torch
-
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
-        py_speech_inputs = np_speech_inputs.tolist()
-
-        for inputs in [py_speech_inputs, np_speech_inputs]:
-            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_features.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
