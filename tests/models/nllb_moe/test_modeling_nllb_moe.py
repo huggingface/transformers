@@ -21,11 +21,13 @@ import unittest
 
 from transformers import NllbMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    require_accelerate,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
     require_torch_gpu,
     slow,
+    tooslow,
     torch_device,
 )
 from transformers.utils import cached_property
@@ -361,20 +363,20 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
+        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval().to(torch_device)
         src_text = ["Life is like a box of chocolates.", "I just want to code."]
         model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
         decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
 
         with torch.no_grad():
-            output = model(**model_inputs, decoder_input_ids=decoder_input_ids).logits
+            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
 
         # fmt: off
         EXPECTED_ENCODER_LAST_HIDDEN = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
         # fmt: on
 
         torch.testing.assert_allclose(
-            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
         )
 
         # fmt: off
@@ -382,11 +384,15 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_allclose(
-            output.decoder_last_hidden_state[1, 0, :30], EXPECTED_DECODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
+            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
         )
 
     def test_inference_head(self):
-        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
+        model = (
+            NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
+            .eval()
+            .to(torch_device)
+        )
         src_text = ["Life is like a box of chocolates.", "I just want to code."]
         model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
         decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
@@ -400,10 +406,11 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[1, 0, :30].cpu(), EXPECTED_LOGTIS, atol=TOLERANCE))
 
+    @tooslow
+    @require_accelerate
     def test_seq_to_seq_generation(self):
         # TODO last test to run!
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").to(torch_device)
-        tokenizer = NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts", src_lang="fr", tgt_lang="en")
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/nllb-moe-128", device_map="auto")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -414,13 +421,12 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tokenizer(src_fr, padding=True, return_tensors="pt")
+        dct = self.default_tokenizer(src_fr, padding=True, return_tensors="pt")
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=5,
-            forced_bos_token_id=tokenizer.get_lang_id("en"),
+            forced_bos_token_id=self.default_tokenizer.lang_code_to_id["eng_Latn"],
         )
 
         expected_en = [
@@ -431,7 +437,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             " communications in France.",
         ]
 
-        generated = tokenizer.batch_decode(
+        generated = self.default_tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated == expected_en
@@ -462,7 +468,6 @@ class NllbMoeRouterTest(unittest.TestCase):
         mask[1][0] = False
         mask = mask.reshape(-1)
         set_seed(0)
-        # test routing with minimal reproduction
         hidden_states = torch.rand((batch_size, sequence_length, self.config.hidden_size))
         classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
         hf_router = NllbMoeTop2Router(self.config)
@@ -479,28 +484,17 @@ class NllbMoeRouterTest(unittest.TestCase):
             torch.nn.Linear(hidden_dim, hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         ]
-        self.training = False
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(experts):
             token_indices = router_mask[:, idx]
             combining_weights = router_probs[token_indices, idx]
             expert_output = expert(masked_hidden_states[idx, token_indices])
-            if self.moe_token_dropout > 0:
-                if self.training:
-                    expert_output = self.token_dropout(expert_output)
-                else:
-                    expert_output *= 1 - self.moe_token_dropout
+            expert_output *= 1 - self.config.moe_token_dropout
             masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
-        # Now test that the next states are correct
+
         # fmt: off
-        EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
-            [
-                [
-                    -1.1620e-01, 1.7170e-01, -2.0238e-01, -1.0510e-01, -1.0427e-02, -6.7572e-02, 1.5150e-01, 5.2377e-02, 1.2958e-01, -5.8975e-01, -2.1205e-01, 1.6905e-01, -2.9141e-01, -3.5747e-01, 7.0752e-02, -1.5030e-01, -6.7922e-02, 1.8135e-01, -1.5806e-01, -2.8438e-02, 1.7408e-01, 4.8298e-02, -1.1792e-02, -3.3192e-01, 1.5980e-01, 1.6762e-01, 2.0164e-01, -1.5490e-01, 9.5776e-02, 2.2973e-01, -1.4285e-02, -1.0743e-01, ], [
-                    -8.9075e-02, 6.2051e-02, 2.8243e-03, -9.6243e-02, -1.1256e-01, 1.4499e-01, 7.9538e-02, 2.2229e-01, -3.1332e-02, -4.6955e-01, 1.7454e-01, 2.6892e-01, -5.7691e-04, -3.4575e-01, 1.7524e-01, -9.0632e-02, -2.4328e-01, 1.1492e-01, -9.1722e-02, -1.8781e-01, 5.9616e-01, 1.7841e-02, -1.5246e-02, -2.8347e-01, 6.0415e-02, 3.0621e-01, 1.9543e-01, 6.2028e-02, 1.5608e-01, 1.6039e-01, 6.9567e-02, -1.4346e-01, ],
-            ],
-        )
+        EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor([[ 7.0340e-04,  2.7997e-03, -1.3351e-02, -7.6705e-03, -3.5089e-03,3.9773e-03,  7.4593e-03,  1.2566e-02,  3.5860e-03, -2.7448e-02,-1.3731e-02, -1.0534e-02, -1.3606e-02, -1.5048e-02, -2.8914e-03,-5.0371e-03, -1.3963e-03,  6.0076e-03, -1.1380e-02, -1.4620e-02, 5.2401e-03,  8.4660e-04, -1.5319e-03, -1.6735e-02,  1.1302e-02, 3.6119e-03,  4.6084e-03, -1.3458e-02,  7.7792e-05,  1.4312e-02, 4.9107e-03, -5.0936e-03], [-4.4538e-03,  3.1026e-03,  1.4121e-04, -4.8121e-03, -5.6279e-03, 7.2493e-03,  3.9769e-03,  1.1114e-02, -1.5666e-03, -2.3477e-02, 8.7268e-03,  1.3446e-02, -2.8845e-05, -1.7287e-02,  8.7619e-03, -4.5316e-03, -1.2164e-02,  5.7461e-03, -4.5861e-03, -9.3907e-03, 2.9808e-02,  8.9206e-04, -7.6232e-04, -1.4173e-02,  3.0208e-03, 1.5310e-02,  9.7717e-03,  3.1014e-03,  7.8042e-03,  8.0197e-03, 3.4784e-03, -7.1728e-03]])
         # fmt: on
-        self.assertTrue(torch.allclose(hidden_states, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
+        self.assertTrue(torch.allclose(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))

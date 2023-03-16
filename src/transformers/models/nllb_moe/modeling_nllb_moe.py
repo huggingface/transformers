@@ -331,7 +331,7 @@ class NllbMoeTop2Router(nn.Module):
         if padding_mask is not None:
             if len(padding_mask.shape) == 4:
                 # only get the last causal mask
-                padding_mask = padding_mask[:, :, -1, :].reshape(top_1_mask.shape[0])
+                padding_mask = padding_mask[:, :, -1, :].reshape(-1)[-nb_tokens:]
             non_padding = ~padding_mask.bool()
             top_1_mask = top_1_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
             top_2_mask = top_2_mask * non_padding.unsqueeze(-1).to(top_1_mask.dtype)
