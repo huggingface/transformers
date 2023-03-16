@@ -41,7 +41,7 @@ class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.5"
+    cache_version: str = "0.6"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
