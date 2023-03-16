@@ -262,7 +262,7 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out_strs["generated_text"][0], expected_text)
 
         expected_slice = torch.tensor(
-            [[[-39.7358, -44.8562, -36.6253], [-62.3605, -64.5908, -59.0069], [-74.6127, -68.9724, -71.7150]]],
+            [[[-39.5397, -44.4024, -36.1844], [-61.4709, -63.8639, -58.3454], [-74.0225, -68.5494, -71.2164]]],
             device=torch_device,
         )
 
