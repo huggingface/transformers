@@ -130,7 +130,8 @@ class OptimizerNames(ExplicitEnum):
     SGD = "sgd"
     ADAGRAD = "adagrad"
 
-
+#! accelerator
+# The accelerator should be added here
 @dataclass
 class TrainingArguments:
     """
@@ -1499,6 +1500,12 @@ class TrainingArguments:
         """
         return timedelta(seconds=self.ddp_timeout)
 
+    #! tag: state, device initialization
+    # Needs to set: 
+    # - self.device
+    # - self._n_gpu
+    # - self.local_rank
+    # - self.xpu_backend
     @cached_property
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
@@ -1650,6 +1657,7 @@ class TrainingArguments:
 
         return device
 
+    #* Should not need any changes
     @property
     def device(self) -> "torch.device":
         """
@@ -1658,6 +1666,8 @@ class TrainingArguments:
         requires_backends(self, ["torch"])
         return self._setup_devices
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState`
     @property
     def n_gpu(self):
         """
@@ -1672,6 +1682,8 @@ class TrainingArguments:
         _ = self._setup_devices
         return self._n_gpu
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState.DISTRIBUTED_MODE`
     @property
     def parallel_mode(self):
         """
@@ -1697,6 +1709,8 @@ class TrainingArguments:
         else:
             return ParallelMode.NOT_PARALLEL
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState.num_processes`
     @property
     def world_size(self):
         """
@@ -1714,6 +1728,8 @@ class TrainingArguments:
             return torch.distributed.get_world_size()
         return 1
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState.process_index`
     @property
     def process_index(self):
         """
@@ -1730,6 +1746,8 @@ class TrainingArguments:
             return torch.distributed.get_rank()
         return 0
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState.local_process_index`
     @property
     def local_process_index(self):
         """
@@ -1746,6 +1764,9 @@ class TrainingArguments:
             return self.local_rank
         return 0
 
+    #! state
+    #* Should passthrough to the `AcceleratorState.is_local_main_process`
+    #* `AcceleratorState` might want to check `smp.rank()`?
     @property
     def should_log(self):
         """
@@ -1759,6 +1780,9 @@ class TrainingArguments:
             else:
                 return self.process_index == 0
 
+    #! state
+    #* Should passthrough to the `AcceleratorState.is_local_main_process`
+    #* `AcceleratorState` might want to check `smp.rank()`?
     @property
     def should_save(self):
         """
@@ -1801,6 +1825,8 @@ class TrainingArguments:
         """
         return not is_sagemaker_mp_enabled()
 
+    #! tag: gradient accumulation
+    # See if this is actually still needed, Accelerate may need to support neuroncore
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
@@ -1810,6 +1836,8 @@ class TrainingArguments:
             self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled() or is_torch_neuroncore_available()
         )
 
+    #! tag: state
+    #* Should passthrough to the `AcceleratorState.is_main_process`
     @contextlib.contextmanager
     def main_process_first(self, local=True, desc="work"):
         """

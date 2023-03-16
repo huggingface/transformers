@@ -80,6 +80,8 @@ def enable_full_determinism(seed: int):
         tf.config.experimental.enable_op_determinism()
 
 
+#! utils
+# Replace with accelerate.set_seed
 def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
@@ -320,7 +322,8 @@ def is_main_process(local_rank):
         return xm.get_ordinal() == 0
     return local_rank in [-1, 0]
 
-
+#! state
+# Replace with `PartialState`
 def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
