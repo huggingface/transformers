@@ -1,4 +1,5 @@
 import os
+import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -499,6 +500,7 @@ class OnnxExportTestCaseV2(TestCase):
 class StableDropoutTestCase(TestCase):
     """Tests export of StableDropout module."""
 
+    @unittest.skip("torch 2.0.0 gives `torch.onnx.errors.OnnxExporterError: Module onnx is not installed!`.")
     @require_torch
     @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
     def test_training(self):
