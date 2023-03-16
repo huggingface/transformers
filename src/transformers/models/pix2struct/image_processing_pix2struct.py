@@ -27,7 +27,7 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -371,8 +371,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         max_patches = max_patches if max_patches is not None else self.max_patches
         is_vqa = self.is_vqa
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
