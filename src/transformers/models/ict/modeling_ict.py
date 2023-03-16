@@ -26,7 +26,7 @@ import torchvision.models as models
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
+from ...modeling_outputs import BaseModelOutput, MaskedImageCompletionOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -54,7 +54,6 @@ ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sheonhan/ict-places-256",
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
-
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class ICTSelfAttention(nn.Module):
@@ -310,7 +309,7 @@ class ICTTransformerModel(ICTTransformerPreTrainedModel):
         )
 
 
-class BaseNetwork(nn.Module):
+class ICTPretrainedModel(PreTrainedModel):
     def __init__(self):
         super().__init__()
 
@@ -360,7 +359,7 @@ class ResnetBlock(nn.Module):
         return out
 
 
-class InpaintGenerator(BaseNetwork):
+class InpaintGenerator(ICTPretrainedModel):
     def __init__(self, residual_blocks=8):
         super().__init__()
 
@@ -398,7 +397,7 @@ class InpaintGenerator(BaseNetwork):
         return x
 
 
-class Discriminator(BaseNetwork):
+class Discriminator(ICTPretrainedModel):
     def __init__(self, in_channels):
         super().__init__()
 
@@ -856,7 +855,7 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
         # self.post_init()
 
     @add_start_docstrings_to_model_forward(ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskedImageCompletionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
