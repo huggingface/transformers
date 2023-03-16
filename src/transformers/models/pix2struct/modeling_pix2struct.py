@@ -504,6 +504,9 @@ PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
             [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
             paper](https://arxiv.org/abs/2210.03347) (figure 5) for more details.
 
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
