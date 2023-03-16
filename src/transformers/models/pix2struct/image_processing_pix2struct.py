@@ -37,7 +37,6 @@ from ...utils.import_utils import requires_backends
 if is_vision_available():
     import textwrap
 
-    import PIL
     from PIL import Image, ImageDraw, ImageFont
 
 if is_torch_available():
