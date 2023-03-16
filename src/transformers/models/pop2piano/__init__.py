@@ -17,11 +17,15 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_librosa_available,
+    is_scipy_available,
+
 )
 
 
 _import_structure = {
-    "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig", "Pop2PianoOnnxConfig"],
+    "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
+    "feature_extraction_pop2piano": ["Pop2PianoFeatureExtractor"],
 }
 
 try:
@@ -33,12 +37,14 @@ else:
     _import_structure["modeling_pop2piano"] = [
         "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Pop2PianoForConditionalGeneration",
-        "Pop2PianoModel",
+        # "Pop2PianoModel",
         "Pop2PianoPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig, Pop2PianoOnnxConfig
+
+    from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor # Need to check if dependencies are available or not
 
     try:
         if not is_torch_available():
@@ -49,7 +55,7 @@ if TYPE_CHECKING:
         from .modeling_pop2piano import (
             POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pop2PianoForConditionalGeneration,
-            Pop2PianoModel,
+            # Pop2PianoModel,
             Pop2PianoPreTrainedModel,
         )
 

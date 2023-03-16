@@ -41,6 +41,7 @@ if is_torch_available():
         Pop2PianoForConditionalGeneration,
         set_seed,
     )
+    from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 class Pop2PianoModelTester:
     def __init__(
@@ -609,8 +610,8 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in Pop2Piano_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        for model_name in POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
@@ -672,3 +673,58 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     @unittest.skip("Pop2Piano does not need this test.")
     def test_generate_with_past_key_values(self):
         pass
+
+@require_torch
+@require_torchaudio
+class Pop2PianoModelIntegrationTests(unittest.TestCase):
+    @slow
+    def test_log_mel_spectrogram_integration(self):
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        inputs = torch.ones([10, 100000])
+        output = model.spectrogram(inputs)
+
+        # check shape
+        self.assertEqual(output.size(), torch.Size([10, 512, 98]))
+
+        # check values
+        self.assertEqual(output[0, :3, :3].cpu().numpy().tolist(),
+                         [[-13.815510749816895, -13.815510749816895, -13.815510749816895],
+                          [-13.815510749816895, -13.815510749816895, -13.815510749816895],
+                          [-13.815510749816895, -13.815510749816895, -13.815510749816895]]
+                         )
+
+    @slow
+    def test_mel_conditioner_integration(self):
+        composer = "composer1"
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        input_embeds = torch.ones([10, 100, 512])
+
+        composer_value = model.config.composer_to_feature_token[composer]
+        composer_value = torch.tensor(composer_value)
+        composer_value = composer_value.repeat(input_embeds.size(0))
+        outputs = model.mel_conditioner(input_embeds, composer_value)
+
+        # check shape
+        self.assertEqual(outputs.size(), torch.Size([10, 101, 512]))
+
+        # check values
+        self.assertEqual(outputs[0, :3, :3].detach().cpu().numpy().tolist(),
+                         [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166],
+                          [1.0, 1.0, 1.0],
+                          [1.0, 1.0, 1.0]]
+                         )
+
+    @slow
+    def test_full_model_integration(self):
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model.eval()
+        input_features = BatchFeature({'input_features': torch.ones([100, 100000])})
+        outputs = model.generate(input_features=input_features)
+
+        # check for shapes
+        self.assertEqual(outputs.size(0), 100)
+
+        # check for values
+        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(),
+                         [0, 134, 133]
+                         )

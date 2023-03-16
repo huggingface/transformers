@@ -19,18 +19,18 @@ from typing import Any, Dict, List, Optional, Union
 
 import os
 import torch
-import scipy
-import librosa
-import pathlib
+import scipy#
+import librosa#
+import pathlib#
 import essentia
 import warnings
-import note_seq
+# import note_seq
 import pretty_midi
 import numpy as np
 import soundfile as sf
 import essentia.standard
-import IPython.display as ipd
-from IPython.display import display
+# import IPython.display as ipd
+# from IPython.display import display
 from torch.nn.utils.rnn import pad_sequence
 from .configuration_pop2piano import Pop2PianoConfig
 
@@ -556,8 +556,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 print(f"stereo-mix file saved at {mix_path}!")
 
             if show_plot:
-                display("Stereo MIX", ipd.Audio(stereo, rate=sr))
-                display("Rendered MIDI", ipd.Audio(pm_raw_audio, rate=sr))
-                display("Original Song", ipd.Audio(raw_audio, rate=sr))
-                display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
+                # display("Stereo MIX", ipd.Audio(stereo, rate=sr))
+                # display("Rendered MIDI", ipd.Audio(pm_raw_audio, rate=sr))
+                # display("Original Song", ipd.Audio(raw_audio, rate=sr))
+                # display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
         return pm_list

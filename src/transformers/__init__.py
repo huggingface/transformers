@@ -600,6 +600,14 @@ _import_structure = {
         "WhisperProcessor",
         "WhisperTokenizer",
     ],
+    "models.pop2piano": [
+        "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Pop2PianoConfig",
+        "Pop2PianoFeatureExtractor",
+       
+       
+       
+    ],
     "models.x_clip": [
         "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XCLIPConfig",
@@ -2907,6 +2915,14 @@ else:
             "WhisperPreTrainedModel",
         ]
     )
+    _import_structure["models.pop2piano"].extend(
+        [
+            "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Pop2PianoForConditionalGeneration",
+            # "Pop2PianoModel",
+            "Pop2PianoPreTrainedModel",
+        ]
+    )
     _import_structure["models.x_clip"].extend(
         [
             "XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4533,6 +4549,14 @@ if TYPE_CHECKING:
         WhisperFeatureExtractor,
         WhisperProcessor,
         WhisperTokenizer,
+    )
+    from .models.pop2piano import (
+        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pop2PianoConfig,
+        Pop2PianoFeatureExtractor,
+       
+       
+       
     )
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6455,6 +6479,12 @@ if TYPE_CHECKING:
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
+        )
+        from .models.pop2piano import (
+            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Pop2PianoForConditionalGeneration,
+            # Pop2PianoModel,
+            Pop2PianoPreTrainedModel,
         )
         from .models.x_clip import (
             XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
