@@ -24,9 +24,8 @@ RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --inde
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
-# This will uninstall torch 2.0.0
-# TODO: uncomment the following line once `torch-tensorrt` is ready for `torch 2.0.0`
-# RUN python3 -m pip install torch-tensorrt==1.3.0 --find-links https://github.com/pytorch/TensorRT/releases/expanded_assets/v1.3.0
+# Uninstall `torch-tensorrt` shipped with the base image
+RUN python3 -m pip uninstall -y torch-tensorrt
 
 # recompile apex
 RUN python3 -m pip uninstall -y apex
