@@ -189,9 +189,9 @@ Ecco un breve riepilogo di ciò a cui prestare attenzione durante il passaggio d
 
 Per usare Torchscript (vedi #1010, #1204 e #1195) l'ordine specifico delle **parole chiave di input** di alcuni modelli (`attention_mask`, `token_type_ids`...) è stato modificato. 
 
-Se chiamavi i modelli con nomi di parole chiave per argomenti di parole chiave, ad esempio `model(inputs_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)`, questo non dovrebbe causare alcun cambiamento. 
+Se inizializzavi i modelli usando parole chiave per gli argomenti, ad esempio `model(inputs_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)`, questo non dovrebbe causare alcun cambiamento. 
 
-Se chiamavi i modelli con input posizionali per argomenti di parole chiave, ad esempio `model(inputs_ids, attention_mask, token_type_ids)`, potrebbe essere necessario ricontrollare l'ordine esatto degli argomenti di input. 
+Se inizializzavi i modelli con input posizionali per gli argomenti, ad esempio `model(inputs_ids, attention_mask, token_type_ids)`, potrebbe essere necessario ricontrollare l'ordine esatto degli argomenti di input. 
 
 ## Migrazione da pytorch-pretrained-bert 
 

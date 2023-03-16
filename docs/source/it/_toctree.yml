@@ -39,6 +39,8 @@
     title: Addestramento efficiente su multiple CPU
   - local: big_models
     title: Istanziare un big model
+  - local: migration
+    title: Passaggio da pacchetti precedenti
   - local: debugging
     title: Debugging
   title: Guide pratiche
@@ -53,7 +55,5 @@
     title: Risorse della comunità
   - local: pr_checks
     title: Controlli su una Pull Request
-  - local: migration
-    title: Passaggio da pacchetti precedenti
   title: Guide How-to
   
