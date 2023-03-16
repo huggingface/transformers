@@ -289,6 +289,14 @@ class NllbMoeTop2Router(nn.Module):
         if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
             self.classifier = self.classifier.to(self.dtype)
 
+    def normalize_router_probabilities(self, router_probs, top_1_mask, top_2_mask):
+        top_1_max_probs = (router_probs * top_1_mask).sum(dim=1)
+        top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
+        denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(router_probs.dtype).eps)
+        top_1_max_probs = top_1_max_probs / denom_s
+        top_2_max_probs = top_2_max_probs / denom_s
+        return top_1_max_probs, top_2_max_probs
+
     def route_tokens(
         self,
         router_logits: torch.Tensor,
@@ -301,11 +309,10 @@ class NllbMoeTop2Router(nn.Module):
 
 
         """
-        # Apply Softmax and cast back to the original `dtype`
         nb_tokens = router_logits.shape[0]
+        # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(input_dtype)
-        top_1_max_probs, top_1_expert_index = torch.max(router_probs, dim=-1)
-        # ((batch_size * sequence_length), self.num_experts)
+        top_1_expert_index = torch.argmax(router_probs, dim=-1)
         top_1_mask = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
 
         if self.second_expert_policy == "sampling":
@@ -316,13 +323,11 @@ class NllbMoeTop2Router(nn.Module):
         logits_except_top_1 = router_logits.masked_fill(top_1_mask.bool(), float("-inf"))
         top_2_expert_index = torch.argmax(logits_except_top_1, dim=-1)
         top_2_mask = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
-        top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
 
         if self.normalize_router_prob_before_dropping:
-            # Normalize gate probabilities
-            denom_s = torch.clamp(top_1_max_probs + top_2_max_probs, min=torch.finfo(input_dtype).eps)
-            top_1_max_probs = top_1_max_probs / denom_s
-            top_2_max_probs = top_2_max_probs / denom_s
+            top_1_max_probs, top_2_max_probs = self.normalize_router_probabilities(
+                router_probs, top_1_mask, top_2_mask
+            )
 
         if self.second_expert_policy == "random":
             sampled = (2 * top_2_mask) > torch.rand_like(top_2_mask)
@@ -338,22 +343,17 @@ class NllbMoeTop2Router(nn.Module):
 
         if self.batch_prioritized_routing:
             # sort tokens based on their routing probability
-            # to make sure important tokens are routed, even
-            # if they appear last in the sequence. TODO explain with a bit more
-            # details for each operations
+            # to make sure important tokens are routed, first
             importance_scores = (-1 * top_1_max_probs).argsort(dim=0)
             sorted_top_1_mask = top_1_mask[importance_scores]
             sorted_cumsum1 = (torch.cumsum(sorted_top_1_mask) - 1) * sorted_top_1_mask
-            importance_sorted_locations1 = sorted_cumsum1[importance_scores.argsort(dim=0)]
+            locations1 = sorted_cumsum1[importance_scores.argsort(dim=0)]
 
             sorted_top_2_mask = top_2_mask[importance_scores]
             sorted_cumsum2 = (torch.cumsum(sorted_top_2_mask) - 1) * sorted_top_2_mask
-            importance_sorted_locations2 = sorted_cumsum2[importance_scores.argsort(dim=0)]
+            locations2 = sorted_cumsum2[importance_scores.argsort(dim=0)]
             # Update 2nd's location by accounting for locations of 1st
-            importance_sorted_locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
-
-            locations1 = importance_sorted_locations1
-            locations2 = importance_sorted_locations2
+            locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
         else:
             locations1 = torch.cumsum(top_1_mask, dim=0) - 1
@@ -373,14 +373,9 @@ class NllbMoeTop2Router(nn.Module):
         top_2_mask = top_2_mask * torch.lt(locations2, self.expert_capacity)
 
         if not self.normalize_router_prob_before_dropping:
-            # Normalize gate probabilities
-            top_1_max_probs = (router_probs * top_1_mask).sum(dim=1)
-            top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
-            denom_s = top_1_max_probs + top_2_max_probs
-            # Avoid divide-by-zero
-            denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
-            top_1_max_probs /= denom_s
-            top_2_max_probs /= denom_s
+            top_1_max_probs, top_2_max_probs = self.normalize_router_probabilities(
+                router_probs, top_1_mask, top_2_mask
+            )
 
         # Calculate combine_weights and dispatch_mask
         gates1 = top_1_max_probs[:, None] * top_1_mask
@@ -391,20 +386,22 @@ class NllbMoeTop2Router(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> Tuple:
         r"""
-        Generic forward function for every Router class. Each Router expects to have the same input hidden states
-        (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
-        number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
-
-        Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
-        `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
-        to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
+        The hidden states are reshaped to simplify the computation of the router probabilities (combining weights for
+        each experts.)
 
         Args:
-            hidden_states (`torch.Tensor`) :
-                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+            hidden_states (`torch.Tensor`):
+                (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
         Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
-            and the router logits. The router probabilities and logits are required to compute the loss.
+            top_1_mask (`torch.Tensor` of shape (batch_size, sequence_length)):
+                Index tensor of shape [batch_size, sequence_length] corresponding to the expert selected for each token
+                using the top1 probabilities of the router.
+            router_probabilities (`torch.Tensor` of shape (batch_size, sequence_length, nump_experts)):
+                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
+                token and expert. Used for routing tokens to experts.
+            router_logits (`torch.Tensor` of shape (batch_size, sequence_length))):
+                Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
+                This is used later for computing router z-loss.
         """
         self.input_dtype = hidden_states.dtype
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -412,8 +409,8 @@ class NllbMoeTop2Router(nn.Module):
         hidden_states = hidden_states.to(self.dtype)
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
-        dispatch_mask, router_probs, router_logits = self.route_tokens(router_logits, self.input_dtype, padding_mask)
-        return dispatch_mask, router_probs, router_logits
+        top_1_mask, router_probs, router_logits = self.route_tokens(router_logits, self.input_dtype, padding_mask)
+        return top_1_mask, router_probs, router_logits
 
 
 # Adapted from transformers.models.t5.modeling_t5.T5DenseActDense with T5->NllbMoe
@@ -456,23 +453,37 @@ class NllbMoeSparseMLP(nn.Module):
         for idx in range(self.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
-    def forward(self, hidden_states, padding_mask):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
         r"""
-        Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
+        The goal of this forward pass is to have the same number of operation as the equivalent `NllbMoeDenseActDense`
+        (mlp) layer. This means that all of the hidden states should be processed at most twice ( since we are using a
+        top_2 gating mecanism). This means that we keep the complexity to O(batch_size x sequence_length x hidden_dim)
+        instead of O(num_experts x batch_size x sequence_length x hidden_dim).
 
-        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)`
-        and corresponds to the argmax of the `router_probs`. The probabilities are needed in the computation of the
-        hidden states : they are broadcasted to the hidden states values (can be interpreted as a scaling factor).
+        1- Get the `router_probs` from the `router`. The shape of the `router_mask` is `(batch_size X sequence_length,
+        num_expert)` and corresponds to the boolean version of the `router_probs`. The inputs are masked using the
+        `router_mask`.
 
-        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each
-        expert the corresponding hidden states.
+        2- Dispatch the hidden_states to its associated experts. The router probabilities are used to weight the
+        contribution of each experts when updating the masked hidden states.
+
+        Args:
+            hidden_states (`torch.Tensor` of shape `batch_size, sequence_length, hidden_dim`):
+                The hidden states
+            padding_mask (`torch.Tensor`, *optional*):
+                Attention mask. Can be in the causal form or not.
+
+        Returns:
+            hidden_states:
+                Updated hidden states
+            router_logits:
+                Needed for computing the loss
 
         """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
-        top_1_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
-        expert_index = torch.argmax(top_1_mask, dim=-1)  # TODO should only take the top1 mask, not both
-        router_mask = router_probs.bool()
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+
+        top_1_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
+        router_mask = router_probs.bool()
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(self.experts.values()):
@@ -486,7 +497,9 @@ class NllbMoeSparseMLP(nn.Module):
                     expert_output *= 1 - self.moe_token_dropout
             masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, (router_logits, expert_index)
+
+        top_1_expert_index = torch.argmax(top_1_mask, dim=-1)
+        return hidden_states, (router_logits, top_1_expert_index)
 
 
 # Adapted from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
@@ -777,12 +790,13 @@ class NllbMoeDecoderLayer(nn.Module):
                 large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
+            encoder_attention_mask (`torch.FloatTensor`):
+                encoder attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by
+                very large negative values.
+            layer_head_mask (`torch.FloatTensor`):
+                mask for attention heads in a given layer of size `(encoder_attention_heads,)`.
+            cross_attn_layer_head_mask (`torch.FloatTensor`):
+                mask for cross-attention heads in a given layer of size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
@@ -902,14 +916,14 @@ NLLB_MOE_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import AutoTokenizer, NllbMoeForConditionalGeneration
 
-    >>> model = NllbMoeForConditionalGeneration.from_pretrained("facebook/NllbMoe_418M")
-    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/NllbMoe_418M")
+    >>> model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
 
     >>> text_to_translate = "Life is like a box of chocolates"
     >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
 
     >>> # translate to French
-    >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
+    >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("eng_Latn"))
     >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
     ```
 """
@@ -998,6 +1012,9 @@ NLLB_MOE_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+            should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1009,8 +1026,10 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
     [`NllbMoeEncoderLayer`].
 
     Args:
-        config: NllbMoeConfig
-        embed_tokens (nn.Embedding): output embedding
+        config:
+            NllbMoeConfig
+        embed_tokens (nn.Embedding):
+            output embedding
     """
 
     def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
@@ -1090,6 +1109,9 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+                and should not be returned during inference.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
@@ -1205,8 +1227,10 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`NllbMoeDecoderLayer`]
 
     Args:
-        config: NllbMoeConfig
-        embed_tokens (nn.Embedding): output embedding
+        config:
+            NllbMoeConfig
+        embed_tokens (nn.Embedding):
+            output embedding
     """
 
     def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
@@ -1318,6 +1342,9 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+                and should not be returned during inference.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
@@ -1561,8 +1588,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, NllbMoeModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/nllb-moe-8")
-        >>> model = SwitchTransformersModel.from_pretrained("hf-internal-testing/nllb-moe-8")
+        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts")
+        >>> model = SwitchTransformersModel.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
