@@ -2669,6 +2669,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         if labels is not None:
             if decoder_input_values is None:
                 decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
+            if self.config.use_guided_attention_loss:
+                output_attentions = True
 
         outputs = self.speecht5(
             input_values=input_ids,
@@ -2682,7 +2684,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             speaker_embeddings=speaker_embeddings,
-            output_attentions=output_attentions or labels is not None,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
@@ -2696,8 +2698,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 outputs_before_postnet,
                 outputs_after_postnet,
                 logits,
-                outputs.cross_attentions,
                 labels,
+                outputs.cross_attentions,
             )
 
         if not return_dict:
@@ -2722,8 +2724,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         outputs_before_postnet: torch.FloatTensor,
         outputs_after_postnet: torch.FloatTensor,
         logits: torch.FloatTensor,
-        cross_attentions: torch.FloatTensor,
         labels: torch.FloatTensor,
+        cross_attentions: Optional[torch.FloatTensor] = None,
     ):
         padding_mask = labels != -100.0
 
