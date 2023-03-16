@@ -1198,7 +1198,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         # [batch_size, num_queries, num_classes+1]
         class_queries_logits = outputs.class_queries_logits
         # [batch_size, num_queries, height, width]
-        masks_queries_logits = outputs.masks_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits.transpose(1, 0)
 
         img_size = (480, 640)
         num_topk_queries = 10

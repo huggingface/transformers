@@ -2739,7 +2739,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         class_logits = class_queries_logits[-1]
 
         if self.config.is_video:
-            mask_logits = masks_queries_logits[-1][0].transpose(1, 0)
+            mask_logits = masks_queries_logits[-1][0]
         else:
             mask_logits = masks_queries_logits[-1]
 
