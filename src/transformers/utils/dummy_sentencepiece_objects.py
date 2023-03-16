@@ -86,7 +86,7 @@ class LayoutXLMTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class LlamaTokenizer(metaclass=DummyObject):
+class LLaMATokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

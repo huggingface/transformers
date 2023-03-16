@@ -31,7 +31,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_llama"] = ["LlamaTokenizer"]
+    _import_structure["tokenization_llama"] = ["LLaMATokenizer"]
 
 try:
     if not is_torch_available():
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_llama import LlamaTokenizer
+        from .tokenization_llama import LLaMATokenizer
 
     try:
         if not is_torch_available():

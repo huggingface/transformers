@@ -31,7 +31,7 @@ Sample usage:
 Thereafter, models can be loaded via:
 
     ```
-    tokenizer = transformers.LlamaTokenizer.from_pretrained("/output/path/tokenizer/")
+    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/")
 
     model = transformers.LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
     ```
@@ -243,7 +243,7 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path):
             "bos_token": "",
             "eos_token": "",
             "model_max_length": int(1e30),
-            "tokenizer_class": "LlamaTokenizer",
+            "tokenizer_class": "LLaMATokenizer",
             "unk_token": "",
         },
         os.path.join(tokenizer_path, "tokenizer_config.json"),

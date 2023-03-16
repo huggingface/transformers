@@ -33,11 +33,11 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 - After conversion, the model and tokenizer can be loaded via:
 
 ```python
-tokenizer = transformers.LlamaTokenizer.from_pretrained("/output/path/tokenizer/")
+tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/")
 model = transformers.LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
 ```
 
-- The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quick of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LlamaTokenizer` object or in the tokenizer configuration.
+- The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quick of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LLaMATokenizer` object or in the tokenizer configuration.
 
 This model was contributed by [zphang](https://huggingface.co/zphang) with contributions from [BlackSamorez](https://huggingface.co/BlackSamorez). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
 
@@ -46,9 +46,9 @@ This model was contributed by [zphang](https://huggingface.co/zphang) with contr
 [[autodoc]] LlamaConfig
 
 
-## LlamaTokenizer
+## LLaMATokenizer
 
-[[autodoc]] LlamaTokenizer
+[[autodoc]] LLaMATokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences

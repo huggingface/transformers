@@ -668,7 +668,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
-    _import_structure["models.llama"].append("LlamaTokenizer")
+    _import_structure["models.llama"].append("LLaMATokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -4267,7 +4267,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
-        from .models.llama import LlamaTokenizer
+        from .models.llama import LLaMATokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
