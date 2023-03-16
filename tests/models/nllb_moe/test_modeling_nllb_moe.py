@@ -408,7 +408,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
     @require_accelerate
     def test_seq_to_seq_generation(self):
         # TODO last test to run!
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/nllb-moe-128", device_map="auto")
+        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
