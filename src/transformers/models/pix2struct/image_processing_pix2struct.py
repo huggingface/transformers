@@ -176,10 +176,10 @@ def render_header(image: np.ndarray, header: str, **kwargs):
     new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
 
     # Convert back to the original framework if necessary
-    image = to_numpy_array(image)
+    new_image = to_numpy_array(new_image)
 
-    if infer_channel_dimension_format(image) == ChannelDimension.LAST:
-        image = to_channel_dimension_format(image, ChannelDimension.LAST)
+    if infer_channel_dimension_format(new_image) == ChannelDimension.LAST:
+        new_image = to_channel_dimension_format(new_image, ChannelDimension.LAST)
 
     return new_image
 
@@ -383,6 +383,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
         if is_vqa:
             if header_text is None:
                 raise ValueError("A header text must be provided for VQA models.")
@@ -396,9 +399,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
                 for i, image in enumerate(images)
             ]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
 
         if do_normalize:
             images = [self.normalize(image=image, data_format=data_format) for image in images]
