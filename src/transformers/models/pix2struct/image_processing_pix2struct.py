@@ -121,6 +121,10 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 Maximum number of patches to extract.
             patch_size (`dict`):
                 Dictionary containing the patch height and width.
+
+        Returns:
+            result (`np.ndarray`):
+                A sequence of `max_patches` flattened patches.
         """
         requires_backends(self.extract_flattened_patches, "torch")
 
