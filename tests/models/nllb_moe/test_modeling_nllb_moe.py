@@ -352,7 +352,7 @@ TOLERANCE = 1e-4
 class NllbMoeModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return NllbTokenizer.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts")
+        return NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
 
     @require_torch_gpu
     def test_inference_no_head(self):
@@ -404,7 +404,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
 
     def test_inference_head(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").to(torch_device)
         tokenizer = NllbTokenizer.from_pretrained(
             "facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn"
         )
@@ -433,8 +433,8 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[1, 0, :30], EXPECTED_LOGTIS, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts").to(torch_device)
-        tokenizer = NllbTokenizer.from_pretrained("ArthurZ/dummy-nllb-moe-2-experts", src_lang="fr", tgt_lang="en")
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").to(torch_device)
+        tokenizer = NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts", src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -496,12 +496,13 @@ class NllbMoeRouterTest(unittest.TestCase):
         # test routing with minimal reproduction
         hidden_states = torch.rand((batch_size, sequence_length, self.config.hidden_size))
         classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
-
         hf_router = NllbMoeTop2Router(self.config)
+
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         logits = classfier(hidden_states.reshape((batch_size * sequence_length), hidden_dim))
-        dispatch_mask, router_probs, router_logits = hf_router.route_tokens(logits, padding_mask=mask)
-        dispatch_mask = dispatch_mask.reshape((batch_size, sequence_length, self.config.num_experts))
+        top_1_mask, router_probs, router_logits = hf_router.route_tokens(logits, padding_mask=mask)
+        expert_index = torch.argmax(top_1_mask, dim=-1) 
+        router_mask = router_probs.bool()
         set_seed(0)
         experts = [
             torch.nn.Linear(hidden_dim, hidden_dim),
@@ -509,22 +510,20 @@ class NllbMoeRouterTest(unittest.TestCase):
             torch.nn.Linear(hidden_dim, hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         ]
-
-        expert_outputs = []
-        for idx, expert in enumerate(experts):
-            token_indices = dispatch_mask[:, :, idx].bool()
-            expert_outputs.append(expert(hidden_states[token_indices]))
-        expert_outputs = torch.cat(expert_outputs, dim=0)
-
         self.training = False
-        if self.config.moe_token_dropout > 0:
-            if self.training:
-                expert_outputs = torch.nn.Dropout2d(self.config.moe_token_dropout)(expert_outputs)
-            else:
-                expert_outputs *= 1 - self.config.moe_token_dropout
-
-        combined_output = router_probs.mm(expert_outputs.reshape(self.config.num_experts, hidden_dim))
-        combined_output = combined_output.reshape(batch_size, sequence_length, hidden_dim)[:, 0]
+        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
+        masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
+        for idx, expert in enumerate(experts):
+            token_indices = router_mask[:, idx]
+            combining_weights = router_probs[token_indices, idx]
+            expert_output = expert(masked_hidden_states[idx, token_indices])
+            if self.moe_token_dropout > 0:
+                if self.training:
+                    expert_output = self.token_dropout(expert_output)
+                else:
+                    expert_output *= 1 - self.moe_token_dropout
+            masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
+        hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
         # Now test that the next states are correct
         # fmt: off
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor(
@@ -535,4 +534,4 @@ class NllbMoeRouterTest(unittest.TestCase):
             ],
         )
         # fmt: on
-        self.assertTrue(torch.allclose(combined_output, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
+        self.assertTrue(torch.allclose(hidden_states, EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
