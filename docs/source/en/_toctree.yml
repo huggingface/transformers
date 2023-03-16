@@ -319,6 +319,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/llama
+        title: LLaMA
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
