@@ -836,8 +836,6 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
