@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
+from accelerate import Accelerator
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -143,6 +144,8 @@ class TrainingArguments:
     command line.
 
     Parameters:
+        accelerator (`Accelerator`, *optional*):
+            An Accelerator object to use for training. Will handle mixed-precision, distributed training, and more.
         output_dir (`str`):
             The output directory where the model predictions and checkpoints will be written.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`):
@@ -581,6 +584,9 @@ class TrainingArguments:
     """
 
     framework = "pt"
+    accelerator: Optional[Accelerator] = field(
+        default=None, metadata={"help": "The accelerator to use for distributed training."}
+    )
     output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
@@ -1104,6 +1110,8 @@ class TrainingArguments:
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
         # This needs to happen before any call to self.device or self.n_gpu.
+        self.accelerator_state = self.accelerator.state if self.accelerator is not None else None
+        
         env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
@@ -1500,12 +1508,6 @@ class TrainingArguments:
         """
         return timedelta(seconds=self.ddp_timeout)
 
-    #! tag: state, device initialization
-    # Needs to set: 
-    # - self.device
-    # - self._n_gpu
-    # - self.local_rank
-    # - self.xpu_backend
     @cached_property
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
@@ -1515,6 +1517,10 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+        if self.accelerator_state is not None:
+            self._n_gpu = self.accelerator_state.num_processes
+            self.local_rank = self.accelerator_state.local_rank
+            return self.accelerator_state.device
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
