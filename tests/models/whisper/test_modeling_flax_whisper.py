@@ -949,3 +949,12 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
+
+    # WhisperEncoder does not have any base model
+    def test_save_load_to_base(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
