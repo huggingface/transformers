@@ -131,8 +131,7 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
     if use_large:
         processor.image_processor.max_patches = 4096
 
-    if is_vqa:
-        processor.image_processor.is_vqa = False
+    processor.image_processor.is_vqa = True
 
     # mkdir if needed
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
