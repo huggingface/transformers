@@ -880,29 +880,6 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # overwrite because of `input_features`
-    def test_save_load_from_base(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == base_class.__name__:
-                continue
-
-            model = base_class(config)
-            base_params = flatten_dict(unfreeze(model.params))
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                head_model = model_class.from_pretrained(tmpdirname)
-
-                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
-                # base_param_from_head = get_params(head_model.params, from_head_prefix=head_model.base_model_prefix)
-
-                for key in base_param_from_head.keys():
-                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -915,30 +892,6 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_features", "attention_mask", "output_attentions"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # overwrite because of `input_features`
-    def test_save_load_to_base(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == base_class.__name__:
-                continue
-
-            model = model_class(config)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname)
-
-                base_params = flatten_dict(unfreeze(base_model.params))
-
-                for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    # input embeds is meaningless for an encoder-only acoustic model
     def test_inputs_embeds(self):
         pass
 
@@ -957,4 +910,3 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # WhisperEncoder does not have any base model
     def test_save_load_from_base(self):
         pass
-
