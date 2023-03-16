@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ICTForMaskedImageModeling, ICTModel
+    from transformers import ICTModel
     from transformers.models.ict.modeling_ict import ICT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -128,25 +128,6 @@ class ICTModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = ICTForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = ICTForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -168,7 +149,6 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ICTModel,
-            ICTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()

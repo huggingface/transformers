@@ -26,7 +26,7 @@ import torchvision.models as models
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, MaskedImageCompletionOutput
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -855,7 +855,7 @@ class ICTModel(ICTPretrainedGuidedUpsampler):
         # self.post_init()
 
     @add_start_docstrings_to_model_forward(ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageCompletionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
