@@ -16,7 +16,6 @@
 import argparse
 import collections.abc
 import copy
-import importlib
 import inspect
 import json
 import os
@@ -67,7 +66,8 @@ if not is_torch_available():
 if not is_tf_available():
     raise ValueError("Please install TensorFlow.")
 
-from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
+from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model  # noqa E402
+
 
 FRAMEWORKS = ["pytorch", "tensorflow"]
 INVALID_ARCH = []
