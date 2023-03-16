@@ -865,8 +865,8 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 model = model_class(config)
 
                 @jax.jit
-                def model_jitted(input_features, decoder_input_ids, **kwargs):
-                    return model(input_features=input_features, decoder_input_ids=decoder_input_ids, **kwargs)
+                def model_jitted(input_features, **kwargs):
+                    return model(input_features=input_features, **kwargs)
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
@@ -909,4 +909,19 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     # WhisperEncoder does not have any base model
     def test_save_load_from_base(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
         pass
