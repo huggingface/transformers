@@ -105,8 +105,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=["lm_head"]
         threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
-        modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
-            Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
+        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `[`lm_head`]`):
+            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
         current_key_name (`List[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
