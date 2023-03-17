@@ -22,7 +22,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- Weights for the LLaMA models can be obtained from by filling out [this form]()https://docs.google.com/forms/d/e/1FAIpQLSfqNECQnMkycAp2jP4Z9TFX0cGR4uf7b_fBxjY_OjhJILlKGA/viewform?usp=send_form)
+- Weights for the LLaMA models can be obtained from by filling out [this form](https://docs.google.com/forms/d/e/1FAIpQLSfqNECQnMkycAp2jP4Z9TFX0cGR4uf7b_fBxjY_OjhJILlKGA/viewform?usp=send_form)
 - After downloading the weights, they will need to be converted to the Hugging Face Transformers format using the [conversion script](/src/transformers/models/llama/convert_llama_weights_to_hf.py). The script can be called with the following (example) command:
 
 ```bash
@@ -37,7 +37,7 @@ tokenizer = transformers.LlamaTokenizer.from_pretrained("/output/path/tokenizer/
 model = transformers.LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
 ```
 
-- The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quick of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LlamaTokenizer` object or in the tokenizer configuration.
+- The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LlamaTokenizer` object or in the tokenizer configuration.
 
 This model was contributed by [zphang](https://huggingface.co/zphang) with contributions from [BlackSamorez](https://huggingface.co/BlackSamorez). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
 
