@@ -30,7 +30,7 @@ LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class LlamaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~LlamaModel`]. It is used to instantiate an LLaMA
+    This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B.
 
@@ -41,7 +41,7 @@ class LlamaConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlamaModel`]
+            `inputs_ids` passed when calling [`LlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
