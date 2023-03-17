@@ -56,30 +56,6 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# starting with activation functions
-# squared-relu and laplace are alternatives to softmax for attention activation
-def relu2(x):
-    relu_x = F.relu(x)
-    squared = torch.square(relu_x)
-    return squared
-
-
-def laplace(x, mu=0.707107, sigma=0.282095):
-    x = (x - mu).div(sigma * math.sqrt(2.0))
-    return 0.5 * (1.0 + torch.erf(x))
-
-
-# gelu-accurate is an alternative to gelu and is used with the remaining hidden activation functions in the
-# original MEGA repo, which all have exact equivalents in ACT2FN
-def gelu_accurate(x):
-    if not hasattr(gelu_accurate, "_a"):
-        gelu_accurate._a = math.sqrt(2 / math.pi)
-    return 0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
-
-
-ACT2FN["gelu_accurate"] = gelu_accurate
-
-
 # utility for causal LM masking in the format that Mega expects
 def generate_causal_mask(seq_len):
     """
@@ -446,12 +422,7 @@ class MegaGatedCrossAttention(nn.Module):
         # (batch_size X target_sequence_length X source_sequence_length)
         qk = torch.bmm(query, key.transpose(1, 2)) / lengths + bias
 
-        if self.attention_activation == "relu2":
-            attn_weights = relu2(qk).type_as(qk)
-        elif self.attention_activation == "laplace":
-            attn_weights = laplace(qk).type_as(qk)
-        else:
-            raise ValueError("Unknown attention activation function: {}".format(self.attention_activation))
+        attn_weights = ACT2FN[self.attention_activation](qk).type_as(qk)
 
         if key_padding_mask is not None:
             attn_weights = attn_weights * key_padding_mask.unsqueeze(1)
@@ -830,12 +801,7 @@ class MovingAverageGatedAttention(nn.Module):
         # (batch_size X number of chunks X sequence_length X sequence_length)
         qk = torch.matmul(query, key.transpose(2, 3)) / lengths + bias
 
-        if self.config.attention_activation == "relu2":
-            attn_weights = relu2(qk).type_as(qk)
-        elif self.config.attention_activation == "laplace":
-            attn_weights = laplace(qk).type_as(qk)
-        else:
-            raise ValueError(f"Unknown attention activation function: {self.config.attention_activation}")
+        attn_weights = ACT2FN[self.config.attention_activation](qk).type_as(qk)
 
         if padding_mask is not None:
             attn_weights = attn_weights * padding_mask.unsqueeze(2)

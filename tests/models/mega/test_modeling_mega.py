@@ -22,6 +22,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -408,10 +409,20 @@ class MegaModelTester:
 
         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length * 8, self.hidden_size))
 
-    def check_element_attention(
+    def check_laplace_self_attention(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.attention_activation = "laplace"
+        model = MegaModel(config)
+
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def check_relu2_self_attention(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.attention_activation = "relu2"
         model = MegaModel(config)
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -444,7 +455,7 @@ class MegaModelTester:
 
 
 @require_torch
-class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MegaForCausalLM,
@@ -459,6 +470,18 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (MegaForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MegaModel,
+            "question-answering": MegaForQuestionAnswering,
+            "text-classification": MegaForSequenceClassification,
+            "text-generation": MegaForCausalLM,
+            "zero-shot": MegaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -542,13 +565,49 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_chunking_longer_sequence(*config_and_inputs)
 
-    def test_for_element_attention(self):
+    def test_for_laplace_attention(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_element_attention(*config_and_inputs)
+        self.model_tester.check_laplace_self_attention(*config_and_inputs)
+    
+    def test_for_relu2_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_relu2_self_attention(*config_and_inputs)
 
     def test_for_sequence_length_beyond_max_positions(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_sequence_length_beyond_max_positions(*config_and_inputs)
+
+    def test_generate_fp16(self):
+        config, input_ids, _, attention_mask, *_ = self.model_tester.prepare_config_and_inputs_for_decoder()
+        # attention_mask = torch.LongTensor(input_ids.ne(1)).to(torch_device)
+        model = MegaForCausalLM(config).eval().to(torch_device)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
+        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_sequence_classification_model(self):
+        config, input_ids, _, attention_mask, *_ = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = self.model_tester.num_labels
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = MegaForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_sequence_classification_model_for_multi_label(self):
+        config, input_ids, _, attention_mask, *_ = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = self.model_tester.num_labels
+        config.problem_type = "multi_label_classification"
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = MegaForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @slow
     def test_model_from_pretrained(self):
