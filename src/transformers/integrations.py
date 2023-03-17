@@ -60,10 +60,12 @@ _has_neptune = (
 if TYPE_CHECKING and _has_neptune:
     try:
         _neptune_version = importlib_metadata.version("neptune")
+        from neptune import Run
         logger.info(f"Neptune version {_neptune_version} available.")
     except importlib_metadata.PackageNotFoundError:
         try:
             _neptune_version = importlib_metadata.version("neptune-client")
+            from neptune.new import Run
             logger.info(f"Neptune-client version {_neptune_version} available.")
         except importlib_metadata.PackageNotFoundError:
             _has_neptune = False
