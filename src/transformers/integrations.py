@@ -27,6 +27,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional
 
+import importlib_metadata
 import numpy as np
 
 from . import __version__ as version
@@ -53,12 +54,19 @@ if _has_comet:
     except (ImportError, ValueError):
         _has_comet = False
 
-_has_neptune = importlib.util.find_spec("neptune") is not None
+_has_neptune = (
+    importlib.util.find_spec("neptune") is not None or importlib.util.find_spec("neptune-client") is not None
+)
 if TYPE_CHECKING and _has_neptune:
     try:
-        from neptune import Run
-    except ImportError:
-        from neptune.new import Run
+        _neptune_version = importlib_metadata.version("neptune")
+        logger.info(f"Neptune version {_neptune_version} available.")
+    except importlib_metadata.PackageNotFoundError:
+        try:
+            _neptune_version = importlib_metadata.version("neptune-client")
+            logger.info(f"Neptune-client version {_neptune_version} available.")
+        except importlib_metadata.PackageNotFoundError:
+            _has_neptune = False
 
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
