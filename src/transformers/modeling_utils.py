@@ -397,9 +397,10 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
+    checkpoint_file_realpath = os.path.realpath(checkpoint_file)
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         # Check format of the archive
-        with safe_open(checkpoint_file, framework="pt") as f:
+        with safe_open(checkpoint_file_realpath, framework="pt") as f:
             metadata = f.metadata()
         if metadata.get("format") not in ["pt", "tf", "flax"]:
             raise OSError(
@@ -410,12 +411,12 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             raise NotImplementedError(
                 f"Conversion from a {metadata['format']} safetensors archive to PyTorch is not implemented yet."
             )
-        return safe_load_file(checkpoint_file)
+        return safe_load_file(checkpoint_file_realpath)
     try:
-        return torch.load(checkpoint_file, map_location="cpu")
+        return torch.load(checkpoint_file_realpath, map_location="cpu")
     except Exception as e:
         try:
-            with open(checkpoint_file) as f:
+            with open(checkpoint_file_realpath) as f:
                 if f.read(7) == "version":
                     raise OSError(
                         "You seem to have cloned a repository without having git-lfs installed. Please install "
