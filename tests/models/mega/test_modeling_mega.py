@@ -568,7 +568,7 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_for_laplace_attention(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_laplace_self_attention(*config_and_inputs)
-    
+
     def test_for_relu2_attention(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_relu2_self_attention(*config_and_inputs)

@@ -120,12 +120,15 @@ class ClippedGELUActivation(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.clip(gelu(x), self.min, self.max)
 
+
 class AccurateGELUActivation(nn.Module):
     """
-    Applies GELU approximation that is faster than default and more accurate than QuickGELU. See: https://github.com/hendrycks/GELUs
+    Applies GELU approximation that is faster than default and more accurate than QuickGELU. See:
+    https://github.com/hendrycks/GELUs
 
     Implemented along with MEGA (Moving Average Equipped Gated Attention)
     """
+
     def __init__(self):
         super().__init__()
         self.precomputed_constant = math.sqrt(2 / math.pi)
@@ -178,22 +181,27 @@ class LinearActivation(nn.Module):
 
 class LaplaceActivation(nn.Module):
     """
-    Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See https://arxiv.org/abs/2209.10655
+    Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See
+    https://arxiv.org/abs/2209.10655
 
     Inspired by squared relu, but with bounded range and gradient for better stability
     """
+
     def forward(self, input, mu=0.707107, sigma=0.282095):
         input = (input - mu).div(sigma * math.sqrt(2.0))
         return 0.5 * (1.0 + torch.erf(input))
+
 
 class ReLUSquaredActivation(nn.Module):
     """
     Applies the relu^2 activation introduced in https://arxiv.org/abs/2109.08668v2
     """
+
     def forward(self, input):
         relu_applied = nn.functional.relu(input)
         squared = torch.square(relu_applied)
         return squared
+
 
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
@@ -210,7 +218,7 @@ ACT2CLS = {
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
     "gelu_pytorch_tanh": PytorchGELUTanh,
     "gelu_accurate": AccurateGELUActivation,
-    'laplace':LaplaceActivation,
+    "laplace": LaplaceActivation,
     "linear": LinearActivation,
     "mish": MishActivation,
     "quick_gelu": QuickGELUActivation,
