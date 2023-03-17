@@ -33,8 +33,10 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 - After conversion, the model and tokenizer can be loaded via:
 
 ```python
-tokenizer = transformers.LlamaTokenizer.from_pretrained("/output/path/tokenizer/")
-model = transformers.LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
+from transformers import LlamaForCausalLM, LlamaTokenizer
+
+tokenizer = LlamaTokenizer.from_pretrained("/output/path/tokenizer/")
+model = LlamaForCausalLM.from_pretrained("/output/path/llama-7b/")
 ```
 
 - The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LlamaTokenizer` object or in the tokenizer configuration.
