@@ -450,6 +450,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
         output_word_offsets: bool = False,
+        n_best: Optional[int] = 1,
     ):
         """
         Decode output logits to audio transcription with language model support.
@@ -480,6 +481,11 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+            n_best (`int`, *optional*, defaults to `1`):
+                Number of best hypotheses to return. If `n_best` is greater than 1, the returned `text` will be a list
+                of lists of strings, `logit_score` will be a list of floats, and `lm_score` will be a list of float,
+                where the length of these lists will correspond to the number of returned hypotheses. The value should
+                be >= 1.
 
                 <Tip>
 
@@ -564,17 +570,37 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         word_offsets = None
         if output_word_offsets:
             word_offsets = [
-                {"word": word, "start_offset": start_offset, "end_offset": end_offset}
-                for word, (start_offset, end_offset) in decoded_beams[0][2]
+                [
+                    {"word": word, "start_offset": start_offset, "end_offset": end_offset}
+                    for word, (start_offset, end_offset) in beam[2]
+                ]
+                for beam in decoded_beams
             ]
+        logit_scores = [beam[-2] for beam in decoded_beams]
 
-        # more output features will be added in the future
-        return Wav2Vec2DecoderWithLMOutput(
-            text=decoded_beams[0][0],
-            logit_score=decoded_beams[0][-2],
-            lm_score=decoded_beams[0][-1],
-            word_offsets=word_offsets,
-        )
+        lm_scores = [beam[-1] for beam in decoded_beams]
+
+        hypotheses = [beam[0] for beam in decoded_beams]
+
+        if n_best > len(decoded_beams):
+            logger.info(
+                "N-best size is larger than the number of generated hypotheses, all hypotheses will be returned."
+            )
+
+        if n_best == 1:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=hypotheses[0],
+                logit_score=logit_scores[0],
+                lm_score=lm_scores[0],
+                word_offsets=word_offsets[0] if word_offsets is not None else None,
+            )
+        else:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=hypotheses[:n_best],
+                logit_score=logit_scores[:n_best],
+                lm_score=lm_scores[:n_best],
+                word_offsets=word_offsets[:n_best] if word_offsets is not None else None,
+            )
 
     @contextmanager
     def as_target_processor(self):
