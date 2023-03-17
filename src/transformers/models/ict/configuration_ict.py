@@ -181,7 +181,7 @@ class ICTTransformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=512,
-        hidden_size=768,
+        hidden_size=1024,
         num_hidden_layers=35,
         num_attention_heads=8,
         intermediate_size=4096,

@@ -198,7 +198,7 @@ class ICTImageProcessor(BaseImageProcessor):
                 Image to reduce dimensions.
 
         Returns:
-            `np.ndarray`: The image with reduced dimension.
+            `np.ndarray`: The image with reduced dimension with shape of [`size['height']` * `size['width']`].
         """
 
         image = np.array(image).reshape((-1, 3))
