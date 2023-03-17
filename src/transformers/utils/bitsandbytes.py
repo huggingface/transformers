@@ -84,7 +84,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", current_key_name=None):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=["lm_head"], current_key_name=None):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
