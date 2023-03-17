@@ -43,6 +43,7 @@ else:
         "LlamaForCausalLM",
         "LlamaModel",
         "LlamaPreTrainedModel",
+        "LlamaForSequenceClassification",
     ]
 
 
@@ -63,11 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama import (
-            LlamaForCausalLM,
-            LlamaModel,
-            LlamaPreTrainedModel,
-        )
+        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
 
 
 else:
