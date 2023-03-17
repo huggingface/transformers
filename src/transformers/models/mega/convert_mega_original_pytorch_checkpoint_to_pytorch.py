@@ -185,8 +185,8 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     updated_keys = {}
     for module_name in original_state_dict.keys():
         new_module_name = None
-        # have to handle gamma, beta, and alpha differently due to their use 
-        # in multiple modules within the original repository
+        # have to handle gamma, beta, and alpha differently due to their use
+        # in multiple modules within the original repository;
         # beta is used in EMA, MovingAverageGatedAttention, and RotaryRelativePositionalBias, and must be renamed due to flax/tf weights
         if "beta" in module_name:
             # EMA sub-layers were always called "move" in the original repo
@@ -196,7 +196,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
                 new_module_name = module_name.replace("beta", "qk_bias")
             else:
                 new_module_name = module_name.replace("beta", "b_param")
-        # beta is used in EMA and MovingAverageGatedAttention, and must be renamed due to flax/tf weights 
+        # beta is used in EMA and MovingAverageGatedAttention, and must be renamed due to flax/tf weights
         elif "gamma" in module_name:
             if "move.gamma" in module_name:
                 new_module_name = module_name.replace("gamma", "kernel_projection_matrix")

@@ -190,7 +190,7 @@ class MultiDimensionDampedEMA(nn.Module):
         # renamed delta (damping_factor) and alpha (decay_factor) to be more descriptive of what the parameters are doing
         self.damping_factor = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
         self.decay_factor = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
-        # renamed gamma (kernel_projection_matrix) and beta (ema_expansion_matrix) respectively to avoid HF renaming 
+        # renamed gamma (kernel_projection_matrix) and beta (ema_expansion_matrix) respectively to avoid HF renaming
         # things and align with the paper's description of these params' behavior
         self.ema_expansion_matrix = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
         self.kernel_projection_matrix = nn.Parameter(torch.Tensor(kernel_dim, self.ndim))
@@ -238,9 +238,9 @@ class MultiDimensionDampedEMA(nn.Module):
 
     def fft_convolution(self, inputs, kernel, length):
         # this is a wrapper for repeated use of EMA calculation via FFT (fast Fourier transform) convolution
-        inputs_fft = torch.fft.rfft(inputs.float(), n=2*length)
-        kernel_fft = torch.fft.rfft(kernel.float(), n=2*length)
-        convolved_sequence = torch.fft.irfft(inputs_fft * kernel_fft, n=2*length)
+        inputs_fft = torch.fft.rfft(inputs.float(), n=2 * length)
+        kernel_fft = torch.fft.rfft(kernel.float(), n=2 * length)
+        convolved_sequence = torch.fft.irfft(inputs_fft * kernel_fft, n=2 * length)
         return convolved_sequence
 
     def ema_step(self, inputs, length, past_state=None):
@@ -250,7 +250,9 @@ class MultiDimensionDampedEMA(nn.Module):
         # (kernel_dim X ema_projection_size X 1)
         damping_factor, previous_timestep_weight = self.get_ema_coefficients()
         # (kernel_dim X ema_projection_size X 1+sequence_length)
-        vander = torch.arange(length + 1).to(damping_factor).view(1, 1, length + 1) * torch.log(previous_timestep_weight)
+        vander = torch.arange(length + 1).to(damping_factor).view(1, 1, length + 1) * torch.log(
+            previous_timestep_weight
+        )
         vander = torch.exp(vander)
         if past_state is not None:
             # (kernel_dim X ema_projection_size X sequence_length) * (kernel_dim X ema_projection_size X 1)
@@ -394,7 +396,9 @@ class MegaGatedCrossAttention(nn.Module):
         )
 
         self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
-        self.hidden_dropout = MegaDropout(self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(
+            self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout
+        )
         # Attention dropout is standard dropout
         self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, is_featurewise=False)
 
@@ -684,15 +688,15 @@ class RMSNorm(nn.Module):
 # preferred method is to use a dictionary. since these normalization classes require different
 # inputs, we handle this with lambda functions to return the instantiated class
 NORM2FN = {
-    'layernorm':lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
-    'scalenorm':lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
-    'rmsnorm':lambda embedding_dim, eps, affine: RMSNorm(embedding_dim, eps=eps, affine=affine),
-    'batchnorm':lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
-    'syncbatchnorm':lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
+    "layernorm": lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
+    "scalenorm": lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
+    "rmsnorm": lambda embedding_dim, eps, affine: RMSNorm(embedding_dim, eps=eps, affine=affine),
+    "batchnorm": lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
+    "syncbatchnorm": lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine),
 }
 
 
-# we retain the parent class to handle input permutation for batch norm 
+# we retain the parent class to handle input permutation for batch norm
 class MegaSequenceNorm(nn.Module):
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
@@ -719,10 +723,10 @@ ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 class MegaDropout(nn.Module):
     def __init__(self, p, is_featurewise=False):
         super().__init__()
-        self.p = p 
+        self.p = p
         self.is_featurewise = is_featurewise
-    
-    def forward(self, input, batch_first:bool = False):
+
+    def forward(self, input, batch_first: bool = False):
         if self.is_featurewise:
             if batch_first:
                 # (batch_size X sequence_length X feature_dimension)
@@ -758,7 +762,9 @@ class MovingAverageGatedAttention(nn.Module):
             self.config.shared_representation_size**-0.5 if self.config.attention_activation == "softmax" else None
         )
         self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
-        self.hidden_dropout = MegaDropout(self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(
+            self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout
+        )
         # attention dropout is standard dropout
         self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, is_featurewise=False)
 
@@ -1100,7 +1106,9 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         self.activation = ACT2FN[config.activation]
 
         self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
-        self.hidden_dropout = MegaDropout(self.config.nffn_activation_dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(
+            self.config.nffn_activation_dropout_prob, is_featurewise=self.config.use_feature_dropout
+        )
 
         self.prenorm = self.config.normalize_before_ffn
         self.norm = MegaSequenceNorm(
@@ -1143,9 +1151,7 @@ class MegaEmbeddings(nn.Module):
             # registering a buffer here allows model tracing when not passing optional token type IDs
             # more info at transformers issue #5664
             self.register_buffer(
-                "token_type_ids", 
-                torch.zeros(config.max_positions, dtype=torch.long).expand((1, -1)), 
-                persistent=False
+                "token_type_ids", torch.zeros(config.max_positions, dtype=torch.long).expand((1, -1)), persistent=False
             )
 
         # End copy
@@ -1163,12 +1169,12 @@ class MegaEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         # the original Mega implementation did not include token type embeddings, so we add
-        # an option to use them if desired; if embeddings are present and token type IDs are 
+        # an option to use them if desired; if embeddings are present and token type IDs are
         # not provided, we will use a registered buffer (which helps with tracing)
         if self.use_token_types:
             if token_type_ids is None:
                 if hasattr(self, "token_type_ids"):
-                    buffered_token_type_ids = self.token_type_ids[:, :input_shape[1]]
+                    buffered_token_type_ids = self.token_type_ids[:, : input_shape[1]]
                     buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], input_shape[1])
                     token_type_ids = buffered_token_type_ids_expanded
                 else:
@@ -1335,6 +1341,7 @@ class MegaBlock(nn.Module):
             outs = outs + (new_key_values,)
 
         return outs
+
 
 # copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->Mega
 class MegaPooler(nn.Module):

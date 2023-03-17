@@ -48,7 +48,7 @@ class MegaConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 4):
             Number of hidden layers in the Mega encoder.
         intermediate_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden size (self-attention value projection) within the Mega encoder 
+            Dimensionality of the hidden size (self-attention value projection) within the Mega encoder
         ema_projection_size (`int`, *optional*, defaults to 16):
             Dimensionality of the MultiDimensionDampedEMA
         bidirectional (`bool`, *optional*, defaults to `True`):
@@ -108,11 +108,13 @@ class MegaConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         ema_delta_alpha_range (`float`, *optional*, defaults to 0.2):
-            The standard deviation for initializing the delta (damping factor) and alpha (decay factor) parameters in MultiDimensionDampedEMA.
+            The standard deviation for initializing the delta (damping factor) and alpha (decay factor) parameters in
+            MultiDimensionDampedEMA.
         ema_beta_range (`float`, *optional*, defaults to 0.02):
             The standard deviation for initializing the beta parameter (expansion matrix) in MultiDimensionDampedEMA.
         ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
-            The standard deviation for initializing the gamma (projection matrix) and omega (residual weight) parameters in MultiDimensionEMA.
+            The standard deviation for initializing the gamma (projection matrix) and omega (residual weight)
+            parameters in MultiDimensionEMA.
         relative_positional_bias (`str`, *optional*, defaults to `"rotary"`):
             Type of relative positional encoding. Choose one of `"rotary"` or `"simple"`. If `"simple"` is selected,
             `max_positions` is used as a limit on input size, while `"rotary"` extrapolates beyond `max_positions`.
@@ -124,8 +126,9 @@ class MegaConfig(PretrainedConfig):
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         add_lm_hidden_dense_layer (`bool`, *optional*, defaults to `True`):
-            Whether to include a hidden layer for projection between encoder outputs and LM heads (`True`) or pass hidden
-            states directly to LM head (`False`). Remains optional for compatibility with original implementation
+            Whether to include a hidden layer for projection between encoder outputs and LM heads (`True`) or pass
+            hidden states directly to LM head (`False`). Remains optional for compatibility with original
+            implementation
 
     Examples:
 
