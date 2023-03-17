@@ -129,6 +129,48 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
             )
 
+    def test_call_vqa(self):
+        # Initialize image_processor
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL images
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test not batched input
+        expected_hidden_dim = (
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * self.image_processor_tester.num_channels
+        ) + 2
+
+        image_processor.is_vqa = True
+
+        for max_patch in self.image_processor_tester.max_patches:
+            # Test not batched input
+            with self.assertRaises(ValueError):
+                encoded_images = image_processor(
+                    image_inputs[0], return_tensors="pt", max_patches=max_patch
+                ).flattened_patches
+
+            dummy_text = "Hello"
+
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch, header_text=dummy_text
+            ).flattened_patches
+            self.assertEqual(
+                encoded_images.shape,
+                (1, max_patch, expected_hidden_dim),
+            )
+
+            # Test batched
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch, header_text=dummy_text
+            ).flattened_patches
+            self.assertEqual(
+                encoded_images.shape,
+                (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
+            )
+
     def test_call_numpy(self):
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
