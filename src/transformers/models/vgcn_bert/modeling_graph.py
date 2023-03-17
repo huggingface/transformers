@@ -55,11 +55,21 @@ class WordGraph:
         self, rows: list, tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
     ):
         if type(rows[0]) == tuple:
-            self.adjacency_matrix, self.vocab, self.vocab_indices = _build_predefined_graph(rows, tokenizer)
+            (
+                self.adjacency_matrix,
+                self.vocab,
+                self.vocab_indices,
+                self.wgraph_id_to_tokenizer_id_map,
+                self.tokenizer_id_to_wgraph_id_map,
+            ) = _build_predefined_graph(rows, tokenizer)
         else:
-            self.adjacency_matrix, self.vocab, self.vocab_indices = _build_pmi_graph(
-                rows, tokenizer, window_size, algorithm, threshold
-            )
+            (
+                self.adjacency_matrix,
+                self.vocab,
+                self.vocab_indices,
+                self.wgraph_id_to_tokenizer_id_map,
+                self.tokenizer_id_to_wgraph_id_map,
+            ) = _build_pmi_graph(rows, tokenizer, window_size, algorithm, threshold)
 
     def normalized(self):
         return _normalize_adj(self.adjacency_matrix) if self.adjacency_matrix else None
@@ -90,7 +100,7 @@ def _sparse_scipy2torch(coo_sparse):
 
 def _build_pmi_graph(
     texts: List[str], tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
-) -> Tuple[sp.csr_matrix, List, dict]:
+): #-> Tuple[sp.csr_matrix, list, dict]:
     """
     Build PMI or NPMI adjacency based on text samples
 
@@ -187,12 +197,18 @@ def _build_pmi_graph(
     )
     vocab_adj.setdiag(1.0)
 
-    return vocab_adj, vocab, vocab_indices
+    wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
+    wgraph_id_to_tokenizer_id_map=dict(sorted(wgraph_id_to_tokenizer_id_map.items()))
+    tokenizer_id_to_wgraph_id_map = {v:k for k,v in wgraph_id_to_tokenizer_id_map.items()}
+    tokenizer_id_to_wgraph_id_map=dict(sorted(tokenizer_id_to_wgraph_id_map.items()))
+    assert len(wgraph_id_to_tokenizer_id_map)==len(tokenizer_id_to_wgraph_id_map)
+
+    return vocab_adj, vocab, vocab_indices, wgraph_id_to_tokenizer_id_map, tokenizer_id_to_wgraph_id_map
 
 
 def _build_predefined_graph(
     words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase
-) -> Tuple[sp.csr_matrix, List, dict]:
+): #-> Tuple[sp.csr_matrix, list, dict]:
     vocab_counter = Counter()
     word_pairs = {}
     for w1, w2, v in words_relations:
@@ -230,7 +246,10 @@ def _build_predefined_graph(
     )
     vocab_adj.setdiag(1.0)
 
-    return vocab_adj, vocab, vocab_indices
+    wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
+    tokenizer_id_to_wgraph_id_map = {v:k for k,v in wgraph_id_to_tokenizer_id_map.items()}
+
+    return vocab_adj, vocab, vocab_indices, wgraph_id_to_tokenizer_id_map,tokenizer_id_to_wgraph_id_map
 
 
 def build_knowledge_graph(rdf_list: List[str], tokenizer: PreTrainedTokenizerBase) -> Tuple[sp.csr_matrix, List, dict]:

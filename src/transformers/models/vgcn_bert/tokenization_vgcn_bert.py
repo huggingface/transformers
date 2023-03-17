@@ -107,7 +107,7 @@ class VGCNBertTokenizer(PreTrainedTokenizer):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         graph_sep_token (`str`, *optional*, defaults to `.`):
-            The separator token for separating graph_embeddings and original sequence embeddings. 
+            The separator token for separating graph_embeddings and original sequence embeddings.
             dot or `[SEP]`(from original VGCN-BERT paper) are recommended.
         sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
@@ -168,7 +168,7 @@ class VGCNBertTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-        self.graph_sep_token=graph_sep_token
+        self.graph_sep_token = graph_sep_token
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
