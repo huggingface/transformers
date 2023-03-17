@@ -306,9 +306,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            data_format (`str`):
-                The data format of the image. Can be either "ChannelDimension.channels_first" or
-                "ChannelDimension.channels_last".
         """
         if image.dtype == np.uint8:
             image = image.astype(np.float32)
@@ -318,7 +315,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         std = np.std(image)
         adjusted_stddev = max(std, 1.0 / math.sqrt(np.prod(image.shape)))
 
-        return normalize(image, mean=mean, std=adjusted_stddev, data_format=data_format, **kwargs)
+        return normalize(image, mean=mean, std=adjusted_stddev, **kwargs)
 
     def preprocess(
         self,
@@ -371,6 +368,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         max_patches = max_patches if max_patches is not None else self.max_patches
         is_vqa = self.is_vqa
 
+        if kwargs.get("data_format", None) is not None:
+            raise ValueError("data_format is not an accepted input as the outputs are ")
+
         images = make_list_of_images(images)
 
         if not valid_images(images):
@@ -401,7 +401,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             ]
 
         if do_normalize:
-            images = [self.normalize(image=image, data_format=data_format) for image in images]
+            images = [self.normalize(image=image) for image in images]
 
         # convert to torch tensor and permute
         images = [
