@@ -48,23 +48,22 @@ class MegaConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 4):
             Number of hidden layers in the Mega encoder.
         intermediate_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden size (attention value projection) within the Mega encoder (H in the Mega
-            paper).
+            Dimensionality of the hidden size (self-attention value projection) within the Mega encoder 
         ema_projection_size (`int`, *optional*, defaults to 16):
-            Dimensionality of the MultiHeadEMA
+            Dimensionality of the MultiDimensionDampedEMA
         bidirectional (`bool`, *optional*, defaults to `True`):
-            Whether the MultiHeadEMA used in Mega's self-attention should work bidirectionally (`True`) or
+            Whether the MultiDimensionDampedEMA used in Mega's self-attention should work bidirectionally (`True`) or
             unidirectionally (`False`). Bidirectional EMA is incompatible with causal decoding, so this should be False
             if you intend to use the model as a decoder.
         shared_representation_size (`int`, *optional*, defaults to 64):
-            Dimensionality of the linear projection for shared representation after silu gating (Z in the Mega paper).
+            Dimensionality of the linear projection for shared representation of self-attention queries and keys
         use_chunking (`bool`, *optional*, defaults to `False`):
             Whether to chunk inputs for linear self-attention complexity (described as Mega-chunk in the paper)
         chunk_size (`int`, *optional*, defaults to -1):
             If `use_chunking` is True, determines the size of the chunks to apply to the input sequence. If chunking is
             used, input sequences must be padded to a multiple of `chunk_size`
         truncation (`int`, *optional*):
-            If specified, the sequence length for which to truncate MultiHeadEMA
+            If specified, the sequence length for which to truncate MultiDimensionDampedEMA
         normalize_before_mega (`bool`, *optional*, defaults to `True`):
             Whether to normalize before (True) or after (False) passing through Mega encoder blocks
         normalization_type (`str`, *optional*, defaults to `"scalenorm"`):
@@ -109,11 +108,11 @@ class MegaConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         ema_delta_alpha_range (`float`, *optional*, defaults to 0.2):
-            The standard deviation for initializing the delta and alpha parameters in MultiHeadEMA.
+            The standard deviation for initializing the delta (damping factor) and alpha (decay factor) parameters in MultiDimensionDampedEMA.
         ema_beta_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing the beta parameter in MultiHeadEMA.
+            The standard deviation for initializing the beta parameter (expansion matrix) in MultiDimensionDampedEMA.
         ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
-            The standard deviation for initializing the gamma and omega parameters in MultiHeadEMA.
+            The standard deviation for initializing the gamma (projection matrix) and omega (residual weight) parameters in MultiDimensionEMA.
         relative_positional_bias (`str`, *optional*, defaults to `"rotary"`):
             Type of relative positional encoding. Choose one of `"rotary"` or `"simple"`. If `"simple"` is selected,
             `max_positions` is used as a limit on input size, while `"rotary"` extrapolates beyond `max_positions`.

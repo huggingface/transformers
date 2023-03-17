@@ -179,15 +179,40 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 
     # modify the state dictionary of the original checkpoint to account for naming issues in the Hugging Face
-    # ecosystem -- any names containing "beta" or "gamma" aren't safe to use and are renamed upon _load_pretrained
+    # ecosystem -- any names containing "beta" or "gamma" aren't safe to use and are renamed upon _load_pretrained,
+    # also renaming previously confusing parameter names
     original_state_dict = original_mlm.mega.encoders.state_dict()
     updated_keys = {}
     for module_name in original_state_dict.keys():
         new_module_name = None
+        # have to handle gamma, beta, and alpha differently due to their use 
+        # in multiple modules within the original repository
+        # beta is used in EMA, MovingAverageGatedAttention, and RotaryRelativePositionalBias, and must be renamed due to flax/tf weights
         if "beta" in module_name:
-            new_module_name = module_name.replace("beta", "b_param")
+            # EMA sub-layers were always called "move" in the original repo
+            if "move.beta" in module_name:
+                new_module_name = module_name.replace("beta", "ema_expansion_matrix")
+            elif "mega_layer.beta" in module_name:
+                new_module_name = module_name.replace("beta", "qk_bias")
+            else:
+                new_module_name = module_name.replace("beta", "b_param")
+        # beta is used in EMA and MovingAverageGatedAttention, and must be renamed due to flax/tf weights 
         elif "gamma" in module_name:
-            new_module_name = module_name.replace("gamma", "g_param")
+            if "move.gamma" in module_name:
+                new_module_name = module_name.replace("gamma", "kernel_projection_matrix")
+            elif "mega_layer.gamma" in module_name:
+                new_module_name = module_name.replace("gamma", "qk_weight")
+            else:
+                new_module_name = module_name.replace("gamma", "g_param")
+        # alpha is used in EMA and positional bias; renaming to improve readability
+        elif "move.alpha" in module_name:
+            new_module_name = module_name.replace("alpha", "decay_factor")
+        # delta is only used in EMA; renaming to improve readability
+        elif "delta" in module_name:
+            new_module_name = module_name.replace("delta", "damping_factor")
+        # omega is only used in EMA; renaming to improve readability
+        elif "omega" in module_name:
+            new_module_name = module_name.replace("omega", "residual_weight")
 
         if new_module_name:
             updated_keys[module_name] = new_module_name

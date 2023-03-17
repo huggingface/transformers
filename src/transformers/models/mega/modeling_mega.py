@@ -55,18 +55,6 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Mega models at https://huggingface.co/models?filter=mega
 ]
 
-# Mega source code converted to pure PyTorch
-# resources
-#   - paper: https://arxiv.org/abs/2209.10655
-#   - original implementation: https://github.com/facebookresearch/mega
-# notable differences from the original implementation:
-#   - refactored away from stateful representation of incremental decoding
-#     state in favor of Hugging Face's typical `past_key_values`
-#   - fixed inconsistency in how causal masks are expected by `softmax_attention`
-#     and `element_attention` in MovingAverageGatedAttention (see https://github.com/facebookresearch/mega/issues/11)
-#   - added support for token type embeddings (not specifically included
-#     or excluded in the original implementation/paper)
-
 
 # starting with activation functions
 # squared-relu and laplace are alternatives to softmax for attention activation
@@ -105,9 +93,84 @@ def generate_causal_mask(seq_len):
     return causal_mask.to(torch.long)
 
 
+# Positional embeddings
+# copied from original Mega code and renamed variables for better readability
+class SimpleRelativePositionalBias(nn.Module):
+    def __init__(self, config: MegaConfig):
+        super().__init__()
+        self.config = config
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
+        self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
+
+    def forward(self, seq_len):
+        if seq_len > self.max_positions:
+            raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
+
+        # seq_len * 2 - 1
+        bias = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
+        # seq_len * 3 - 1
+        tile = F.pad(bias, (0, seq_len))
+        # (seq_len * 3 - 1) * seq_len
+        tile = torch.tile(tile, (seq_len,))
+        tile = tile[:-seq_len]
+        # seq_len x (3 * seq_len - 2)
+        tile = tile.view(seq_len, 3 * seq_len - 2)
+        start = (2 * seq_len - 1) // 2
+        end = tile.size(1) - start
+        tile = tile[:, start:end]
+        return tile
+
+
+# rotary positional bias similar to RoPE
+# taken from original Mega repo
+class RotaryRelativePositionalBias(nn.Module):
+    def __init__(self, config: MegaConfig):
+        super().__init__()
+        if config.hidden_size % 2 != 0:
+            raise RuntimeError("Rotary positional bias requires `hidden_size` to be a multiple of 2")
+        self.config = config
+        self.embed_dim = config.shared_representation_size
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
+        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(
+            config.max_positions, self.embed_dim
+        )
+        # alpha and beta parameters for the rotary bias; beta renamed to b_param to avoid clashes with tf/flax weight handling
+        # in loading pretrained weights
+        self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
+        self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
+        self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))
+
+    @staticmethod
+    def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
+        half_dim = embedding_dim // 2
+        emb = math.log(10000) / half_dim
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.arange(max_positions, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        return torch.sin(emb), torch.cos(emb)
+
+    def rotary(self, x):
+        n, d = x.size()
+        x1, x2 = torch.chunk(x, 2, dim=-1)
+        if self.sine is None or n > self.sine.size(0):
+            self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(n, d)
+            self.max_positions = n
+        self.sine = self.sine.to(self._float_tensor)
+        self.cosine = self.cosine.to(self._float_tensor)
+
+        sin = self.sine[:n]
+        cos = self.cosine[:n]
+        return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=1)
+
+    def forward(self, seq_len):
+        rotary_alpha = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
+        rotary_beta = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
+        bias = torch.einsum("mk,nk->mn", rotary_alpha, rotary_beta)
+        return bias
+
+
 # EMA attention module
-# largely left unmodified except the incremental state
-class MultiHeadEMA(nn.Module):
+# largely left unmodified from original Mega repo except the incremental state and variable names
+class MultiDimensionDampedEMA(nn.Module):
     """Exponential Moving Average Layer.
     See "https://arxiv.org/abs/2209.10655" for more details.
     """
@@ -124,64 +187,75 @@ class MultiHeadEMA(nn.Module):
         self.scale = math.sqrt(1.0 / self.ndim)
 
         kernel_dim = 2 * config.hidden_size if self.bidirectional else config.hidden_size
-        self.delta = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
-        self.alpha = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
-        # renamed gamma and beta to g_param and b_param respectively to avoid HF renaming things
-        self.b_param = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
-        self.g_param = nn.Parameter(torch.Tensor(kernel_dim, self.ndim))
-        self.omega = nn.Parameter(torch.Tensor(config.hidden_size))
+        # renamed delta (damping_factor) and alpha (decay_factor) to be more descriptive of what the parameters are doing
+        self.damping_factor = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
+        self.decay_factor = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
+        # renamed gamma (kernel_projection_matrix) and beta (ema_expansion_matrix) respectively to avoid HF renaming 
+        # things and align with the paper's description of these params' behavior
+        self.ema_expansion_matrix = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
+        self.kernel_projection_matrix = nn.Parameter(torch.Tensor(kernel_dim, self.ndim))
+        # renamed omega to residual_weight to describe what it's doing
+        self.residual_weight = nn.Parameter(torch.Tensor(config.hidden_size))
         self._kernel = None
         self._coeffs = None
 
-    def _calc_coeffs(self):
+    def _compute_ema_coefficients(self):
         self._coeffs = None
         # convert the alpha and delta parameters (kernel_dim x EMA projection size x 1) to [0, 1] with sigmoid
-        p_coeff = torch.sigmoid(self.delta)
-        alpha = torch.sigmoid(self.alpha)
-        q_coeff = 1.0 - p_coeff * alpha
-        return p_coeff, q_coeff
+        damping_factor = torch.sigmoid(self.damping_factor)
+        decay_factor = torch.sigmoid(self.decay_factor)
+        previous_timestep_weight = 1.0 - damping_factor * decay_factor
+        return damping_factor, previous_timestep_weight
 
-    def _compute_kernel(self, length: int):
+    def _compute_efficient_ema_kernel(self, length: int):
+        # computes the kernel used for efficient damped EMA applied via FFT convolution
         self._kernel = None
         # p and q have shape (kernel_dim x ema_projection_size x 1)
-        p_coeff, q_coeff = self._calc_coeffs()
+        damping_factor, previous_timestep_weight = self._compute_ema_coefficients()
         # extend the kernel to (kernel_dim X ema_projection_size X sequence_length) and
         # multiply q by sequential ints up to the sequence length
-        vander = torch.arange(length).to(p_coeff).view(1, 1, length) * torch.log(q_coeff)
-        kernel = (p_coeff * self.b_param) * torch.exp(vander)
+        vander = torch.arange(length).to(damping_factor).view(1, 1, length) * torch.log(previous_timestep_weight)
+        kernel = (damping_factor * self.ema_expansion_matrix) * torch.exp(vander)
         # (kernel_dim X ema_projection_size X sequence_length) -> (kernel_dim, sequence_length)
-        return torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
+        return torch.einsum("dnl,dn->dl", kernel, self.kernel_projection_matrix * self.scale)
 
-    def coeffs(self):
+    def get_ema_coefficients(self):
         if self.training:
-            return self._calc_coeffs()
+            return self._compute_ema_coefficients()
         else:
             if self._coeffs is None:
-                self._coeffs = self._calc_coeffs()
+                self._coeffs = self._compute_ema_coefficients()
             return self._coeffs
 
-    def kernel(self, length: int):
+    def get_ema_kernel(self, length: int):
         kernel_size = length if self.truncation is None else min(self.truncation, length)
         if self.training:
-            return self._compute_kernel(kernel_size)
+            return self._compute_efficient_ema_kernel(kernel_size)
         else:
             if self._kernel is None or self._kernel.size(-1) < kernel_size:
-                self._kernel = self._compute_kernel(kernel_size)
+                self._kernel = self._compute_efficient_ema_kernel(kernel_size)
             return self._kernel[..., :kernel_size]
 
-    def step(self, inputs, length, past_state=None):
+    def fft_convolution(self, inputs, kernel, length):
+        # this is a wrapper for repeated use of EMA calculation via FFT (fast Fourier transform) convolution
+        inputs_fft = torch.fft.rfft(inputs.float(), n=2*length)
+        kernel_fft = torch.fft.rfft(kernel.float(), n=2*length)
+        convolved_sequence = torch.fft.irfft(inputs_fft * kernel_fft, n=2*length)
+        return convolved_sequence
+
+    def ema_step(self, inputs, length, past_state=None):
         if length == 1:
-            return self.one_step(inputs, past_state=past_state)
+            return self.one_ema_step(inputs, past_state=past_state)
 
         # (kernel_dim X ema_projection_size X 1)
-        p_coeff, q_coeff = self.coeffs()
+        damping_factor, previous_timestep_weight = self.get_ema_coefficients()
         # (kernel_dim X ema_projection_size X 1+sequence_length)
-        vander = torch.arange(length + 1).to(p_coeff).view(1, 1, length + 1) * torch.log(q_coeff)
+        vander = torch.arange(length + 1).to(damping_factor).view(1, 1, length + 1) * torch.log(previous_timestep_weight)
         vander = torch.exp(vander)
         if past_state is not None:
             # (kernel_dim X ema_projection_size X sequence_length) * (kernel_dim X ema_projection_size X 1)
             # -> (kernel_dim X ema_projection_size X sequence_length)
-            past_ema_proj = vander[:, :, 1:] * (self.g_param * self.scale).unsqueeze(-1)
+            past_ema_proj = vander[:, :, 1:] * (self.kernel_projection_matrix * self.scale).unsqueeze(-1)
             # past_state will be (batch_size, kernel_dim, ema_projection_size)
             past_ema_state = torch.einsum("bdn,dnl->bdl", past_state, past_ema_proj)
             # (kernel_dim X ema_projection_size) * (batch_size X kernel_dim X ema_projection_size)
@@ -193,16 +267,13 @@ class MultiHeadEMA(nn.Module):
 
         # (kernel_dim X ema_projection_size X sequence_length)
         vander = vander[:, :, :-1]
-        kernel = (p_coeff * self.b_param) * vander
-        kernel_proj = torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
+        kernel = (damping_factor * self.ema_expansion_matrix) * vander
+        kernel_proj = torch.einsum("dnl,dn->dl", kernel, self.kernel_projection_matrix * self.scale)
 
-        kernel_fourier = torch.fft.rfft(kernel_proj.float(), n=2 * length)
-        inputs_fourier = torch.fft.rfft(inputs.float(), n=2 * length)
-        # (batch_size X kernel_dim X sequence_length)
-        out = torch.fft.irfft(inputs_fourier * kernel_fourier, n=2 * length)[..., 0:length]
-        out = out.type_as(inputs)
+        ema_output = self.fft_convolution(inputs, kernel_proj, length=length)[..., 0:length]
+        ema_output = ema_output.type_as(inputs)
         if past_ema_state is not None:
-            out = out + past_ema_state
+            ema_output = ema_output + past_ema_state
 
         updated_hidden_state = torch.einsum("bdl,dnl->bdn", inputs, torch.flip(kernel, dims=[2]))
         if past_vandermonde is not None:
@@ -210,17 +281,17 @@ class MultiHeadEMA(nn.Module):
         # return a tuple:
         # (sequence_length, batch_size, kernel_dim)
         # (batch_size, kernel_dim, ema_projection_size)
-        return out.permute(2, 0, 1), updated_hidden_state
+        return ema_output.permute(2, 0, 1), updated_hidden_state
 
-    def one_step(self, inputs, past_state=None):
-        p_coeff, q_coeff = self.coeffs()
+    def one_ema_step(self, inputs, past_state=None):
+        damping_factor, previous_timestep_weight = self.get_ema_coefficients()
         # (kernel_dim X ema_projection_size) x (batch_size X kernel_dim X 1)
         # -> (batch_size X kernel_dim X ema_projection_size)
-        updated_state = (p_coeff * self.b_param).squeeze(-1) * inputs
+        updated_state = (damping_factor * self.ema_expansion_matrix).squeeze(-1) * inputs
         if past_state is not None:
-            updated_state = updated_state + q_coeff.squeeze(-1) * past_state
+            updated_state = updated_state + previous_timestep_weight.squeeze(-1) * past_state
         # (batch_size X kernel_dim)
-        out = torch.einsum("bdn,dn->bd", updated_state, self.g_param * self.scale)
+        out = torch.einsum("bdn,dn->bd", updated_state, self.kernel_projection_matrix * self.scale)
         # (1 X batch_size X kernel_dim), (batch_size X kernel_dim X ema_projection_size)
         return out.unsqueeze(0), updated_state
 
@@ -232,11 +303,11 @@ class MultiHeadEMA(nn.Module):
         use_cache: bool = False,
     ) -> torch.Tensor:
         """
-        Mega's self-attention mechanism based on exponential moving average (EMA)
+        Mega's exponential moving average (EMA) sub-layer applied prior to single-headed (traditional) self-attention
 
         Args:
             inputs (`torch.Tensor` of shape `(sequence_length, batch_size, hidden_size)`):
-                Hidden state / embedding input on which to perform self-attention
+                Hidden state / embedding input to update via EMA based on FFT convolution
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indicates which inputs are to be ignored (mostly due to padding), where elements are either 1 for *not
                 masked* or 0 for *masked*
@@ -250,7 +321,7 @@ class MultiHeadEMA(nn.Module):
             `tuple(torch.FloatTensor)` containing various elements depending on configuration ([`MegaConfig`]) and
             inputs:
             - **hidden_states** (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`) -- Hidden
-              states updated by EMA self-attention, with same shapes as inputs
+              states updated by EMA, with same shapes as inputs
             - **updated_state** (*optional*, returned when `use_cache=True`) `torch.FloatTensor of shape `(batch_size,
               config.ndim)` -- The incremental EMA state for use in the next step of incremental decoding
         """
@@ -262,7 +333,7 @@ class MultiHeadEMA(nn.Module):
             )
 
         # sequence_length X batch_size X hidden_size
-        residual = inputs * self.omega
+        residual = inputs * self.residual_weight
 
         # (sequence_length x batch_size x hidden_size) -> (batch_size x hidden_size x sequence_length)
         inputs = inputs.permute(1, 2, 0)
@@ -274,7 +345,7 @@ class MultiHeadEMA(nn.Module):
             raise RuntimeError("Bidirectional EMA does not support incremental state")
 
         if use_cache:
-            out, updated_state = self.step(inputs, seq_len, past_state=prev_state)
+            out, updated_state = self.ema_step(inputs, seq_len, past_state=prev_state)
 
             # (batch_size X hidden_size) -> (1 x batch_size x hidden_size)
             out = F.silu(out + residual)
@@ -283,7 +354,7 @@ class MultiHeadEMA(nn.Module):
             return out, updated_state
         else:
             # (hidden_size x sequence_length)
-            kernel = self.kernel(seq_len)
+            kernel = self.get_ema_kernel(seq_len)
             fft_len = seq_len
             s_index = 0
             kernel_size = kernel.size(1)
@@ -296,15 +367,12 @@ class MultiHeadEMA(nn.Module):
                 fft_len = fft_len + kernel_size - 1
                 s_index = 2 * kernel_size - 2
 
-            kernel_fourier = torch.fft.rfft(kernel.float(), n=2 * fft_len)
-            inputs_fourier = torch.fft.rfft(inputs.float(), n=2 * fft_len)
-            # (batch_size X hidden_size X sequence_length)
-            out = torch.fft.irfft(inputs_fourier * kernel_fourier, n=2 * fft_len)[..., s_index : s_index + seq_len]
-            out = out.type_as(inputs)
+            ema_output = self.fft_convolution(inputs, kernel, length=fft_len)[..., s_index : s_index + seq_len]
+            ema_output = ema_output.type_as(inputs)
             # (batch_size X hidden_size X sequence_length) -> (sequence_length X batch_size X hidden_size)
-            out = F.silu(out.permute(2, 0, 1) + residual)
+            gated_ema_output = F.silu(ema_output.permute(2, 0, 1) + residual)
 
-            return out, None
+            return gated_ema_output, None
 
 
 # Gated cross-attention
@@ -325,11 +393,10 @@ class MegaGatedCrossAttention(nn.Module):
             self.config.shared_representation_size**-0.5 if self.attention_activation == "softmax" else None
         )
 
-        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob)
-        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob)
+        self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout)
         # Attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob)
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, is_featurewise=False)
 
         self.prenorm = self.config.normalize_before_mega
         self.norm = MegaSequenceNorm(
@@ -419,7 +486,7 @@ class MegaGatedCrossAttention(nn.Module):
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
         key_padding_mask: Optional[torch.Tensor] = None,
-        prev_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -436,7 +503,7 @@ class MegaGatedCrossAttention(nn.Module):
             key_padding_mask (`torch.LongTensor` of shape `(batch_size, source_sequence_length)`, *optional*):
                 Padding mask corresponding to the source sequence, where entries are 1 for *not masked* and 0 for
                 *masked* tokens
-            prev_key_values (`tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`tuple(torch.FloatTensor)`, *optional*):
                 If provided, the hidden state returned from the previous timestep during incremental decoding; expects
                 that prior cross-attention keys and values will be the last two items in the tuple
             output_attentions (`bool`, defaults to `False`): if true, cross-attention weights will be returned
@@ -466,16 +533,16 @@ class MegaGatedCrossAttention(nn.Module):
                 f"Unexpected embedding dimension received: input is {embed_dim} but expected {self.config.hidden_size}"
             )
 
-        if prev_key_values is not None:
+        if past_key_values is not None:
             # make sure the inputs only have a sequence length of 1 if we're doing incremental decoding
             if seq_len != 1:
                 raise ValueError(f"Incremental decoding requested with self-sequence length > 1: {seq_len}")
-            # expect prev_key_values to have (self_key, self_value, self_ema, cross_key, cross_value)
-            prev_cross_key, prev_cross_value = prev_key_values[-2:]
+            # expect past_key_values to have (self_key, self_value, self_ema, cross_key, cross_value)
+            prev_cross_key, prev_cross_value = past_key_values[-2:]
             key = value = None
 
             # use the self-attention cache to get the position id of the current step
-            prev_self_key = prev_key_values[0]
+            prev_self_key = past_key_values[0]
             num_incremental_steps = prev_self_key.size(1) + 1
         else:
             prev_cross_key = prev_cross_value = None
@@ -521,11 +588,11 @@ class MegaGatedCrossAttention(nn.Module):
             projected_value = projected_value.transpose(0, 1)
 
         # if we're doing incremental decoding, k and v are None and need to be overwritten with past values
-        if prev_key_values is not None:
+        if past_key_values is not None:
             projected_key = prev_cross_key
             projected_value = prev_cross_value
 
-        # if we're returning the cache for later use, store these now for later return (can be done without having prev_key_values provided)
+        # if we're returning the cache for later use, store these now for later return (can be done without having past_key_values provided)
         if use_cache:
             updated_cross_key = projected_key
             updated_cross_value = projected_value
@@ -571,77 +638,6 @@ class MegaGatedCrossAttention(nn.Module):
         return outputs
 
 
-# Positional embeddings
-# copied from original Mega code and renamed variables for better readability
-class SimpleRelativePositionalBias(nn.Module):
-    def __init__(self, config: MegaConfig):
-        super().__init__()
-        self.config = config
-        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
-        self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
-
-    def forward(self, seq_len):
-        if seq_len > self.max_positions:
-            raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
-
-        # seq_len * 2 - 1
-        bias = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
-        # seq_len * 3 - 1
-        tile = F.pad(bias, (0, seq_len))
-        # (seq_len * 3 - 1) * seq_len
-        tile = torch.tile(tile, (seq_len,))
-        tile = tile[:-seq_len]
-        # seq_len x (3 * seq_len - 2)
-        tile = tile.view(seq_len, 3 * seq_len - 2)
-        start = (2 * seq_len - 1) // 2
-        end = tile.size(1) - start
-        tile = tile[:, start:end]
-        return tile
-
-
-class RotaryRelativePositionalBias(nn.Module):
-    def __init__(self, config: MegaConfig):
-        super().__init__()
-        if config.hidden_size % 2 != 0:
-            raise RuntimeError("Rotary positional bias requires `hidden_size` to be a multiple of 2")
-        self.config = config
-        self.embed_dim = config.shared_representation_size
-        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
-        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(
-            config.max_positions, self.embed_dim
-        )
-        self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
-        self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
-        self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))
-
-    @staticmethod
-    def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
-        half_dim = embedding_dim // 2
-        emb = math.log(10000) / half_dim
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(max_positions, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        return torch.sin(emb), torch.cos(emb)
-
-    def rotary(self, x):
-        n, d = x.size()
-        x1, x2 = torch.chunk(x, 2, dim=-1)
-        if self.sine is None or n > self.sine.size(0):
-            self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(n, d)
-            self.max_positions = n
-        self.sine = self.sine.to(self._float_tensor)
-        self.cosine = self.cosine.to(self._float_tensor)
-
-        sin = self.sine[:n]
-        cos = self.cosine[:n]
-        return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=1)
-
-    def forward(self, seq_len):
-        rotary_alpha = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
-        rotary_beta = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
-        bias = torch.einsum("mk,nk->mn", rotary_alpha, rotary_beta)
-        return bias
-
-
 # Normalization modules
 # copied from original Mega repo without modification except variable names
 class ScaleNorm(nn.Module):
@@ -684,70 +680,55 @@ class RMSNorm(nn.Module):
         return input
 
 
+# original Mega repo used a parent class to organize normalization functions; Hugging Face's
+# preferred method is to use a dictionary. since these normalization classes require different
+# inputs, we handle this with lambda functions to return the instantiated class
+NORM2FN = {
+    'layernorm':lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
+    'scalenorm':lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
+    'rmsnorm':lambda embedding_dim, eps, affine: RMSNorm(embedding_dim, eps=eps, affine=affine),
+    'batchnorm':lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
+    'syncbatchnorm':lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
+}
+
+
+# we retain the parent class to handle input permutation for batch norm 
 class MegaSequenceNorm(nn.Module):
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
-        if norm_type == "layernorm":
-            self.norm = nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine)
-        elif norm_type == "scalenorm":
-            self.norm = ScaleNorm(dim=-1, eps=eps, affine=affine)
-        elif norm_type == "rmsnorm":
-            self.norm = RMSNorm(embedding_dim, eps=eps, affine=affine)
-        elif norm_type == "batchnorm":
-            self.norm = nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine)
-        elif norm_type == "syncbatchnorm":
-            self.norm = nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
-        else:
-            raise ValueError("Unknown norm type: {}".format(norm_type))
-
-    def normalize(self, x):
-        if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
-            if x.dim() != 3:
-                raise ValueError("BatchNorm inputs must be exactly 3-dimensional")
-            x = x.permute(1, 2, 0)
-            x = self.norm(x)
-            return x.permute(2, 0, 1)
-        else:
-            return self.norm(x)
+        self.norm = NORM2FN[norm_type](embedding_dim, eps, affine)
 
     def forward(self, input):
-        return self.normalize(input)
+        if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
+            if input.dim() != 3:
+                raise ValueError("BatchNorm inputs must be exactly 3-dimensional")
+            input = input.permute(1, 2, 0)
+            input = self.norm(input)
+            return input.permute(2, 0, 1)
+        else:
+            return self.norm(input)
 
 
 # add this layernorm class to ALL_LAYERNORM_LAYERS
 ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 
-# Dropout: standard dropout + feature dropout
-# copied from Mega repo, but changed name from Fairseq->Mega,
-# modified variable names, and removed unused items:
-# - `make_generation_fast_` method
-# - `apply_during_inference` attribute
-# - `module_name` arg
+# a unified class for both standard and featurewise dropout
+# the original fairseq mega repo used 2 classes for these and included some unnecessary handling of training logic and unused `inplace` option
+# original used torch.functional version of dropout instead of submodules, so retaining that behavior here as well
 class MegaDropout(nn.Module):
-    def __init__(self, p):
+    def __init__(self, p, is_featurewise=False):
         super().__init__()
-        self.p = p
-
-    def forward(self, input, batch_first: bool = False, inplace: bool = False):
-        if self.training:
-            return F.dropout(input, p=self.p, training=True, inplace=inplace)
-        else:
-            return input
-
-
-class MegaFeatureDropout(nn.Module):
-    def __init__(self, p):
-        super().__init__()
-        self.p = p
-
-    def forward(self, input, batch_first: bool = False, inplace: bool = False):
-        if self.training:
+        self.p = p 
+        self.is_featurewise = is_featurewise
+    
+    def forward(self, input, batch_first:bool = False):
+        if self.is_featurewise:
             if batch_first:
                 # (batch_size X sequence_length X feature_dimension)
                 # -> (batch_size X feature_dimension X sequence_length)
                 # -> (batch_size X sequence_length X feature_dimension)
-                return F.dropout2d(input.transpose(-1, -2), p=self.p, training=True, inplace=inplace).transpose(-1, -2)
+                return F.dropout2d(input.transpose(-1, -2), p=self.p, training=self.training).transpose(-1, -2)
             else:
                 if input.dim() != 3:
                     raise ValueError(
@@ -756,9 +737,9 @@ class MegaFeatureDropout(nn.Module):
                 # (sequence_length X batch_size X feature_dimension)
                 # -> (batch_size X feature_dimension X sequence_length)
                 # -> (sequence_length X batch_size X feature_dimension)
-                return F.dropout2d(input.permute(1, 2, 0), p=self.p, training=True, inplace=inplace).permute(2, 0, 1)
+                return F.dropout2d(input.permute(1, 2, 0), p=self.p, training=self.training).permute(2, 0, 1)
         else:
-            return input
+            return F.dropout(input, p=self.p, training=self.training)
 
 
 # Mega attention: EMA + self-attention
@@ -776,16 +757,15 @@ class MovingAverageGatedAttention(nn.Module):
         self.scaling = (
             self.config.shared_representation_size**-0.5 if self.config.attention_activation == "softmax" else None
         )
-        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob)
-        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob)
+        self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(self.config.hidden_dropout_prob, is_featurewise=self.config.use_feature_dropout)
         # attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob)
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, is_featurewise=False)
 
         self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
         )
-        self.move = MultiHeadEMA(config)
+        self.move = MultiDimensionDampedEMA(config)
 
         self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
         self.mx_proj = nn.Linear(
@@ -795,8 +775,11 @@ class MovingAverageGatedAttention(nn.Module):
         self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
         # renamed gamma and beta to g_param and b_param respectively due to Hugging Face renaming weights upon `.from_pretrained`
-        self.g_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
-        self.b_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+        # gamma and beta here are used as elementwise scalar weight and bias applied to queries and keys in self-attention
+        # (after EMA and gating, prior to chunking)
+        # renamed due to collision with tf/flax gamma and beta, and to improve readability
+        self.qk_weight = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+        self.qk_bias = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
         if self.config.relative_positional_bias == "simple":
             self.rel_pos_bias = SimpleRelativePositionalBias(config)
@@ -899,7 +882,7 @@ class MovingAverageGatedAttention(nn.Module):
         input,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
-        prev_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions=False,
         use_cache=False,
     ):
@@ -915,13 +898,13 @@ class MovingAverageGatedAttention(nn.Module):
             causal_mask (`torch.LongTensor` of shape `(sequence_length, sequence_length)`, *optional*):
                 Indicates which inputs are to be ignored due to causal attention, where elements are either 1 for *not
                 masked* or 0 for *masked*
-            prev_key_values (`tuple(torch.Tensor)`, *optional*):
+            past_key_values (`tuple(torch.Tensor)`, *optional*):
                 The hidden states returned from the previous timestep during incremental decoding; expects that
                 self-attention key, value, and EMA states are the first 3 entries in the tuple
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `prev_key_values` as prior state, and returns the updated
+                Whether to perfom incremental decoding; uses `past_key_values` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -957,11 +940,11 @@ class MovingAverageGatedAttention(nn.Module):
         # unpack the incremental state if provided
         # assumed to be (self K, self V, self EMA state, cross K, cross V)
         # also assumes that incremental decoding is working one token at a time, so input sequence length must be 1
-        if self.config.is_decoder and (prev_key_values is not None):
+        if self.config.is_decoder and (past_key_values is not None):
             if seq_len > 1:
                 raise ValueError(f"Incremental decoding only supports self sequence length of 1; received {seq_len}")
             # the first 3 items in the saved states will be these regardless of whether cross-attention is present
-            prev_self_key, prev_self_value, prev_ema_state = prev_key_values[0:3]
+            prev_self_key, prev_self_value, prev_ema_state = past_key_values[0:3]
         else:
             prev_self_key = prev_self_value = prev_ema_state = None
 
@@ -1001,7 +984,7 @@ class MovingAverageGatedAttention(nn.Module):
         # (sequence_length X batch_size X shared_representation_size)
         # -> (sequence_length X batch_size X 1 X shared_representation_size)
         # -> (sequence_length X batch_size X 2 X shared_representation_size)
-        query_key = query_key.unsqueeze(2) * self.g_param + self.b_param
+        query_key = query_key.unsqueeze(2) * self.qk_weight + self.qk_bias
 
         # (sequence_length X batch_size X 2 X shared_representation_size)
         # -> 2 tensors of (sequence_length X batch_size X shared_representation_size)
@@ -1116,9 +1099,8 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         self.act_fn = config.activation
         self.activation = ACT2FN[config.activation]
 
-        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob)
-        self.hidden_dropout = dropout_module(self.config.nffn_activation_dropout_prob)
+        self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
+        self.hidden_dropout = MegaDropout(self.config.nffn_activation_dropout_prob, is_featurewise=self.config.use_feature_dropout)
 
         self.prenorm = self.config.normalize_before_ffn
         self.norm = MegaSequenceNorm(
@@ -1158,6 +1140,13 @@ class MegaEmbeddings(nn.Module):
         self.use_token_types = config.add_token_type_embeddings
         if self.use_token_types:
             self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+            # registering a buffer here allows model tracing when not passing optional token type IDs
+            # more info at transformers issue #5664
+            self.register_buffer(
+                "token_type_ids", 
+                torch.zeros(config.max_positions, dtype=torch.long).expand((1, -1)), 
+                persistent=False
+            )
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -1174,10 +1163,16 @@ class MegaEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         # the original Mega implementation did not include token type embeddings, so we add
-        # an option to use them if desired
+        # an option to use them if desired; if embeddings are present and token type IDs are 
+        # not provided, we will use a registered buffer (which helps with tracing)
         if self.use_token_types:
             if token_type_ids is None:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=input_ids.device)
+                if hasattr(self, "token_type_ids"):
+                    buffered_token_type_ids = self.token_type_ids[:, :input_shape[1]]
+                    buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], input_shape[1])
+                    token_type_ids = buffered_token_type_ids_expanded
+                else:
+                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=input_ids.device)
 
             # access token type embeddings
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -1188,7 +1183,7 @@ class MegaEmbeddings(nn.Module):
         return embeddings
 
 
-class MegaLayer(nn.Module):
+class MegaBlock(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
         self.seq_len_dim = 1
@@ -1275,7 +1270,7 @@ class MegaLayer(nn.Module):
         else:
             causal_mask = None
 
-        # incremental decoding in the MultiHeadEMA module requires that the attention mask has the same
+        # incremental decoding in the MultiDimensionDampedEMA module requires that the attention mask has the same
         # sequence length as the input tensor; if we're caching incremental states, we assume the input
         # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final
         # token in the input (mask is received as [batch X sequence length])
@@ -1288,7 +1283,7 @@ class MegaLayer(nn.Module):
             input=hidden_states,
             padding_mask=mega_padding_mask,
             causal_mask=causal_mask,
-            prev_key_values=past_key_value,
+            past_key_values=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
@@ -1307,7 +1302,7 @@ class MegaLayer(nn.Module):
                 key=encoder_hidden_states,
                 value=encoder_hidden_states,
                 key_padding_mask=encoder_attention_mask,
-                prev_key_values=past_key_value,
+                past_key_values=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
@@ -1341,7 +1336,7 @@ class MegaLayer(nn.Module):
 
         return outs
 
-
+# copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->Mega
 class MegaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1370,20 +1365,20 @@ class MegaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, MultiHeadEMA):
+        if isinstance(module, MultiDimensionDampedEMA):
             with torch.no_grad():
                 # delta & alpha
-                nn.init.normal_(module.delta, mean=0.0, std=self.config.ema_delta_alpha_range)
-                nn.init.normal_(module.alpha, mean=0.0, std=self.config.ema_delta_alpha_range)
+                nn.init.normal_(module.damping_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
+                nn.init.normal_(module.decay_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
                 # beta [1, -1, 1, -1, ...] seems more stable.
                 val = torch.ones(self.config.ema_projection_size, 1)
                 if self.config.ema_projection_size > 1:
                     idx = torch.tensor(list(range(1, self.config.ema_projection_size, 2)))
                     val.index_fill_(0, idx, -1.0)
-                module.b_param.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
+                module.ema_expansion_matrix.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
                 # gamma & omega
-                nn.init.normal_(module.g_param, mean=0.0, std=self.config.ema_gamma_omega_range)
-                nn.init.normal_(module.omega, mean=0.0, std=self.config.ema_gamma_omega_range)
+                nn.init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
+                nn.init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)
         elif isinstance(module, SimpleRelativePositionalBias):
             nn.init.normal_(module.rel_pos_bias, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, RotaryRelativePositionalBias):
@@ -1397,8 +1392,8 @@ class MegaPreTrainedModel(PreTrainedModel):
                 nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, MovingAverageGatedAttention):
             # linear layers covered separately by the generic nn.Linear init below
-            nn.init.normal_(module.g_param, mean=0.0, std=self.config.initializer_range)
-            nn.init.constant_(module.b_param, 0.0)
+            nn.init.normal_(module.qk_weight, mean=0.0, std=self.config.initializer_range)
+            nn.init.constant_(module.qk_bias, 0.0)
         elif isinstance(module, nn.Linear):
             # initializes all linear layers in the entire network
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1506,7 +1501,7 @@ class MegaModel(MegaPreTrainedModel):
         self.config = config
 
         self.embedding_layer = MegaEmbeddings(config)
-        self.encoders = nn.ModuleList([MegaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.encoders = nn.ModuleList([MegaBlock(config) for _ in range(config.num_hidden_layers)])
 
         self.pooler = MegaPooler(config) if add_pooling_layer else None
 
@@ -2191,6 +2186,7 @@ class MegaForTokenClassification(MegaPreTrainedModel):
         )
 
 
+# copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Mega
 class MegaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
