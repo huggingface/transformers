@@ -91,7 +91,7 @@ def write_model(model_path, input_base_path, model_size):
     def permute(w):
         return w.view(n_heads, dim // n_heads // 2, 2, dim).transpose(1, 2).reshape(dim, dim)
 
-    print(f"Fetching all models from the checkpoint at {input_base_path}.")
+    print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     if model_size == "7B":
         # Not shared
