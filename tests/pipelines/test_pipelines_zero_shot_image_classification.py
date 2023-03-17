@@ -78,9 +78,14 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
 
-        self.assertEqual(
+        # The floating scores are so close, we enter floating error approximation and the order is not guaranteed across
+        # python and torch versions.
+        self.assertIn(
             nested_simplify(output),
-            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+            [
+                [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+                [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "c"}, {"score": 0.333, "label": "b"}],
+            ],
         )
 
         output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)

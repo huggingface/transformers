@@ -33,7 +33,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
-DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
+DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
 @dataclass
@@ -41,7 +41,7 @@ class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.5"
+    cache_version: str = "0.6"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
@@ -374,7 +374,8 @@ exotic_models_job = CircleCIJob(
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
-        "pip install natten",
+        # wait until natten is ready for torch 2.0.0
+        # "pip install natten",
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
