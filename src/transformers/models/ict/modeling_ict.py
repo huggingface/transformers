@@ -17,17 +17,18 @@
 
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import torch
-import torch.optim as optim
 import torch.utils.checkpoint
 import torchvision.models as models
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, MaskedImageCompletionOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -73,7 +74,7 @@ class ICTSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.output_projection = nn.Linear(config.hidden_size, config.hidden_size)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.residual_dropout = nn.Dropout(config.residual_dropout_prob)
@@ -82,6 +83,24 @@ class ICTSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
+    
+    def prune_heads(self, heads: Set[int]) -> None:
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.num_attention_heads, self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.query = prune_linear_layer(self.query, index)
+        self.key = prune_linear_layer(self.key, index)
+        self.value = prune_linear_layer(self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.num_attention_heads = self.num_attention_heads - len(heads)
+        self.all_head_size = self.attention_head_size * self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self, hidden_states, output_attentions: bool = False
@@ -110,7 +129,7 @@ class ICTSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = self.output_projection(context_layer)
+        outputs = self.output(context_layer)
         outputs = self.residual_dropout(outputs)
 
         return (outputs, attention_probs) if output_attentions else (outputs,)
@@ -198,15 +217,14 @@ ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). 
+            Generate random masks if not provided.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -240,6 +258,14 @@ class ICTTransformerModel(ICTPretrainedModel):
 
     def get_input_embeddings(self):
         return self.token_embedding
+
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for block, heads in heads_to_prune.items():
+            self.blocks[block].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(ICT_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -671,23 +697,6 @@ ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 @add_start_docstrings(
@@ -734,21 +743,15 @@ ICT_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). 
+            Generate random masks if not provided.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -781,8 +784,8 @@ class ICTModel(ICTPretrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskedImageCompletionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -795,28 +798,26 @@ class ICTModel(ICTPretrainedModel):
         Returns:
 
         Example:
-         ```python
-         >>> import torch
-         >>> import numpy as np
-         >>> from PIL import Image
-         >>> import requests
+        ```python
+        >>> import torch
+        >>> import numpy as np
+        >>> from PIL import Image
+        >>> import requests
 
-         >>> from transformers import AutoImageProcessor, ICTModel
+        >>> from transformers import AutoImageProcessor, ICTModel
 
-         >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
-         >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
 
-         >>> url = "TODO"
-         >>> image = Image.open(requests.get(url, stream=True).raw)
-         >>> # prepare image for the model
-         >>> inputs = processor(image, return_tensors="pt")
-
-         >>> # forward pass
-         >>> with torch.no_grad():
-         ...     outputs = model(**inputs)
-
-         >>> output = TODO
-         ```"""
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)        
+        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
+ask
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -825,11 +826,38 @@ class ICTModel(ICTPretrainedModel):
 
         outputs = self.tranformer(
             pixel_values,
+            bool_masked_pos=bool_masked_pos,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        self.guided_upsampler(outputs)
+        sequence_output = outputs[0]
+        
+        # TODO: Reshaping
+        
+        reconstructed_pixel_values = self.guided_upsampler(sequence_output)
 
-        pass
+        masked_image_completion_loss = None
+        if bool_masked_pos is not None:
+            size = self.config.image_size // self.config.patch_size
+            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+            mask = (
+                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                .repeat_interleave(self.config.patch_size, 2)
+                .unsqueeze(1)
+                .contiguous()
+            )
+            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
+            masked_image_completion_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+
+        if not return_dict:
+            output = (reconstructed_pixel_values,) + outputs[1:]
+            return ((masked_image_completion_loss,) + output) if masked_image_completion_loss is not None else output
+        
+        return MaskedImageCompletionOutput(
+            loss=masked_image_completion_loss,
+            reconstruction=reconstructed_pixel_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
