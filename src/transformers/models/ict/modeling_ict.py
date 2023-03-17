@@ -28,7 +28,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, MaskedImageCompletionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -55,6 +54,7 @@ ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sheonhan/ict-places-256",
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
+
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class ICTSelfAttention(nn.Module):
@@ -83,7 +83,7 @@ class ICTSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
-    
+
     def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
@@ -199,7 +199,7 @@ ICT_TRANSFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
-    
+
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -217,8 +217,8 @@ ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). 
-            Generate random masks if not provided.
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
+            masks if not provided.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -229,6 +229,7 @@ ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 @add_start_docstrings(
     "The transformer for outputting raw hidden-states without any specific head on top.",
     ICT_TRANSFORMER_START_DOCSTRING,
@@ -237,7 +238,7 @@ ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
 class ICTTransformerModel(ICTPretrainedModel):
     config_class = ICTTransformerConfig
     main_input_name = "pixel_values"
-    
+
     def __init__(self, config: ICTTransformerConfig):
         super().__init__(config)
         self.config = config
@@ -290,12 +291,12 @@ class ICTTransformerModel(ICTPretrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         pixel_values = pixel_values.to(torch.long)
-        batch_size, num_pixel  = pixel_values.size()
+        batch_size, num_pixel = pixel_values.size()
 
         inputs_embeds = self.token_embedding(pixel_values)
 
         if bool_masked_pos:
-            masks = masks.unsqueeze(2).ong()
+            masks = bool_masked_pos.unsqueeze(2).ong()
             inputs_embeds = inputs_embeds * (1 - masks.long())
         else:
             masks = torch.randint(low=0, high=2, size=(batch_size, num_pixel))
@@ -677,11 +678,12 @@ class VGG19(torch.nn.Module):
         }
         return out
 
+
 ICT_GUIDED_UP_SAMPLER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
-    
+
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -699,6 +701,7 @@ ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING = r"""
             for details.
 """
 
+
 @add_start_docstrings(
     "The guided sampler for outputting the completed images.",
     ICT_GUIDED_UP_SAMPLER_START_DOCSTRING,
@@ -713,15 +716,15 @@ class ICTGuidedUpsampler(ICTPretrainedModel):
         self.perceptual_loss = PerceptualLoss()
         self.style_loss = StyleLoss()
         self.adversarial_loss = AdversarialLoss(type=config.gan_loss)
-        
+
         self.init_weights()
-        
 
     def forward(self, images, edges, masks):
         images_masked = (images * (1 - masks).float()) + masks
         inputs = torch.cat((images_masked, edges), dim=1)
         outputs = self.generator(inputs)
         return outputs
+
 
 ICT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -744,8 +747,8 @@ ICT_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
             for details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). 
-            Generate random masks if not provided.
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
+            masks if not provided.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -755,6 +758,7 @@ ICT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 @add_start_docstrings(ICT_START_DOCSTRING)
 class ICTModel(ICTPretrainedModel):
@@ -795,29 +799,31 @@ class ICTModel(ICTPretrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-        Returns:
+                Returns:
 
-        Example:
-        ```python
-        >>> import torch
-        >>> import numpy as np
-        >>> from PIL import Image
-        >>> import requests
+                Example:
+                ```python
+                >>> import torch
+                >>> import numpy as np
+                >>> from PIL import Image
+                >>> import requests
 
-        >>> from transformers import AutoImageProcessor, ICTModel
+                >>> from transformers import AutoImageProcessor, ICTModel
 
-        >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
-        >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
+                >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+                >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)        
-        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
-        
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
-ask
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        ```"""
+                >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+                >>> image = Image.open(requests.get(url, stream=True).raw)
+                >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+
+                >>> # create random boolean mask of shape (batch_size, num_patches)
+                >>> bool_masked_pos = torch.randint(
+                ...     low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])
+                ... ).bool()
+
+                >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+                ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -833,9 +839,9 @@ ask
         )
 
         sequence_output = outputs[0]
-        
+
         # TODO: Reshaping
-        
+
         reconstructed_pixel_values = self.guided_upsampler(sequence_output)
 
         masked_image_completion_loss = None
@@ -849,12 +855,14 @@ ask
                 .contiguous()
             )
             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_image_completion_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+            masked_image_completion_loss = (
+                (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+            )
 
         if not return_dict:
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_image_completion_loss,) + output) if masked_image_completion_loss is not None else output
-        
+
         return MaskedImageCompletionOutput(
             loss=masked_image_completion_loss,
             reconstruction=reconstructed_pixel_values,

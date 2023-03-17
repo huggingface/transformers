@@ -146,13 +146,7 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ICTModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ICTModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ICTModel} if is_torch_available() else {}
     fx_compatible = False
 
