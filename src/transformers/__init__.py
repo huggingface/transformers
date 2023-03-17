@@ -4486,9 +4486,9 @@ if TYPE_CHECKING:
             TypicalLogitsWarper,
             top_k_top_p_filtering,
         )
+        from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
-        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
