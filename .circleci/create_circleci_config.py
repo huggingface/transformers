@@ -374,8 +374,7 @@ exotic_models_job = CircleCIJob(
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
-        # wait until natten is ready for torch 2.0.0
-        # "pip install natten",
+        "pip install natten",
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
