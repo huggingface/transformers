@@ -572,9 +572,9 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in
-            the batch must have the same number of masked patches. If `None`, then all patches are considered.
-            Sequence length is `(num_frames // tubelet_size) * (image_size // patch_size) ** 2`.
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
+            batch must have the same number of masked patches. If `None`, then all patches are considered. Sequence
+            length is `(num_frames // tubelet_size) * (image_size // patch_size) ** 2`.
 
         Returns:
 
@@ -787,9 +787,9 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     ) -> Union[tuple, VideoMAEForPreTrainingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in
-            the batch must have the same number of masked patches. Sequence length is
-            `(num_frames // tubelet_size) * (image_size // patch_size) ** 2`.
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
+            batch must have the same number of masked patches. Sequence length is `(num_frames // tubelet_size) *
+            (image_size // patch_size) ** 2`.
 
         Returns:
 
