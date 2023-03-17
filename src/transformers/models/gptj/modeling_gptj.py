@@ -30,12 +30,16 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
+    logging,
+)
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
-
-torch.fx.wrap("len")
 
 logger = logging.get_logger(__name__)
 
@@ -200,7 +204,12 @@ class GPTJAttention(nn.Module):
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
 
-        sincos = embed_positions[position_ids]
+        if is_torch_fx_proxy(position_ids):
+            # Assume no padding in torch.fx case, index-by-tensor can't be traced
+            sincos = embed_positions[None, : position_ids.shape[-1], :].repeat(position_ids.shape[0], 1, 1)
+        else:
+            sincos = embed_positions[position_ids]
+
         sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
