@@ -21,7 +21,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -484,6 +484,14 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
 
+    def test_pipeline_negative_device(self):
+        # To avoid regressing, pipeline used to accept device=-1
+        classifier = pipeline("text-generation", "hf-internal-testing/tiny-random-bert", device=-1)
+
+        expected_output = [{"generated_text": ANY(str)}]
+        actual_output = classifier("Test input.")
+        self.assertEqual(expected_output, actual_output)
+
     @slow
     @require_torch
     def test_load_default_pipelines_pt(self):
@@ -759,7 +767,6 @@ class DynamicPipelineTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
