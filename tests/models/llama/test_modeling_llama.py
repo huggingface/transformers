@@ -276,6 +276,35 @@ class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # def test_inputs_embeds(self):
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+    #     for model_class in (LlamaModel,):
+    #         model = model_class(config)
+    #         model.to(torch_device)
+    #         model.eval()
+
+    #         inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+    #         if not self.is_encoder_decoder:
+    #             input_ids = inputs["input_ids"]
+    #             del inputs["input_ids"]
+    #         else:
+    #             encoder_input_ids = inputs["input_ids"]
+    #             decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+    #             del inputs["input_ids"]
+    #             inputs.pop("decoder_input_ids", None)
+
+    #         wte = model.get_input_embeddings()
+    #         if not self.is_encoder_decoder:
+    #             inputs["inputs_embeds"] = wte(input_ids)
+    #         else:
+    #             inputs["inputs_embeds"] = wte(encoder_input_ids)
+    #             inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+    #         with torch.no_grad():
+    #             model(**inputs)[0]
+
     def test_llama_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -290,7 +319,7 @@ class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_llama_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 1
+        config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -299,7 +328,7 @@ class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, 1))
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     def test_llama_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
