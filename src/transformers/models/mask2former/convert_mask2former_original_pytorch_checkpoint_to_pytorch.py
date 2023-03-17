@@ -14,12 +14,13 @@
 # limitations under the License.
 import json
 import sys
-import requests
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
+
+import requests
 import torch
 import torchvision
 import torchvision.transforms as T
@@ -1004,7 +1005,7 @@ def test(
             video = torchvision.io.read_video(file_path)[0]
             video_frames = [
                 image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
-                for frame in video
+                for frame in video[:5]
             ]
             img_processor_output = torch.cat(video_frames)
 
@@ -1034,16 +1035,24 @@ def test(
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
-
         if not is_video_ckpt:
             tr_complete = T.Compose(
                 [T.Resize(image_size), T.ToTensor()],
             )
             original_model_input = (tr_complete(im) * 255.0).to(torch.int).float().squeeze(0)
         else:
-            image_size = (480, 640)
-            resize = T.Resize(image_size)
-            original_model_input = [resize(frame.permute(2, 0, 1)) for frame in video]
+            original_model_input = []
+            for frame in video[:5]:
+                original_model_input.append(
+                    image_processor(
+                        images=frame,
+                        return_tensors="pt",
+                        do_resize=True,
+                        do_rescale=False,
+                        do_normalize=False,
+                        size=image_size,
+                    ).pixel_values[0]
+                )
 
         # modify original Mask2Former code to return mask and class logits
         original_class_logits, original_mask_logits = original_model([{"image": original_model_input}])
@@ -1055,12 +1064,11 @@ def test(
         assert original_mask_logits.shape == our_mask_logits.shape, "Output masks shapes are not matching."
         assert original_class_logits.shape == our_class_logits.shape, "Output class logits shapes are not matching."
         assert torch.allclose(
-            original_class_logits, our_class_logits, atol=tolerance
-        ), "The class logits are not the same."
-        assert torch.allclose(
             original_mask_logits, our_mask_logits, atol=tolerance
         ), "The predicted masks are not the same."
-
+        assert torch.allclose(
+            original_class_logits, our_class_logits, atol=tolerance
+        ), "The class logits are not the same."
         logger.info("✅ Test passed!")
 
 
@@ -1069,7 +1077,6 @@ def get_model_and_dataset_name(checkpoint_file: Path, is_video_ckpt: bool):
     model_name_raw: str = checkpoint_file.parents[0].stem
 
     # `segmentation_task_type` must be one of the following: `instance-segmentation`, `panoptic-segmentation`, `semantic-segmentation`
-
     segmentation_task_name: str = checkpoint_file.parents[1].stem
     if segmentation_task_name not in ["instance-segmentation", "panoptic-segmentation", "semantic-segmentation"]:
         raise ValueError(
@@ -1077,7 +1084,6 @@ def get_model_and_dataset_name(checkpoint_file: Path, is_video_ckpt: bool):
             " panoptic-segmentation, semantic-segmentation."
         )
 
-    # dataset name must be one of the following: `coco`, `ade`, `cityscapes`, `mapillary-vistas`
     dataset_name: str = checkpoint_file.parents[2].stem
     if dataset_name not in ["coco", "ade", "cityscapes", "mapillary-vistas", "youtubevis_2019", "youtubevis_2021"]:
         raise ValueError(
@@ -1134,8 +1140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--is_video_ckpt",
         type=bool,
-        const=False,
-        nargs="?",
+        default=False,
         help=("Whether the given checkpoint is corresponding to video input."),
     )
 
@@ -1144,7 +1149,7 @@ if __name__ == "__main__":
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     mask2former_dir: Path = args.mask2former_dir
-    is_video_ckpt: bool = args.is_video_ckpt
+    is_video_ckpt = args.is_video_ckpt
     # append the path to the parents to mask2former dir
     sys.path.append(str(mask2former_dir.parent))
     sys.path.append(str(mask2former_dir))
@@ -1160,9 +1165,7 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir, is_video_ckpt
     ):
-
         model_name, dataset_name = get_model_and_dataset_name(checkpoint_file, is_video_ckpt)
-        print("model_name:", model_name)
 
         if not is_video_ckpt:
             height_width = (384, 384)

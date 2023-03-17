@@ -21,7 +21,7 @@ The abstract from the paper is the following:
 *Image segmentation groups pixels with different semantics, e.g., category or instance membership. Each choice
 of semantics defines a task. While only the semantics of each task differ, current research focuses on designing specialized architectures for each task. We present Masked-attention Mask Transformer (Mask2Former), a new architecture capable of addressing any image segmentation task (panoptic, instance or semantic). Its key components include masked attention, which extracts localized features by constraining cross-attention within predicted mask regions. In addition to reducing the research effort by at least three times, it outperforms the best specialized architectures by a significant margin on four popular datasets. Most notably, Mask2Former sets a new state-of-the-art for panoptic segmentation (57.8 PQ on COCO), instance segmentation (50.1 AP on COCO) and semantic segmentation (57.7 mIoU on ADE20K).*
 
-A follow up for Mask2Former paper was also released called [Mask2Former for Video Instance Segmentation](https://arxiv.org/abs/2112.10764) by Bowen Cheng, Anwesa Choudhuri, Ishan Misra, Alexander Kirillov, Rohit Girdhar, Alexander G. Schwing. Through this paper, the authors have tried to show that Mask2Former model can achieve SoTA performance for video instance segmentation as well without any architectural changes.
+A follow up work on Mask2Former for video segmentation was also released in [Mask2Former for Video Instance Segmentation](https://arxiv.org/abs/2112.10764) by Bowen Cheng, Anwesa Choudhuri, Ishan Misra, Alexander Kirillov, Rohit Girdhar, Alexander G. Schwing. 
 
 The abstract from the video instance segmentation paper is the following:
 
@@ -43,6 +43,7 @@ This model was contributed by [Shivalika Singh](https://huggingface.co/shivi) an
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Mask2Former.
 
 - Demo notebooks regarding inference + fine-tuning Mask2Former on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Mask2Former).
+- An extensive tutorial to fine-tune Mask2Former's predecessor [MaskFormer](maskformer) for the instance segmentation task can be found [here](https://pyimagesearch.com/2023/03/13/train-a-maskformer-segmentation-model-with-hugging-face-transformers/). The same steps can be used to fine-tuning Mask2Former once the image processor and model names are replaced with the corresponding Mask2Former class names.
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.

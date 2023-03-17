@@ -18,6 +18,7 @@ import inspect
 import unittest
 
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
@@ -31,6 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    import torchvision
 
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
@@ -439,9 +441,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         # load model and processor
         model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
-        img_size = {"height": 480, "width": 640}
 
         video = prepare_video()
+        image_size = (480, 640)
         video_frames = [
             image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
             for frame in video
@@ -490,7 +492,6 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         # load model and processor
         model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
-        img_size = {"height": 480, "width": 640}
 
         video = prepare_video()
         video_frames = [

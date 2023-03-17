@@ -2224,7 +2224,6 @@ class Mask2FormerVideoTransformerModule(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
     ) -> Mask2FormerMaskedAttentionDecoderOutput:
-
         multi_stage_features = []
         multi_stage_positional_embeddings = []
         size_list = []

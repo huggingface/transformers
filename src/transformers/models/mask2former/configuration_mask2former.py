@@ -96,14 +96,14 @@ class Mask2FormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
+        use_auxiliary_loss (`bool`, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
         feature_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature strides corresponding to features generated from backbone network.
-        output_auxiliary_logits (`boolean`, *optional*):
+        output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.
-        is_video (`boolean``, *optional*, defaults to `False` ):
+        is_video (`bool`, *optional*, defaults to `False` ):
             Whether the input being passed to the model is a video or not.
         num_frames (`int`, *optional*, defaults to 2):
             Number of frames in the video.
