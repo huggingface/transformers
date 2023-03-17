@@ -638,10 +638,11 @@ class BloomModel(BloomPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-        self.build_alibi_tensor = build_alibi_tensor
-
         # Initialize weights and apply final processing
         self.post_init()
+
+    def build_alibi_tensor(self, attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
+        return build_alibi_tensor(attention_mask, num_heads, dtype)
 
     def get_input_embeddings(self):
         return self.word_embeddings
