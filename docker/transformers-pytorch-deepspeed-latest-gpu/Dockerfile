@@ -40,6 +40,9 @@ RUN python3 -m pip uninstall -y deepspeed
 # TODO: Find out why test fail.
 RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
+# dash 2.9.0 has some issue.
+RUN python3 -m pip install -U dash==2.8.1
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
