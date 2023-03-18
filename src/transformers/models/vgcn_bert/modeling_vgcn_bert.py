@@ -115,12 +115,14 @@ class VocabGraphConvolution(nn.Module):
     ):
         super().__init__()
         self.word_embeddings = word_embeddings
-        self.position_embeddings=position_embeddings
+        self.position_embeddings = position_embeddings
         self.wgraphs = wgraphs  # List[torch.sparse.FloatTensor]
-        self.wgraph_id_to_tokenizer_id_maps=[dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
-        self.tokenizer_id_to_wgraph_id_maps=[dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
-        #TODO: device?
-        self.tokenizer_ids_in_gvocab_order_list:List[torch.LongTensor] = [torch.LongTensor(List(m.values())) for m in wgraph_id_to_tokenizer_id_maps]
+        self.wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
+        self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
+        # TODO: device?
+        self.tokenizer_ids_in_gvocab_order_list: List[torch.LongTensor] = [
+            torch.LongTensor(List(m.values())) for m in wgraph_id_to_tokenizer_id_maps
+        ]
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
@@ -131,52 +133,64 @@ class VocabGraphConvolution(nn.Module):
 
         self.fc_hg = nn.Linear(hid_dim, out_dim)
         self.activation = get_activation(activation) if activation else None
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(dropout_rate) if dropout_rate>0 else None
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        # TODO: check that do not init self.word_embeddings
+        # TODO: check this func do not init self.word_embeddings and self.position_embeddings
         for n, p in self.named_parameters():
             if n.startswith("W") or n.startswith("a") or n in ("W", "a", "dense"):
                 nn.init.kaiming_uniform_(p, a=math.sqrt(5))
 
-    def forward(self, input_ids: torch.Tensor, position_ids: torch.Tensor=None):
-        device=input_ids.device
+    def forward(self, input_ids: torch.Tensor, position_ids: torch.Tensor = None):
+        device = input_ids.device
         # TODO: for batch
-        graph_x_ids_list=[torch.LongTensor(list(map(lambda x:m.get(x,-1), input_ids.numpy()), device=device)) for m in self.tokenizer_id_to_wgraph_id_maps]
-        positon_ids_in_gvocab_orders=[ {g_x_id:p_id  for g_x_id, p_id in zip(g_x_ids,position_ids)} for g_x_ids in graph_x_ids_list]
-        positon_ids_in_gvocab_orders=[dict(sorted(m.items())) for m in positon_ids_in_gvocab_orders]
+        gx_ids_in_sentence_order_list = [
+            torch.LongTensor(list(map(lambda x: m.get(x, -1), input_ids.numpy())), device=device)
+            for m in self.tokenizer_id_to_wgraph_id_maps
+        ]
 
+        positon_ids_in_gvocab_order_list = [
+            {gx_id: p_id for gx_id, p_id in zip(gx_ids, position_ids)} for gx_ids in gx_ids_in_sentence_order_list
+        ]
+        positon_ids_in_gvocab_order_list = [dict(sorted(m.items())) for m in positon_ids_in_gvocab_order_list]
 
         # G_embedding=(act(V1*A1_sub*W1_vh)+act(V2*A2_sub*W2_vh)）*W_hg
         # H_eh = torch.zeros((self.word_embeddings.))
-        for g_v_ids, g, g_x_ids, p_v_dict fc_vh in zip(self.tokenizer_ids_in_gvocab_order_list, self.wgraphs, graph_x_ids_list,positon_ids_in_gvocab_orders, self.fc_vh_list):
+        for gv_ids, g, gx_ids, p_gv_dict, fc_vh in zip(
+            self.tokenizer_ids_in_gvocab_order_list,
+            self.wgraphs,
+            gx_ids_in_sentence_order_list,
+            positon_ids_in_gvocab_order_list,
+            self.fc_vh_list,
+        ):
             # A1_sub*W1_vh
-            sub_wgraph = g[g_x_ids]  # TODO: correct
+            sub_wgraph = g[gx_ids]  # TODO: correct
+            #TODO: squeeze the sub_graph
             # H_vh = sub_wgraph.mm(getattr(self, "W%d_vh" % i))
             H_vh = fc_vh(sub_wgraph)
 
             # V1*A1_sub*W1_vh
-            gvocab_ev = self.word_embeddings(g_v_ids).transpose(1, 2)
+            gvocab_ev = self.word_embeddings(gv_ids).transpose(1, 2)
             if position_ids:
-                # TODO: correct X_position_dv 
-                X_position_ev = self.position_embeddings(torch.LongTensor(list(p_v_dict.values())))
+                # TODO: correct X_position_dv
+                position_in_gvocab_ev = self.position_embeddings(torch.LongTensor(list(p_gv_dict.values())))
                 # X_position_ev=eye.mm(X_position_env)
-                gvocab_ev += X_position_ev
+                gvocab_ev += position_in_gvocab_ev
             H_eh = gvocab_ev.matmul(H_vh)
 
             # fc -> act -> dropout
             if self.activation:
                 H_eh = self.activation(H_eh)
-            if self.dropout>0:
+            if self.dropout:
                 H_eh = self.dropout(H_eh)
 
-            fused_H = H_eh if not fused_H else fused_H + H_eh  #TODO: H_eh+=...
+            fused_H = H_eh if not fused_H else fused_H + H_eh  # TODO: H_eh+=...
 
-        # fused_H=LayerNorm(fused_H) # embedding layer will do it
+        # fused_H=LayerNorm(fused_H) # embedding assemble layer will do LayerNorm
         out_ge = self.fc_hg(fused_H).transpose(1, 2)
-        # self.dropout(out_ge) # embedding layer will do it
+        # self.dropout(out_ge) # embedding assemble layer will do dropout
         return out_ge
 
 
@@ -220,13 +234,12 @@ class VGCNEmbeddings(nn.Module):
             vgcn_graphs,
             vgcn_vocab_ids,
             self.word_embeddings,
-            self.position_embeddings
+            self.position_embeddings,
             config.vgcn_hidden_dim,
             self.vgcn_graph_embds_dim,
             config.vgcn_activation,
             config.vgcn_dropout,
         )
-
 
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
@@ -239,9 +252,7 @@ class VGCNEmbeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(
-        self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Parameters:
             input_ids (torch.Tensor):
