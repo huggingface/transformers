@@ -592,109 +592,164 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             raise ValueError("`stride` must be a positive integer no greater "
                              "than `window_length`")
 
-    def __call__(self, inputs: Union[str, List[str]], **kwargs):
-        """
-        Classify each token of the text(s) given as inputs.
-        Args:
-            inputs (:obj:`str` or :obj:`List[str]`):
-                One or several texts (or one list of texts) for token classification.
-        Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a list of dictionaries (one for each token in
-            the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
-            with the following keys:
-            - **word** (:obj:`str`) -- The token/word classified.
-            - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
-              `aggregation_strategy` is not :obj:`"none"`.
-            - **index** (:obj:`int`, only present when ``aggregation_strategy="none"``) -- The index of the
-              corresponding token in the sentence.
-            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
-            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
-        """
+    def preprocess(self, sentence, offset_mapping=None):
+        model_inputs = self.tokenizer(
+            sentence,
+            return_tensors=self.framework,
+            truncation=True,
+            return_special_tokens_mask=True,
+            return_offsets_mapping=self.tokenizer.is_fast,
+            add_special_tokens=True,
+            padding=True,
+            max_length=self.window_length,
+            stride=self.stride,
+            return_overflowing_tokens=True
+        )
+        model_inputs.pop("overflow_to_sample_mapping")
 
-        _inputs, offset_mappings = self._args_parser(inputs, **kwargs)
+        if offset_mapping:
+            model_inputs["offset_mapping"] = offset_mapping
 
-        answers = []
-        num_labels = self.model.num_labels
+        model_inputs["sentence"] = sentence
 
-        for i, sentence in enumerate(_inputs):
+        return model_inputs
 
-            # Manage correct placement of the tensors
-            with self.device_placement():
+    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
+        # TODO: Implement this
+        raise ValueError(f"model_outputs = {model_outputs['input_ids']}")
+        super().postprocess(model_outputs, aggregation_strategy=aggregation_strategy, ignore_labels=ignore_labels)
+        # if ignore_labels is None:
+        #     ignore_labels = ["O"]
+        # logits = model_outputs["logits"][0].numpy()
+        # sentence = model_outputs["sentence"]
+        # input_ids = model_outputs["input_ids"][0]
+        # offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
+        # special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
-                tokens = self.tokenizer(
-                    sentence,
-                    padding=True,
-                    return_attention_mask=False,
-                    return_tensors=self.framework,
-                    return_special_tokens_mask=True,
-                    add_special_tokens=False,
-                    return_offsets_mapping=self.tokenizer.is_fast
-                )
-                if self.tokenizer.is_fast:
-                    offset_mapping = \
-                        tokens.pop("offset_mapping").cpu().numpy()[0]
-                elif offset_mappings:
-                    offset_mapping = offset_mappings[i]
-                else:
-                    offset_mapping = None
+        # maxes = np.max(logits, axis=-1, keepdims=True)
+        # shifted_exp = np.exp(logits - maxes)
+        # scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-                special_tokens_mask = \
-                    tokens.pop("special_tokens_mask").cpu().numpy()[0]
+        # if self.framework == "tf":
+        #     input_ids = input_ids.numpy()
+        #     offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
 
-                if self.framework == "tf":
-                    raise ValueError("SlidingWindowNERPipeline does not "
-                                     "support TensorFlow models.")
-                # Forward inference pass
-                inference_context = self.get_inference_context()
-                with inference_context():
-                    tokens = self.ensure_tensor_on_device(**tokens)
+        # pre_entities = self.gather_pre_entities(
+        #     sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+        # )
+        # grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
+        # # Filter anything that is in self.ignore_labels
+        # entities = [
+        #     entity
+        #     for entity in grouped_entities
+        #     if entity.get("entity", None) not in ignore_labels
+        #        and entity.get("entity_group", None) not in ignore_labels
+        # ]
+        # return entities
 
-                    # Get logits (i.e. tag scores)
-                    entities = np.zeros(tokens['input_ids'].shape[1:] +
-                                        (num_labels,))
-                    writes = np.zeros(entities.shape)
-                    for start in range(
-                            0, tokens['input_ids'].shape[1] - 1,
-                            self.stride):
-                        end = start + self.window_length - 2
-                        window_input_ids = torch.cat([
-                            torch.tensor([[CLS_ID]]),
-                            tokens['input_ids'][:, start:end],
-                            torch.tensor([[SEP_ID]])
-                        ], dim=1)
-                        window_logits = self.model(
-                            input_ids=window_input_ids)[0][0].cpu().numpy()
-                        entities[start:end] += window_logits[1:-1]
-                        writes[start:end] += 1
-                    # Old way for getting logits under PyTorch
-                    # entities = self.model(**tokens)[0][0].cpu().numpy()
-                    input_ids = tokens["input_ids"].cpu().numpy()[0]
-                    entities = entities / writes
+    # def __call__(self, inputs: Union[str, List[str]], **kwargs):
+    #     """
+    #     Classify each token of the text(s) given as inputs.
+    #     Args:
+    #         inputs (:obj:`str` or :obj:`List[str]`):
+    #             One or several texts (or one list of texts) for token classification.
+    #     Return:
+    #         A list or a list of list of :obj:`dict`: Each result comes as a list of dictionaries (one for each token in
+    #         the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
+    #         with the following keys:
+    #         - **word** (:obj:`str`) -- The token/word classified.
+    #         - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
+    #         - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
+    #           `aggregation_strategy` is not :obj:`"none"`.
+    #         - **index** (:obj:`int`, only present when ``aggregation_strategy="none"``) -- The index of the
+    #           corresponding token in the sentence.
+    #         - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
+    #           Only exists if the offsets are available within the tokenizer
+    #         - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
+    #           Only exists if the offsets are available within the tokenizer
+    #     """
 
-                    scores = np.exp(entities) / np.exp(entities).sum(
-                        -1, keepdims=True)
+    #     _inputs, offset_mappings = self._args_parser(inputs, **kwargs)
 
-                    pre_entities = self.gather_pre_entities(
-                        sentence, input_ids, scores, offset_mapping,
-                        special_tokens_mask, self._postprocess_params['aggregation_strategy'])
-                    grouped_entities = self.aggregate(
-                        pre_entities, self._postprocess_params['aggregation_strategy'])
-                    # Filter anything that is in self.ignore_labels
-                    entities = [
-                        entity
-                        for entity in grouped_entities
-                        if entity.get("entity", None) not in ["O"]
-                        and entity.get("entity_group", None) not in
-                        ["O"]
-                    ]
-                    answers.append(entities)
+    #     answers = []
+    #     num_labels = self.model.num_labels
 
-        if len(answers) == 1:
-            return answers[0]
-        return answers
+    #     for i, sentence in enumerate(_inputs):
+
+    #         # Manage correct placement of the tensors
+    #         with self.device_placement():
+
+    #             tokens = self.tokenizer(
+    #                 sentence,
+    #                 padding=True,
+    #                 return_attention_mask=False,
+    #                 return_tensors=self.framework,
+    #                 return_special_tokens_mask=True,
+    #                 add_special_tokens=False,
+    #                 return_offsets_mapping=self.tokenizer.is_fast
+    #             )
+    #             if self.tokenizer.is_fast:
+    #                 offset_mapping = \
+    #                     tokens.pop("offset_mapping").cpu().numpy()[0]
+    #             elif offset_mappings:
+    #                 offset_mapping = offset_mappings[i]
+    #             else:
+    #                 offset_mapping = None
+
+    #             special_tokens_mask = \
+    #                 tokens.pop("special_tokens_mask").cpu().numpy()[0]
+
+    #             if self.framework == "tf":
+    #                 raise ValueError("SlidingWindowNERPipeline does not "
+    #                                  "support TensorFlow models.")
+    #             # Forward inference pass
+    #             inference_context = self.get_inference_context()
+    #             with inference_context():
+    #                 tokens = self.ensure_tensor_on_device(**tokens)
+
+    #                 # Get logits (i.e. tag scores)
+    #                 entities = np.zeros(tokens['input_ids'].shape[1:] +
+    #                                     (num_labels,))
+    #                 writes = np.zeros(entities.shape)
+    #                 for start in range(
+    #                         0, tokens['input_ids'].shape[1] - 1,
+    #                         self.stride):
+    #                     end = start + self.window_length - 2
+    #                     window_input_ids = torch.cat([
+    #                         torch.tensor([[CLS_ID]]),
+    #                         tokens['input_ids'][:, start:end],
+    #                         torch.tensor([[SEP_ID]])
+    #                     ], dim=1)
+    #                     window_logits = self.model(
+    #                         input_ids=window_input_ids)[0][0].cpu().numpy()
+    #                     entities[start:end] += window_logits[1:-1]
+    #                     writes[start:end] += 1
+    #                 # Old way for getting logits under PyTorch
+    #                 # entities = self.model(**tokens)[0][0].cpu().numpy()
+    #                 input_ids = tokens["input_ids"].cpu().numpy()[0]
+    #                 entities = entities / writes
+
+    #                 scores = np.exp(entities) / np.exp(entities).sum(
+    #                     -1, keepdims=True)
+
+    #                 pre_entities = self.gather_pre_entities(
+    #                     sentence, input_ids, scores, offset_mapping,
+    #                     special_tokens_mask, self._postprocess_params['aggregation_strategy'])
+    #                 grouped_entities = self.aggregate(
+    #                     pre_entities, self._postprocess_params['aggregation_strategy'])
+    #                 # Filter anything that is in self.ignore_labels
+    #                 entities = [
+    #                     entity
+    #                     for entity in grouped_entities
+    #                     if entity.get("entity", None) not in ["O"]
+    #                     and entity.get("entity_group", None) not in
+    #                     ["O"]
+    #                 ]
+    #                 answers.append(entities)
+
+    #     if len(answers) == 1:
+    #         return answers[0]
+    #     return answers
 
 
 NerPipeline = TokenClassificationPipeline
