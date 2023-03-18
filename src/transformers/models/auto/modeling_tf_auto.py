@@ -193,7 +193,6 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
-        ("beit", "TFBeitForMaskedImageModeling"),
         ("deit", "TFDeiTForMaskedImageModeling"),
         ("swin", "TFSwinForMaskedImageModeling"),
     ]
