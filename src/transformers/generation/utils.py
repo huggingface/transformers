@@ -1191,12 +1191,9 @@ class GenerationMixin:
         """
 
         if not synced_gpus and is_deepspeed_zero3_enabled():
-            import torch.distributed
-
-            world_size = torch.distributed.world_size()
-            if world_size > 1:
+            if dist.world_size() > 1:
                 logger.warning_once(
-                    f"Detected DeepSpeed ZeRO Stage 3 with {world_size} gpus, "
+                    f"Detected DeepSpeed ZeRO Stage 3 with {dist.world_size()} gpus, "
                     "which requires `synced_gpus=True` `generate` argument. Enable it to remove this warning."
                 )
                 synced_gpus = True
