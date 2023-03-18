@@ -33,8 +33,14 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
+  - local: perf_train_cpu
+    title: Addestramento efficiente su CPU
+  - local: perf_train_cpu_many
+    title: Addestramento efficiente su multiple CPU
   - local: big_models
     title: Istanziare un big model
+  - local: migration
+    title: Passaggio da pacchetti precedenti
   - local: debugging
     title: Debugging
   title: Guide pratiche

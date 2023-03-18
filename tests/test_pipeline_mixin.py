@@ -172,7 +172,7 @@ class PipelineTesterMixin:
 
         for tokenizer_name in tokenizer_names:
             for processor_name in processor_names:
-                if is_test_to_skip(
+                if self.is_pipeline_test_to_skip(
                     pipeline_test_class_name,
                     model_architecture.config_class,
                     model_architecture,
@@ -404,6 +404,11 @@ class PipelineTesterMixin:
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return False
+
 
 def validate_test_components(test_case, task, model, tokenizer, processor):
     # TODO: Move this to tiny model creation script
@@ -431,109 +436,3 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
                 f"(`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is greater than "
                 f"`config_vocab_size` ({config_vocab_size}). Something is wrong."
             )
-
-
-def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer_name, processor_name):
-    """Some tests are just not working"""
-
-    to_skip = False
-
-    if config_class.__name__ == "RoCBertConfig" and test_casse_name in [
-        "FillMaskPipelineTests",
-        "FeatureExtractionPipelineTests",
-        "TextClassificationPipelineTests",
-        "TokenClassificationPipelineTests",
-    ]:
-        # Get error: IndexError: index out of range in self.
-        # `word_shape_file` and `word_pronunciation_file` should be shrunk during tiny model creation,
-        # otherwise `IndexError` could occur in some embedding layers. Skip for now until this model has
-        # more usage.
-        to_skip = True
-    elif config_class.__name__ in ["LayoutLMv3Config", "LiltConfig"]:
-        # Get error: ValueError: Words must be of type `List[str]`. Previously, `LayoutLMv3` is not
-        # used in pipeline tests as it could not find a checkpoint
-        # TODO: check and fix if possible
-        to_skip = True
-    # config/model class we decide to skip
-    elif config_class.__name__ in ["TapasConfig"]:
-        # Get error: AssertionError: Table must be of type pd.DataFrame. Also, the tiny model has large
-        # vocab size as the fast tokenizer could not be converted. Previous, `Tapas` is not used in
-        # pipeline tests due to the same reason.
-        # TODO: check and fix if possible
-        to_skip = True
-
-    # TODO: check and fix if possible
-    if not to_skip and tokenizer_name is not None:
-        if (
-            test_casse_name == "QAPipelineTests"
-            and not tokenizer_name.endswith("Fast")
-            and config_class.__name__
-            in [
-                "FlaubertConfig",
-                "GPTJConfig",
-                "LongformerConfig",
-                "MvpConfig",
-                "OPTConfig",
-                "ReformerConfig",
-                "XLMConfig",
-            ]
-        ):
-            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
-            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
-            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
-            to_skip = True
-        elif test_casse_name == "ZeroShotClassificationPipelineTests" and config_class.__name__ in [
-            "CTRLConfig",
-            "OpenAIGPTConfig",
-        ]:
-            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
-            # `CTRLConfig` and `OpenAIGPTConfig` were never used in pipeline tests, either because of a missing
-            # checkpoint or because a tiny config could not be created
-            to_skip = True
-        elif test_casse_name == "TranslationPipelineTests" and config_class.__name__ in [
-            "M2M100Config",
-            "PLBartConfig",
-        ]:
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `M2M100Config` and `PLBartConfig` were never used in pipeline tests: cannot create a simple tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and config_class.__name__ in [
-            "ProphetNetConfig",
-            "TransfoXLConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `TransfoXLConfig` and `ProphetNetConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer.
-            to_skip = True
-        elif test_casse_name == "FillMaskPipelineTests" and config_class.__name__ in [
-            "FlaubertConfig",
-            "XLMConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `FlaubertConfig` and `TransfoXLConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and model_architecture.__name__ in [
-            "TFRoFormerForCausalLM"
-        ]:
-            # TODO: add `prepare_inputs_for_generation` for `TFRoFormerForCausalLM`
-            to_skip = True
-        elif test_casse_name == "QAPipelineTests" and model_architecture.__name__ in ["FNetForQuestionAnswering"]:
-            # TODO: The change in `base.py` in the PR #21132 (https://github.com/huggingface/transformers/pull/21132)
-            #       fails this test case. Skip for now - a fix for this along with the initial changes in PR #20426 is
-            #       too much. Let `ydshieh` to fix it ASAP once #20426 is merged.
-            to_skip = True
-        elif config_class.__name__ == "LayoutLMv2Config" and test_casse_name in [
-            "QAPipelineTests",
-            "TextClassificationPipelineTests",
-            "TokenClassificationPipelineTests",
-            "ZeroShotClassificationPipelineTests",
-        ]:
-            # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
-            # config. With new tiny model creation, it is available, but we need to fix the failed tests.
-            to_skip = True
-        elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
-            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
-            to_skip = True
-
-    return to_skip
