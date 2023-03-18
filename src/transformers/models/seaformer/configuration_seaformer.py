@@ -28,7 +28,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "seaformer-small": "https://huggingface.co/seaformer-small/resolve/main/config.json",
+    "seaformer-large": "https://huggingface.co/seaformer-large/resolve/main/config.json",
 }
 
 
@@ -102,24 +102,42 @@ class SeaformerConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[32, 64, 160, 256],
-        patch_sizes=[7, 3, 3, 3],
-        strides=[4, 2, 2, 2],
-        num_attention_heads=[1, 2, 5, 8],
-        mlp_ratios=[4, 4, 4, 4],
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        classifier_dropout_prob=0.1,
-        initializer_range=0.02,
-        drop_path_rate=0.1,
-        layer_norm_eps=1e-6,
-        decoder_hidden_size=256,
+        num_encoder_blocks=3,
+        depths=[3, 3, 3],
+        num_labels = 150,
+        channels = [32, 64, 128, 192, 256, 320],
+        cfgs = [
+                [   [3, 3, 32, 1],  
+                    [3, 4, 64, 2], 
+                    [3, 4, 64, 1]],  
+                [
+                    [5, 4, 128, 2],  
+                    [5, 4, 128, 1]],  
+                [
+                    [3, 4, 192, 2],  
+                    [3, 4, 192, 1]],
+                [
+                    [5, 4, 256, 2]],  
+                [
+                    [3, 6, 320, 2]]
+            ],
+        drop_path_rate = 0.1,
+        emb_dims = [192, 256, 320],
+        key_dims = [16, 20, 24],
+        num_heads=8,
+        mlp_ratios=[2,4,6],
+        attn_ratios = 2,
+        act_layer = None,
+        in_channels = [128, 192, 256, 320],
+        in_index = [0, 1, 2, 3],
+        decoder_channels = 192,
+        dropout_ratio = 0.1,
+        embed_dims = [128, 160, 192],
+        is_dw = True,
+        align_corners = False,
         semantic_loss_ignore_index=255,
-        **kwargs,
+        hidden_sizes = [128],
+        **kwargs
     ):
         super().__init__(**kwargs)
 
@@ -133,24 +151,27 @@ class SeaformerConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
-        self.sr_ratios = sr_ratios
-        self.hidden_sizes = hidden_sizes
-        self.patch_sizes = patch_sizes
-        self.strides = strides
-        self.mlp_ratios = mlp_ratios
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.initializer_range = initializer_range
+        self.channels = channels
+        self.cfgs = cfgs
         self.drop_path_rate = drop_path_rate
-        self.layer_norm_eps = layer_norm_eps
-        self.decoder_hidden_size = decoder_hidden_size
-        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
+        self.emb_dims = emb_dims
+        self.key_dims = key_dims
+        self.num_heads = num_heads
+        self.mlp_ratios = mlp_ratios
+        self.attn_ratios = attn_ratios
+        self.act_layer = act_layer
+        self.in_channels = in_channels
+        self.in_index = in_index
+        self.dropout_ratio = dropout_ratio
+        self.embed_dims = embed_dims
+        self.decoder_channels = decoder_channels
+        self.is_dw = is_dw
+        self.align_corners = align_corners
+        self.num_labels = num_labels
+        self.hidden_sizes = hidden_sizes
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-
-
+        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
+        
 class SeaformerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
