@@ -214,14 +214,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.999, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 0.999, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.997, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 0.999, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 0.999, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.999, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 0.999, "word": "Musk Foundation", "start": 297, "end": 312},
+                {'entity_group': 'PER', 'score': 1.0, 'word': 'Elon Reeve Musk', 'start': 0, 'end': 15},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'SpaceX', 'start': 97, 'end': 103},
+                {'entity_group': 'ORG', 'score': 0.984, 'word': 'Tesla, Inc.', 'start': 150, 'end': 161},
+                {'entity_group': 'ORG', 'score': 0.998, 'word': 'Twitter, Inc.', 'start': 180, 'end': 193},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'The Boring Company', 'start': 206, 'end': 224},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Neuralink', 'start': 240, 'end': 249},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'OpenAI', 'start': 254, 'end': 260},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Musk Foundation', 'start': 297, 'end': 312},
             ],
         )
 
@@ -230,14 +230,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.999, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 0.999, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.997, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 0.999, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 0.999, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.999, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 0.999, "word": "Musk Foundation", "start": 297, "end": 312},
+                {'entity_group': 'PER', 'score': 1.0, 'word': 'Elon Reeve Musk', 'start': 0, 'end': 15},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'SpaceX', 'start': 97, 'end': 103},
+                {'entity_group': 'ORG', 'score': 0.984, 'word': 'Tesla, Inc.', 'start': 150, 'end': 161},
+                {'entity_group': 'ORG', 'score': 0.998, 'word': 'Twitter, Inc.', 'start': 180, 'end': 193},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'The Boring Company', 'start': 206, 'end': 224},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Neuralink', 'start': 240, 'end': 249},
+                {'entity_group': 'ORG', 'score': 0.999, 'word': 'OpenAI', 'start': 254, 'end': 260},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Musk Foundation', 'start': 297, 'end': 312},
             ],
         )
 
@@ -246,14 +246,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.999, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 0.999, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.997, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 0.999, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 0.999, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.999, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 0.999, "word": "Musk Foundation", "start": 297, "end": 312},
+                {'entity_group': 'PER', 'score': 1.0, 'word': 'Elon Reeve Musk', 'start': 0, 'end': 15},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'SpaceX', 'start': 97, 'end': 103},
+                {'entity_group': 'ORG', 'score': 0.984, 'word': 'Tesla, Inc.', 'start': 150, 'end': 161},
+                {'entity_group': 'ORG', 'score': 0.998, 'word': 'Twitter, Inc.', 'start': 180, 'end': 193},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'The Boring Company', 'start': 206, 'end': 224},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Neuralink', 'start': 240, 'end': 249},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'OpenAI', 'start': 254, 'end': 260},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'Musk Foundation', 'start': 297, 'end': 312},
             ],
         )
 
@@ -262,14 +262,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.833, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 0.499, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.997, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 0.999, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 0.666, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.667, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 0.749, "word": "Musk Foundation", "start": 297, "end": 312},
+                {'entity_group': 'PER', 'score': 0.833, 'word': 'Elon Reeve Musk', 'start': 0, 'end': 15},
+                {'entity_group': 'ORG', 'score': 0.5, 'word': 'SpaceX', 'start': 97, 'end': 103},
+                {'entity_group': 'ORG', 'score': 0.984, 'word': 'Tesla, Inc.', 'start': 150, 'end': 161},
+                {'entity_group': 'ORG', 'score': 0.998, 'word': 'Twitter, Inc.', 'start': 180, 'end': 193},
+                {'entity_group': 'ORG', 'score': 1.0, 'word': 'The Boring Company', 'start': 206, 'end': 224},
+                {'entity_group': 'ORG', 'score': 0.667, 'word': 'Neuralink', 'start': 240, 'end': 249},
+                {'entity_group': 'ORG', 'score': 0.668, 'word': 'OpenAI', 'start': 254, 'end': 260},
+                {'entity_group': 'ORG', 'score': 0.75, 'word': 'Musk Foundation', 'start': 297, 'end': 312},
             ],
         )
 
