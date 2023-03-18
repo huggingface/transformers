@@ -29,9 +29,8 @@ from typing import Any
 
 from packaging import version
 
-from transformers.utils.versions import importlib_metadata
-
 from . import logging
+from .versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -479,6 +478,8 @@ def is_torch_compile_available():
 
     import torch
 
+    # We don't do any version check here to support nighlies marked as 1.14. Ultimately needs to check version against
+    # 2.0 but let's do it later.
     return hasattr(torch, "compile")
 
 

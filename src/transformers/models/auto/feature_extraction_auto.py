@@ -83,6 +83,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
         ("timesformer", "VideoMAEFeatureExtractor"),
+        ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),

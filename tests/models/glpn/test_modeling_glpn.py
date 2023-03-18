@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -143,8 +144,11 @@ class GLPNModelTester:
 
 
 @require_torch
-class GLPNModelTest(ModelTesterMixin, unittest.TestCase):
+class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"depth-estimation": GLPNForDepthEstimation, "feature-extraction": GLPNModel} if is_torch_available() else {}
+    )
 
     test_head_masking = False
     test_pruning = False

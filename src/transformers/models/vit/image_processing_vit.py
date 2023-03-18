@@ -18,8 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -32,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)

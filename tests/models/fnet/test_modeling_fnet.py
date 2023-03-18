@@ -24,6 +24,7 @@ from transformers.testing_utils import require_tokenizers, require_torch, slow, 
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -265,7 +266,7 @@ class FNetModelTester:
 
 
 @require_torch
-class FNetModelTest(ModelTesterMixin, unittest.TestCase):
+class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FNetModel,
@@ -280,11 +281,32 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FNetModel,
+            "fill-mask": FNetForMaskedLM,
+            "question-answering": FNetForQuestionAnswering,
+            "text-classification": FNetForSequenceClassification,
+            "token-classification": FNetForTokenClassification,
+            "zero-shot": FNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # Skip Tests
     test_pruning = False
     test_head_masking = False
     test_pruning = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests":
+            return True
+
+        return False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

@@ -4,6 +4,7 @@
 deps = {
     "Pillow": "Pillow",
     "accelerate": "accelerate>=0.10.0",
+    "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "black": "black~=23.1",
     "codecarbon": "codecarbon==1.2.0",
@@ -34,7 +35,7 @@ deps = {
     "keras-nlp": "keras-nlp>=0.3.1",
     "librosa": "librosa",
     "nltk": "nltk",
-    "natten": "natten>=0.14.4",
+    "natten": "natten>=0.14.5",
     "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
