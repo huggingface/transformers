@@ -860,7 +860,7 @@ BEIT_INPUTS_DOCSTRING = r"""
     BEIT_START_DOCSTRING,
 )
 class TFBeitModel(TFBeitPreTrainedModel):
-    def __init__(self, config: BeitConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
+    def __init__(self, config: BeitConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
