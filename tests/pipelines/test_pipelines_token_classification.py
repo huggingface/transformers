@@ -199,7 +199,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_chunking(self):
-        NER_MODEL = "Davlan/distilbert-base-multilingual-cased-ner-hrl"
+        NER_MODEL = "Davlan/bert-base-multilingual-cased-ner-hrl"
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
         tokenizer.model_max_length = 20
