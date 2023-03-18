@@ -1312,7 +1312,7 @@ class NeptuneCallback(TrainerCallback):
             consistent_checkpoint_path = os.path.join(self._volatile_checkpoints_dir, checkpoint)
             try:
                 # Remove leading ../ from a relative path.
-                cpkt_path = relative_path.replace("..", "").lstrip("/")
+                cpkt_path = relative_path.replace("..", "").lstrip(os.path.sep)
                 copy_path = os.path.join(consistent_checkpoint_path, cpkt_path)
                 shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
