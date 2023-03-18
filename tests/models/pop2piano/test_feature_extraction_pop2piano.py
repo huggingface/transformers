@@ -41,23 +41,6 @@ if requirements:
 if is_torch_available():
     import torch
 
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
-
-
 @require_torch
 @require_essentia
 @require_librosa
@@ -71,7 +54,7 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
         n_bars=2,
         sample_rate=22050,
         use_mel=True,
-        pad_token_id=0,
+        padding_value=0,
         vocab_size_special=4,
         vocab_size_note=128,
         vocab_size_velocity=2,
@@ -81,7 +64,7 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
         self.n_bars = n_bars
         self.sample_rate = sample_rate
         self.use_mel = use_mel
-        self.pad_token_id = pad_token_id
+        self.padding_value = padding_value
         self.vocab_size_special = vocab_size_special
         self.vocab_size_note = vocab_size_note
         self.vocab_size_velocity = vocab_size_velocity
@@ -92,29 +75,12 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
             "n_bars": self.n_bars,
             "sample_rate": self.sample_rate,
             "use_mel": self.use_mel,
-            "pad_token_id": self.pad_token_id,
+            "padding_value": self.padding_value,
             "vocab_size_special": self.vocab_size_special,
             "vocab_size_note": self.vocab_size_note,
             "vocab_size_velocity": self.vocab_size_velocity,
             "vocab_size_time":self.vocab_size_time,
         }
-
-    # def prepare_inputs_for_common(self, equal_length=False, numpify=False):
-    #     def _flatten(list_of_lists):
-    #         return list(itertools.chain(*list_of_lists))
-    #
-    #     if equal_length:
-    #         speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
-    #     else:
-    #         # make sure that inputs increase in size
-    #         speech_inputs = [
-    #             floats_list((x, self.feature_size))
-    #             for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
-    #         ]
-    #     if numpify:
-    #         speech_inputs = [np.asarray(x) for x in speech_inputs]
-    #     return speech_inputs
-
 
 @require_torch
 @require_essentia
@@ -138,8 +104,8 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = feat_extract_first.mel_filters
-        mel_2 = feat_extract_second.mel_filters
+        mel_1 = feat_extract_first.use_mel
+        mel_2 = feat_extract_second.use_mel
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
@@ -159,71 +125,76 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.assertEqual(dict_first, dict_second)
 
     def test_call(self):
-        # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+        speech_input = np.zeros([1000000, ])
 
-        # Test feature size
-        input_features = feature_extractor(np_speech_inputs, padding="max_length", return_tensors="np").input_features
-        self.assertTrue(input_features.ndim == 3)
-        self.assertTrue(input_features.shape[-1] == feature_extractor.nb_max_frames)
-        self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
-
-        # Test not batched input
-        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
-
-        # Test batched
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
-        # Test truncation required
-        speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
-
-        speech_inputs_truncated = [x[: feature_extractor.n_samples] for x in speech_inputs]
-        np_speech_inputs_truncated = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
-
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").input_features
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
+        input_features = feature_extractor(speech_input, audio_sr=16_000, return_tensors="np")
+        self.assertTrue(input_features.input_features.ndim == 2)
+        self.assertTrue(input_features.beatsteps.ndim == 1)
+        self.assertTrue(input_features.ext_beatstep.ndim == 1)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
-        return [x["array"] for x in speech_samples]
+        return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
     def test_integration(self):
-        # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
-            [
-                0.1193, -0.0946, -0.1098, -0.0196, 0.0225, -0.0690, -0.1736, 0.0951,
-                0.0971, -0.0817, -0.0702, 0.0162, 0.0260, 0.0017, -0.0192, -0.1678,
-                0.0709, -0.1867, -0.0655, -0.0274, -0.0234, -0.1884, -0.0516, -0.0554,
-                -0.0274, -0.1425, -0.1423, 0.0837, 0.0377, -0.0854
-            ]
+            [-4.5434e-05, -1.8900e-04, -2.2150e-04, -2.1844e-04, -2.7647e-04,
+             -2.1334e-04, -1.5305e-04, -2.6124e-04, -2.6863e-04, -1.5969e-04,
+             -1.6224e-04, -1.2900e-04, -9.9139e-06, 1.5336e-05, 4.7507e-05,
+             9.3454e-05, -2.3652e-05, -1.2942e-04, -1.0804e-04, -1.4267e-04,
+             -1.5102e-04, -6.7488e-05, -9.6527e-05, -9.6909e-05, 8.0032e-05,
+             8.1948e-05, -7.3148e-05, 3.4405e-05, 1.5065e-04, -1.0989e-04]
         )
-        # fmt: on
 
-        input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        input_speech, sampling_rate = self._load_datasamples(1)
+        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        input_features = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt").input_features
+        self.assertTrue(torch.allclose(input_features[0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
-    def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        audio = self._load_datasamples(1)[0]
-        audio = ((audio - audio.min()) / (audio.max() - audio.min())) * 65535  # Rescale to [0, 65535] to show issue
-        audio = feat_extract.zero_mean_unit_var_norm([audio], attention_mask=None)[0]
+    @unittest.skip("Pop2PianoFeatureExtractor does not return attention_mask")
+    def test_attention_mask(self):
+        pass
 
-        self.assertTrue(np.all(np.mean(audio) < 1e-3))
-        self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
+    @unittest.skip("Pop2PianoFeatureExtractor does not return attention_mask")
+    def test_attention_mask_with_truncation(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor only takes one raw_audio at a time")
+    def test_batch_feature_pt(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor only takes one raw_audio at a time")
+    def test_batch_feature_tf(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor only takes one raw_audio at a time")
+    def test_batch_feature(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports padding")
+    def test_padding_accepts_tensors_pt(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports padding")
+    def test_padding_accepts_tensors_tf(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    def test_truncation_from_array(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    def test_truncation_from_list(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports padding")
+    def test_padding_from_list(self):
+        pass
+
+    @unittest.skip("Pop2PianoFeatureExtractor does not supports padding")
+    def test_padding_from_array(self):
+        pass
