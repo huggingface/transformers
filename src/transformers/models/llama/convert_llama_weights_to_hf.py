@@ -126,11 +126,15 @@ def write_model(model_path, input_base_path, model_size):
             }
         else:
             # Sharded
+            # Note that in the 13B checkpoint, not cloning the two following weights will result in the checkpoint
+            # becoming 37GB instead of 26GB for some reason.
             state_dict = {
-                f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][f"layers.{layer_i}.attention_norm.weight"],
+                f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][
+                    f"layers.{layer_i}.attention_norm.weight"
+                ].clone(),
                 f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][
                     f"layers.{layer_i}.ffn_norm.weight"
-                ],
+                ].clone(),
             }
             state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
                 torch.cat(
@@ -219,6 +223,9 @@ def write_model(model_path, input_base_path, model_size):
 
     print("Loading the checkpoint in a Llama model.")
     model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float16, low_cpu_mem_usage=True)
+    # Avoid saving this as part of the config.
+    del model.config._name_or_path
+
     print("Saving in the Transformers format.")
     model.save_pretrained(model_path)
     shutil.rmtree(tmp_model_path)
