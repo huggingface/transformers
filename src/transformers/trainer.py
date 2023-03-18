@@ -97,6 +97,7 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
     nested_concat,
@@ -1122,11 +1123,13 @@ class Trainer:
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAMW_TORCH:
+        elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
+            if args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
+                optimizer_kwargs.update({"fused": True})
         elif args.optim == OptimizerNames.ADAMW_TORCH_XLA:
             try:
                 from torch_xla.amp.syncfree import AdamW
@@ -1742,9 +1745,7 @@ class Trainer:
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps}")
-        logger.info(
-            f"  Number of trainable parameters = {sum(p.numel() for p in model.parameters() if p.requires_grad)}"
-        )
+        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True)}")
 
         self.state.epoch = 0
         start_time = time.time()
@@ -1811,7 +1812,7 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
-        model.zero_grad(set_to_none=True)
+        model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -1969,7 +1970,7 @@ class Trainer:
                     if optimizer_was_run and not self.deepspeed:
                         self.lr_scheduler.step()
 
-                    model.zero_grad(set_to_none=True)
+                    model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
@@ -2414,7 +2415,6 @@ class Trainer:
                 self.optimizer.load_state_dict(optimizer_state)
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
-                map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(checkpoint, "user_content.pt")):
                         # Optimizer checkpoint was saved with smp >= 1.10
@@ -2434,7 +2434,7 @@ class Trainer:
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
                     self.optimizer.load_state_dict(
-                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
                     )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
