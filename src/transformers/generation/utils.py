@@ -24,6 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
+from ..deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
     MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -1188,6 +1189,18 @@ class GenerationMixin:
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+
+        if not synced_gpus and is_deepspeed_zero3_enabled():
+            import torch.distributed
+
+            world_size = torch.distributed.world_size()
+            if world_size > 1:
+                logger.warning_once(
+                    f"Detected DeepSpeed ZeRO Stage 3 with {world_size} gpus, "
+                    "which requires `synced_gpus=True` `generate` argument. Enable it to remove this warning."
+                )
+                synced_gpus = True
+
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
 
