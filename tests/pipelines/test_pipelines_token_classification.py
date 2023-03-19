@@ -198,77 +198,81 @@ class TokenClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_chunking(self):
-        NER_MODEL = "Davlan/bert-base-multilingual-cased-ner-hrl"
+        NER_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-        tokenizer.model_max_length = 20
+        tokenizer.model_max_length = 10
+        stride = 5
         sentence = (
-            "Elon Reeve Musk is a business magnate and investor. He is the founder, CEO and chief engineer of SpaceX; "
-            "angel investor, CEO and product architect of Tesla, Inc.; owner and CEO of Twitter, Inc.; founder of The "
-            "Boring Company; co-founder of Neuralink and OpenAI; and president of the philanthropic Musk Foundation."
+            "Hugging Face, Inc. is a French company that develops tools for building applications using machine learning. "
+            "The company, based in New York City was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf."
         )
 
-        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple", stride=10)
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="simple", stride=stride
+        )
         output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 1.0, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 1.0, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.998, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 1.0, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 1.0, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 1.0, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 1.0, "word": "Musk Foundation", "start": 297, "end": 312},
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
             ],
         )
 
-        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first", stride=10)
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="first", stride=stride
+        )
         output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 1.0, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 1.0, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.998, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 1.0, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 1.0, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.999, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 1.0, "word": "Musk Foundation", "start": 297, "end": 312},
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
             ],
         )
 
-        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="max", stride=10)
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="max", stride=stride
+        )
         output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 1.0, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 1.0, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.998, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 1.0, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 1.0, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 1.0, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 1.0, "word": "Musk Foundation", "start": 297, "end": 312},
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
             ],
         )
 
-        token_classifier = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="average", stride=10)
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="average", stride=stride
+        )
         output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.833, "word": "Elon Reeve Musk", "start": 0, "end": 15},
-                {"entity_group": "ORG", "score": 0.5, "word": "SpaceX", "start": 97, "end": 103},
-                {"entity_group": "ORG", "score": 0.984, "word": "Tesla, Inc.", "start": 150, "end": 161},
-                {"entity_group": "ORG", "score": 0.998, "word": "Twitter, Inc.", "start": 180, "end": 193},
-                {"entity_group": "ORG", "score": 1.0, "word": "The Boring Company", "start": 206, "end": 224},
-                {"entity_group": "ORG", "score": 0.667, "word": "Neuralink", "start": 240, "end": 249},
-                {"entity_group": "ORG", "score": 0.668, "word": "OpenAI", "start": 254, "end": 260},
-                {"entity_group": "ORG", "score": 0.75, "word": "Musk Foundation", "start": 297, "end": 312},
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
             ],
         )
 
