@@ -869,7 +869,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = BioGptModel(config)
-        self.score = nn.Linear(config.word_embed_proj_dim, self.num_labels, bias=False)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()

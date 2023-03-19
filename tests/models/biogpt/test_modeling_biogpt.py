@@ -291,6 +291,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             "feature-extraction": BioGptModel,
             "text-generation": BioGptForCausalLM,
             "token-classification": BioGptForTokenClassification,
+            "text-classification": BioGptForSequenceClassification
         }
         if is_torch_available()
         else {}
