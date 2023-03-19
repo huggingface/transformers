@@ -197,7 +197,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
 
     @require_torch
-    @slow
     def test_chunking(self):
         NER_MODEL = "Davlan/bert-base-multilingual-cased-ner-hrl"
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
