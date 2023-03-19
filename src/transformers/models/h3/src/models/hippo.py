@@ -4,15 +4,8 @@
 
 import numpy as np
 import torch
-from einops import rearrange
-from opt_einsum import contract
+
 from scipy import special as ss
-
-
-def embed_c2r(A):
-    A = rearrange(A, "... m n -> ... m () n ()")
-    A = np.pad(A, ((0, 0), (0, 1), (0, 0), (0, 1))) + np.pad(A, ((0, 0), (1, 0), (0, 0), (1, 0)))
-    return rearrange(A, "m x n y -> (m x) (n y)")
 
 
 # TODO take in 'torch' option to return torch instead of numpy, and converts the shape of B from (N, 1) to (N)
@@ -252,9 +245,9 @@ def nplr(measure, N, rank=1, dtype=torch.float, diagonalize_precision=True):
     V_inv = V.conj().transpose(-1, -2)
 
     # C = initial_C(measure, N, dtype=dtype)
-    B = contract("ij, j -> i", V_inv, B.to(V))  # V^* B
+    B = torch.einsum("ij, j -> i", V_inv, B.to(V))  # V^* B
     # C = contract('ij, j -> i', V_inv, C.to(V)) # V^* C
-    P = contract("ij, ...j -> ...i", V_inv, P.to(V))  # V^* P
+    P = torch.einsum("ij, ...j -> ...i", V_inv, P.to(V))  # V^* P
 
     # return w, P, B, C, V
     return w, P, B, V

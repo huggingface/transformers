@@ -21,8 +21,8 @@ URL: https://github.com/HazyResearch/H3/tree/main
 import argparse
 
 import torch
-from huggingface_hub import hf_hub_download
 
+from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer, H3Config, H3ForCausalLM
 
 
@@ -46,7 +46,10 @@ def get_h3_config(model_name):
         attn_layer_idx = [8, 16]
 
     elif model_name == "H3-2.7b":
-        raise NotImplementedError("To do")
+        hidden_size = 2560
+        num_hidden_layers = 32
+        num_attention_heads = 20
+        attn_layer_idx = [8, 16, 24]
 
     config = H3Config(
         hidden_size=hidden_size,
@@ -84,7 +87,13 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
         "H3-1.3b": "danfu09/H3-1.3B",
         "H3-2.7b": "danfu09/H3-2.7B",
     }
-    filepath = hf_hub_download(repo_id=model_name_to_repo_id[model_name], filename="model.pt")
+    model_name_to_file_name = {
+        "H3-125m": "model.pt",
+        "H3-355m": "model.pt",
+        "H3-1.3b": "model.pt",
+        "H3-2.7b": "model-3attn.pt",
+    }
+    filepath = hf_hub_download(repo_id=model_name_to_repo_id[model_name], filename=model_name_to_file_name[model_name])
     state_dict = torch.load(filepath, map_location="cpu")
     if "pytorch-lightning_version" in state_dict:
         state_dict = {k[len("model.") :]: v for k, v in state_dict["state_dict"].items() if k.startswith("model.")}
@@ -134,7 +143,8 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
         expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
     elif model_name == "H3-355m":
         expected_slice = torch.tensor([[4.5926, 6.2018, 4.6021]], device=device)
-    assert torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-2)
+    if model_name in ['H3-125m', 'H3-355m']:
+        assert torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-2)
 
     print("Generating text...")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")

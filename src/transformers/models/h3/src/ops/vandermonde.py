@@ -4,8 +4,7 @@
 """pykeops implementations of the Vandermonde matrix multiplication kernel used in the S4D kernel."""
 
 import torch
-from einops import rearrange
-from opt_einsum import contract
+
 from pykeops.torch import Genred, LazyTensor
 
 
@@ -50,7 +49,7 @@ def log_vandermonde_naive(v, x, L, conj=True):
     v: (..., N) x: (..., N) returns: (..., L) \sum v x^l
     """
     vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x))  # (... N L)
-    vandermonde_prod = contract("... n, ... n l -> ... l", v, vandermonde_matrix)  # (... L)
+    vandermonde_prod = torch.einsum("... n, ... n l -> ... l", v, vandermonde_matrix)  # (... L)
     if conj:
         return 2 * vandermonde_prod.real
     else:
@@ -63,9 +62,12 @@ def log_vandermonde_lazy(v, x, L, conj=True):
         x = _conj(x)
     l = torch.arange(L).to(x)
     v, x, l = _broadcast_dims(v, x, l)
-    v_l = LazyTensor(rearrange(v, "... N -> ... N 1 1"))
-    x_l = LazyTensor(rearrange(x, "... N -> ... N 1 1"))
-    l_l = LazyTensor(rearrange(l, "... L -> ... 1 L 1"))
+    # v_l = LazyTensor(rearrange(v, '... N -> ... N 1 1'))
+    v_l = LazyTensor(v.unsqueeze(-1).unsqueeze(-1))
+    # x_l = LazyTensor(rearrange(x, '... N -> ... N 1 1'))
+    x_l = LazyTensor(x.unsqueeze(-1).unsqueeze(-1))
+    # l_l = LazyTensor(rearrange(l, '... L -> ... 1 L 1'))
+    l_l = LazyTensor(l.unsqueeze(-2).unsqueeze(-1))
     # exp
     vand = (x_l * l_l).exp()
     s = (v_l * vand).sum(dim=len(v_l.shape) - 2)
@@ -100,7 +102,7 @@ def log_vandermonde(v, x, L, conj=True):
 
 def log_vandermonde_transpose_naive(u, v, x, L):
     vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x))  # (... N L)
-    vandermonde_prod = contract("... l, ... n, ... n l -> ... n", u.to(x), v.to(x), vandermonde_matrix)  # (... L)
+    vandermonde_prod = torch.einsum("... l, ... n, ... n l -> ... n", u.to(x), v.to(x), vandermonde_matrix)  # (... L)
     return vandermonde_prod
 
 
@@ -140,7 +142,7 @@ def _log_vandermonde_matmul(x, L):
 
 
 def log_vandermonde_matmul(v, K):
-    prod = contract("...n, ...nl -> ...l", v, K)
+    prod = torch.einsum("...n, ...nl -> ...l", v, K)
     return 2 * prod.real
 
 

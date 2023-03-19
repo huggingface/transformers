@@ -10,8 +10,6 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
-from opt_einsum import contract
 
 from transformers.models.h3.src.models.ssm_utils import OptimModule
 
@@ -68,6 +66,7 @@ class SSKernelDiag(OptimModule):
         bandlimit=None,
         force_real=False,
     ):
+
         super().__init__()
         self.L = L
         self.disc = disc
@@ -142,7 +141,8 @@ class SSKernelDiag(OptimModule):
         A = self._A()  # (H N)
 
         B = _r2c(self.B)
-        B = repeat(B, "t n -> 1 (v t) n", v=self.repeat)
+        # B = repeat(B, "t n -> 1 (v t) n", v=self.repeat)
+        B = torch.flatten(B.unsqueeze(0).unsqueeze(0).repeat(1, self.repeat, 1, 1), 1, 2)
 
         # Force A to be real valued, so the whole kernel can be interpreted as a "multi-head EMA"
         if self.force_real:
@@ -154,7 +154,8 @@ class SSKernelDiag(OptimModule):
             C = C * mask
 
         # Incorporate dt into A
-        A = repeat(A, "t n -> (v t) n", v=self.repeat)
+        # A = repeat(A, "t n -> (v t) n", v=self.repeat)
+        A = torch.flatten(A.unsqueeze(0).repeat(self.repeat, 1, 1), 0, 1)
         dtA = A * dt.unsqueeze(-1)  # (H N)
 
         # Augment B with state
@@ -179,10 +180,12 @@ class SSKernelDiag(OptimModule):
             C = C * (1.0 - dtA / 2).reciprocal() * dt.unsqueeze(-1)  # or * dtA / A
             dA = (1.0 + dtA / 2) / (1.0 - dtA / 2)
             if log_vandermonde_fast is not None:
-                dA_log = repeat(dA.log(), "h d -> (c h) d", c=C.shape[0])
-                K = rearrange(
-                    log_vandermonde_fast(rearrange(C, "c h d -> (c h) d"), dA_log, L), "(c h) d -> c h d", c=C.shape[0]
-                )
+                # dA_log = repeat(dA.log(), "h d -> (c h) d", c=C.shape[0])
+                dA_log = torch.flatten(dA.log().unsqueeze(0).repeat(C.shape[0], 1, 1), 0, 1)
+                # K = rearrange(
+                #     log_vandermonde_fast(rearrange(C, "c h d -> (c h) d"), dA_log, L), "(c h) d -> c h d", c=C.shape[0]
+                # )
+                K = log_vandermonde_fast(torch.flatten(C, 0, 1), dA_log, L).view(*C.shape[:2], -1)
             else:
                 K = log_vandermonde(C, dA.log(), L)
         elif self.disc == "dss":
@@ -205,7 +208,7 @@ class SSKernelDiag(OptimModule):
             r = x_conj / (x * x_conj + 1e-7)
 
             C = C * num * r  # [C H N]
-            K = contract("chn,hnl->chl", C, S).float()
+            K = torch.einsum("chn,hnl->chl", C, S).float()
         else:
             assert False, f"{self.disc} not supported"
 
@@ -225,8 +228,10 @@ class SSKernelDiag(OptimModule):
         self.dC = C
         A = self._A()  # (H N)
 
-        A = repeat(A, "t n -> (v t) n", v=self.repeat)
-        B = repeat(B, "t n -> (v t) n", v=self.repeat)
+        # A = repeat(A, "t n -> (v t) n", v=self.repeat)
+        # B = repeat(B, "t n -> (v t) n", v=self.repeat)
+        A = torch.flatten(A.unsqueeze(0).repeat(self.repeat, 1, 1), 0, 1)
+        B = torch.flatten(B.unsqueeze(0).repeat(self.repeat, 1, 1), 0, 1)
 
         # Incorporate dt into A
         dtA = A * dt.unsqueeze(-1)  # (H N)
@@ -243,8 +248,8 @@ class SSKernelDiag(OptimModule):
         return state
 
     def step(self, u, state):
-        next_state = contract("h n, b h n -> b h n", self.dA, state) + contract("h n, b h -> b h n", self.dB, u)
-        y = contract("c h n, b h n -> b c h", self.dC, next_state)
+        next_state = torch.einsum("h n, b h n -> b h n", self.dA, state) + torch.einsum("h n, b h -> b h n", self.dB, u)
+        y = torch.einsum("c h n, b h n -> b c h", self.dC, next_state)
         return 2 * y.real, next_state
 
     def forward_state(self, u, state):
@@ -326,12 +331,14 @@ class EMAKernel(OptimModule):
         vander = torch.arange(L).to(p).view(1, 1, L) * torch.log(q)  # (H N L)
         kernel = (p * self.beta) * torch.exp(vander)
         if self.efficient_bidirectional:
-            C = rearrange(self.gamma * self.scale, "(c h) n -> c h n", c=self.channels)
+            # C = rearrange(self.gamma * self.scale, "(c h) n -> c h n", c=self.channels)
+            C = torch.flatten(self.gamma * self.scale, 0, 1)
             kernel = torch.einsum("dnl,cdn->cdl", kernel, C)
             # kernel = rearrange(kernel, 'c d l -> (c d) l')
         else:
             kernel = torch.einsum("dnl,dn->dl", kernel, self.gamma * self.scale)
-            kernel = rearrange(kernel, "(c h) l -> c h l", c=self.channels)
+            # kernel = rearrange(kernel, "(c h) l -> c h l", c=self.channels)
+            kernel = kernel.view(self.channels, self.H, L)
 
         kernel = kernel[..., :L]
         # kernel = rearrange(kernel, '(c h) l -> c h l', c=self.channels)

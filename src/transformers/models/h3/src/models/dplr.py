@@ -4,7 +4,6 @@
 import math
 
 import torch
-from einops import repeat
 
 from transformers.models.h3.src.models import hippo
 
@@ -34,14 +33,16 @@ def dplr(
     if random_imag:
         imag_part = N // 2 * torch.rand(H, N // 2)
     else:
-        imag_part = repeat(torch.arange(N // 2), "n -> h n", h=H)
+        # imag_part = repeat(torch.arange(N//2), 'n -> h n', h=H)
+        imag_part = torch.arange(N//2).unsqueeze(0).repeat(H, 1)
 
     real_part = real_scale * real_part
     if scaling == "random":
         imag_part = torch.randn(H, N // 2)
     elif scaling == "real":
         imag_part = 0 * imag_part
-        real_part = 1 + repeat(torch.arange(N // 2), "n -> h n", h=H)
+        # real_part = 1 + repeat(torch.arange(N//2), 'n -> h n', h=H)
+        real_part = 1 + torch.arange(N//2).unsqueeze(0).repeat(H, 1)
     elif scaling in ["linear", "lin"]:
         imag_part = pi * imag_part
     elif scaling in ["inverse", "inv"]:  # Based on asymptotics of the default HiPPO matrix
@@ -74,7 +75,8 @@ def dplr(
     if diagonal:
         P = P * 0.0
     V = torch.eye(N, dtype=dtype)[:, : N // 2]  # Only used in testing
-    V = repeat(V, "n m -> h n m", h=H)
+    # V = repeat(V, 'n m -> h n m', h=H)
+    V = V.unsqueeze(0).repeat(H, 1, 1)
 
     return w, P, B, V
 
@@ -93,10 +95,14 @@ def ssm(measure, N, R, H, **ssm_args):
         w, P, B, V = dplr(scaling=scaling, N=N, rank=R, H=H, diagonal=True, **ssm_args)
     else:
         w, P, B, V = hippo.nplr(measure, N, R, **ssm_args)
-        w = repeat(w, "n -> s n", s=H)
-        P = repeat(P, "r n -> r s n", s=H)
-        B = repeat(B, "n -> s n", s=H)
-        V = repeat(V, "n m -> s n m", s=H)
+        # w = repeat(w, 'n -> s n', s=H)
+        # P = repeat(P, 'r n -> r s n', s=H)
+        # B = repeat(B, 'n -> s n', s=H)
+        # V = repeat(V, 'n m -> s n m', s=H)
+        w = w.unsqueeze(0).repeat(H, 1)
+        P = P.unsqueeze(1).repeat(1, H, 1)
+        B = B.unsqueeze(0).repeat(H, 1)
+        V = V.unsqueeze(0).repeat(H, 1, 1)
     return w, P, B, V
 
 

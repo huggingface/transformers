@@ -10,8 +10,6 @@ import math
 
 import torch
 import torch.nn as nn
-from einops import rearrange, repeat
-from opt_einsum import contract
 
 from transformers.models.h3.src.models import dplr
 from transformers.models.h3.src.models.ss_kernel_diag import EMAKernel, SSKernelDiag
@@ -98,8 +96,9 @@ class SSKernel(nn.Module):
             if deterministic:
                 C = torch.zeros(channels, self.n_ssm, self.N, dtype=cdtype)
                 C[:, :, :1] = 1.0
-                C = contract("hmn, chn -> chm", V.conj().transpose(-1, -2), C)  # V^* C
-                C = repeat(C, "c t n -> c (v t) n", v=self.n_ssm // C.size(-2)).clone().contiguous()
+                C = torch.einsum("hmn, chn -> chm", V.conj().transpose(-1, -2), C)  # V^* C
+                # C = repeat(C, "c t n -> c (v t) n", v=self.n_ssm // C.size(-2)).clone().contiguous()
+                C = torch.flatten(C.unsqueeze(1).repeat(1, self.n_ssm // C.size(-2), 1, 1), 1, 2).clone().contiguous()
             else:
                 C = torch.randn(channels, self.H, self.N // 2, dtype=cdtype)
 
@@ -107,9 +106,12 @@ class SSKernel(nn.Module):
             assert self.n_ssm % B.size(-2) == 0 and self.n_ssm % P.size(-2) == 0 and self.n_ssm % w.size(-2) == 0
             # Broadcast tensors to n_ssm copies
             # These will be the parameters, so make sure tensors are materialized and contiguous
-            B = repeat(B, "t n -> (v t) n", v=self.n_ssm // B.size(-2)).clone().contiguous()
-            P = repeat(P, "r t n -> r (v t) n", v=self.n_ssm // P.size(-2)).clone().contiguous()
-            w = repeat(w, "t n -> (v t) n", v=self.n_ssm // w.size(-2)).clone().contiguous()
+            # B = repeat(B, "t n -> (v t) n", v=self.n_ssm // B.size(-2)).clone().contiguous()
+            # P = repeat(P, "r t n -> r (v t) n", v=self.n_ssm // P.size(-2)).clone().contiguous()
+            # w = repeat(w, "t n -> (v t) n", v=self.n_ssm // w.size(-2)).clone().contiguous()
+            B = torch.flatten(B.unsqueeze(0).repeat(self.n_ssm // B.size(-2), 1, 1), 0, 1).clone().contiguous()
+            P = torch.flatten(P.unsqueeze(1).repeat(1, self.n_ssm // P.size(-2), 1, 1), 1, 2).clone().contiguous()
+            w = torch.flatten(w.unsqueeze(0).repeat(self.n_ssm // w.size(-2), 1, 1), 0, 1).clone().contiguous()
 
             if mode == "diag":
                 if not measure.startswith("diag"):
@@ -118,7 +120,8 @@ class SSKernel(nn.Module):
                         " 'diag-lin', 'diag-inv', or 'diag-legs' for the main variants, or 'diag' for a combination of"
                         " S4D-Lin and S4D-Inv."
                     )
-                C = C * repeat(B, "t n -> (v t) n", v=H // self.n_ssm)
+                # C = C * repeat(B, "t n -> (v t) n", v=H // self.n_ssm)
+                C = C * torch.flatten(B.unsqueeze(0).repeat(H // self.n_ssm, 1, 1), 0, 1)
                 self.kernel = SSKernelDiag(
                     w,
                     B,
@@ -135,7 +138,8 @@ class SSKernel(nn.Module):
                 # Match torch.Conv1d init
                 C = torch.randn(self.H, self.channels, self.N)
                 nn.init.kaiming_uniform_(C, a=math.sqrt(5))
-                C = rearrange(C, "h c n -> c h n")
+                # C = rearrange(C, "h c n -> c h n")
+                C = torch.permute(C, (1, 0, 2))
                 self.kernel = SSKernelShift(B, C, L=L, lr=lr, **kernel_args)
             else:
                 raise NotImplementedError(f"{mode=} is not valid")
@@ -162,9 +166,9 @@ class SSKernel(nn.Module):
         if conj:
             state = _conj(state)
 
-        v = contract("h n, b h l -> b h n l", dB, u.flip(-1))  # dB.unsqueeze(-1) * u.flip(-1).unsqueeze(-2)
+        v = torch.einsum("h n, b h l -> b h n l", dB, u.flip(-1))  # dB.unsqueeze(-1) * u.flip(-1).unsqueeze(-2)
         AL, v = power(u.size(-1), dA, v)
-        next_state = contract("h m n, b h n -> b h m", AL, state)
+        next_state = torch.einsum("h m n, b h n -> b h m", AL, state)
         next_state = next_state + v
 
         if conj:

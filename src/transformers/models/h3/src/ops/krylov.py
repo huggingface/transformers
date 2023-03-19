@@ -5,7 +5,6 @@ A : (N, N) b : (N,) c : (N,) Return: [c^T A^i b for i in [L]]
 
 import torch
 import torch.nn.functional as F
-from einops import rearrange
 
 from transformers.models.h3.src.ops.toeplitz import causal_convolution
 
@@ -123,7 +122,9 @@ def power(L, A, v=None):
 
     # Handle reduction for power of 2
     while v.size(-1) > 1:
-        v = rearrange(v, "... (z l) -> ... z l", z=2)
+        # v = rearrange(v, '... (z l) -> ... z l', z=2)
+        v_shape = v.shape
+        v = v.reshape(*v_shape[:-2], 2, v_shape[-1] // 2)
         v = v[..., 0, :] + powers.pop() @ v[..., 1, :]
     return I, v.squeeze(-1)
 
@@ -142,7 +143,13 @@ def krylov_toeplitz(L, A, b, c=None):
     if c is not None:
         x = torch.einsum("l...n, ...n -> ...l", x, c)
     else:
-        x = rearrange(x, "l ... n -> ... n l")
+        # x = rearrange(x, 'l ... n -> ... n l')
+        x = x.unsqueeze(-1)
+        x_dims = [i for i in range(len(x.shape))]
+        x_dims[0] = x_dims[-1]
+        x_dims[-1] = 0
+        x = torch.permute(x, tuple(x_dims))
+        x = x.squeeze(0)
     x = x.contiguous()
     return x
 
@@ -178,6 +185,12 @@ def krylov_toeplitz_(L, A, b, c=None):
     if c is not None:
         x = torch.einsum("l...n, ...n -> ...l", x, c)
     else:
-        x = rearrange(x, "l ... n -> ... n l")
+        # x = rearrange(x, 'l ... n -> ... n l')
+        x = x.unsqueeze(-1)
+        x_dims = [i for i in range(len(x.shape))]
+        x_dims[0] = x_dims[-1]
+        x_dims[-1] = 0
+        x = torch.permute(x, tuple(x_dims))
+        x = x.squeeze(0)
     x = x.contiguous()
     return x

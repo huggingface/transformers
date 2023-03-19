@@ -7,8 +7,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
-from opt_einsum import contract
 
 from transformers.models.h3.src.models.ssm_utils import OptimModule
 
@@ -40,9 +38,7 @@ class SSKernelShift(OptimModule):
         # Augment B with state
         B = self.B
         if state is not None:
-            B = rearrange(
-                torch.cat([rearrange(B, "h n -> 1 h n"), state], dim=-3), "bp1 h n -> bp1 1 h n"
-            )  # (1 + B, 1, H, N)
+            B = torch.cat([B.unsqueeze(0), state], dim=-3).unsqueeze(1)  # (1 + B, 1, H, N)
         B_f = torch.fft.rfft(B, n=2 * self.N)
         C_f = torch.fft.rfft(self.C, n=2 * self.N)
         k = torch.fft.irfft(B_f.conj() * C_f, n=2 * self.N)[..., : min(self.N, L)]
@@ -65,8 +61,8 @@ class SSKernelShift(OptimModule):
 
     def step(self, u, state):
         """u: (B, H), state: (B, H, N)"""
-        next_state = F.pad(state, (1, -1)) + contract("h n, b h -> b h n", self.B, u)
-        y = contract("c h n, b h n -> b c h", self.C, next_state)
+        next_state = F.pad(state, (1, -1)) + torch.einsum("h n, b h -> b h n", self.B, u)
+        y = torch.einsum("c h n, b h n -> b c h", self.C, next_state)
         return y, next_state
 
     def forward_state(self, u, state):
