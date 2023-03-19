@@ -24,6 +24,8 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 
 
 if is_torch_available():
+    import torch
+
     from transformers import H3_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2Tokenizer, H3ForCausalLM, H3Model
 
 
@@ -228,3 +230,35 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         for model_name in H3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = H3Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+@slow
+class H3ModelIntegrationTests(unittest.TestCase):
+    def test_inference_lm_head(self):
+        # TODO update organization
+        tokenizer = GPT2Tokenizer.from_pretrained("nielsr/H3-125m")
+        model = H3ForCausalLM.from_pretrained("nielsr/H3-125m").to(torch_device)
+
+        # prepare prompt
+        prompt = "Once upon a time"
+        inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
+
+        # verify single forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            logits = outputs.logits
+
+        expected_slice = torch.tensor(
+            [[6.2463, 6.4880, -0.2030], [8.0580, 7.6352, 3.6786], [5.2628, 4.5664, 3.0919]], device=torch_device
+        )
+        assert torch.allclose(logits[0, :3, :3], expected_slice)
+
+        # verify generation
+        predictions = model.generate(**inputs, max_new_tokens=11)
+        generated_text = tokenizer.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(
+            predictions[0].tolist(), [7454, 2402, 257, 640, 11, 262, 995, 373, 257, 1295, 286, 4167, 290, 22471, 13]
+        )
+        self.assertEqual("""Once upon a time, the world was a place of peace and harmony.""", generated_text)

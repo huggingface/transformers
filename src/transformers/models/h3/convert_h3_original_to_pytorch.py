@@ -157,12 +157,14 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
     print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
+        print(f"Saving model and tokenizer to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
+        tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing {model_name} to the hub...")
+        print(f"Pushing model and tokenizer for {model_name} to the hub...")
         model.push_to_hub(f"nielsr/{model_name}")
+        tokenizer.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
