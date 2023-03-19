@@ -397,7 +397,7 @@ BIOGPT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-BioGpt_INPUTS_DOCSTRING = r"""
+BIOGPT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -505,7 +505,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(BioGpt_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
@@ -661,7 +661,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.output_projection = new_embeddings
 
-    @add_start_docstrings_to_model_forward(BioGpt_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
@@ -861,7 +861,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
     """,
     BIOGPT_START_DOCSTRING,
 )
-# Copied from transformers.models.opt.modeling_opt.OPTForSequenceClassification with OPT->BioGpt
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
@@ -869,12 +868,12 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = BioGptModel(config)
-        self.score = nn.Linear(config.word_embed_proj_dim, self.num_labels, bias=False)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BioGpt_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
