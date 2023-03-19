@@ -4,8 +4,12 @@
 """pykeops implementations of the Vandermonde matrix multiplication kernel used in the S4D kernel."""
 
 import torch
-from pykeops.torch import Genred, LazyTensor
 
+from transformers.utils import is_pykeops_available
+
+
+if is_pykeops_available():
+    from pykeops.torch import Genred, LazyTensor
 
 try:
     from cauchy_mult import vand_log_mult_sym_bwd, vand_log_mult_sym_fwd

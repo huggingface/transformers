@@ -629,6 +629,12 @@ def is_in_notebook():
         return False
 
 
+def is_pykeops_available():
+    # TODO fix this
+    return False
+    return importlib.util.find_spec("pykeops") is not None
+
+
 def is_pytorch_quantization_available():
     return _pytorch_quantization_available
 
@@ -924,6 +930,14 @@ PHONEMIZER_IMPORT_ERROR = """
 
 
 # docstyle-ignore
+PYKEOPS_IMPORT_ERROR = """
+{0} requires the PykeOps library but it was not found in your environment. You can install it with pip:
+`pip install pykeops`. See details here: http://www.kernel-operations.io/keops/python/installation.html.
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
 SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
 `pip install sacremoses`. Please note that you may need to restart your runtime after installation.
@@ -1010,6 +1024,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
+        ("pykeops", (is_pykeops_available, PYKEOPS_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),

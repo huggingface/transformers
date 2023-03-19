@@ -15,25 +15,23 @@ from transformers.models.h3.src.models.ssm_utils import OptimModule
 
 # This could be None if the CUDA import fails
 from transformers.models.h3.src.ops.vandermonde import log_vandermonde_fast
+from transformers.utils import is_pykeops_available
 
-
-# from src.utils import get_logger
-# logger = get_logger(__name__)
 
 logger = logging.getLogger()
 
 
-try:
+if is_pykeops_available():
     from transformers.models.h3.src.ops.vandermonde import log_vandermonde, log_vandermonde_transpose
 
-    has_pykeops = True
-    logger.info("Pykeops installation found.")
-except ImportError:
-    has_pykeops = False
+else:
     from transformers.models.h3.src.ops.vandermonde import log_vandermonde_naive as log_vandermonde
     from transformers.models.h3.src.ops.vandermonde import log_vandermonde_transpose_naive as log_vandermonde_transpose
 
-    logger.warning("Falling back on slow Vandermonde kernel. Install pykeops for improved memory efficiency.")
+    logger.warning(
+        """Falling back on slow Vandermonde kernel. It's recommended to install pykeops for improved memory efficiency:
+    `pip install pykeops`. See details here: http://www.kernel-operations.io/keops/python/installation.html"""
+    )
 
 
 _c2r = torch.view_as_real
