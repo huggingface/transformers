@@ -1,4 +1,0 @@
-# ninja log v5
-1	1003	1678044591996541747	/home/pranav/transformers/src/transformers/models/mra/build/temp.linux-x86_64-cpython-39/home/pranav/transformers/src/transformers/models/mra/cuda_kernel.o	ece43735b73b6aec
-1	18623	1678044609596114204	/home/pranav/transformers/src/transformers/models/mra/build/temp.linux-x86_64-cpython-39/home/pranav/transformers/src/transformers/models/mra/torch_extension.o	fa0417bbbcdbca4b
-1	44499	1678044635483484098	/home/pranav/transformers/src/transformers/models/mra/build/temp.linux-x86_64-cpython-39/home/pranav/transformers/src/transformers/models/mra/cuda_launch.o	f60d17092b3c0422

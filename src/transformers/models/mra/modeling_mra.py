@@ -58,9 +58,28 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MRA models at https://huggingface.co/models?filter=mra
 ]
 
-import sys
-sys.path.append('./dist/cuda_kernel-0.0.0-py3.9-linux-x86_64.egg')
-import kernel as cuda_kernel
+
+def load_cuda_kernels():
+    global cuda_kernel
+    curr_path = os.path.dirname(os.path.realpath(__file__))
+    src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
+    src_files = [os.path.join(curr_path, file) for file in src_files]
+    cuda_kernel = load("cuda_kernel", src_files, verbose=True)
+
+    import cuda_kernel
+
+
+if is_torch_cuda_available() and is_ninja_available():
+    logger.info("Loading custom CUDA kernels...")
+    try:
+        load_cuda_kernels()
+    except Exception as e:
+        logger.warning(
+            "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
+            f" PyTorch and CUDA Toolkit are installed: {e}"
+        )
+else:
+    pass
 
 
 def sparse_max(sparse_C, indices, A_num_block, B_num_block):
@@ -334,6 +353,7 @@ def mra2_attention(
     """
     Use MRA to approximate self-attention.
     """
+    load_cuda_kernels()
     batch_size, num_head, seq_len, head_dim = Q.size()
     meta_batch = batch_size * num_head
 
@@ -561,7 +581,7 @@ class MRASelfAttention(nn.Module):
         )
 
         if head_dim < gpu_warp_size:
-            context_layer = context_layer[:, :, :, :head_dim]
+            context_layer = context_layer[:, :, :head_dim]
 
         context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
 
