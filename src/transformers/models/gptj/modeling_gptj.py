@@ -60,6 +60,11 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     return torch.concat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
+@torch.fx.wrap
+def get_embed_positions(embed_positions, position_ids):
+    return embed_positions.to(position_ids.device).repeat(position_ids.shape[0], 1, 1)
+
+
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
@@ -67,8 +72,7 @@ def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
-def apply_rotary_pos_emb(tensor: torch.Tensor, sincos: torch.Tensor) -> torch.Tensor:
-    sin, cos = sincos
+def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
     sin = torch.repeat_interleave(sin[:, :, None, :], 2, 3)
     cos = torch.repeat_interleave(cos[:, :, None, :], 2, 3)
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
@@ -178,6 +182,13 @@ class GPTJAttention(nn.Module):
 
         return attn_output, attn_weights
 
+    def _get_embed_positions(self, position_ids):
+        embed_positions = self.embed_positions
+        if embed_positions.device != position_ids.device:
+            embed_positions = embed_positions.to(position_ids.device)
+            self.embed_positions = embed_positions
+        return embed_positions.repeat(position_ids.shape[0], 1, 1)
+
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor],
@@ -199,18 +210,14 @@ class GPTJAttention(nn.Module):
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        embed_positions = self.embed_positions
-        if embed_positions.device != position_ids.device:
-            embed_positions = embed_positions.to(position_ids.device)
-            self.embed_positions = embed_positions
-
         if is_torch_fx_proxy(position_ids):
-            # Assume no padding in torch.fx case, index-by-tensor can't be traced
-            sincos = embed_positions[None, : position_ids.shape[-1], :].repeat(position_ids.shape[0], 1, 1)
+            embed_positions = get_embed_positions(self.embed_positions, position_ids)
         else:
-            sincos = embed_positions[position_ids]
+            embed_positions = self._get_embed_positions(position_ids)
 
-        sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
@@ -219,14 +226,14 @@ class GPTJAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
 
             key = torch.cat([k_rot, k_pass], dim=-1)
             query = torch.cat([q_rot, q_pass], dim=-1)
         else:
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
