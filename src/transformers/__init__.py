@@ -468,6 +468,11 @@ _import_structure = {
     ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
+    "models.pop2piano": [
+        "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Pop2PianoConfig",
+        "Pop2PianoFeatureExtractor",
+    ],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -599,14 +604,6 @@ _import_structure = {
         "WhisperFeatureExtractor",
         "WhisperProcessor",
         "WhisperTokenizer",
-    ],
-    "models.pop2piano": [
-        "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Pop2PianoConfig",
-        "Pop2PianoFeatureExtractor",
-       
-       
-       
     ],
     "models.x_clip": [
         "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2397,6 +2394,13 @@ else:
             "PoolFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.pop2piano"].extend(
+        [
+            "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Pop2PianoForConditionalGeneration",
+            "Pop2PianoPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2913,13 +2917,6 @@ else:
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
-        ]
-    )
-    _import_structure["models.pop2piano"].extend(
-        [
-            "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Pop2PianoForConditionalGeneration",
-            "Pop2PianoPreTrainedModel",
         ]
     )
     _import_structure["models.x_clip"].extend(
@@ -4438,6 +4435,11 @@ if TYPE_CHECKING:
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .models.pop2piano import (
+        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pop2PianoConfig,
+        Pop2PianoFeatureExtractor,
+    )
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -4548,14 +4550,6 @@ if TYPE_CHECKING:
         WhisperFeatureExtractor,
         WhisperProcessor,
         WhisperTokenizer,
-    )
-    from .models.pop2piano import (
-        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Pop2PianoConfig,
-        Pop2PianoFeatureExtractor,
-       
-       
-       
     )
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6066,6 +6060,11 @@ if TYPE_CHECKING:
             PoolFormerModel,
             PoolFormerPreTrainedModel,
         )
+        from .models.pop2piano import (
+            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Pop2PianoForConditionalGeneration,
+            Pop2PianoPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
@@ -6478,11 +6477,6 @@ if TYPE_CHECKING:
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
-        )
-        from .models.pop2piano import (
-            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Pop2PianoForConditionalGeneration,
-            Pop2PianoPreTrainedModel,
         )
         from .models.x_clip import (
             XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

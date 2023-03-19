@@ -16,22 +16,23 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
+    is_essentia_available,
     is_librosa_available,
+    is_pretty_midi_available,
     is_scipy_available,
     is_soundfile_availble,
-    is_essentia_available,
-    is_pretty_midi_available,
+    is_tf_available,
+    is_torch_available,
+    is_torchaudio_available,
 )
 
-# Config
+
 _import_structure = {
     "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
 }
 
-# Model
 try:
-    if not is_torch_available():
+    if not is_torch_available() and not is_torchaudio_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -42,11 +43,16 @@ else:
         "Pop2PianoPreTrainedModel",
     ]
 
-# Feature Extractor
 try:
-    if not (is_librosa_available() and is_essentia_available() and
-            is_scipy_available() and is_pretty_midi_available() and
-            is_soundfile_availble()):
+    if not (
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_pretty_midi_available()
+        and is_soundfile_availble()
+        and is_tf_available()
+        and is_torch_available()
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -55,12 +61,10 @@ else:
 
 
 if TYPE_CHECKING:
-    # Config
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
 
-    # Model
     try:
-        if not is_torch_available():
+        if not is_torch_available() and not is_torchaudio_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
@@ -71,11 +75,16 @@ if TYPE_CHECKING:
             Pop2PianoPreTrainedModel,
         )
 
-    # Feature Extractor
     try:
-        if not (is_librosa_available() and is_essentia_available() and
-                is_scipy_available() and is_pretty_midi_available() and
-                is_soundfile_availble()):
+        if not (
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_pretty_midi_available()
+            and is_soundfile_availble()
+            and is_tf_available()
+            and is_torch_available()
+        ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
@@ -84,4 +93,5 @@ if TYPE_CHECKING:
 
 else:
     import sys
+
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

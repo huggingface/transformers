@@ -12,57 +12,58 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pop2Piano model configuration """
+""" Pop2Piano model configuration"""
 
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/config.json" # For now
+    "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/config.json"  # For now
 }
 
-COMPOSER_TO_FEATURE_TOKEN = {'composer1': 2052,
-                             'composer2': 2053,
-                             'composer3': 2054,
-                             'composer4': 2055,
-                             'composer5': 2056,
-                             'composer6': 2057,
-                             'composer7': 2058,
-                             'composer8': 2059,
-                             'composer9': 2060,
-                             'composer10': 2061,
-                             'composer11': 2062,
-                             'composer12': 2063,
-                             'composer13': 2064,
-                             'composer14': 2065,
-                             'composer15': 2066,
-                             'composer16': 2067,
-                             'composer17': 2068,
-                             'composer18': 2069,
-                             'composer19': 2070,
-                             'composer20': 2071,
-                             'composer21': 2072
+COMPOSER_TO_FEATURE_TOKEN = {
+    "composer1": 2052,
+    "composer2": 2053,
+    "composer3": 2054,
+    "composer4": 2055,
+    "composer5": 2056,
+    "composer6": 2057,
+    "composer7": 2058,
+    "composer8": 2059,
+    "composer9": 2060,
+    "composer10": 2061,
+    "composer11": 2062,
+    "composer12": 2063,
+    "composer13": 2064,
+    "composer14": 2065,
+    "composer15": 2066,
+    "composer16": 2067,
+    "composer17": 2068,
+    "composer18": 2069,
+    "composer19": 2070,
+    "composer20": 2071,
+    "composer21": 2072,
 }
+
 
 class Pop2PianoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used to instantiate a
-    Pop2PianoForConditionalGeneration model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Pop2Piano
-    [sweetcocoa/pop2piano](https://huggingface.co/sweetcocoa/pop2piano) architecture.
+    This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used
+    to instantiate a Pop2PianoForConditionalGeneration model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Pop2Piano [sweetcocoa/pop2piano](https://huggingface.co/sweetcocoa/pop2piano) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 2400):
-            Vocabulary size of the Pop2PianoForConditionalGeneration model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
+            Vocabulary size of the Pop2PianoForConditionalGeneration model. Defines the number of different tokens that
+            can be represented by the `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -139,7 +140,6 @@ class Pop2PianoConfig(PretrainedConfig):
         dataset_n_bars=2,
         dataset_sampling_rate=22050,
         dataset_mel_is_conditioned=True,
-
         n_fft=4096,
         hop_length=1024,
         f_min=10.0,
@@ -165,10 +165,12 @@ class Pop2PianoConfig(PretrainedConfig):
         self.dense_act_fn = dense_act_fn
         self.is_gated_act = act_info[0] == "gated"
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
-        self.dataset = {'target_length': dataset_target_length,
-                        'n_bars': dataset_n_bars,
-                        'sampling_rate': dataset_sampling_rate,
-                        'mel_is_conditioned': dataset_mel_is_conditioned}
+
+        self.dataset_mel_is_conditioned = dataset_mel_is_conditioned
+        self.dataset_target_length = dataset_target_length
+        self.dataset_n_bars = dataset_n_bars
+        self.dataset_sampling_rate = dataset_sampling_rate
+
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.f_min = f_min

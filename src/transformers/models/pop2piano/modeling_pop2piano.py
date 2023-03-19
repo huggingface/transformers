@@ -17,32 +17,32 @@
 
 import copy
 import math
-import random
 import warnings
-import torchaudio
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-from ...feature_extraction_utils import BatchFeature
-import torch.utils.checkpoint
+import torchaudio
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from ...generation.utils import GreedySearchEncoderDecoderOutput
-
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-
+from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    BackboneOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, is_torch_fx_proxy
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -52,7 +52,7 @@ _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "susnato/pop2piano_dev"
 
 POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/pop2piano_dev", # For now
+    "susnato/pop2piano_dev",  # For now
     # See all Pop2Piano models at https://huggingface.co/models?filter=pop2piano
 ]
 
@@ -60,26 +60,22 @@ POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 Pop2Piano_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for detail.
-            [What are input IDs?](../glossary#input-ids)
-            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+            Indices of input sequence tokens in the vocabulary. Pop2Piano is a model with relative position embeddings
+            so you should be able to pad the inputs on both the right and the left. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
+            [What are input IDs?](../glossary#input-ids) To know more on how to prepare `input_ids` for pretraining
+            take a look a [Pop2Pianp Training](./Pop2Piano#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
-            Training](./t5#training).
+            Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+            [What are decoder input IDs?](../glossary#decoder-input-ids) Pop2Piano uses the `pad_token_id` as the
+            starting token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -115,9 +111,9 @@ Pop2Piano_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix. If
+            `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value of
+            `inputs_embeds`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -131,6 +127,7 @@ Pop2Piano_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -143,7 +140,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = None
     _keep_in_fp32_modules = ["wo"]
-    
+
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -198,10 +195,9 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
-            " See T5 docs for more information"
-        )
+        assert (
+            decoder_start_token_id is not None
+        ), "self.model.config.decoder_start_token_id has to be defined. In Pop2Piano it is usually set to the pad_token_id."
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -219,8 +215,9 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
         return shifted_input_ids
 
+
 class LogMelSpectrogram(nn.Module):
-    """ Generates MelSpectrogram then applies log base e. """
+    """Generates MelSpectrogram then applies log base e."""
 
     def __init__(self, sampling_rate, n_fft, hop_length, f_min, n_mels):
         super(LogMelSpectrogram, self).__init__()
@@ -240,8 +237,9 @@ class LogMelSpectrogram(nn.Module):
 
         return X
 
+
 class ConcatEmbeddingToMel(nn.Module):
-    """ Embedding Matrix for `composer` tokens. """
+    """Embedding Matrix for `composer` tokens."""
 
     def __init__(self, embedding_offset, n_vocab, n_dim) -> None:
         super(ConcatEmbeddingToMel, self).__init__()
@@ -254,7 +252,8 @@ class ConcatEmbeddingToMel(nn.Module):
         inputs_embeds = torch.cat([composer_embedding, feature], dim=1)
         return inputs_embeds
 
-# Copied from transformers.models.t5.T5LayerNorm with T5->Pop2Piano,t5->pop2piano
+
+# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
 class Pop2PianoLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -296,7 +295,7 @@ except Exception:
 ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
 
 
-# Copied from transformers.models.t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
+# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -328,7 +327,8 @@ class Pop2PianoLayerSelfAttention(nn.Module):
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
-# Copied from transformers.models.t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
+
+# Adapted from transformers.models.t5.modeling_t5.T5Attention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoAttention(nn.Module):
     def __init__(self, config: Pop2PianoConfig, has_relative_attention_bias=False):
         super().__init__()
@@ -372,19 +372,18 @@ class Pop2PianoAttention(nn.Module):
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
+        Args:
         Adapted from Mesh Tensorflow:
-        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+        https:
+            //github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
         Translate relative position to a bucket number for relative attention. The relative position is defined as
         memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
         position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
         small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.:
         This should allow for more graceful generalization to longer sequences than the model has been trained on
-        Args:
-            relative_position: an int32 Tensor
-            bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer
-            max_distance: an integer
+            relative_position: an int32 Tensor bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer max_distance: an integer
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
         """
@@ -559,11 +558,12 @@ class Pop2PianoAttention(nn.Module):
             outputs = outputs + (attn_weights,)
         return outputs
 
-# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+
+# Adapted from transformers.models.t5.modeling_t5.T5LayerFF with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerFF(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
-        if config.is_gated_act:
+        if config.is_gated_act or config.feed_forward_proj.split("-")[0] == "gated":
             self.DenseReluDense = Pop2PianoDenseGatedActDense(config)
         else:
             self.DenseReluDense = Pop2PianoDenseActDense(config)
@@ -577,7 +577,8 @@ class Pop2PianoLayerFF(nn.Module):
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
-# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoDenseActDense(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
@@ -590,12 +591,17 @@ class Pop2PianoDenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
-# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->Pop2Piano
 class Pop2PianoDenseGatedActDense(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
@@ -614,13 +620,18 @@ class Pop2PianoDenseGatedActDense(nn.Module):
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
-# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+
+# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -656,7 +667,8 @@ class Pop2PianoLayerCrossAttention(nn.Module):
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
-# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+
+# Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoBlock(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -713,8 +725,12 @@ class Pop2PianoBlock(nn.Module):
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
@@ -740,8 +756,12 @@ class Pop2PianoBlock(nn.Module):
             hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            if hidden_states.dtype == torch.float16:
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Combine self attn and cross attn key value states
@@ -755,8 +775,12 @@ class Pop2PianoBlock(nn.Module):
         hidden_states = self.layer[-1](hidden_states)
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
@@ -769,7 +793,7 @@ class Pop2PianoBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-# Copied from transformers.models.t5.T5Stack with T5->Pop2Piano,t5->pop2piano
+# Adapted from transformers.models.t5.modeling_t5.T5Stack with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -1015,15 +1039,14 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 
 
 Pop2Piano_START_DOCSTRING = r"""
-    The Pop2PianoForConditionalGeneration model was proposed in [POP2PIANO : POP AUDIO-BASED PIANO COVER GENERATION](https://arxiv.org/pdf/2211.00895) by Jongho Choi, Kyogu 
-    Lee. It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
     Parameters:
+    The Pop2PianoForConditionalGeneration model was proposed in [POP2PIANO : POP AUDIO-BASED PIANO COVER
+    GENERATION](https://arxiv.org/pdf/2211.00895) by Jongho Choi, Kyogu Lee. It's an encoder decoder transformer
+    pre-trained in a text-to-text denoising generative setting. This model inherits from [`PreTrainedModel`]. Check the:
+    superclass documentation for the generic methods the library implements for all its model (such as downloading or
+    saving, resizing the input embeddings, pruning heads etc.) This model is also a PyTorch
+    [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a regular PyTorch
+    Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
         config ([`Pop2PianoConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1037,7 +1060,16 @@ If you do not want to use any `decoder_head_mask` now, please set `decoder_head_
 num_heads)`.
 """
 
-# Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration with T5->Pop2Piano,t5->pop2piano
+# Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+__HEAD_MASK_WARNING_MSG = """
+The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
+If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = torch.ones(num_layers,
+num_heads)`.
+"""
+
+
+# Adapted from transformers.models.t5.modeling_t5.T5ForConditionalGeneration with T5->Pop2Piano,t5->pop2piano
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
 class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1054,20 +1086,20 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         self.config = config
         self.model_dim = config.d_model
 
-        self.spectrogram = LogMelSpectrogram(sampling_rate=config.dataset.get("sampling_rate"),
-                                             n_fft=config.n_fft,
-                                             hop_length=config.hop_length,
-                                             f_min=config.f_min,
-                                             n_mels=config.n_mels
-                                             )
-        if config.dataset.get("mel_is_conditioned", True):
+        self.spectrogram = LogMelSpectrogram(
+            sampling_rate=config.dataset_sampling_rate,
+            n_fft=config.n_fft,
+            hop_length=config.hop_length,
+            f_min=config.f_min,
+            n_mels=config.n_mels,
+        )
+        if config.dataset_mel_is_conditioned:
             n_dim = 512
             composer_n_vocab = len(config.composer_to_feature_token)
             embedding_offset = min(config.composer_to_feature_token.values())
-            self.mel_conditioner = ConcatEmbeddingToMel(embedding_offset=embedding_offset,
-                                                        n_vocab=composer_n_vocab,
-                                                        n_dim=n_dim
-                                                        )
+            self.mel_conditioner = ConcatEmbeddingToMel(
+                embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=n_dim
+            )
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1116,23 +1148,23 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            decoder_input_ids: Optional[torch.LongTensor] = None,
-            decoder_attention_mask: Optional[torch.BoolTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            decoder_head_mask: Optional[torch.FloatTensor] = None,
-            cross_attn_head_mask: Optional[torch.Tensor] = None,
-            encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1140,25 +1172,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         Returns:
-        Examples:
-        ```python
-        >>> from transformers import AutoTokenizer, T5ForConditionalGeneration
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        >>> # training
-        >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
-        >>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
-        >>> outputs = model(input_ids=input_ids, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-        >>> # inference
-        >>> input_ids = tokenizer(
-        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
-        ```"""
+        """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1234,7 +1248,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 
@@ -1262,33 +1276,28 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
     @torch.no_grad()
     def generate(
-            self,
-            input_features:BatchFeature,
-            inputs_embeds=None,
-            composer="composer1",
-            n_bars:int = 2,
-            max_length:int=None,
-            inputs: Optional[torch.Tensor] = None,
-            generation_config=None,
-            logits_processor=None,
-            stopping_criteria=None,
-            prefix_allowed_tokens_fn=None,
-            synced_gpus=False,
-            return_timestamps=None,
-            task=None,
-            language=None,
-            is_multilingual=None,
-            **kwargs,
+        self,
+        input_features: BatchFeature,
+        inputs_embeds=None,
+        composer="composer1",
+        n_bars: int = 2,
+        max_length: int = None,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config=None,
+        **kwargs,
     ):
         """
         Generates sequences of token ids for models with a language modeling head.
+
         <Tip warning={true}>
+
         Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`. For an overview of generation
+        strategies and code examples, check out the [following guide](./generation_strategies).
+
         </Tip>
+
         Parameters:
             input_features (`BatchFeature`):
                 `input_features` returned by `Pop2PianoFeatureExtractor.__call__`
@@ -1314,33 +1323,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
-                generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
-                If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
-                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
-                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
-                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
-            synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            return_timestamps (`bool`, *optional*):
-                Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
-            task (`bool`, *optional*):
-                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
-                will be updated accordingly.
-            language (`bool`, *optional*):
-                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
-                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
-            is_multilingual (`bool`, *optional*):
-                Whether or not the model is multilingual.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1360,87 +1342,56 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     - [`~generation.SampleEncoderDecoderOutput`],
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
-        """
+        Examples:
+        ```python
+        >>> import librosa
+        >>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration
+
+        >>> raw_audio, sr = librosa.load("audio.mp3", sr=44100)
+        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        >>> model.eval()
+
+        >>> feature_extractor_outputs = fe(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
+        >>> model_outputs = model.generate(feature_extractor_outputs, composer="composer1")
+
+        >>> prettymidi_output = feature_extractor.postprocess(
+        ...     relative_tokens=model_outputs,
+        ...     beatsteps=feature_extractor_outputs["beatsteps"],
+        ...     ext_beatstep=feature_extractor_outputs["ext_beatstep"],
+        ...     raw_audio=raw_audio,
+        ...     sampling_rate=sr,
+        ...     mix_sampling_rate=sr,
+        ...     save_path="./Outputs/",
+        ...     audio_file_name="output_filename",
+        ...     save_midi=True,
+        ...     save_mix=True,
+        ... )
+        ```"""
         if input_features is not None and inputs_embeds is not None:
             raise ValueError("Both input_features and inputs_embeds received. Please give only input_features")
 
         if generation_config is None:
             generation_config = self.generation_config
 
-        if return_timestamps is not None:
-            if not hasattr(generation_config, "no_timestamps_token_id"):
-                raise ValueError(
-                    "You are trying to return timestamps, but the generation config is not properly set."
-                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
-                    "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
-                )
-
-            generation_config.return_timestamps = return_timestamps
-        else:
-            generation_config.return_timestamps = False
-
-        if language is not None:
-            generation_config.language = language
-        if task is not None:
-            generation_config.task = task
-
-        forced_decoder_ids = []
-        if task is not None or language is not None:
-            if hasattr(generation_config, "language"):
-                if generation_config.language in generation_config.lang_to_id.keys():
-                    language_token = generation_config.language
-                elif generation_config.language in TO_LANGUAGE_CODE.keys():
-                    language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
-                else:
-                    raise ValueError(
-                        f"Unsupported language: {self.language}. Language should be one of:"
-                        f" {list(TO_LANGUAGE_CODE.keys()) if generation_config.language in TO_LANGUAGE_CODE.keys() else list(TO_LANGUAGE_CODE.values())}."
-                    )
-                forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
-            else:
-                forced_decoder_ids.append((1, None))  # automatically detect the language
-
-            if hasattr(generation_config, "task"):
-                if generation_config.task in TASK_IDS:
-                    forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
-                else:
-                    raise ValueError(
-                        f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
-                    )
-            else:
-                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
-            if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
-                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
-                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
-
-        # Legacy code for backward compatibility
-        elif hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
-            forced_decoder_ids = self.config.forced_decoder_ids
-        elif (
-                hasattr(self.generation_config, "forced_decoder_ids")
-                and self.generation_config.forced_decoder_ids is not None
-        ):
-            forced_decoder_ids = self.generation_config.forced_decoder_ids
-
-        if generation_config.return_timestamps:
-            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
-
-        if len(forced_decoder_ids) > 0:
-            generation_config.forced_decoder_ids = forced_decoder_ids
-
         # select composer randomly if not already given
         composer_to_feature_token = self.config.composer_to_feature_token
         if composer is None:
             composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
         elif composer not in composer_to_feature_token.keys():
-            raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
+            raise ValueError(
+                f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}"
+            )
 
-        n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
-        max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars"))) \
-            if max_length is None else max_length
+        n_bars = self.config.dataset_n_bars if n_bars is None else n_bars
+        max_length = (
+            self.config.dataset_target_length * max(1, (n_bars // self.config.dataset_n_bars))
+            if max_length is None
+            else max_length
+        )
 
         inputs_embeds = self.spectrogram(input_features["input_features"]).transpose(-1, -2)
-        if self.config.dataset.get("mel_is_conditioned", None):
+        if self.config.dataset_mel_is_conditioned:
             composer_value = composer_to_feature_token[composer]
             composer_value = torch.tensor(composer_value, device=self.device)
             composer_value = composer_value.repeat(inputs_embeds.shape[0])
@@ -1449,26 +1400,22 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         return super().generate(
             inputs,
             generation_config,
-            logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
             inputs_embeds=inputs_embeds,
             max_length=max_length,
             **kwargs,
         )
 
     def prepare_inputs_for_generation(
-            self,
-            input_ids,
-            past_key_values=None,
-            attention_mask=None,
-            head_mask=None,
-            decoder_head_mask=None,
-            cross_attn_head_mask=None,
-            use_cache=None,
-            encoder_outputs=None,
-            **kwargs,
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:

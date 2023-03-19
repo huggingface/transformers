@@ -410,11 +410,14 @@ def is_pyctcdecode_available():
 def is_librosa_available():
     return _librosa_available
 
+
 def is_essentia_available():
     return _essentia_available
 
+
 def is_pretty_midi_available():
     return _pretty_midi_available
+
 
 def is_torch_cuda_available():
     if is_torch_available():

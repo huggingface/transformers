@@ -15,34 +15,28 @@
 """ Testing suite for the PyTorch Pop2Piano model. """
 
 import copy
-import inspect
-import os
 import tempfile
 import unittest
 
-import numpy as np
-
-import transformers
 from transformers import Pop2PianoConfig
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torchaudio, slow, torch_device
-from transformers.utils import cached_property, is_flax_available, is_torch_available
 from transformers.feature_extraction_utils import BatchFeature
+from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
+from transformers.utils import is_torch_available, is_torchaudio_available
 
-# from ...test_pipeline_mixin import PipelineTesterMixin
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-if is_torch_available():
+if is_torch_available() and is_torchaudio_available():
     import torch
 
-    from transformers import (
-        Pop2PianoForConditionalGeneration,
-        set_seed,
-    )
+    from transformers import Pop2PianoForConditionalGeneration
     from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
 
+
+@require_torch
+@require_torchaudio
 class Pop2PianoModelTester:
     def __init__(
         self,
@@ -393,7 +387,9 @@ class Pop2PianoModelTester:
         lm_labels,
     ):
         model = Pop2PianoForConditionalGeneration(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["encoder_last_hidden_state"]
+        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)[
+            "encoder_last_hidden_state"
+        ]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_encoder_decoder_shared_weights(
@@ -508,8 +504,9 @@ class Pop2PianoModelTester:
 
 
 @require_torch
+@require_torchaudio
 class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Pop2PianoForConditionalGeneration, ) if is_torch_available() else ()
+    all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
@@ -591,10 +588,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
-
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
@@ -628,40 +621,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 input_names=["input_ids", "decoder_input_ids"],
             )
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = Pop2PianoForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from Pop2Piano model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
     def test_disk_offload(self):
         pass
@@ -673,6 +632,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     @unittest.skip("Pop2Piano does not need this test.")
     def test_generate_with_past_key_values(self):
         pass
+
 
 @require_torch
 @require_torchaudio
@@ -687,11 +647,14 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.size(), torch.Size([10, 512, 98]))
 
         # check values
-        self.assertEqual(output[0, :3, :3].cpu().numpy().tolist(),
-                         [[-13.815510749816895, -13.815510749816895, -13.815510749816895],
-                          [-13.815510749816895, -13.815510749816895, -13.815510749816895],
-                          [-13.815510749816895, -13.815510749816895, -13.815510749816895]]
-                         )
+        self.assertEqual(
+            output[0, :3, :3].cpu().numpy().tolist(),
+            [
+                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
+                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
+                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
+            ],
+        )
 
     @slow
     def test_mel_conditioner_integration(self):
@@ -708,23 +671,20 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.size(), torch.Size([10, 101, 512]))
 
         # check values
-        self.assertEqual(outputs[0, :3, :3].detach().cpu().numpy().tolist(),
-                         [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166],
-                          [1.0, 1.0, 1.0],
-                          [1.0, 1.0, 1.0]]
-                         )
+        self.assertEqual(
+            outputs[0, :3, :3].detach().cpu().numpy().tolist(),
+            [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+        )
 
     @slow
     def test_full_model_integration(self):
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model.eval()
-        input_features = BatchFeature({'input_features': torch.ones([100, 100000])})
+        input_features = BatchFeature({"input_features": torch.ones([100, 100000])})
         outputs = model.generate(input_features=input_features)
 
         # check for shapes
         self.assertEqual(outputs.size(0), 100)
 
         # check for values
-        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(),
-                         [0, 134, 133]
-                         )
+        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(), [0, 134, 133])

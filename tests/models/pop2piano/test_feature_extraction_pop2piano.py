@@ -14,9 +14,7 @@
 # limitations under the License.
 
 
-import itertools
 import os
-import random
 import tempfile
 import unittest
 
@@ -24,22 +22,40 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import is_speech_available
-from transformers.testing_utils import (check_json_file_has_correct_format, require_torch,
-                                        require_essentia, require_librosa, require_scipy,
-                                        require_pretty_midi, require_soundfile)
-from transformers.utils.import_utils import (is_torch_available, is_essentia_available,
-                                             is_scipy_available, is_librosa_available,
-                                             is_soundfile_availble, )
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_essentia,
+    require_librosa,
+    require_pretty_midi,
+    require_scipy,
+    require_soundfile,
+    require_torch,
+)
+from transformers.utils.import_utils import (
+    is_essentia_available,
+    is_librosa_available,
+    is_scipy_available,
+    is_soundfile_availble,
+    is_torch_available,
+)
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-requirements = is_speech_available() and is_torch_available() and is_essentia_available() and is_scipy_available() and \
-        is_librosa_available() and is_soundfile_availble()
+
+requirements = (
+    is_speech_available()
+    and is_torch_available()
+    and is_essentia_available()
+    and is_scipy_available()
+    and is_librosa_available()
+    and is_soundfile_availble()
+)
 
 if requirements:
     from transformers import Pop2PianoFeatureExtractor
 if is_torch_available():
     import torch
+
 
 @require_torch
 @require_essentia
@@ -79,8 +95,9 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
             "vocab_size_special": self.vocab_size_special,
             "vocab_size_note": self.vocab_size_note,
             "vocab_size_velocity": self.vocab_size_velocity,
-            "vocab_size_time":self.vocab_size_time,
+            "vocab_size_time": self.vocab_size_time,
         }
+
 
 @require_torch
 @require_essentia
@@ -126,7 +143,11 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_call(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input = np.zeros([1000000, ])
+        speech_input = np.zeros(
+            [
+                1000000,
+            ]
+        )
 
         input_features = feature_extractor(speech_input, audio_sr=16_000, return_tensors="np")
         self.assertTrue(input_features.input_features.ndim == 2)
@@ -142,12 +163,38 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_integration(self):
         EXPECTED_INPUT_FEATURES = torch.tensor(
-            [-4.5434e-05, -1.8900e-04, -2.2150e-04, -2.1844e-04, -2.7647e-04,
-             -2.1334e-04, -1.5305e-04, -2.6124e-04, -2.6863e-04, -1.5969e-04,
-             -1.6224e-04, -1.2900e-04, -9.9139e-06, 1.5336e-05, 4.7507e-05,
-             9.3454e-05, -2.3652e-05, -1.2942e-04, -1.0804e-04, -1.4267e-04,
-             -1.5102e-04, -6.7488e-05, -9.6527e-05, -9.6909e-05, 8.0032e-05,
-             8.1948e-05, -7.3148e-05, 3.4405e-05, 1.5065e-04, -1.0989e-04]
+            [
+                -4.5434e-05,
+                -1.8900e-04,
+                -2.2150e-04,
+                -2.1844e-04,
+                -2.7647e-04,
+                -2.1334e-04,
+                -1.5305e-04,
+                -2.6124e-04,
+                -2.6863e-04,
+                -1.5969e-04,
+                -1.6224e-04,
+                -1.2900e-04,
+                -9.9139e-06,
+                1.5336e-05,
+                4.7507e-05,
+                9.3454e-05,
+                -2.3652e-05,
+                -1.2942e-04,
+                -1.0804e-04,
+                -1.4267e-04,
+                -1.5102e-04,
+                -6.7488e-05,
+                -9.6527e-05,
+                -9.6909e-05,
+                8.0032e-05,
+                8.1948e-05,
+                -7.3148e-05,
+                3.4405e-05,
+                1.5065e-04,
+                -1.0989e-04,
+            ]
         )
 
         input_speech, sampling_rate = self._load_datasamples(1)

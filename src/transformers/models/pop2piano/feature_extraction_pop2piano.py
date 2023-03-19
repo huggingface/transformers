@@ -12,30 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Feature extractor class for Pop2Piano """
-
-import copy
-from typing import Any, Dict, List, Optional, Union
+""" Feature extractor class for Pop2Piano"""
 
 import os
-
-import tensorflow
-import torch
-import scipy
-import librosa
-import pathlib
-import essentia
 import warnings
-import pretty_midi
-import numpy as np
-import soundfile as sf
-import essentia.standard
-from torch.nn.utils.rnn import pad_sequence
-from .configuration_pop2piano import Pop2PianoConfig
+from typing import List, Optional, Union
 
-from ...utils import TensorType, logging
-from ...feature_extraction_utils import BatchFeature
+import essentia
+import essentia.standard
+import librosa
+import numpy as np
+import pretty_midi
+import scipy
+import soundfile as sf
+import torch
+from torch.nn.utils.rnn import pad_sequence
+
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
+from ...utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -50,6 +46,7 @@ TIE: int = 2
 EOS: int = 1
 PAD: int = 0
 
+
 class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Pop2Piano feature extractor.
@@ -57,45 +54,43 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class loads audio, extracts rhythm and does preprocesses before being passed through `LogMelSpectrogram`.
-    This class also contains postprocessing methods to convert model outputs to midi audio and stereo-mix.
     Args:
+    This class loads audio, extracts rhythm and does preprocesses before being passed through `LogMelSpectrogram`. This:
+    class also contains postprocessing methods to convert model outputs to midi audio and stereo-mix.
         n_bars (`int`, *optional*, defaults to 2):
             Determines `n_steps` in method `preprocess_mel`.
         sampling_rate (`int`, *optional*, defaults to 22050):
             Sample rate of audio signal.
         use_mel (`bool`, *optional*, defaults to `True`):
-            Whether to preprocess for `LogMelSpectrogram` or not.
-            For the current implementation this must be `True`.
+            Whether to preprocess for `LogMelSpectrogram` or not. For the current implementation this must be `True`.
         padding_value (`int`, *optional*, defaults to 0):
             Padding value used to pad the audio. Should correspond to silences.
         vocab_size_special (`int`, *optional*, defaults to 4):
             Number of special values.
         vocab_size_note (`int`, *optional*, defaults to 128):
-            This represents the number of Note Values.
-            Note values indicate a pitch event for one of the MIDI pitches. But only the 88 pitches corresponding to
-            piano keys are actually used.
+            This represents the number of Note Values. Note values indicate a pitch event for one of the MIDI pitches.
+            But only the 88 pitches corresponding to piano keys are actually used.
         vocab_size_velocity (`int`, *optional*, defaults to 2):
             Number of Velocity tokens.
         vocab_size_time (`int`, *optional*, defaults to 100):
-            This represents the number of Beat Shifts.
-            Beat Shift [100 values] Indicates the relative time shift within the segment quantized into 8th-note
-            beats(half-beats).
+            This represents the number of Beat Shifts. Beat Shift [100 values] Indicates the relative time shift within
+            the segment quantized into 8th-note beats(half-beats).
     """
     model_input_names = ["input_features"]
 
-    def __init__(self,
-                 n_bars:int = 2,
-                 sampling_rate:int = 22050,
-                 use_mel:int = True,
-                 padding_value:int = 0,
-                 vocab_size_special:int = 4,
-                 vocab_size_note:int = 128,
-                 vocab_size_velocity:int = 2,
-                 vocab_size_time:int = 100,
-                 feature_size=None,
-                 **kwargs
-        ):
+    def __init__(
+        self,
+        n_bars: int = 2,
+        sampling_rate: int = 22050,
+        use_mel: int = True,
+        padding_value: int = 0,
+        vocab_size_special: int = 4,
+        vocab_size_note: int = 128,
+        vocab_size_velocity: int = 2,
+        vocab_size_time: int = 100,
+        feature_size=None,
+        **kwargs,
+    ):
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
@@ -114,8 +109,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     def extract_rhythm(self, raw_audio):
         """
         This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as
-        tempo in bpm for an audio signal.
-        For more information please visit https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
+        tempo in bpm for an audio signal. For more information please visit
+        https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
         """
         essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
         bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(raw_audio)
@@ -130,9 +125,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             fill_value="extrapolate",
         )
         if extend:
-            beat_steps_8th = beat_times_function(
-                np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1)
-            )
+            beat_steps_8th = beat_times_function(np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1))
         else:
             beat_steps_8th = beat_times_function(
                 np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
@@ -146,16 +139,18 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             bounds_error=False,
             fill_value="extrapolate",
         )
-        ext_beats = beat_times_function(
-            np.linspace(0, beat_times.size + n_extend - 1, beat_times.size + n_extend)
-        )
+        ext_beats = beat_times_function(np.linspace(0, beat_times.size + n_extend - 1, beat_times.size + n_extend))
 
         return ext_beats
 
     def preprocess_mel(
-            self, audio, beatstep, n_bars, padding_value,
-        ):
-        """ Preprocessing for `LogMelSpectrogram` """
+        self,
+        audio,
+        beatstep,
+        n_bars,
+        padding_value,
+    ):
+        """Preprocessing for `LogMelSpectrogram`"""
 
         n_steps = n_bars * 4
         n_target_step = len(beatstep)
@@ -163,9 +158,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         def split_audio(audio):
             """
-            Split audio corresponding beat intervals.
-            Each audio's lengths are different.
-            Because each corresponding beat interval times are different.
+            Split audio corresponding beat intervals. Each audio's lengths are different. Because each corresponding
+            beat interval times are different.
             """
 
             batch = []
@@ -186,13 +180,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return batch, ext_beatstep
 
     def single_preprocess(
-            self,
-            beatstep,
-            feature_tokens=None,
-            audio=None,
-            n_bars=None,
+        self,
+        beatstep,
+        feature_tokens=None,
+        audio=None,
+        n_bars=None,
     ):
-        """ Preprocessing method for a single sequence. """
+        """Preprocessing method for a single sequence."""
 
         if feature_tokens is None and audio is None:
             raise ValueError("Both `feature_tokens` and `audio` can't be None at the same time!")
@@ -209,27 +203,29 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beatstep = beatstep - beatstep[0]
 
         if self.use_mel:
-            batch, ext_beatstep = self.preprocess_mel(audio,
-                                                      beatstep,
-                                                      n_bars=n_bars,
-                                                      padding_value=self.padding_value,
-                                                      )
+            batch, ext_beatstep = self.preprocess_mel(
+                audio,
+                beatstep,
+                n_bars=n_bars,
+                padding_value=self.padding_value,
+            )
         else:
             raise NotImplementedError("use_mel must be True")
 
         return batch, ext_beatstep
 
-    def __call__(self,
-                 raw_audio:Union[np.ndarray, List[float], List[np.ndarray]],
-                 audio_sr:int,
-                 steps_per_beat:int=2,
-                 return_tensors:Optional[Union[str, TensorType]]="pt",
-                 **kwargs
-                 ) -> BatchFeature:
+    def __call__(
+        self,
+        raw_audio: Union[np.ndarray, List[float], List[np.ndarray]],
+        audio_sr: int,
+        steps_per_beat: int = 2,
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        **kwargs,
+    ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one sequence.
-        Please note that `Pop2PianoFeatureExtractor` only accepts one raw_audio at a time.
         Args:
+        Main method to featurize and prepare for the model one sequence. Please note that `Pop2PianoFeatureExtractor`
+        only accepts one raw_audio at a time.
             raw_audio (`np.ndarray`, `List`):
                 Denotes the raw_audio.
             audio_sr (`int`):
@@ -238,11 +234,12 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 Denotes Steps per beat.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
-        warnings.warn("Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times.")
+        warnings.warn(
+            "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
+        )
 
         # If it's [np.ndarray]
         if isinstance(raw_audio, list) and isinstance(raw_audio[0], np.ndarray):
@@ -254,7 +251,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         if self.sampling_rate != audio_sr and self.sampling_rate is not None:
             # Change `raw_audio_sr` to `self.sampling_rate`
             raw_audio = librosa.core.resample(
-                raw_audio, orig_sr=audio_sr, target_sr=self.sampling_rate, res_type='kaiser_best'
+                raw_audio, orig_sr=audio_sr, target_sr=self.sampling_rate, res_type="kaiser_best"
             )
         audio_sr = self.sampling_rate
         start_sample = int(beatsteps[0] * audio_sr)
@@ -270,10 +267,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         )
         batch = batch.cpu().numpy()
 
-        output = BatchFeature({"input_features": batch,
-                              "beatsteps": beatsteps,
-                              "ext_beatstep": ext_beatstep,
-                             })
+        output = BatchFeature(
+            {
+                "input_features": batch,
+                "beatsteps": beatsteps,
+                "ext_beatstep": ext_beatstep,
+            }
+        )
 
         if return_tensors is not None:
             output = output.convert_to_tensors(return_tensors)
@@ -281,15 +281,17 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return output
 
     def decode(self, token, time_idx_offset):
-        """ Decodes the tokens generated by the transformer """
+        """Decodes the tokens generated by the transformer"""
 
         if token >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity):
-            type, value =  TOKEN_TIME, ((token - (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity)) + time_idx_offset)
+            type, value = TOKEN_TIME, (
+                (token - (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity)) + time_idx_offset
+            )
         elif token >= (self.vocab_size_special + self.vocab_size_note):
-            type, value =  TOKEN_VELOCITY, (token - (self.vocab_size_special + self.vocab_size_note))
+            type, value = TOKEN_VELOCITY, (token - (self.vocab_size_special + self.vocab_size_note))
             value = int(value)
         elif token >= self.vocab_size_special:
-            type, value =  TOKEN_NOTE, (token - self.vocab_size_special)
+            type, value = TOKEN_NOTE, (token - self.vocab_size_special)
             value = int(value)
         else:
             type, value = TOKEN_SPECIAL, token
@@ -298,14 +300,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return [type, value]
 
     def relative_batch_tokens_to_midi(
-            self,
-            tokens,
-            beatstep,
-            beat_offset_idx=None,
-            bars_per_batch=None,
-            cutoff_time_idx=None,
+        self,
+        tokens,
+        beatstep,
+        beat_offset_idx=None,
+        bars_per_batch=None,
+        cutoff_time_idx=None,
     ):
-        """ Converts tokens to midi """
+        """Converts tokens to midi"""
 
         beat_offset_idx = 0 if beat_offset_idx is None else beat_offset_idx
         notes = None
@@ -336,13 +338,15 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def relative_tokens_to_notes(self, tokens, start_idx, cutoff_time_idx=None):
         # decoding If the first token is an arranger
-        if tokens[0] >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time):
+        if tokens[0] >= (
+            self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time
+        ):
             tokens = tokens[1:]
 
         words = [self.decode(token, time_idx_offset=0) for token in tokens]
 
         if hasattr(start_idx, "item"):
-            """ if numpy or torch tensor """
+            """if numpy or torch tensor"""
             start_idx = start_idx.item()
 
         current_idx = start_idx
@@ -374,9 +378,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                             pass
                         else:
                             offset_idx = current_idx
-                            notes.append(
-                                [onset_idx, offset_idx, pitch, DEFAULT_VELOCITY]
-                            )
+                            notes.append([onset_idx, offset_idx, pitch, DEFAULT_VELOCITY])
                             note_onsets_ready[pitch] = None
                 else:
                     # note_on
@@ -390,9 +392,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                             pass
                         else:
                             offset_idx = current_idx
-                            notes.append(
-                                [onset_idx, offset_idx, pitch, DEFAULT_VELOCITY]
-                            )
+                            notes.append([onset_idx, offset_idx, pitch, DEFAULT_VELOCITY])
                             note_onsets_ready[pitch] = current_idx
             else:
                 raise ValueError
@@ -417,7 +417,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             return notes
 
     def notes_to_midi(self, notes, beatstep, offset_sec=None):
-        """ Converts notes to midi """
+        """Converts notes to midi"""
 
         new_pm = pretty_midi.PrettyMIDI(resolution=384, initial_tempo=120.0)
         new_inst = pretty_midi.Instrument(program=0)
@@ -439,7 +439,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return new_pm
 
     def get_stereo(self, pop_y, midi_y, pop_scale=0.99):
-        """ Generates stereo audio using `pop audio(`pop_y`)` and `generated midi audio(`midi_y`)` """
+        """Generates stereo audio using `pop audio(`pop_y`)` and `generated midi audio(`midi_y`)`"""
 
         if len(pop_y) > len(midi_y):
             midi_y = np.pad(midi_y, (0, len(pop_y) - len(midi_y)))
@@ -449,32 +449,33 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return stereo
 
     def _to_np(self, tensor):
-        """ Converts tensorflow or pytorch tensor to np.ndarray. """
+        """Converts pytorch tensor to np.ndarray."""
         if isinstance(tensor, np.ndarray):
             return tensor
         elif isinstance(tensor, torch.Tensor):
             return tensor.cpu().numpy()
-        elif isinstance(tensor, tensorflow.Tensor):
-            return tensor.numpy()
+        else:
+            raise ValueError("dtype not understood! Please use wither torch.Tensor or np.ndarray")
 
-    def postprocess(self,
-                    relative_tokens:Union[TensorType],
-                    beatsteps:Union[TensorType],
-                    ext_beatstep:Union[TensorType],
-                    raw_audio:Union[np.ndarray, List[float], List[np.ndarray]],
-                    sampling_rate:int,
-                    mix_sampling_rate=None,
-                    save_path:str=None,
-                    audio_file_name:str=None,
-                    save_midi:bool=False,
-                    save_mix:bool=False,
-                    click_amp:float=0.2,
-                    stereo_amp:float=0.5,
-                    add_click:bool=False,
-        ):
+    def postprocess(
+        self,
+        relative_tokens: Union[np.ndarray, torch.Tensor],
+        beatsteps: Union[np.ndarray, torch.Tensor],
+        ext_beatstep: Union[np.ndarray, torch.Tensor],
+        raw_audio: Union[np.ndarray, List[float], List[np.ndarray]],
+        sampling_rate: int,
+        mix_sampling_rate=None,
+        save_path: str = None,
+        audio_file_name: str = None,
+        save_midi: bool = False,
+        save_mix: bool = False,
+        click_amp: float = 0.2,
+        stereo_amp: float = 0.5,
+        add_click: bool = False,
+    ):
         r"""
-        Postprocess step. It also saves the `"generated midi audio"`, `"stereo-mix"`
         Args:
+        Postprocess step. It also saves the `"generated midi audio"`, `"stereo-mix"`
             relative_tokens ([`~utils.TensorType`]):
                 Output of `Pop2PianoConditionalGeneration` model.
             beatsteps ([`~utils.TensorType`]):
@@ -512,8 +513,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError("If you want to save any mix or midi file then you must define save_path.")
 
         if save_path and (not save_midi and not save_mix):
-            raise ValueError("You are setting save_path but not saving anything, use save_midi=True to "
-                             "save the midi file and use save_mix to save the mix file or do both!")
+            raise ValueError(
+                "You are setting save_path but not saving anything, use save_midi=True to "
+                "save the midi file and use save_mix to save the mix file or do both!"
+            )
 
         mix_sampling_rate = sampling_rate if mix_sampling_rate is None else mix_sampling_rate
 
@@ -524,11 +527,12 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             else:
                 raise ValueError(f"Is {save_path} a directory?")
 
-        pm, notes = self.relative_batch_tokens_to_midi(tokens=relative_tokens,
-                                                       beatstep=ext_beatstep,
-                                                       bars_per_batch=self.n_bars,
-                                                       cutoff_time_idx=(self.n_bars + 1) * 4,
-                                                       )
+        pm, notes = self.relative_batch_tokens_to_midi(
+            tokens=relative_tokens,
+            beatstep=ext_beatstep,
+            bars_per_batch=self.n_bars,
+            cutoff_time_idx=(self.n_bars + 1) * 4,
+        )
         for n in pm.instruments[0].notes:
             n.start += beatsteps[0]
             n.end += beatsteps[0]
