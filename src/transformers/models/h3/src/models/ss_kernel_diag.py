@@ -66,7 +66,6 @@ class SSKernelDiag(OptimModule):
         bandlimit=None,
         force_real=False,
     ):
-
         super().__init__()
         self.L = L
         self.disc = disc
@@ -248,7 +247,9 @@ class SSKernelDiag(OptimModule):
         return state
 
     def step(self, u, state):
-        next_state = torch.einsum("h n, b h n -> b h n", self.dA, state) + torch.einsum("h n, b h -> b h n", self.dB, u)
+        next_state = torch.einsum("h n, b h n -> b h n", self.dA, state) + torch.einsum(
+            "h n, b h -> b h n", self.dB, u
+        )
         y = torch.einsum("c h n, b h n -> b c h", self.dC, next_state)
         return 2 * y.real, next_state
 

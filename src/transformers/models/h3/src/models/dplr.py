@@ -34,7 +34,7 @@ def dplr(
         imag_part = N // 2 * torch.rand(H, N // 2)
     else:
         # imag_part = repeat(torch.arange(N//2), 'n -> h n', h=H)
-        imag_part = torch.arange(N//2).unsqueeze(0).repeat(H, 1)
+        imag_part = torch.arange(N // 2).unsqueeze(0).repeat(H, 1)
 
     real_part = real_scale * real_part
     if scaling == "random":
@@ -42,7 +42,7 @@ def dplr(
     elif scaling == "real":
         imag_part = 0 * imag_part
         # real_part = 1 + repeat(torch.arange(N//2), 'n -> h n', h=H)
-        real_part = 1 + torch.arange(N//2).unsqueeze(0).repeat(H, 1)
+        real_part = 1 + torch.arange(N // 2).unsqueeze(0).repeat(H, 1)
     elif scaling in ["linear", "lin"]:
         imag_part = pi * imag_part
     elif scaling in ["inverse", "inv"]:  # Based on asymptotics of the default HiPPO matrix

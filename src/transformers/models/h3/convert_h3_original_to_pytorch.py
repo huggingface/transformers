@@ -21,8 +21,8 @@ URL: https://github.com/HazyResearch/H3/tree/main
 import argparse
 
 import torch
-
 from huggingface_hub import hf_hub_download
+
 from transformers import AutoTokenizer, H3Config, H3ForCausalLM
 
 
@@ -143,7 +143,7 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
         expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
     elif model_name == "H3-355m":
         expected_slice = torch.tensor([[4.5926, 6.2018, 4.6021]], device=device)
-    if model_name in ['H3-125m', 'H3-355m']:
+    if model_name in ["H3-125m", "H3-355m"]:
         assert torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-2)
 
     print("Generating text...")

@@ -213,7 +213,9 @@ class H3(nn.Module):
         # kv = rearrange(k, "b 1 (h d1) -> b d1 1 h", d1=self.head_dim) * rearrange(
         #     v, "b 1 (h d2) -> b 1 d2 h", d2=self.head_dim
         # )  # b d1 d2 h
-        kv = torch.permute(k.view(b, l, h, d1), (0, 3, 1, 2)) * torch.permute(v.view(b, l, h, d1), (0, 1, 3, 2)) # b d1 d2 h
+        kv = torch.permute(k.view(b, l, h, d1), (0, 3, 1, 2)) * torch.permute(
+            v.view(b, l, h, d1), (0, 1, 3, 2)
+        )  # b d1 d2 h
         # y, next_state = self.kernel.step(rearrange(kv, "b d1 d2 h -> (b d1 d2) h"), state)
         y, next_state = self.kernel.step(torch.flatten(kv, 0, 2), state)
         # y = rearrange(y, "(b d1 d2) 1 h -> b d1 d2 h", d1=self.head_dim, d2=self.head_dim) + kv * self.D

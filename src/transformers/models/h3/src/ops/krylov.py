@@ -145,7 +145,7 @@ def krylov_toeplitz(L, A, b, c=None):
     else:
         # x = rearrange(x, 'l ... n -> ... n l')
         x = x.unsqueeze(-1)
-        x_dims = [i for i in range(len(x.shape))]
+        x_dims = list(range(len(x.shape)))
         x_dims[0] = x_dims[-1]
         x_dims[-1] = 0
         x = torch.permute(x, tuple(x_dims))
@@ -187,7 +187,7 @@ def krylov_toeplitz_(L, A, b, c=None):
     else:
         # x = rearrange(x, 'l ... n -> ... n l')
         x = x.unsqueeze(-1)
-        x_dims = [i for i in range(len(x.shape))]
+        x_dims = list(range(len(x.shape)))
         x_dims[0] = x_dims[-1]
         x_dims[-1] = 0
         x = torch.permute(x, tuple(x_dims))

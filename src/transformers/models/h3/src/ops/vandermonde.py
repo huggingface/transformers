@@ -4,7 +4,6 @@
 """pykeops implementations of the Vandermonde matrix multiplication kernel used in the S4D kernel."""
 
 import torch
-
 from pykeops.torch import Genred, LazyTensor
 
 
