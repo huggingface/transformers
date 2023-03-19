@@ -277,6 +277,34 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_regular_chunk(self):
+        NER_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
+        model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
+        regular_tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
+        chunked_tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
+        chunked_tokenizer.model_max_length = 10
+        stride = 5
+        sentence = (
+            "Hugging Face, Inc. is a French company that develops tools for building applications using machine learning. "
+            "The company, based in New York City was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf."
+        )
+
+        for aggregation_strategy in ["simple", "first", "max", "average"]:
+            regular_token_classifier = TokenClassificationPipeline(
+                model=model, tokenizer=regular_tokenizer, aggregation_strategy=aggregation_strategy
+            )
+            chunked_token_classifier = TokenClassificationPipeline(
+                model=model, tokenizer=chunked_tokenizer, aggregation_strategy=aggregation_strategy, stride=stride
+            )
+            regular_output = regular_token_classifier(sentence)
+            chunked_output = chunked_token_classifier(sentence)
+            for item in regular_output:
+                item.pop("score")
+            for item in chunked_output:
+                item.pop("score")
+            self.assertEqual(regular_output, chunked_output)
+
+    @require_torch
     @slow
     def test_spanish_bert(self):
         # https://github.com/huggingface/transformers/pull/4987
