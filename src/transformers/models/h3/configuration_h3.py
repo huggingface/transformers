@@ -102,7 +102,6 @@ class H3Config(PretrainedConfig):
         ssm_mode="diag",
         ssm_measure="diag-lin",
         attn_layer_idx=[6],
-        use_cache=False,
         bos_token_id=50256,
         eos_token_id=50256,
         **kwargs,
@@ -122,7 +121,6 @@ class H3Config(PretrainedConfig):
         self.ssm_mode = ssm_mode
         self.ssm_measure = ssm_measure
         self.attn_layer_idx = attn_layer_idx
-        self.use_cache = use_cache
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 

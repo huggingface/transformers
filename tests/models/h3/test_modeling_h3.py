@@ -104,7 +104,6 @@ class H3ModelTester:
             residual_dropout=self.hidden_dropout_prob,
             n_positions=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            use_cache=False,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
@@ -139,15 +138,9 @@ class H3ModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        (
-            config,
-            input_ids,
-            input_mask,
-        ) = config_and_inputs
+        config, input_ids, input_mask = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-        }
+        inputs_dict = {"input_ids": input_ids}
 
         return config, inputs_dict
 
