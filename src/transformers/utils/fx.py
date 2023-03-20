@@ -376,7 +376,7 @@ def torch_repeat_interleave(*args, dim=None, output_size=None):
             else:
                 shape = [sum(shape)]
                 dim = 0
-        if type(repeats) == int or torch.numel(repeats) == 1:
+        if isinstance(repeats, int) or torch.numel(repeats) == 1:
             shape[dim] *= int(repeats)
         else:
             shape[dim] = output_size if output_size is not None else args[1].sum()
