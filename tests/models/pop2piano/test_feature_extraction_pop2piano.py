@@ -146,11 +146,14 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         speech_input = np.zeros(
             [
                 1000000,
-            ]
+            ],
+            dtype=np.float32,
         )
 
         input_features = feature_extractor(speech_input, audio_sr=16_000, return_tensors="np")
-        self.assertTrue(input_features.input_features.ndim == 2)
+        self.assertTrue(input_features.input_features.ndim == 3)
+        self.assertEqual(input_features.input_features.shape[-1], 512)
+
         self.assertTrue(input_features.beatsteps.ndim == 1)
         self.assertTrue(input_features.ext_beatstep.ndim == 1)
 
@@ -163,44 +166,13 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_integration(self):
         EXPECTED_INPUT_FEATURES = torch.tensor(
-            [
-                -4.5434e-05,
-                -1.8900e-04,
-                -2.2150e-04,
-                -2.1844e-04,
-                -2.7647e-04,
-                -2.1334e-04,
-                -1.5305e-04,
-                -2.6124e-04,
-                -2.6863e-04,
-                -1.5969e-04,
-                -1.6224e-04,
-                -1.2900e-04,
-                -9.9139e-06,
-                1.5336e-05,
-                4.7507e-05,
-                9.3454e-05,
-                -2.3652e-05,
-                -1.2942e-04,
-                -1.0804e-04,
-                -1.4267e-04,
-                -1.5102e-04,
-                -6.7488e-05,
-                -9.6527e-05,
-                -9.6909e-05,
-                8.0032e-05,
-                8.1948e-05,
-                -7.3148e-05,
-                3.4405e-05,
-                1.5065e-04,
-                -1.0989e-04,
-            ]
+            [[-7.1493, -6.8701, -4.3214], [-5.9473, -5.7548, -3.8438], [-6.1324, -5.9018, -4.3778]]
         )
 
         input_speech, sampling_rate = self._load_datasamples(1)
         feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
         input_features = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt").input_features
-        self.assertTrue(torch.allclose(input_features[0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        self.assertTrue(torch.allclose(input_features[0, :3, :3], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
     @unittest.skip("Pop2PianoFeatureExtractor does not return attention_mask")
     def test_attention_mask(self):

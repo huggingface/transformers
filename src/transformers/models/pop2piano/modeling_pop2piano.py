@@ -22,7 +22,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torchaudio
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
@@ -214,28 +213,6 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         return shifted_input_ids
-
-
-class LogMelSpectrogram(nn.Module):
-    """Generates MelSpectrogram then applies log base e."""
-
-    def __init__(self, sampling_rate, n_fft, hop_length, f_min, n_mels):
-        super(LogMelSpectrogram, self).__init__()
-        self.melspectrogram = torchaudio.transforms.MelSpectrogram(
-            sample_rate=sampling_rate,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            f_min=f_min,
-            n_mels=n_mels,
-        )
-
-    def forward(self, x):
-        with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=False):
-                X = self.melspectrogram(x)
-                X = X.clamp(min=1e-6).log()
-
-        return X
 
 
 class ConcatEmbeddingToMel(nn.Module):
@@ -1086,20 +1063,12 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         self.config = config
         self.model_dim = config.d_model
 
-        self.spectrogram = LogMelSpectrogram(
-            sampling_rate=config.dataset_sampling_rate,
-            n_fft=config.n_fft,
-            hop_length=config.hop_length,
-            f_min=config.f_min,
-            n_mels=config.n_mels,
+        n_dim = 512
+        composer_n_vocab = len(config.composer_to_feature_token)
+        embedding_offset = min(config.composer_to_feature_token.values())
+        self.mel_conditioner = ConcatEmbeddingToMel(
+            embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=n_dim
         )
-        if config.dataset_mel_is_conditioned:
-            n_dim = 512
-            composer_n_vocab = len(config.composer_to_feature_token)
-            embedding_offset = min(config.composer_to_feature_token.values())
-            self.mel_conditioner = ConcatEmbeddingToMel(
-                embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=n_dim
-            )
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1390,12 +1359,10 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             else max_length
         )
 
-        inputs_embeds = self.spectrogram(input_features["input_features"]).transpose(-1, -2)
-        if self.config.dataset_mel_is_conditioned:
-            composer_value = composer_to_feature_token[composer]
-            composer_value = torch.tensor(composer_value, device=self.device)
-            composer_value = composer_value.repeat(inputs_embeds.shape[0])
-            inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
+        composer_value = composer_to_feature_token[composer]
+        composer_value = torch.tensor(composer_value, device=self.device)
+        composer_value = composer_value.repeat(input_features["input_features"].shape[0])
+        inputs_embeds = self.mel_conditioner(input_features["input_features"], composer_value)
 
         return super().generate(
             inputs,

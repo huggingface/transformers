@@ -26,6 +26,7 @@ import pretty_midi
 import scipy
 import soundfile as sf
 import torch
+import torchaudio
 from torch.nn.utils.rnn import pad_sequence
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -75,6 +76,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         vocab_size_time (`int`, *optional*, defaults to 100):
             This represents the number of Beat Shifts. Beat Shift [100 values] Indicates the relative time shift within
             the segment quantized into 8th-note beats(half-beats).
+        n_fft (`int`, *optional*, defaults to 4096):
+            Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
+        hop_length (`int`, *optional*, defaults to 1024):
+            Length of hop between Short-Time Fourier Transform windows.
+        f_min (`float`, *optional*, defaults to 10.0):
+            Minimum frequency.
+        n_mels (`int`, *optional*, defaults to 512):
+            Number of mel filterbanks.
     """
     model_input_names = ["input_features"]
 
@@ -88,6 +97,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         vocab_size_note: int = 128,
         vocab_size_velocity: int = 2,
         vocab_size_time: int = 100,
+        n_fft: int = 4096,
+        hop_length: int = 1024,
+        f_min: float = 10.0,
+        n_mels: int = 512,
         feature_size=None,
         **kwargs,
     ):
@@ -105,6 +118,27 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         self.vocab_size_note = vocab_size_note
         self.vocab_size_velocity = vocab_size_velocity
         self.vocab_size_time = vocab_size_time
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.f_min = f_min
+        self.n_mels = n_mels
+
+    def log_mel_spectogram(self, sequence):
+        """Generates MelSpectrogram then applies log base e."""
+
+        melspectrogram = torchaudio.transforms.MelSpectrogram(
+            sample_rate=self.sampling_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            f_min=self.f_min,
+            n_mels=self.n_mels,
+        )
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=False):
+                X = melspectrogram(sequence)
+                X = X.clamp(min=1e-6).log()
+
+        return X
 
     def extract_rhythm(self, raw_audio):
         """
@@ -265,8 +299,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beatstep=beatsteps - beatsteps[0],
             n_bars=self.n_bars,
         )
-        batch = batch.cpu().numpy()
 
+        # Apply LogMelSpectogram
+        batch = self.log_mel_spectogram(batch).transpose(-1, -2)
+
+        batch = batch.cpu().numpy()
         output = BatchFeature(
             {
                 "input_features": batch,

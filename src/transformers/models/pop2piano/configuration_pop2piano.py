@@ -98,18 +98,6 @@ class Pop2PianoConfig(PretrainedConfig):
             Determines `max_length` for transformer `generate` function along with `dataset_n_bars`.
         dataset_n_bars (`int`, *optional*, defaults to 2):
             Determines `max_length` for transformer `generate` function along with `dataset_target_length`.
-        dataset_sampling_rate (`int` *optional*, defaults to 22050):
-            Sample rate of audio signal.
-        dataset_mel_is_conditioned (`bool`, *optional*, defaults to `True`):
-            Whether to use `ConcatEmbeddingToMel` or not.
-        n_fft (`int`, *optional*, defaults to 4096):
-            Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
-        hop_length (`int`, *optional*, defaults to 1024):
-            Length of hop between Short-Time Fourier Transform windows.
-        f_min (`float`, *optional*, defaults to 10.0):
-            Minimum frequency.
-        n_mels (`int`, *optional*, defaults to 512):
-            Number of mel filterbanks.
     """
 
     model_type = "pop2piano"
@@ -138,12 +126,6 @@ class Pop2PianoConfig(PretrainedConfig):
         dense_act_fn="relu",
         dataset_target_length=256,
         dataset_n_bars=2,
-        dataset_sampling_rate=22050,
-        dataset_mel_is_conditioned=True,
-        n_fft=4096,
-        hop_length=1024,
-        f_min=10.0,
-        n_mels=512,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -166,15 +148,8 @@ class Pop2PianoConfig(PretrainedConfig):
         self.is_gated_act = act_info[0] == "gated"
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
 
-        self.dataset_mel_is_conditioned = dataset_mel_is_conditioned
         self.dataset_target_length = dataset_target_length
         self.dataset_n_bars = dataset_n_bars
-        self.dataset_sampling_rate = dataset_sampling_rate
-
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.f_min = f_min
-        self.n_mels = n_mels
 
         super().__init__(
             pad_token_id=pad_token_id,

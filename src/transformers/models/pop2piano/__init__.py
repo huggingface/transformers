@@ -32,7 +32,7 @@ _import_structure = {
 }
 
 try:
-    if not is_torch_available() and not is_torchaudio_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -52,6 +52,7 @@ try:
         and is_soundfile_availble()
         and is_tf_available()
         and is_torch_available()
+        and is_torchaudio_available()
     ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -64,7 +65,7 @@ if TYPE_CHECKING:
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
 
     try:
-        if not is_torch_available() and not is_torchaudio_available():
+        if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
@@ -84,6 +85,7 @@ if TYPE_CHECKING:
             and is_soundfile_availble()
             and is_tf_available()
             and is_torch_available()
+            and is_torchaudio_available()
         ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:

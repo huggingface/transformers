@@ -638,25 +638,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 @require_torchaudio
 class Pop2PianoModelIntegrationTests(unittest.TestCase):
     @slow
-    def test_log_mel_spectrogram_integration(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        inputs = torch.ones([10, 100000])
-        output = model.spectrogram(inputs)
-
-        # check shape
-        self.assertEqual(output.size(), torch.Size([10, 512, 98]))
-
-        # check values
-        self.assertEqual(
-            output[0, :3, :3].cpu().numpy().tolist(),
-            [
-                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
-                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
-                [-13.815510749816895, -13.815510749816895, -13.815510749816895],
-            ],
-        )
-
-    @slow
     def test_mel_conditioner_integration(self):
         composer = "composer1"
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
@@ -680,11 +661,11 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     def test_full_model_integration(self):
         model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
         model.eval()
-        input_features = BatchFeature({"input_features": torch.ones([100, 100000])})
+        input_features = BatchFeature({"input_features": torch.ones([75, 66, 512])})
         outputs = model.generate(input_features=input_features)
 
         # check for shapes
-        self.assertEqual(outputs.size(0), 100)
+        self.assertEqual(outputs.size(0), 75)
 
         # check for values
-        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(), [0, 134, 133])
+        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(), [0, 1])
