@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 import regex as re
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_whitespace
 from ...utils import logging
 
 
@@ -449,14 +449,11 @@ class CLIPTokenizer(PreTrainedTokenizer):
         else:
             text = whitespace_clean(self.fix_text(text)).lower()
 
-        test = []
         for token in re.findall(self.pat, text):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
-            test.append(token)
-        print('test', test)
         return bpe_tokens
 
     def _convert_token_to_id(self, token):
