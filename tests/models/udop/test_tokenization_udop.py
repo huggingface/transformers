@@ -63,8 +63,8 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     maxDiff = None
 
     def get_words_and_boxes(self):
-        words = ["a", "weirdly", "test"]
-        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+        words = ["a", "weirdly", "test", "hello"]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129], [961, 885, 992, 912]]
 
         return words, boxes
 
@@ -403,7 +403,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_2 = tokenizer.decode(ids)
                 self.assertIsInstance(text_2, str)
 
-                output_text = "a weirdly test"
+                output_text = "a weirdly test hello"
                 self.assertEqual(text_2, output_text)
 
     def test_mask_output(self):

@@ -1028,6 +1028,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
 
         # Padding
+        print("Padding strategy:", padding_strategy)
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
             encoded_inputs = self.pad(
                 encoded_inputs,
