@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from transformers.models.h3.src.models.ss_kernel import SSKernel
+from transformers.utils import requires_backends
 
 
 try:
@@ -42,6 +43,7 @@ class H3(nn.Module):
         """
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
+        requires_backends(self, ["scipy"])
         self.d_model = d_model
         self.head_dim = head_dim
         assert d_model % head_dim == 0

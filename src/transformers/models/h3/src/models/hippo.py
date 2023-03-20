@@ -4,7 +4,12 @@
 
 import numpy as np
 import torch
-from scipy import special as ss
+
+from transformers.utils import is_scipy_available
+
+
+if is_scipy_available():
+    from scipy import special as ss
 
 
 # TODO take in 'torch' option to return torch instead of numpy, and converts the shape of B from (N, 1) to (N)
