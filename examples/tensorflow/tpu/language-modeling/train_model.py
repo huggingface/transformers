@@ -19,6 +19,7 @@
 import argparse
 import logging
 import os
+import re
 
 import tensorflow as tf
 
@@ -48,22 +49,6 @@ def parse_args():
         type=str,
         default="unigram-tokenizer-wikitext",
         help="The name of the tokenizer to load. We use the pretrained tokenizer to initialize the model's vocab size.",
-    )
-
-    parser.add_argument(
-        "--samples_per_epoch",
-        type=int,
-        help="Number of samples to use per epoch.",
-        required=True
-        # TODO Can we get this number during dataset creation? It's hard to figure it out afterwards.
-    )
-
-    parser.add_argument(
-        "--num_validation_samples",
-        type=int,
-        help="Number of samples to use for validation",
-        required=True
-        # TODO Same here
     )
 
     parser.add_argument(
@@ -174,12 +159,23 @@ def initialize_tpu(args):
     return tpu
 
 
+def count_samples(file_list):
+    num_samples = 0
+    for file in file_list:
+        filename = file.split('/')[-1]
+        sample_count = re.search(r"-\d+-(\d+)\.tfrecord", filename).group(1)
+        sample_count = int(sample_count)
+        num_samples += sample_count
+
+    return num_samples
+
+
 def main(args):
     if not args.no_tpu:
         tpu = initialize_tpu(args)
         strategy = tf.distribute.experimental.TPUStrategy(tpu)
     else:
-        strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+        strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
 
     if args.bfloat16:
         tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
@@ -188,8 +184,18 @@ def main(args):
     config = AutoConfig.from_pretrained(args.pretrained_model_config)
     config.vocab_size = tokenizer.vocab_size
 
-    steps_per_epoch = args.samples_per_epoch // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
-    validation_steps = args.num_validation_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
+    training_records = tf.io.gfile.glob(os.path.join(args.train_dataset, "*.tfrecord"))
+    training_records = training_records[:10]  # TODO Debug remove
+    if not training_records:
+        raise ValueError(f"No .tfrecord files found in {args.train_dataset}.")
+    eval_records = tf.io.gfile.glob(os.path.join(args.eval_dataset, "*.tfrecord"))
+    if not eval_records:
+        raise ValueError(f"No .tfrecord files found in {args.eval_dataset}.")
+
+    num_train_samples = count_samples(training_records)
+    num_validation_samples = count_samples(eval_records)
+
+    steps_per_epoch = num_train_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
     total_train_steps = steps_per_epoch * args.num_epochs
 
     with strategy.scope():
@@ -218,11 +224,11 @@ def main(args):
     )
 
     batch_size = args.per_replica_batch_size * strategy.num_replicas_in_sync
-    training_records = tf.io.gfile.glob(os.path.join(args.train_dataset, "*.tfrecord"))
-    if not training_records:
-        raise ValueError(f"No .tfrecord files found in {args.train_dataset}.")
+
     training_records = tf.data.Dataset.from_tensor_slices(training_records).shuffle(len(training_records))
     train_dataset = tf.data.TFRecordDataset(training_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
+    # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
+    train_dataset = train_dataset.apply(tf.data.experimental.assert_cardinality(num_train_samples))
     train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
     train_dataset = train_dataset.map(decode_fn)
     train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
@@ -246,10 +252,9 @@ def main(args):
 
     train_dataset = train_dataset.map(mask_with_collator)
 
-    eval_records = tf.io.gfile.glob(os.path.join(args.eval_dataset, "*.tfrecord"))
-    if not eval_records:
-        raise ValueError(f"No .tfrecord files found in {args.eval_dataset}.")
     eval_dataset = tf.data.TFRecordDataset(eval_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
+    # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
+    eval_dataset = eval_dataset.apply(tf.data.experimental.assert_cardinality(num_validation_samples))
     eval_dataset = eval_dataset.map(decode_fn)
     eval_dataset = eval_dataset.batch(batch_size, drop_remainder=True)
     eval_dataset.map(mask_with_collator)
@@ -266,8 +271,6 @@ def main(args):
         validation_data=eval_dataset,
         epochs=args.num_epochs,
         callbacks=callbacks,
-        steps_per_epoch=steps_per_epoch,
-        validation_steps=validation_steps,
     )
 
     model.save_pretrained(args.output_dir)
