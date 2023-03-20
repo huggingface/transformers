@@ -21,7 +21,6 @@ from ...utils import (
     is_pretty_midi_available,
     is_scipy_available,
     is_soundfile_availble,
-    is_tf_available,
     is_torch_available,
     is_torchaudio_available,
 )
@@ -50,7 +49,6 @@ try:
         and is_scipy_available()
         and is_pretty_midi_available()
         and is_soundfile_availble()
-        and is_tf_available()
         and is_torch_available()
         and is_torchaudio_available()
     ):
@@ -83,7 +81,6 @@ if TYPE_CHECKING:
             and is_scipy_available()
             and is_pretty_midi_available()
             and is_soundfile_availble()
-            and is_tf_available()
             and is_torch_available()
             and is_torchaudio_available()
         ):
