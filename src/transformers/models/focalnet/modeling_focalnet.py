@@ -415,28 +415,18 @@ class FocalNetLayer(nn.Module):
     r"""Focal Modulation Network Block.
 
     Args:
-        dim (int):
+        config (`FocalNetConfig()`):
+            Model config.
+        dim (`int`):
             Number of input channels.
-        input_resolution (tuple[int]):
+        input_resolution (`Tuple[int]`):
             Input resulotion.
-        mlp_ratio (float):
-            Ratio of mlp hidden dim to embedding dim.
-        drop (float, optional):
-            Dropout rate. Default: 0.0
-        drop_path (float, optional):
-            Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional):
-            Normalization layer. Default: nn.LayerNorm
-        focal_level (int):
+        focal_level (`int`, *optional*, defaults to 1):
             Number of focal levels.
-        focal_window (int):
-            Focal window size at first focal level
-        use_layerscale (bool):
-            Whether use layerscale
-        layerscale_value (float):
-            Initial layerscale value
-        use_post_layernorm (bool):
-            Whether use layernorm after modulation
+        focal_window (`int`, *optional*, defaults to 3):
+            Focal window size at first focal level.
+        drop_path (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate.
     """
 
     def __init__(
@@ -444,49 +434,48 @@ class FocalNetLayer(nn.Module):
         config,
         dim,
         input_resolution,
-        mlp_ratio=4.0,
-        drop=0.0,
-        drop_path=0.0,
         focal_level=1,
         focal_window=3,
-        use_layerscale=False,
-        layerscale_value=1e-4,
-        use_post_layernorm=False,
-        use_post_layernorm_in_modulation=False,
-        normalize_modulator=False,
+        drop_path=0.0,
     ):
         super().__init__()
 
         self.config = config
 
+        # layer-specific attributes
         self.dim = dim
         self.input_resolution = input_resolution
-        self.mlp_ratio = mlp_ratio
-
-        self.focal_window = focal_window
         self.focal_level = focal_level
-        self.use_post_layernorm = use_post_layernorm
+
+        # general attributes
+        self.mlp_ratio = config.mlp_ratio
+        self.drop = config.hidden_dropout_prob
+        self.use_post_layernorm = config.use_post_layernorm
+        self.use_post_layernorm_in_modulation = config.use_post_layernorm_in_modulation
+        self.normalize_modulator = config.normalize_modulator
+        self.use_layerscale = config.use_layerscale
+        self.layerscale_value = config.layerscale_value
 
         self.norm1 = nn.LayerNorm(dim)
         self.modulation = FocalNetModulation(
             dim,
-            projection_dropout=drop,
+            projection_dropout=self.drop,
             focal_window=focal_window,
             focal_level=self.focal_level,
-            use_post_layernorm_in_modulation=use_post_layernorm_in_modulation,
-            normalize_modulator=normalize_modulator,
+            use_post_layernorm_in_modulation=self.use_post_layernorm_in_modulation,
+            normalize_modulator=self.normalize_modulator,
         )
 
         self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = FocalNetMlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
+        mlp_hidden_dim = int(dim * self.mlp_ratio)
+        self.mlp = FocalNetMlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=self.drop)
 
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0
-        if use_layerscale:
-            self.gamma_1 = nn.Parameter(layerscale_value * torch.ones((dim)), requires_grad=True)
-            self.gamma_2 = nn.Parameter(layerscale_value * torch.ones((dim)), requires_grad=True)
+        if self.use_layerscale:
+            self.gamma_1 = nn.Parameter(self.layerscale_value * torch.ones((dim)), requires_grad=True)
+            self.gamma_2 = nn.Parameter(self.layerscale_value * torch.ones((dim)), requires_grad=True)
 
     def forward(self, hidden_state, input_dimensions):
         height, width = input_dimensions
@@ -511,7 +500,7 @@ class FocalNetLayer(nn.Module):
 
 class FocalNetStage(nn.Module):
     def __init__(
-        self, config, dim, out_dim, input_resolution, depth, drop, drop_path, focal_level, focal_window, downsample
+        self, config, dim, out_dim, input_resolution, depth, drop_path, focal_level, focal_window, downsample
     ):
         super().__init__()
         self.config = config
@@ -522,17 +511,10 @@ class FocalNetStage(nn.Module):
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
-                    mlp_ratio=config.mlp_ratio,
-                    drop=drop,
-                    # TODO fix drop path
-                    # drop_path=drop_path,
                     focal_level=focal_level,
                     focal_window=focal_window,
-                    use_layerscale=config.use_layerscale,
-                    layerscale_value=config.layerscale_value,
-                    use_post_layernorm=config.use_post_layernorm,
-                    use_post_layernorm_in_modulation=config.use_post_layernorm_in_modulation,
-                    normalize_modulator=config.normalize_modulator,
+                    # TODO fix drop path
+                    # drop_path=drop_path,
                 )
                 for _ in range(depth)
             ]
@@ -595,7 +577,6 @@ class FocalNetEncoder(nn.Module):
                     out_dim=embed_dim[i_layer + 1] if (i_layer < self.num_stages - 1) else None,
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
-                    drop=config.hidden_dropout_prob,
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     focal_level=config.focal_levels[i_layer],
                     focal_window=config.focal_windows[i_layer],
