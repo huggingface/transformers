@@ -153,7 +153,9 @@ class PipelineTesterMixin:
 
             repo_name = f"tiny-random-{model_arch_name}"
 
-            self.run_model_pipeline_tests(task, repo_name, model_architecture, tokenizer_names, processor_names, commit)
+            self.run_model_pipeline_tests(
+                task, repo_name, model_architecture, tokenizer_names, processor_names, commit
+            )
 
     def run_model_pipeline_tests(self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names

@@ -1160,7 +1160,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
                     repo_id = f"{organization}/{repo_name}"
                     try:
                         commit_hash = hf_api.repo_info(repo_id, token=token).sha
-                    except Exception as e:
+                    except Exception:
                         # The directory is not created, but processor(s) is/are included in `results`.
                         logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
                         del tiny_model_summary[base_arch_name]
@@ -1366,10 +1366,7 @@ if __name__ == "__main__":
         help="The organization on the Hub to which the tiny models will be uploaded.",
     )
     parser.add_argument(
-        "--token",
-        default=None,
-        type=str,
-        help="A valid authentication token for HuggingFace Hub with write access."
+        "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
     )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 

@@ -95,46 +95,46 @@ def get_tiny_model_summary_from_hub(output_path):
                 "model_classes": set(),
                 "sha": repo_info.sha,
             }
-        except:
+        except Exception:
             continue
         try:
             time.sleep(1)
             tokenizer_fast = AutoTokenizer.from_pretrained(repo_id)
             content["tokenizer_classes"].add(tokenizer_fast.__class__.__name__)
-        except:
+        except Exception:
             pass
         try:
             time.sleep(1)
             tokenizer_slow = AutoTokenizer.from_pretrained(repo_id, use_fast=False)
             content["tokenizer_classes"].add(tokenizer_slow.__class__.__name__)
-        except:
+        except Exception:
             pass
         try:
             time.sleep(1)
             img_p = AutoImageProcessor.from_pretrained(repo_id)
             content["processor_classes"].add(img_p.__class__.__name__)
-        except:
+        except Exception:
             pass
         try:
             time.sleep(1)
             feat_p = AutoFeatureExtractor.from_pretrained(repo_id)
             if not isinstance(feat_p, BaseImageProcessor):
                 content["processor_classes"].add(feat_p.__class__.__name__)
-        except:
+        except Exception:
             pass
         try:
             time.sleep(1)
             model_class = getattr(transformers, model)
             m = model_class.from_pretrained(repo_id)
             content["model_classes"].add(m.__class__.__name__)
-        except:
+        except Exception:
             pass
         try:
             time.sleep(1)
             model_class = getattr(transformers, f"TF{model}")
             m = model_class.from_pretrained(repo_id)
             content["model_classes"].add(m.__class__.__name__)
-        except:
+        except Exception:
             pass
 
         content["tokenizer_classes"] = sorted(content["tokenizer_classes"])
