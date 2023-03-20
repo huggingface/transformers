@@ -104,7 +104,7 @@ _deps = [
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
-    "decord==0.6.0",
+    # "decord==0.6.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -165,7 +165,7 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorflow-cpu>=2.4,<2.12",
     "tensorflow>=2.4,<2.12",
-    "tensorflow-text",
+    # "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
     "timm",
@@ -249,8 +249,12 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", 
+                        #  "tensorflow-text", 
+                         "keras-nlp")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", 
+                            #  "tensorflow-text", 
+                             "keras-nlp")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
@@ -289,7 +293,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord")
+# extras["video"] = deps_list("decord")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -336,7 +340,7 @@ extras["all"] = (
     + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
-    + extras["video"]
+    # + extras["video"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
