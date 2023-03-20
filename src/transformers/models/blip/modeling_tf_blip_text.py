@@ -14,21 +14,20 @@
 # limitations under the License.
 
 # TODO Check whether 'training' is propagated correctly without us manually specifying it
+# TODO Propagate name correctly
 
 import math
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
+from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
 
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFCausalLMOutputWithCrossAttentions,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, get_tf_activation, shape_list
-
-from tensorflow.keras.layers import Embedding, Layer, Dense, LayerNormalization, Dropout
-
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, get_tf_activation, shape_list, unpack_inputs
 from ...utils import logging
 from .configuration_blip import BlipTextConfig
 
@@ -40,10 +39,20 @@ logger = logging.get_logger(__name__)
 class TFBlipTextEmbeddings(Layer):
     """Construct the embeddings from word and position embeddings."""
 
-    def __init__(self, config):
-        super().__init__()
-        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id, kernel_initializer=get_initializer(config.initializer_range), name="word_embeddings")
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="position_embeddings")
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.word_embeddings = Embedding(
+            config.vocab_size,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="word_embeddings",
+        )
+        self.position_embeddings = Embedding(
+            config.max_position_embeddings,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="position_embeddings",
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -81,8 +90,8 @@ class TFBlipTextEmbeddings(Layer):
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L97
 class TFBlipTextSelfAttention(Layer):
-    def __init__(self, config, is_cross_attention):
-        super().__init__()
+    def __init__(self, config, is_cross_attention, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -94,9 +103,13 @@ class TFBlipTextSelfAttention(Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query")
+        self.query = Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        )
         self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
-        self.value = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value")
+        self.value = Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        )
 
         self.dropout = Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -105,7 +118,9 @@ class TFBlipTextSelfAttention(Layer):
             self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     def transpose_for_scores(self, x):
-        new_x_shape = tf.concat(tf.shape(x)[:-1], tf.constant([self.num_attention_heads, self.attention_head_size], dtype=x.dtype))
+        new_x_shape = tf.concat(
+            tf.shape(x)[:-1], tf.constant([self.num_attention_heads, self.attention_head_size], dtype=x.dtype)
+        )
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, perm=(0, 2, 1, 3))
 
@@ -211,10 +226,11 @@ class TFBlipTextSelfOutput(Layer):
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#242
 class TFBlipTextAttention(Layer):
-    def __init__(self, config, is_cross_attention=False):
-        super().__init__()
-        self.self = TFBlipTextSelfAttention(config, is_cross_attention)
-        self.output = TFBlipTextSelfOutput(config)
+    def __init__(self, config, is_cross_attention=False, **kwargs):
+        super().__init__(**kwargs)
+        self.self = TFBlipTextSelfAttention(config, is_cross_attention, name="self")
+        # "output" is a protected attribute on TF models
+        self.self_output = TFBlipTextSelfOutput(config, name="output")
         self.pruned_heads = set()
 
     def call(
@@ -236,7 +252,7 @@ class TFBlipTextAttention(Layer):
             past_key_value,
             output_attentions,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.self_output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -282,16 +298,16 @@ class TFBlipTextOutput(Layer):
 
 
 class TFBlipTextLayer(Layer):
-    def __init__(self, config, layer_num):
-        super().__init__()
+    def __init__(self, config, layer_num, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
         self.seq_len_dim = 1
-        self.attention = TFBlipTextAttention(config)
+        self.attention = TFBlipTextAttention(config, name="attention")
         self.layer_num = layer_num
         if self.config.is_decoder:
-            self.crossattention = TFBlipTextAttention(config, is_cross_attention=self.config.is_decoder)
-        self.intermediate = TFBlipTextIntermediate(config)
-        self.output = TFBlipTextOutput(config)
+            self.crossattention = TFBlipTextAttention(config, is_cross_attention=self.config.is_decoder, name="crossattention")
+        self.intermediate = TFBlipTextIntermediate(config, name="intermediate")
+        self.self_output = TFBlipTextOutput(config, name="output")
 
     def call(
         self,
@@ -329,7 +345,7 @@ class TFBlipTextLayer(Layer):
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
+        layer_output = self.self_output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs
 
         outputs = outputs + (present_key_value,)
@@ -370,7 +386,6 @@ class TFBlipTextEncoder(Layer):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-
 
             layer_outputs = layer_module(
                 hidden_states,
@@ -459,53 +474,31 @@ class TFBlipTextPredictionHeadTransform(Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->BlipText
 class TFBlipTextLMPredictionHead(Layer):
-    def __init__(self, config: BlipTextConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
-        super().__init__(**kwargs)
-
-        self.config = config
-        self.hidden_size = config.hidden_size
-
-        self.transform = TFBlipTextPredictionHeadTransform(config, name="transform")
+    def __init__(self, config):
+        super().__init__()
+        self.transform = TFBlipTextPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
+        self.decoder = Dense(config.vocab_size,
+                             kernel_initializer=get_initializer(config.initializer_range),
+                             name="decoder")
+        # TODO Make sure we can copy weights from torch despite them doing this weird shit
+        # self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
-    def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        # self.decoder.bias = self.bias
 
-        super().build(input_shape)
-
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
-        return self.input_embeddings
-
-    def set_output_embeddings(self, value: tf.Variable):
-        self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self) -> Dict[str, tf.Variable]:
-        return {"bias": self.bias}
-
-    def set_bias(self, value: tf.Variable):
-        self.bias = value["bias"]
-        self.config.vocab_size = shape_list(value["bias"])[0]
-
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
-
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
         return hidden_states
 
 
 class TFBlipTextOnlyMLMHead(Layer):
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
         self.predictions = TFBlipTextLMPredictionHead(config)
 
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
@@ -543,7 +536,17 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         self.encoder = TFBlipTextEncoder(config)
         self.pooler = TFBlipTextPooler(config) if add_pooling_layer else None
 
-        self.post_init()
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        output = self.call(inputs)
+        return self.serving_output(output)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -568,9 +571,9 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         """
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
+        if attention_mask.shape.rank == 3:
             extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
+        elif attention_mask.shape.rank == 2:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -578,7 +581,10 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                 batch_size, seq_length = input_shape
 
                 seq_ids = tf.range(seq_length, dtype=attention_mask.dtype)
-                causal_mask = tf.broadcast_to(seq_ids[None, None, :], (batch_size, seq_length, seq_length)) <= seq_ids[None, :, None]
+                causal_mask = (
+                    tf.broadcast_to(seq_ids[None, None, :], (batch_size, seq_length, seq_length))
+                    <= seq_ids[None, :, None]
+                )
                 breakpoint()  # TODO Make sure this is right
                 # in case past_key_values are used we need to add a prefix ones mask to the causal mask
 
@@ -586,9 +592,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                     prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
                     causal_mask = tf.concat(
                         [
-                            tf.ones(
-                                (batch_size, seq_length, prefix_seq_len), dtype=causal_mask.dtype
-                            ),
+                            tf.ones((batch_size, seq_length, prefix_seq_len), dtype=causal_mask.dtype),
                             causal_mask,
                         ],
                         axis=-1,
@@ -613,6 +617,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
+    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -631,15 +636,15 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         is_decoder=False,
     ):
         r"""
-        encoder_hidden_states  (`torch.FloatTensor`, *optional*):
+        encoder_hidden_states  (`tf.Tensor`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor`, *optional*):
+        encoder_attention_mask (`tf.Tensor`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`tuple(tuple(tf.Tensor))`, *optional*):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -662,17 +667,14 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
+            input_shape = shape_list(input_ids)
             batch_size, seq_length = input_shape
-            device = input_ids.device
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
             batch_size, seq_length = input_shape
-            device = inputs_embeds.device
         elif encoder_embeds is not None:
-            input_shape = encoder_embeds.size()[:-1]
+            input_shape = shape_list(encoder_embeds)[:-1]
             batch_size, seq_length = input_shape
-            device = encoder_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or encoder_embeds")
 
@@ -684,9 +686,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: tf.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, is_decoder
-        )
+        extended_attention_mask: tf.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, is_decoder)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -757,8 +757,8 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
 
         self.bert = TFBlipTextModel(config, add_pooling_layer=False, name="bert")
         self.cls = TFBlipTextOnlyMLMHead(config)
@@ -769,6 +769,7 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
+    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -786,22 +787,21 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         return_dict=None,
         return_logits=False,
         is_decoder=True,
-        reduction="mean",
     ):
         r"""
-        encoder_hidden_states (`torch.FloatTensor`, *optional*): Sequence of
+        encoder_hidden_states (`tf.Tensor`, *optional*): Sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
             configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor`, *optional*):
+        encoder_attention_mask (`tf.Tensor`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor`, *optional*):
+        labels (`tf.Tensor`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`tuple(tuple(tf.Tensor))`, *optional*):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -840,12 +840,15 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :]
+            shifted_prediction_scores = tf.reshape(shifted_prediction_scores, (-1, self.config.vocab_size))
             labels = labels[:, 1:]
-            # TODO How do we get label smoothing in Keras for sparse CE?
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=reduction, label_smoothing=0.1)
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            if reduction == "none":
-                lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
+            labels = tf.reshape(labels, (-1,))
+            # Keras won't give us label smoothing for sparse CE, so we de-sparsify things here
+            one_hot_labels = tf.one_hot(labels, depth=self.config.vocab_size, dtype=tf.float32)
+            loss_fct = tf.keras.losses.CategoricalCrossentropy(
+                from_logits=True, label_smoothing=0.1
+            )
+            lm_loss = loss_fct(shifted_prediction_scores, one_hot_labels)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
