@@ -31,11 +31,11 @@ from transformers.models.bert.modeling_bert import (
     BertOutput,
     BertSelfAttention,
     BertSelfOutput,
+    Data2VecTextModel,
 )
 
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-from transformers.models.data2vec.data2vec_text import Data2VecTextModel
 from transformers.utils import logging
 
 
