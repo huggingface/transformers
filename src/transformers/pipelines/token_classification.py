@@ -616,36 +616,74 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
 
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
         # TODO: Implement this
-        raise ValueError(f"model_outputs = {model_outputs['input_ids']}")
-        super().postprocess(model_outputs, aggregation_strategy=aggregation_strategy, ignore_labels=ignore_labels)
-        # if ignore_labels is None:
-        #     ignore_labels = ["O"]
-        # logits = model_outputs["logits"][0].numpy()
-        # sentence = model_outputs["sentence"]
-        # input_ids = model_outputs["input_ids"][0]
-        # offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
-        # special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+        if ignore_labels is None:
+            ignore_labels = ["O"]
 
-        # maxes = np.max(logits, axis=-1, keepdims=True)
-        # shifted_exp = np.exp(logits - maxes)
-        # scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+        sentence: str = model_outputs["sentence"]
 
-        # if self.framework == "tf":
-        #     input_ids = input_ids.numpy()
-        #     offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+        # Shape: (num_windows, window_length, categories)
+        original_logits = model_outputs["logits"].numpy()
 
-        # pre_entities = self.gather_pre_entities(
-        #     sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
-        # )
-        # grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
-        # # Filter anything that is in self.ignore_labels
-        # entities = [
-        #     entity
-        #     for entity in grouped_entities
-        #     if entity.get("entity", None) not in ignore_labels
-        #        and entity.get("entity_group", None) not in ignore_labels
-        # ]
-        # return entities
+        # Shape: (num_windows, window_length)
+        input_ids = model_outputs["input_ids"]
+        special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
+
+        # Shape: (num_windows, window_length, 2)
+        offset_mapping = model_outputs["offset_mapping"] if model_outputs["offset_mapping"] is not None else None
+
+        num_tokens = (special_tokens_mask ^ 1).sum()
+        num_categories = original_logits.shape[-1]
+        logit_sums = np.zeros((num_tokens, num_categories))
+        logit_writes = np.zeros((num_tokens,))
+
+        flattened_input_ids = np.zeros((num_tokens,), dtype=np.int)
+        flattened_offset_mapping = np.zeros((num_tokens, 2), dtype=np.int)
+
+        num_windows = original_logits.shape[0]
+        idx = 0
+        for window_idx in range(num_windows):
+            is_real_token = special_tokens_mask[window_idx] == 0
+            real_token_logits = original_logits[window_idx, is_real_token, :]
+            end_idx = idx + len(real_token_logits)
+            print(f"Writing window: ({idx}, {idx+len(real_token_logits)})")
+            logit_sums[idx: end_idx] += real_token_logits
+            logit_writes[idx: end_idx] += 1
+
+            flattened_input_ids[idx: end_idx] = input_ids[window_idx, is_real_token]
+            flattened_offset_mapping[idx: end_idx] = offset_mapping[window_idx, is_real_token, :]
+            idx += self.window_length - self.stride - special_tokens_mask[window_idx].sum()
+
+
+        # Average the logits across all windows
+        logits = logit_sums / logit_writes[:, np.newaxis]
+
+        special_tokens_mask = np.zeros_like(logit_writes)
+        input_ids = flattened_input_ids
+        offset_mapping = flattened_offset_mapping
+
+        # NOTE: End of Connor's code
+
+        # Normalize the logits by subtracting max in each category
+        maxes = np.max(logits, axis=-1, keepdims=True)
+        shifted_exp = np.exp(logits - maxes)
+        scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
+        if self.framework == "tf":
+            input_ids = input_ids.numpy()
+            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+
+        pre_entities = self.gather_pre_entities(
+            sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+        )
+        grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
+        # Filter anything that is in self.ignore_labels
+        entities = [
+            entity
+            for entity in grouped_entities
+            if entity.get("entity", None) not in ignore_labels
+               and entity.get("entity_group", None) not in ignore_labels
+        ]
+        return entities
 
     # def __call__(self, inputs: Union[str, List[str]], **kwargs):
     #     """
