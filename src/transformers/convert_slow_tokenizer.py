@@ -19,10 +19,9 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
-import warnings
 from typing import Dict, List, Tuple
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .utils import requires_backends
@@ -450,12 +449,13 @@ class SpmConverter(Converter):
         self.proto = m
 
         if self.proto.trainer_spec.byte_fallback:
-            warnings.warn(
-                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
-                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
-                "unknown tokens into a sequence of byte tokens matching the original piece of text."
-            )
+            if not getattr(self, "handle_byte_fallback", None):
+                raise RuntimeError(
+                    "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+                    " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                    " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                    "unknown tokens into a sequence of byte tokens matching the original piece of text."
+                )
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
@@ -1094,6 +1094,78 @@ class XGLMConverter(SpmConverter):
         )
 
 
+class LlamaConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Sequence(
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Strip(content=" ", left=1),
+            ]
+        )
+
+    def tokenizer(self, proto):
+        model_type = proto.trainer_spec.model_type
+        vocab_scores = self.vocab(proto)
+        if model_type == 1:
+            raise RuntimeError("Llama is supposed to be a BPE model!")
+        elif model_type == 2:
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            tokenizer = Tokenizer(
+                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
+            )
+            tokenizer.add_special_tokens(
+                [
+                    AddedToken("<unk>", normalized=True),
+                    AddedToken("<s>", normalized=True),
+                    AddedToken("</s>", normalized=True),
+                ]
+            )
+        else:
+            raise Exception(
+                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
+            )
+
+        return tokenizer
+
+    def normalizer(self, proto):
+        return normalizers.Sequence(
+            [
+                normalizers.Prepend(prepend="▁"),
+                normalizers.Replace(pattern=" ", content="▁"),
+            ]
+        )
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return None
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="<s> $A",
+            pair="<s> $A $B",
+            special_tokens=[
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+            ],
+        )
+
+
 class MarkupLMConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -1183,6 +1255,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,
     "XGLMTokenizer": XGLMConverter,
+    "LlamaTokenizer": LlamaConverter,
 }
 
 
