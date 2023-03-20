@@ -831,7 +831,7 @@ class FlaxBeitForMaskedImageModeling(FlaxBeitPreTrainedModel):
 
 FLAX_BEIT_MLM_DOCSTRING = """
     bool_masked_pos (`numpy.ndarray` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
     Returns:
 

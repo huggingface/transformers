@@ -907,6 +907,10 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFData2VecVisionModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
