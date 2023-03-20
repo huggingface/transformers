@@ -1,3 +1,22 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert UDOP checkpoints from the original repository. URL: https://github.com/microsoft/i-Code/tree/main/i-Code-Doc"""
+
+
+import argparse
+
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -62,11 +81,15 @@ def prepare_dummy_inputs(tokenizer, image_processor):
     return torch.tensor(input_ids).unsqueeze(0), torch.tensor(seg_data).unsqueeze(0).float(), pixel_values
 
 
-def convert():
+def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+    model_name_to_checkpoint_path = {
+        "udop-large": "/Users/nielsrogge/Downloads/udop-unimodel-large-224/pytorch_model.bin",
+        "udop-dual-large": "",
+    }
+
     # load original state dict
-    state_dict = torch.load(
-        "/Users/nielsrogge/Downloads/udop-unimodel-large-224/pytorch_model.bin", map_location="cpu"
-    )
+    checkpoint_path = model_name_to_checkpoint_path[model_name]
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
 
     # rename keys
     for key, value in state_dict.copy().items():
@@ -121,6 +144,31 @@ def convert():
 
     print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
+    if pytorch_dump_folder_path is not None:
+        model.save_pretrained(pytorch_dump_folder_path)
+        tokenizer.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
+
 
 if __name__ == "__main__":
-    convert()
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument(
+        "--model_name",
+        default="udop-large",
+        type=str,
+        choices=["udop-large", "udop-dual-large"],
+        help=("Name of the UDOP model you'd like to convert."),
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+    )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
+
+    args = parser.parse_args()
+    convert_udop_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
