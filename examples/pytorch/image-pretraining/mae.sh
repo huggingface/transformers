@@ -25,4 +25,5 @@
     --load_best_model_at_end True \
     --save_total_limit 3 \
     --seed 42 \
+    --report_to tensorboard \
     --disable_tqdm True 2>&1 | tee mae.log
