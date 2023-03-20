@@ -279,6 +279,8 @@ class UdopTokenizer(PreTrainedTokenizer):
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
             extra_ids=extra_ids,
+            loc_extra_ids=loc_extra_ids,
+            other_extra_ids=other_extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
