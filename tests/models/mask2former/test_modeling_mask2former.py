@@ -494,6 +494,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
 
         video = prepare_video()
+        image_size = (480, 640)
         video_frames = [
             image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
             for frame in video

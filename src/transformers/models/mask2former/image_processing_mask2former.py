@@ -1161,8 +1161,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return_binary_maps: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into video instance segmentation predictions.
-        Only supports PyTorch.
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into video instance segmentation
+        predictions. Only supports PyTorch.
 
         Args:
             outputs ([`Mask2FormerForUniversalSegmentation`]):

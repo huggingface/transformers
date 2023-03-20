@@ -645,7 +645,9 @@ class Mask2FormerLoss(nn.Module):
         pred_masks = masks_queries_logits[src_idx]
 
         if self.is_video:
-            target_masks = torch.cat([target["masks"][i] for target, (_, i) in zip(mask_labels, indices)]).to(pred_masks)
+            target_masks = torch.cat([target["masks"][i] for target, (_, i) in zip(mask_labels, indices)]).to(
+                pred_masks
+            )
 
             # No need to upsample predictions as we are using normalized coordinates
             pred_masks = pred_masks.flatten(0, 1)[:, None]
@@ -2687,13 +2689,20 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
 
         >>> # Load Mask2Former trained on YouTubeVIS 2021 dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
+        >>> image_processor = AutoImageProcessor.from_pretrained(
+        ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        ... )
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        ... )
 
         >>> file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
         >>> video = torchvision.io.read_video(file_path)[0]
 
-        >>> video_frames = [image_processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640)).pixel_values for frame in video]
+        >>> video_frames = [
+        ...     image_processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640)).pixel_values
+        ...     for frame in video
+        ... ]
         >>> video_input = torch.cat(video_frames)
 
         >>> with torch.no_grad():
