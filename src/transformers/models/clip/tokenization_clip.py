@@ -196,7 +196,8 @@ class BasicTokenizer(object):
             char = chars[i]
             if _is_punctuation(char):
                 output.append([char])
-                start_new_word = True
+                if char != "'":
+                    start_new_word = True
             else:
                 if start_new_word:
                     output.append([])
