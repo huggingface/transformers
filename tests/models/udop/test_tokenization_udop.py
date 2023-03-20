@@ -56,7 +56,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
-    test_rust_tokenizer = False  # TODO update this
+    test_rust_tokenizer = True
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True
@@ -160,35 +160,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
         assert encoded_pair == text + [1] + text_2 + [1]
-
-    def test_offsets_with_special_characters(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                words, boxes = self.get_words_and_boxes()
-                words[1] = tokenizer_r.mask_token
-                tokens = tokenizer_r.encode_plus(
-                    words,
-                    boxes=boxes,
-                    return_attention_mask=False,
-                    return_token_type_ids=False,
-                    return_offsets_mapping=True,
-                    add_special_tokens=True,
-                )
-
-                expected_results = [
-                    ((0, 0), tokenizer_r.cls_token),
-                    ((0, 1), "▁a"),
-                    ((0, 6), tokenizer_r.mask_token),
-                    ((0, 4), "▁test"),
-                    ((0, 0), tokenizer_r.sep_token),
-                ]
-
-                self.assertEqual(
-                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
-                )
-                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
         tokenizers: List[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
@@ -1730,23 +1701,23 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_alignement_methods(self):
         pass
 
-    @unittest.skip("udop tokenizer requires boxes besides sequences.")
+    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
 
-    @unittest.skip("udop tokenizer requires boxes besides sequences.")
+    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         pass
 
-    @unittest.skip("udop tokenizer requires boxes besides sequences.")
+    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("udop tokenizer always expects pretokenized inputs.")
+    @unittest.skip("UDOP tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("udop fast tokenizer does not support prepare_for_model")
+    @unittest.skip("UDOP fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 

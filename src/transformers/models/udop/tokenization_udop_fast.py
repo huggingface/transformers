@@ -29,7 +29,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
-from ..xlm_roberta.tokenization_xlm_roberta_fast import (
+from ..udop.tokenization_udop import (
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
     PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
@@ -770,7 +770,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is None:
             return len(token_ids_0 + sep) * [0]
-        return len(token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+        return len(token_ids_0 + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
