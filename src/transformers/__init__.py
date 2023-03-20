@@ -1802,11 +1802,7 @@ else:
         ]
     )
     _import_structure["models.llama"].extend(
-        [
-            "LlamaForCausalLM",
-            "LlamaModel",
-            "LlamaPreTrainedModel",
-        ]
+        ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
     )
     _import_structure["models.longformer"].extend(
         [
@@ -4498,9 +4494,9 @@ if TYPE_CHECKING:
             TypicalLogitsWarper,
             top_k_top_p_filtering,
         )
+        from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
-        from .modeling_utils import PreTrainedModel
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5210,11 +5206,7 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import (
-            LlamaForCausalLM,
-            LlamaModel,
-            LlamaPreTrainedModel,
-        )
+        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,

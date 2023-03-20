@@ -85,7 +85,7 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
     >>> from transformers import RobertaTokenizerFast
     >>> tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
     >>> tokenizer("Hello world")['input_ids']
-    [0, 31414, 232, 328, 2]
+    [0, 31414, 232, 2]
     >>> tokenizer(" Hello world")['input_ids']
     [0, 20920, 232, 2]
     ```
