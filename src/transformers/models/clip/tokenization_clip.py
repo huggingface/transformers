@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 import regex as re
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_whitespace
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
 
@@ -128,13 +128,16 @@ class BasicTokenizer(object):
             value for `lowercase` (as in the original BERT).
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None, pattern=None
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.pattern = pattern
 
     def tokenize(self, text, never_split=None):
         """
@@ -168,8 +171,9 @@ class BasicTokenizer(object):
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
-            split_tokens.append(token)
+            split_tokens.extend(self._split_on_punc_or_pattern(token, never_split))
 
+        print('split_tokens', split_tokens)
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
 
@@ -183,6 +187,31 @@ class BasicTokenizer(object):
                 continue
             output.append(char)
         return "".join(output)
+
+    def _split_on_punc_or_pattern(self, text, never_split=None):
+        """Splits a piece of text by self.pattern or punctuation."""
+        if never_split is not None and text in never_split:
+            return [text]
+        if self.pattern:
+            return re.findall(self.pattern, text, flags=re.UNICODE)
+
+        chars = list(text)
+        i = 0
+        start_new_word = True
+        output = []
+        while i < len(chars):
+            char = chars[i]
+            if _is_punctuation(char):
+                output.append([char])
+                start_new_word = True
+            else:
+                if start_new_word:
+                    output.append([])
+                start_new_word = False
+                output[-1].append(char)
+            i += 1
+
+        return ["".join(x) for x in output]
 
     def _tokenize_chinese_chars(self, text):
         """Adds whitespace around any CJK character."""
@@ -294,7 +323,11 @@ class CLIPTokenizer(PreTrainedTokenizer):
         #     self.fix_text = ftfy.fix_text
         # except ImportError:
         logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
-        self.nlp = BasicTokenizer(do_lower_case=True)
+        self.pat = re.compile(
+            r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
+            re.IGNORECASE,
+        )
+        self.nlp = BasicTokenizer(do_lower_case=True, pattern=self.pat.pattern)
         self.fix_text = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -308,11 +341,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {"<|startoftext|>": "<|startoftext|>", "<|endoftext|>": "<|endoftext|>"}
-
-        self.pat = re.compile(
-            r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
-            re.IGNORECASE,
-        )
 
     @property
     def vocab_size(self):

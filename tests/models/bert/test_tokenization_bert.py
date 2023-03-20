@@ -182,6 +182,20 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
 
+    def test_basic_tokenizer_split_on_punc_or_pattern(self):
+        # # Split on punc
+        tokenizer = BasicTokenizer()
+        text = "a\n'll !!to?'d of, can't."
+        expected = ["a", "'", "ll", "!", "!", "to", "?", "'", "d", "of", ",", "can", "'", "t", "."]
+        self.assertListEqual(tokenizer.tokenize(text), expected)
+
+        # Split on patterns
+        pattern = r"(<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+)"
+        tokenizer = BasicTokenizer(pattern=pattern)
+        text = "a\n'll !!to?'d''d of, can't."
+        expected = ['a', "'ll", '!!', 'to', "?'", 'd', "''", 'd', 'of', ',', 'can', "'t", '.']
+        self.assertListEqual(tokenizer.tokenize(text), expected)
+
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 

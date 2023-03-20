@@ -20,6 +20,8 @@ import os
 import unicodedata
 from typing import List, Optional, Tuple
 
+import regex as re
+
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
@@ -387,13 +389,16 @@ class BasicTokenizer(object):
             value for `lowercase` (as in the original BERT).
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None, pattern=None
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.pattern = pattern
 
     def tokenize(self, text, never_split=None):
         """
@@ -427,7 +432,7 @@ class BasicTokenizer(object):
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
-            split_tokens.extend(self._run_split_on_punc(token, never_split))
+            split_tokens.extend(self._split_on_punc_or_pattern(token, never_split))
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
@@ -443,10 +448,12 @@ class BasicTokenizer(object):
             output.append(char)
         return "".join(output)
 
-    def _run_split_on_punc(self, text, never_split=None):
-        """Splits punctuation on a piece of text."""
+    def _split_on_punc_or_pattern(self, text, never_split=None):
+        """Splits a piece of text by self.pattern or punctuation."""
         if never_split is not None and text in never_split:
             return [text]
+        if self.pattern:
+            return re.findall(self.pattern, text, flags=re.UNICODE)
         chars = list(text)
         i = 0
         start_new_word = True
