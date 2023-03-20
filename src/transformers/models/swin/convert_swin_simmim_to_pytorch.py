@@ -162,6 +162,7 @@ if __name__ == "__main__":
         "--model_name",
         default="swin-base-simmim-window6-192",
         type=str,
+        choices=["swin-base-simmim-window6-192", "swin-large-simmim-window12-192"],
         help="Name of the Swin SimMIM model you'd like to convert.",
     )
     parser.add_argument(

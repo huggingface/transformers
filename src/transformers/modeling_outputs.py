@@ -1628,8 +1628,9 @@ class SampleTSPredictionOutput(ModelOutput):
 @dataclass
 class MaskedImageModelingOutput(ModelOutput):
     """
-    Args:
     Base class for outputs of masked image completion / in-painting models.
+
+    Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Reconstruction loss.
         reconstruction (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):

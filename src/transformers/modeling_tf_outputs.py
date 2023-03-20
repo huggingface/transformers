@@ -955,8 +955,9 @@ class TFImageClassifierOutputWithNoAttention(ModelOutput):
 @dataclass
 class TFMaskedImageModelingOutput(ModelOutput):
     """
-    Args:
     Base class for outputs of masked image completion / in-painting models.
+
+    Args:
         loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Reconstruction loss.
         reconstruction (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
