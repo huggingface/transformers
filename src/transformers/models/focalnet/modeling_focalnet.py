@@ -560,8 +560,10 @@ class FocalNetStage(nn.Module):
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
-            H, W = input_dimensions
-            hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states_before_downsampling.shape[0], -1, H, W)
+            height, width = input_dimensions
+            hidden_states = hidden_states.transpose(1, 2).reshape(
+                hidden_states_before_downsampling.shape[0], -1, height, width
+            )
             hidden_states, output_dimensions = self.downsample(hidden_states)
 
         else:
