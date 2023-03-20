@@ -450,7 +450,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
         output_word_offsets: bool = False,
-        n_best: Optional[int] = 1,
+        n_best: int = 1,
     ):
         """
         Decode output logits to audio transcription with language model support.
