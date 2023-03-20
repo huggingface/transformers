@@ -193,7 +193,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pattern = r"(<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+)"
         tokenizer = BasicTokenizer(pattern=pattern)
         text = "a\n'll !!to?'d''d of, can't."
-        expected = ['a', "'ll", '!!', 'to', "?'", 'd', "''", 'd', 'of', ',', 'can', "'t", '.']
+        expected = ["a", "'ll", "!!", "to", "?'", "d", "''", "d", "of", ",", "can", "'t", "."]
         self.assertListEqual(tokenizer.tokenize(text), expected)
 
     def test_wordpiece_tokenizer(self):

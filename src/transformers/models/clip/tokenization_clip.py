@@ -173,7 +173,7 @@ class BasicTokenizer(object):
                     token = self._run_strip_accents(token)
             split_tokens.extend(self._split_on_punc_or_pattern(token, never_split))
 
-        print('split_tokens', split_tokens)
+        print("split_tokens", split_tokens)
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
 
@@ -317,18 +317,18 @@ class CLIPTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        # try:
-        #     import ftfy
-
-        #     self.fix_text = ftfy.fix_text
-        # except ImportError:
-        logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
         self.pat = re.compile(
             r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
             re.IGNORECASE,
         )
-        self.nlp = BasicTokenizer(do_lower_case=True, pattern=self.pat.pattern)
-        self.fix_text = None
+        try:
+            import ftfy
+
+            self.fix_text = ftfy.fix_text
+        except ImportError:
+            logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
+            self.nlp = BasicTokenizer(do_lower_case=True, pattern=self.pat.pattern)
+            self.fix_text = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
