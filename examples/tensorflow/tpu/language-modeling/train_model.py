@@ -175,7 +175,7 @@ def count_samples(file_list):
 def main(args):
     if not args.no_tpu:
         tpu = initialize_tpu(args)
-        strategy = tf.distribute.experimental.TPUStrategy(tpu)
+        strategy = tf.distribute.TPUStrategy(tpu)
     else:
         strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
 
