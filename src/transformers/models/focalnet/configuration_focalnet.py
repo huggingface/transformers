@@ -47,11 +47,11 @@ class FocalNetConfig(PretrainedConfig):
         use_conv_embed (`bool`, *optional*, defaults to `False`):
             Whether to use convolutional embedding. The authors noted that using convolutional embedding usually
             improve the performance, but it's not used by default.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth (number of layers) of each stage in the encoder.
-        focal_levels (`list(int)`, *optional*, defaults to [2, 2, 2, 2]):
+        focal_levels (`list(int)`, *optional*, defaults to `[2, 2, 2, 2]`):
             Number of focal levels in each layer of the respective stages in the encoder.
-        focal_windows (`list(int)`, *optional*, defaults to [3, 3, 3, 3]):
+        focal_windows (`list(int)`, *optional*, defaults to `[3, 3, 3, 3]`):
             Focal window size in each layer of the respective stages in the encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,

@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "FocalNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/focalnet-tiny"
@@ -393,7 +392,7 @@ class FocalNetModulation(nn.Module):
         return x_out
 
 
-class Mlp(nn.Module):
+class FocalNetMlp(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
@@ -481,7 +480,7 @@ class FocalNetLayer(nn.Module):
         self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
+        self.mlp = FocalNetMlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
 
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0
@@ -755,7 +754,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=FocalNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -947,7 +945,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=FocalNetImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
