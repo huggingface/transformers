@@ -185,7 +185,6 @@ def main(args):
     config.vocab_size = tokenizer.vocab_size
 
     training_records = tf.io.gfile.glob(os.path.join(args.train_dataset, "*.tfrecord"))
-    training_records = training_records[:10]  # TODO Debug remove
     if not training_records:
         raise ValueError(f"No .tfrecord files found in {args.train_dataset}.")
     eval_records = tf.io.gfile.glob(os.path.join(args.eval_dataset, "*.tfrecord"))
