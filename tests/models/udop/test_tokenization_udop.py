@@ -21,8 +21,8 @@ from typing import List
 
 from transformers import (
     AddedToken,
-    UdopTokenizerFast,
     SpecialTokensMixin,
+    UdopTokenizerFast,
     is_tf_available,
     is_torch_available,
     logging,
@@ -56,7 +56,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
-    test_rust_tokenizer = False # TODO update this
+    test_rust_tokenizer = False  # TODO update this
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True
@@ -898,7 +898,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     words, boxes = self.get_words_and_boxes()
 
                     normal_tokens = tokenizer(words, boxes=boxes, padding=True, pad_to_multiple_of=8)
- 
+
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 

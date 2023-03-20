@@ -1,6 +1,7 @@
 from transformers import UdopTokenizer, UdopTokenizerFast
 from transformers.testing_utils import get_tests_dir
 
+
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 slow_tokenizer = UdopTokenizer(SAMPLE_VOCAB)
