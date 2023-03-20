@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for PIX2STRUCT."""
+"""Image processor class for Pix2Struct."""
 import io
 import math
 from typing import Dict, Optional, Union
@@ -200,6 +200,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
             paper](https://arxiv.org/pdf/2210.03347.pdf).
+        is_vqa (`bool`, *optional*, defaults to `False`):
+            Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is 
+            rendered onto the input images.
     """
 
     model_input_names = ["flattened_patches"]
@@ -340,14 +343,16 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                Maximum number of patches to extract.
             header_text (`Union[List[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
-            patch_size (`dict`, *optional*, defaults to `self.patch_size`):
-                Dictionary containing the patch height and width.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
+            max_patches (`int`, *optional*, defaults to `self.max_patches`):
+                Maximum number of patches to extract.
+            patch_size (`dict`, *optional*, defaults to `self.patch_size`):
+                Dictionary containing the patch height and width.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -355,12 +360,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format considered by the normalization function:
-                    - `ChannelDimension.FIRST` or `'channels_first'`: The channel dimension is the first dimension.
-                    - `ChannelDimension.LAST` or `'channels_last'`: The channel dimension is the last dimension.
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
