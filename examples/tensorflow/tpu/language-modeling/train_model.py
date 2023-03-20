@@ -68,6 +68,7 @@ def parse_args():
         "--tpu_name",
         type=str,
         help="Name of TPU resource to initialize. Should be blank on Colab, and 'local' on TPU VMs.",
+        default="local"
     )
 
     parser.add_argument(
@@ -151,7 +152,8 @@ def initialize_tpu(args):
         else:
             tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
     except ValueError:
-        raise RuntimeError("Couldn't connect to TPU!")
+        raise RuntimeError("Couldn't connect to TPU! Most likely you need to specify --tpu_name, --tpu_zone, or "
+                           "--gcp_project. When running on a TPU VM, use --tpu_name local.")
 
     tf.config.experimental_connect_to_cluster(tpu)
     tf.tpu.experimental.initialize_tpu_system(tpu)
