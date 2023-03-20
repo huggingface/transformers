@@ -645,7 +645,7 @@ class Mask2FormerLoss(nn.Module):
         pred_masks = masks_queries_logits[src_idx]
 
         if self.is_video:
-            target_masks = torch.cat([t["masks"][i] for t, (_, i) in zip(targets, indices)]).to(pred_masks)
+            target_masks = torch.cat([target["masks"][i] for target, (_, i) in zip(mask_labels, indices)]).to(pred_masks)
 
             # No need to upsample predictions as we are using normalized coordinates
             pred_masks = pred_masks.flatten(0, 1)[:, None]
