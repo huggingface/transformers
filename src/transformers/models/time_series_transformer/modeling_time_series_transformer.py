@@ -1119,11 +1119,11 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
