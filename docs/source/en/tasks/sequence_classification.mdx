@@ -16,7 +16,7 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="leNG9fN9FQU"/>
 
-Text classification is a common NLP task that assigns a label or class to text. Some of the largest companies run text classification in production for a wide range of practical applications. One of the most popular forms of text classification is sentiment analysis, which assigns a label like 🙂 positive, 🙁 negative, or 😐 neutral to a sequence of text. 
+Text classification is a common NLP task that assigns a label or class to text. Some of the largest companies run text classification in production for a wide range of practical applications. One of the most popular forms of text classification is sentiment analysis, which assigns a label like 🙂 positive, 🙁 negative, or 😐 neutral to a sequence of text.
 
 This guide will show you how to:
 
@@ -69,7 +69,7 @@ Then take a look at an example:
 }
 ```
 
-There are two fields in this dataset: 
+There are two fields in this dataset:
 
 - `text`: the movie review text.
 - `label`: a value that is either `0` for a negative review or `1` for a positive review.
@@ -267,7 +267,7 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).
 
 Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 

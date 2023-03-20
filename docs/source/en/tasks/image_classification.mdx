@@ -403,9 +403,9 @@ Configure the model for training with `compile()`:
 >>> model.compile(optimizer=optimizer, loss=loss)
 ```
 
-To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](./main_classes/keras_callbacks).
-Pass your `compute_metrics` function to [KerasMetricCallback](./main_classes/keras_callbacks#transformers.KerasMetricCallback),
-and use the [PushToHubCallback](./main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
+To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](../main_classes/keras_callbacks).
+Pass your `compute_metrics` function to [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback),
+and use the [PushToHubCallback](../main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback

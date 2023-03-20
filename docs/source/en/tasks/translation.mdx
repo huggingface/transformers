@@ -284,7 +284,7 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute the SacreBLEU metric from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the SacreBLEU metric from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).
 
 Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 
@@ -362,7 +362,7 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 ```
 
-Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](../main_classes/text_generation) API.
 
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM
@@ -388,7 +388,7 @@ Tokenize the text and return the `input_ids` as TensorFlow tensors:
 >>> inputs = tokenizer(text, return_tensors="tf").input_ids
 ```
 
-Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](../main_classes/text_generation) API.
 
 ```py
 >>> from transformers import TFAutoModelForSeq2SeqLM
