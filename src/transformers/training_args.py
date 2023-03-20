@@ -557,7 +557,7 @@ class TrainingArguments:
             Whether to use Apple Silicon chip based `mps` device.
         torch_compile (`bool`, *optional*, defaults to `False`):
             Whether or not to compile the model using PyTorch 2.0
-            [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/) (requires a nighlty install of PyTorch).
+            [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/).
 
             This will use the best defaults for the [`torch.compile`
             API](https://pytorch.org/docs/2.0/generated/torch.compile.html?highlight=torch+compile#torch.compile). You
