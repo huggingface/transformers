@@ -40,7 +40,7 @@ model = LlamaForCausalLM.from_pretrained("/output/path")
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 ```
 
-Import note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
+Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
 
