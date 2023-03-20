@@ -3,7 +3,10 @@ name: Self-hosted runner (push)
 on:
   push:
     branches:
-      - auto_tiny
+      - update_tiny_models*
+  repository_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
 
 env:
   TOKEN: ${{ secrets.SYLVAIN_HF_TOKEN }}
