@@ -661,7 +661,7 @@ class BeitModel(BeitPreTrainedModel):
     ) -> Union[tuple, BeitModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-                    Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
