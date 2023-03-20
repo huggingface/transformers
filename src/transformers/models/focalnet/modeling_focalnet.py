@@ -513,10 +513,9 @@ class FocalNetStage(nn.Module):
                     input_resolution=input_resolution,
                     focal_level=focal_level,
                     focal_window=focal_window,
-                    # TODO fix drop path
-                    # drop_path=drop_path,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                 )
-                for _ in range(depth)
+                for i in range(depth)
             ]
         )
 
