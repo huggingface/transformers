@@ -211,6 +211,8 @@ class GPTJAttention(nn.Module):
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
         if is_torch_fx_proxy(position_ids):
+            # The logic to conditionally copy to GPU could not be traced, so we do this
+            # every time in the torch.fx case
             embed_positions = get_embed_positions(self.embed_positions, position_ids)
         else:
             embed_positions = self._get_embed_positions(position_ids)
