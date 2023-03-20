@@ -26,7 +26,7 @@ from transformers import SwinConfig, SwinForMaskedImageModeling, ViTFeatureExtra
 
 
 def get_swin_config(model_name):
-    config = SwinConfig(image_size=192)
+    config = SwinConfig(image_size=224)
 
     if "base" in model_name:
         window_size = 6
@@ -132,7 +132,7 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = ViTFeatureExtractor(size={"height": 192, "width": 192})
+    feature_extractor = ViTFeatureExtractor(size={"height": 224, "width": 224})
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = feature_extractor(images=image, return_tensors="pt")
 
@@ -162,7 +162,6 @@ if __name__ == "__main__":
         "--model_name",
         default="swin-base-simmim-window6-192",
         type=str,
-        choices=["swin-base-simmim-window6-192", "swin-large-simmim-window12-192"],
         help="Name of the Swin SimMIM model you'd like to convert.",
     )
     parser.add_argument(
