@@ -119,7 +119,7 @@ class TFBlipTextSelfAttention(Layer):
 
     def transpose_for_scores(self, x):
         new_x_shape = tf.concat(
-            tf.shape(x)[:-1], tf.constant([self.num_attention_heads, self.attention_head_size], dtype=x.dtype)
+            [tf.shape(x)[:-1], tf.constant([self.num_attention_heads, self.attention_head_size], dtype=tf.int32)], axis=0
         )
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, perm=(0, 2, 1, 3))
@@ -162,7 +162,7 @@ class TFBlipTextSelfAttention(Layer):
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
+            seq_length = shape_list(hidden_states)[1]
             position_ids_l = tf.expand_dims(tf.range(seq_length, dtype=tf.int64, device=hidden_states.device), 1)
             position_ids_r = tf.expand_dims(tf.range(seq_length, dtype=tf.int64, device=hidden_states.device), 0)
             distance = position_ids_l - position_ids_r
@@ -180,7 +180,7 @@ class TFBlipTextSelfAttention(Layer):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BlipTextModel forward() function)
-            attention_scores = attention_scores + attention_mask.to(attention_scores.device)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
@@ -196,7 +196,7 @@ class TFBlipTextSelfAttention(Layer):
         context_layer = attention_probs_dropped @ value_layer
 
         context_layer = tf.transpose(context_layer, perm=(0, 2, 1, 3))
-        new_context_layer_shape = tf.concat(tf.shape(context_layer)[:-2], (self.all_head_size,))
+        new_context_layer_shape = shape_list(context_layer)[:-2] + [self.all_head_size]
         context_layer = tf.reshape(context_layer, new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
@@ -581,11 +581,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                 batch_size, seq_length = input_shape
 
                 seq_ids = tf.range(seq_length, dtype=attention_mask.dtype)
-                causal_mask = (
-                    tf.broadcast_to(seq_ids[None, None, :], (batch_size, seq_length, seq_length))
-                    <= seq_ids[None, :, None]
-                )
-                breakpoint()  # TODO Make sure this is right
+                causal_mask = tf.broadcast_to(seq_ids, (batch_size, seq_length, seq_length)) <= seq_ids[None, :, None]
                 # in case past_key_values are used we need to add a prefix ones mask to the causal mask
 
                 if causal_mask.shape[1] < attention_mask.shape[1]:
@@ -597,8 +593,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
                         ],
                         axis=-1,
                     )
-
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                extended_attention_mask = tf.cast(causal_mask[:, None, :, :], attention_mask.dtype) * attention_mask[:, None, None, :]
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
@@ -692,9 +687,9 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
             if type(encoder_hidden_states) == list:
-                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
+                encoder_batch_size, encoder_sequence_length, _ = shape_list(encoder_hidden_states[0])
             else:
-                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+                encoder_batch_size, encoder_sequence_length, _ = shape_list(encoder_hidden_states)
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
             if type(encoder_attention_mask) == list:

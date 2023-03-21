@@ -1157,6 +1157,62 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
+    def invert_attention_mask(self, encoder_attention_mask: tf.Tensor) -> tf.Tensor:
+        """
+        Invert an attention mask (e.g., switches 0. and 1.).
+
+        Args:
+            encoder_attention_mask (`torch.Tensor`): An attention mask.
+
+        Returns:
+            `tf.Tensor`: The inverted attention mask.
+        """
+        if encoder_attention_mask.shape.rank == 3:
+            encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
+        if encoder_attention_mask.shape.rank == 2:
+            encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
+        # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow
+        # /transformer/transformer_layers.py#L270
+        # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
+        # encoder_extended_attention_mask.transpose(-1, -2))
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * encoder_extended_attention_mask.dtype.min
+
+        return encoder_extended_attention_mask
+
+    def get_head_mask(
+        self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
+        """
+        Prepare the head mask if needed.
+
+        Args:
+            head_mask (`tf.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (`int`):
+                The number of hidden layers in the model.
+
+        Returns:
+            `tf.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
+        """
+        if head_mask is not None:
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+        else:
+            head_mask = [None] * num_hidden_layers
+
+        return head_mask
+
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
+        if head_mask.shape.rank == 1:
+            head_mask = head_mask[None, None, :, None, None]
+            head_mask = tf.repeat(head_mask, repeats=num_hidden_layers, axis=0)
+        elif head_mask.shape.rank == 2:
+            head_mask = head_mask[:, None, :, None, None]
+        assert head_mask.shape.rank == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+        head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
+        return head_mask
+
     def eager_serving(self, inputs):
         """
         Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
