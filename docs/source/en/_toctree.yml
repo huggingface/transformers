@@ -85,6 +85,8 @@
       title: Zero-shot object detection
     - local: tasks/zero_shot_image_classification
       title: Zero-shot image classification
+    - local: tasks/monocular_depth_estimation
+      title: Depth estimation
     title: Computer Vision
   - sections:
     - local: tasks/image_captioning
@@ -319,6 +321,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/llama
+        title: LLaMA
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
