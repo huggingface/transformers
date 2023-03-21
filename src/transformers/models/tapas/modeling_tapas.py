@@ -33,7 +33,6 @@ from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
-    torch_int_div,
 )
 from ...utils import (
     ModelOutput,
@@ -1637,7 +1636,7 @@ class ProductIndexMap(IndexMap):
 
     def project_outer(self, index):
         """Projects an index with the same index set onto the outer components."""
-        indices = torch_int_div(index.indices, self.inner_index.num_segments).type(torch.long)
+        indices = torch.div(index.indices, self.inner_index.num_segments, rounding_mode="floor").type(torch.long)
         return IndexMap(indices=indices, num_segments=self.outer_index.num_segments, batch_dims=index.batch_dims)
 
     def project_inner(self, index):

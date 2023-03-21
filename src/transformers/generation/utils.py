@@ -32,7 +32,6 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..pytorch_utils import torch_int_div
 from ..utils import ModelOutput, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
@@ -2795,7 +2794,7 @@ class GenerationMixin:
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
 
-            next_indices = torch_int_div(next_tokens, vocab_size)
+            next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
             next_tokens = next_tokens % vocab_size
 
             # stateless
@@ -3129,7 +3128,7 @@ class GenerationMixin:
             next_token_scores, _indices = torch.sort(next_token_scores, descending=True, dim=1)
             next_tokens = torch.gather(next_tokens, -1, _indices)
 
-            next_indices = torch_int_div(next_tokens, vocab_size)
+            next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
             next_tokens = next_tokens % vocab_size
 
             # stateless
@@ -3473,7 +3472,7 @@ class GenerationMixin:
                     next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
                 )
 
-                next_indices = torch_int_div(next_tokens, vocab_size)
+                next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
                 next_tokens = next_tokens % vocab_size
 
                 # stateless
@@ -3503,7 +3502,9 @@ class GenerationMixin:
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
                 reordering_indices[batch_group_indices] = (
-                    num_beams * torch_int_div(beam_idx, group_size) + group_start_idx + (beam_idx % group_size)
+                    num_beams * torch.div(beam_idx, group_size, rounding_mode="floor")
+                    + group_start_idx
+                    + (beam_idx % group_size)
                 )
 
             # Store scores, attentions and hidden_states when required

@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, torch_int_div
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -972,7 +972,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         num_indices_to_pick_from = params.shape[2]
 
         shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-        indices_shift = torch_int_div(shift, num_indices_to_gather) * num_indices_to_pick_from
+        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])

@@ -33,9 +33,7 @@ if is_torch_available():
 
     from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
     from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
+
 
 if is_vision_available():
     from PIL import Image
@@ -266,7 +264,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for SwinModel when torch < 1.9")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
 
