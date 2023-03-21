@@ -68,13 +68,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     as the conditioning of the model can be done on the three different queries. If None is provided, defaults values will be used.:
 
     Depending on the number of genres on which the model should be conditioned (`n_genres`).
-    ```
+    ```python
     >>> from transformers import JukeboxTokenizer
+
     >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
-    >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
+    >>> tokenizer("Alan Jackson", "Country Rock", "old town road")["input_ids"]
     [tensor([[   0,    0,    0, 6785,  546,   41,   38,   30,   76,   46,   41,   49,
                40,   76,   44,   41,   27,   30]]), tensor([[  0,   0,   0, 145,   0]]), tensor([[  0,   0,   0, 145,   0]])]
-
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
