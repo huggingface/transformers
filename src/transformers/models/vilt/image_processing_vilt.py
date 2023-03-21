@@ -230,31 +230,35 @@ class ViltImageProcessor(BaseImageProcessor):
         output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
 
         Args:
             image (`np.ndarray`):
                 Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -264,12 +268,18 @@ class ViltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            mean (`float` or `List[float]`):
-                Image mean.
-            std (`float` or `List[float]`):
-                Image standard deviation.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 

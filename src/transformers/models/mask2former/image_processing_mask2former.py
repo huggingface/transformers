@@ -459,6 +459,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         )
         return self.size["longest_edge"]
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     def resize(
         self,
         image: np.ndarray,
@@ -502,6 +503,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.rescale
     def rescale(
         self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
     ) -> np.ndarray:
@@ -510,17 +512,35 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         """
         return rescale(image, rescale_factor, data_format=data_format)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
         mean: Union[float, Iterable[float]],
         std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
-        Normalize the image with the given mean and standard deviation.
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
         """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def convert_segmentation_map_to_binary_masks(
         self,
@@ -781,6 +801,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.encode_inputs with MaskFormer->Mask2Former
     def encode_inputs(
         self,
         pixel_values_list: List[ImageInput],
@@ -838,13 +859,12 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
-        ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
-
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
             )
+        ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)

@@ -57,6 +57,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.pad_size = pad_size
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:

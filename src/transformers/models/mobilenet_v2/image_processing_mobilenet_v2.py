@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for MobileNetV2."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -118,6 +118,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -146,6 +147,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.center_crop
     def center_crop(
         self,
         image: np.ndarray,
@@ -154,22 +156,23 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
-        edge, the image is padded with 0's and then center cropped.
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Size of the output image in the form `{"height": h, "width": w}`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` parameter must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:
@@ -192,11 +195,12 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -206,9 +210,9 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            mean (`float` or `List[float]`):
+            mean (`float` or `Iterable[float]`):
                 Image mean to use for normalization.
-            std (`float` or `List[float]`):
+            std (`float` or `Iterable[float]`):
                 Image standard deviation to use for normalization.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input

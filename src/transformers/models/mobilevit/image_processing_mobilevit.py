@@ -131,23 +131,24 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.crop_size = crop_size
         self.do_flip_channel_order = do_flip_channel_order
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PIL.Image.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image.
+        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
+        resized to keep the input aspect ratio.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Controls the size of the output image. The shortest edge of the image will be resized to
-                `size["shortest_edge"]` while maintaining the aspect ratio.
+                Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -155,10 +156,11 @@ class MobileViTImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
+            raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.center_crop
     def center_crop(
         self,
         image: np.ndarray,
@@ -167,39 +169,42 @@ class MobileViTImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Center crop an image to size `(size["height], size["width"])`. If the input size is smaller than `size` along
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Size of the output image in the form `{"height": h, "width": w}`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
 
         Args:
             image (`np.ndarray`):
                 Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 

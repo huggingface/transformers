@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for TVLT."""
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -184,6 +184,7 @@ class TvltImageProcessor(BaseImageProcessor):
             raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.deit.image_processing_deit.DeiTImageProcessor.center_crop
     def center_crop(
         self,
         image: np.ndarray,
@@ -192,39 +193,42 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
-        edge, the image is padded with 0's and then center cropped.
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Size of the output image in the form `{"height": h, "width": w}`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"Size must have 'height' and 'width' as keys. Got {size.keys()}")
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
 
         Args:
             image (`np.ndarray`):
                 Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
@@ -232,8 +236,8 @@ class TvltImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -243,9 +247,9 @@ class TvltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            mean (`float` or `List[float]`):
+            mean (`float` or `Iterable[float]`):
                 Image mean to use for normalization.
-            std (`float` or `List[float]`):
+            std (`float` or `Iterable[float]`):
                 Image standard deviation to use for normalization.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input

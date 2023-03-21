@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -109,7 +109,7 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample:
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -152,8 +152,8 @@ class ViTImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -163,9 +163,9 @@ class ViTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            mean (`float` or `List[float]`):
+            mean (`float` or `Iterable[float]`):
                 Image mean to use for normalization.
-            std (`float` or `List[float]`):
+            std (`float` or `Iterable[float]`):
                 Image standard deviation to use for normalization.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
