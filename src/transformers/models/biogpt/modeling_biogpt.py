@@ -857,6 +857,8 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
     """,
     BIOGPT_START_DOCSTRING,
 )
+
+# Adapted from transformers.models.opt.modeling_opt.OPTForSequenceClassification with OPT->BioGpt
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
@@ -916,18 +918,18 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            sequence_length = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                sequence_length = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
             else:
-                sequence_lengths = -1
+                sequence_length = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_length]
 
         loss = None
         if labels is not None:
@@ -964,7 +966,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
+        self.model.embed_tokens = value
