@@ -988,11 +988,15 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
+        if config.prediction_length is None:
+            raise ValueError("The `prediction_length` config needs to be specified.")
 
-        embed_dim = config.d_model
-
+        self.value_embedding = AutoformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = AutoformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([AutoformerEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1041,8 +1045,10 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = inputs_embeds
-        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.value_embedding(inputs_embeds)
+        embed_pos = self.embed_positions(inputs_embeds.size())
+
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -1118,7 +1124,13 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+        if config.prediction_length is None:
+            raise ValueError("The `prediction_length` config needs to be specified.")
 
+        self.value_embedding = AutoformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = AutoformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([AutoformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -1241,9 +1253,9 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        hidden_states = inputs_embeds
-        hidden_states = self.layernorm_embedding(hidden_states)
-
+        hidden_states = self.value_embedding(inputs_embeds)
+        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1571,8 +1583,10 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        trend_init = 
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
+            trend=trend_init,
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],

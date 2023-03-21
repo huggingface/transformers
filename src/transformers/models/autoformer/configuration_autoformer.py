@@ -74,6 +74,8 @@ class AutoformerConfig(PretrainedConfig):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
             `num_static_categorical_features` is > 0.
+        d_model (`int`, *optional*, defaults to 64):
+            Dimensionality of the transformer layers.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -142,6 +144,7 @@ class AutoformerConfig(PretrainedConfig):
         num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
+        d_model: int = 64,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,
@@ -182,7 +185,7 @@ class AutoformerConfig(PretrainedConfig):
                 )
             self.cardinality = cardinality
         else:
-            self.cardinality = [1]
+            self.cardinality = [0]
         if embedding_dimension and num_static_categorical_features > 0:
             if len(embedding_dimension) != num_static_categorical_features:
                 raise ValueError(
@@ -194,7 +197,8 @@ class AutoformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
+        self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -228,6 +232,6 @@ class AutoformerConfig(PretrainedConfig):
             sum(self.embedding_dimension)
             + self.num_dynamic_real_features
             + self.num_time_features
-            + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
-            + self.input_size  # the log(scale)
+            + self.num_static_real_features
+            + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
