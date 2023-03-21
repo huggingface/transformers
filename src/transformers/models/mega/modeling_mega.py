@@ -110,9 +110,9 @@ class MegaEmbeddings(nn.Module):
 
 class SimpleRelativePositionalBias(nn.Module):
     """
-    Simple relative positional embeddings copied from the Mega repo; renamed variables
-    for better readability
+    Simple relative positional embeddings copied from the Mega repo; renamed variables for better readability
     """
+
     def __init__(self, config: MegaConfig):
         super().__init__()
         self.config = config
@@ -140,13 +140,13 @@ class SimpleRelativePositionalBias(nn.Module):
 
 class RotaryRelativePositionalBias(nn.Module):
     """
-    Rotary relative bias for positional information; similar in concept to RoPE (i.e. 
-    RoFormer) but taken from the Mega repo due to differences in implementation.
+    Rotary relative bias for positional information; similar in concept to RoPE (i.e. RoFormer) but taken from the Mega
+    repo due to differences in implementation.
 
-    When initialized, produces a positional bias which ranges from position 0 to 
-    config.max_positions, but can extrapolate to longer sequences. Can be indexed 
-    according to input position IDs
+    When initialized, produces a positional bias which ranges from position 0 to config.max_positions, but can
+    extrapolate to longer sequences. Can be indexed according to input position IDs
     """
+
     def __init__(self, config: MegaConfig):
         super().__init__()
         if config.hidden_size % 2 != 0:
@@ -195,11 +195,11 @@ class MegaDropout(nn.Module):
     """
     A unified class for standard dropout functionality and featurewise dropout.
 
-    The original fairseq Mega repo used 2 classes for these, which included some 
-    unnecessary handling of training logic and an unused `inplace` option. The 
-    original implementation used torch.nn.functional instead of submodules, which
+    The original fairseq Mega repo used 2 classes for these, which included some unnecessary handling of training logic
+    and an unused `inplace` option. The original implementation used torch.nn.functional instead of submodules, which
     is retained here as well.
     """
+
     def __init__(self, dropout_probability, is_featurewise=False):
         super().__init__()
         self.dropout_probability = dropout_probability
@@ -211,7 +211,9 @@ class MegaDropout(nn.Module):
                 # (batch_size X sequence_length X feature_dimension)
                 # -> (batch_size X feature_dimension X sequence_length)
                 # -> (batch_size X sequence_length X feature_dimension)
-                return F.dropout2d(input.transpose(-1, -2), p=self.dropout_probability, training=self.training).transpose(-1, -2)
+                return F.dropout2d(
+                    input.transpose(-1, -2), p=self.dropout_probability, training=self.training
+                ).transpose(-1, -2)
             else:
                 if input.dim() != 3:
                     raise ValueError(
@@ -220,16 +222,19 @@ class MegaDropout(nn.Module):
                 # (sequence_length X batch_size X feature_dimension)
                 # -> (batch_size X feature_dimension X sequence_length)
                 # -> (sequence_length X batch_size X feature_dimension)
-                return F.dropout2d(input.permute(1, 2, 0), p=self.dropout_probability, training=self.training).permute(2, 0, 1)
+                return F.dropout2d(input.permute(1, 2, 0), p=self.dropout_probability, training=self.training).permute(
+                    2, 0, 1
+                )
         else:
             return F.dropout(input, p=self.dropout_probability, training=self.training)
 
 
 class MegaRMSNorm(nn.Module):
     """
-    RMSNorm used in Mega implementation. Differs from T5's RMSNorm by applying the
-    weight prior to taking the square root (as opposed to after in T5)
+    RMSNorm used in Mega implementation. Differs from T5's RMSNorm by applying the weight prior to taking the square
+    root (as opposed to after in T5)
     """
+
     def __init__(self, number_features, eps=1e-6, affine=True):
         super().__init__()
         self.num_features = number_features
@@ -263,10 +268,10 @@ NORM2FN = {
 
 class MegaSequenceNorm(nn.Module):
     """
-    A wrapper class for various layer normalization options used in Mega. Used
-    to handle differences in expectations on input axis locations for different
-    normalization methods.
+    A wrapper class for various layer normalization options used in Mega. Used to handle differences in expectations on
+    input axis locations for different normalization methods.
     """
+
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
         self.norm = NORM2FN[norm_type](embedding_dim, eps, affine)
@@ -288,10 +293,9 @@ ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 class MultiDimensionDampedEMA(nn.Module):
     """
-    Mega's Exponential Moving Average layer, largely left unmodified from the original 
-    repo with the exception of variable names and stateful representation of incremental 
-    decoding state.
-    See "https://arxiv.org/abs/2209.10655" for more details.
+    Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
+    variable names and stateful representation of incremental decoding state. See "https://arxiv.org/abs/2209.10655"
+    for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -498,10 +502,9 @@ class MultiDimensionDampedEMA(nn.Module):
 
 class MegaGatedCrossAttention(nn.Module):
     """
-    Gated Structured State Attention for use in encoder-decoder model.
-    See Mega paper for more details. Only modifications from original implementation
-    are variable names, removing the unnecessary `before_attn_fn` and `static_kv` arguments,
-    and the stateful representation of incremental decoder state.
+    Gated Structured State Attention for use in encoder-decoder model. See Mega paper for more details. Only
+    modifications from original implementation are variable names, removing the unnecessary `before_attn_fn` and
+    `static_kv` arguments, and the stateful representation of incremental decoder state.
     """
 
     def __init__(self, config: MegaConfig):
@@ -783,7 +786,7 @@ class MovingAverageGatedAttention(nn.Module):
     Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
 
-    Differences from original implementation include hidden state refactor and fixed inconsistency with additive / 
+    Differences from original implementation include hidden state refactor and fixed inconsistency with additive /
     multiplicative attention masks
     """
 
@@ -831,8 +834,8 @@ class MovingAverageGatedAttention(nn.Module):
     def element_attention(self, query, key, padding_mask, causal_mask):
         """
         Apply element-wise attention via relu^2 or laplace. Same as original implementation but with standardized
-        causal attention mask. Expects the Hugging Face standard attention mask paradigm: 1 for not masked, and 0
-        for masked.
+        causal attention mask. Expects the Hugging Face standard attention mask paradigm: 1 for not masked, and 0 for
+        masked.
         """
         seq_len = key.size(2)
         if padding_mask is not None:
@@ -1114,8 +1117,8 @@ class MovingAverageGatedAttention(nn.Module):
 
 class MegaNormalizedFeedForwardNetwork(nn.Module):
     """
-    Normalized feed-forward network used in Mega blocks. 
-    Left as-is from original Mega repo aside from retrieving args from Hugging Face config
+    Normalized feed-forward network used in Mega blocks. Left as-is from original Mega repo aside from retrieving args
+    from Hugging Face config
     """
 
     def __init__(self, config: MegaConfig):
@@ -1452,9 +1455,9 @@ class MegaModel(MegaPreTrainedModel):
     Equipped Gated Attention*_ by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig,
     Jonathan May, and Luke Zettlemoyer
 
-    To behave as a decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with
-    both `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
+    To behave as a decoder the model needs to be initialized with the `is_decoder` argument of the configuration set to
+    `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with both
+    `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
@@ -1551,7 +1554,7 @@ class MegaModel(MegaPreTrainedModel):
             use_cache = use_cache if use_cache is not None else self.config.use_cache
 
             # Mega expects the causal mask to be a 2D square matrix of (from) x (to) over the input sequence length
-            # the HF utility function generates a 3D causal mask which includes batch size, so we'll create a dummy 
+            # the HF utility function generates a 3D causal mask which includes batch size, so we'll create a dummy
             # mask with the correct device and all ones
             temp_mask_for_extension = torch.ones((1, sequence_length), dtype=torch.long, device=device)
             causal_mask = self.create_extended_attention_mask_for_decoder(input_shape, temp_mask_for_extension)
