@@ -136,6 +136,13 @@ def parse_args():
         help="Maximum length of tokenized sequences. Should match the setting used in prepare_tfrecord_shards.py",
     )
 
+    parser.add_argument(
+        "--mlm_probability",
+        type=float,
+        default=0.15,
+        help="Fraction of tokens to mask during training.",
+    )
+
     parser.add_argument("--output_dir", type=str, required=True, help="Path to save model checkpoints to.")
     parser.add_argument("--hub_model_id", type=str, help="Model ID to upload to on the Hugging Face Hub.")
 
@@ -170,6 +177,24 @@ def count_samples(file_list):
         num_samples += sample_count
 
     return num_samples
+
+
+def prepare_dataset(records, decode_fn, mask_fn, batch_size, shuffle, shuffle_buffer_size=None):
+    num_samples = count_samples(records)
+    dataset = tf.data.Dataset.from_tensor_slices(records)
+    if shuffle:
+        dataset = dataset.shuffle(len(dataset))
+    dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=tf.data.experimental.AUTOTUNE)
+    # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
+    dataset = dataset.apply(tf.data.experimental.assert_cardinality(num_samples))
+    dataset = dataset.map(decode_fn)
+    if shuffle:
+        assert shuffle_buffer_size is not None
+        dataset = dataset.shuffle(args.shuffle_buffer_size)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+    dataset = dataset.map(mask_fn)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
 
 
 def main(args):
@@ -224,18 +249,6 @@ def main(args):
         tokenizer=tokenizer, mlm_probability=0.15, mlm=True, return_tensors="tf"
     )
 
-    batch_size = args.per_replica_batch_size * strategy.num_replicas_in_sync
-
-    training_records = tf.data.Dataset.from_tensor_slices(training_records).shuffle(len(training_records))
-    train_dataset = tf.data.TFRecordDataset(training_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
-    # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
-    train_dataset = train_dataset.apply(tf.data.experimental.assert_cardinality(num_train_samples))
-    train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
-    train_dataset = train_dataset.map(decode_fn)
-    train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
-    train_dataset = train_dataset.batch(batch_size, drop_remainder=True)
-    train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
-
     def mask_with_collator(batch):
         # TF really needs an isin() function
         special_tokens_mask = (
@@ -251,15 +264,24 @@ def main(args):
         )
         return batch
 
-    train_dataset = train_dataset.map(mask_with_collator)
+    batch_size = args.per_replica_batch_size * strategy.num_replicas_in_sync
 
-    eval_dataset = tf.data.TFRecordDataset(eval_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
-    # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
-    eval_dataset = eval_dataset.apply(tf.data.experimental.assert_cardinality(num_validation_samples))
-    eval_dataset = eval_dataset.map(decode_fn)
-    eval_dataset = eval_dataset.batch(batch_size, drop_remainder=True)
-    eval_dataset.map(mask_with_collator)
-    eval_dataset = eval_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    train_dataset = prepare_dataset(
+        training_records,
+        decode_fn=decode_fn,
+        mask_fn=mask_with_collator,
+        batch_size=batch_size,
+        shuffle=True,
+        shuffle_buffer_size=args.shuffle_buffer_size
+    )
+
+    eval_dataset = prepare_dataset(
+        eval_records,
+        decode_fn=decode_fn,
+        mask_fn=mask_with_collator,
+        batch_size=batch_size,
+        shuffle=False,
+    )
 
     callbacks = []
     if args.hub_model_id:
