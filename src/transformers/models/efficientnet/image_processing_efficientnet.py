@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for EfficientNet."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -147,8 +147,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def rescale(
         self,
@@ -173,7 +174,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            offset (`bool`, *optional*):
+           offset (`bool`, *optional*):
                 Whether to scale the image in both negative and positive directions.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.

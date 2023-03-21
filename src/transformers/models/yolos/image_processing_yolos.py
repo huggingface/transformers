@@ -862,6 +862,36 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         return rescale(image, rescale_factor, data_format=data_format)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
@@ -892,11 +922,12 @@ class YolosImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
-        return_pixel_mask: bool = False,
+        return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> BatchFeature:

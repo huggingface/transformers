@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for BLIP."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -135,8 +135,62 @@ class BlipImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+        )
+
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
