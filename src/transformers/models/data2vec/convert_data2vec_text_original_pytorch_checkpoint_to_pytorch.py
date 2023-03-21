@@ -24,14 +24,18 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
+from transformers import (
+    Data2VecTextConfig,
+    Data2VecTextForMaskedLM,
+    Data2VecTextForSequenceClassification,
+    Data2VecTextModel,
+)
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
     BertOutput,
     BertSelfAttention,
     BertSelfOutput,
-    Data2VecTextModel,
 )
 
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
