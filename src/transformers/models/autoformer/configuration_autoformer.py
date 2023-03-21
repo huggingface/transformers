@@ -1,4 +1,5 @@
 # coding=utf-8
+# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,11 +129,11 @@ class AutoformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_size: int = 1,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
+        input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: bool = True,
         num_dynamic_real_features: int = 0,

@@ -1,6 +1,7 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2021 THUML @ Tsinghua University
 # Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -295,6 +296,16 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         )
         return super().forward(positions)
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesValueEmbedding with TimeSeries->Autoformer
+class AutoformerValueEmbedding(nn.Module):
+    def __init__(self, feature_size, d_model):
+        super().__init__()
+        self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
+
+    def forward(self, x):
+        return self.value_projection(x)
 
 
 # Eli to Kashif: class based on
@@ -621,11 +632,10 @@ class AutoformerEncoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        # Todo: ask kashif whether apply self_attn_layer_norm here or not.
-        #  In the original paper they don't apply it after AutoCorrelation, but
-        #  we can consider applying it as improvment :).
+        # added layer norm here as an improvement
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, _ = self.decomp1(hidden_states)
+
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
@@ -682,6 +692,16 @@ class AutoformerDecoderLayer(nn.Module):
         self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_avg)
         self.decomp3 = AutoformerSeriesDecompositionLayer(config.moving_avg)
 
+        self.trend_projection = nn.Conv1d(
+            in_channels=self.embed_dim,
+            out_channels=config.input_size,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            padding_mode="circular",
+            bias=False,
+        )
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -728,9 +748,7 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states, trend1 = self.decomp1(hidden_states)
-        # Todo: ask kashif whether apply self_attn_layer_norm here or not.
-        #  In the original paper they don't apply it after AutoCorrelation, but
-        #  we can consider applying it as improvement :).
+        # added layer norm here as an improvement
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
@@ -752,9 +770,7 @@ class AutoformerDecoderLayer(nn.Module):
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states, trend2 = self.decomp2(hidden_states)
-            # Todo: ask kashif whether apply self_attn_layer_norm here or not.
-            #  In the original paper they don't apply it after AutoCorrelation, but
-            #  we can consider applying it as improvement :).
+            # added layer norm here as an improvement
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -772,7 +788,9 @@ class AutoformerDecoderLayer(nn.Module):
 
         # TODO in the original they used another projection layer to hidden_states and residual_trend:
         #  nn.Conv1d to residual_trend and nn.Linear to hidden_states
-        outputs = (hidden_states,)
+        residual_trend = trend1 + trend2 + trend3
+        residual_trend = self.trend_projection(residual_trend.permute(0, 2, 1)).transpose(1, 2)
+        outputs = ((hidden_states, residual_trend),)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -1129,8 +1147,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         return combined_attention_mask
 
     def forward(
-        # TODO: add trend param
         self,
+        trend: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1291,9 +1309,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
-            hidden_states = layer_outputs[0]
-            # TODO resiudal_trend = hidden_states[1]
-            #  trend += residual_trend
+            (hidden_states, residual_trend) = layer_outputs[0]
+            trend = trend + residual_trend
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -1306,7 +1323,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states += (hidden_states + trend,)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
@@ -1316,8 +1333,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            # TODO trend=trend, (maybe add last_trend and all_trends like in the hidden_state?)
+            last_hidden_state=hidden_states + trend,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
