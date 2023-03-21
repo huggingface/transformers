@@ -129,7 +129,7 @@ _deps = [
     "keras-nlp>=0.3.1",
     "librosa",
     "nltk",
-    "natten>=0.14.5",
+    "natten>=0.14.6",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
