@@ -58,8 +58,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from ...pytorch_utils import torch_int_div
-
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
@@ -1122,7 +1120,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
             labels_per_image = labels[topk_indices]
 
-            topk_indices = torch_int_div(topk_indices, num_classes)
+            topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
             # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
             mask_pred = masks_queries_logits[i][topk_indices]
 

@@ -276,7 +276,6 @@ except importlib_metadata.PackageNotFoundError:
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
-TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 
 def is_kenlm_available():
@@ -388,15 +387,13 @@ def is_torch_tf32_available():
 
 
 torch_version = None
-_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
+_torch_fx_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
     _torch_fx_available = (torch_version.major, torch_version.minor) >= (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
-
-    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
 
 
 def is_torch_fx_available():
@@ -405,10 +402,6 @@ def is_torch_fx_available():
 
 def is_bs4_available():
     return importlib.util.find_spec("bs4") is not None
-
-
-def is_torch_onnx_dict_inputs_support_available():
-    return _torch_onnx_dict_inputs_support_available
 
 
 def is_tf_available():

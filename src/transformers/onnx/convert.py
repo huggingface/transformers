@@ -26,7 +26,6 @@ from ..utils import (
     TensorType,
     is_tf_available,
     is_torch_available,
-    is_torch_onnx_dict_inputs_support_available,
     logging,
 )
 from .config import OnnxConfig
@@ -338,9 +337,6 @@ def export(
 
     if is_torch_available():
         from ..utils import torch_version
-
-        if not is_torch_onnx_dict_inputs_support_available():
-            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
             logger.warning(
