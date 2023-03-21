@@ -94,3 +94,31 @@ Alternatively, you can switch your cloned 🤗 Transformers to a specific versio
 git checkout tags/v3.5.1
 ```
 and run the example command as usual afterward.
+
+## Running the Examples on Remote Hardware (with Auto-Setup)
+
+If you want to run the examples on a remote machine, you can use the `run_on_remote.py` script. It will optionally
+spin up that machine on-demand from a cloud provider, automatically install the required dependencies and 
+run the example on the remote machine. You can run it with the following command:
+
+```bash
+# First install runhouse:
+pip install runhouse
+
+# For an on-demand V100 with whichever cloud provider you have configured:
+python run_on_remote.py \
+    --example pytorch/text-generation/run_generation.py \
+    --model_type=gpt2 \
+    --model_name_or_path=gpt2 \
+    --prompt "This is a test"
+
+# For byo (bring your own) cluster:
+python run_on_remote.py --host <cluster_ip> --user <user> --key_path <key_path> \
+  --example <example> <args>
+
+# For on-demand instances
+python run_on_remote.py --instance <instance> --provider <provider> \
+  --example <example> <args>
+```
+
+You can also adapt the script to your own needs.
