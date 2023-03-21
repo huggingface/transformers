@@ -33,16 +33,6 @@ is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
 
 
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
-
-
 def softmax_backward_data(parent, grad_output, output, dim, self):
     """
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
