@@ -104,10 +104,12 @@ class CodeGenTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import CodeGenTokenizer
+
     >>> tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 

@@ -60,10 +60,12 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import MvpTokenizerFast
+
     >>> tokenizer = MvpTokenizerFast.from_pretrained("RUCAIBox/mvp")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 

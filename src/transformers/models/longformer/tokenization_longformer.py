@@ -122,10 +122,12 @@ class LongformerTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import LongformerTokenizer
+
     >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 

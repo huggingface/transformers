@@ -51,10 +51,12 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import GPTNeoXTokenizerFast
+
     >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("gpt2")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 

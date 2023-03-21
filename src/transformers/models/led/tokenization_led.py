@@ -99,10 +99,12 @@ class LEDTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import LEDTokenizer
+
     >>> tokenizer = LEDTokenizer.from_pretrained("allenai/led-base-16384")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 

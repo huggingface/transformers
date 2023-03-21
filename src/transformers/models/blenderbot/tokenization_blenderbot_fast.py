@@ -57,10 +57,12 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import BlenderbotTokenizerFast
+
     >>> tokenizer = BlenderbotTokenizerFast.from_pretrained("facebook/blenderbot-3B")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [6950, 1085, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [6950, 1085, 2]
     ```
 

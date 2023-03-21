@@ -81,10 +81,12 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import DebertaTokenizerFast
+
     >>> tokenizer = DebertaTokenizerFast.from_pretrained("microsoft/deberta-base")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [1, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [1, 20920, 232, 2]
     ```
 

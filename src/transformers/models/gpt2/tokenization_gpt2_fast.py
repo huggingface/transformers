@@ -77,10 +77,12 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import GPT2TokenizerFast
+
     >>> tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 

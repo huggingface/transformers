@@ -199,10 +199,12 @@ class LukeTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import LukeTokenizer
+
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 

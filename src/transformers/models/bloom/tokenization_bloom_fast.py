@@ -56,10 +56,12 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import BloomTokenizerFast
+
     >>> tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [59414, 8876]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [86153, 8876]
     ```
 

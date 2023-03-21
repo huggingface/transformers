@@ -49,8 +49,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     Example usage:
     ```python
     >>> from transformers import GPTSw3Tokenizer
+
     >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-    >>> tokenizer("Svenska är kul!")['input_ids']
+    >>> tokenizer("Svenska är kul!")["input_ids"]
     [1814, 377, 3617, 63504]
     ```
 
