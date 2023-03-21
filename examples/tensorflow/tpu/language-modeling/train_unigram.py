@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--vocab_size",
         type=int,
-        default=10000,
+        default=10048,
         help="Size of the desired vocabulary.",
     )
     parser.add_argument(

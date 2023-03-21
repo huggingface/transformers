@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument(
         "--max_length",
         type=int,
-        default=128,
+        default=512,
         help="Maximum sequence length. For training on TPUs, it helps to have a maximum"
         " sequence length that is a multiple of 8.",
     )
@@ -79,7 +79,7 @@ def tokenize_function(tokenizer):
     return fn
 
 
-def group_texts(block_size=128):
+def group_texts(block_size):
     def fn(examples):
         # Concatenate all texts.
         concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
