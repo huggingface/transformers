@@ -71,9 +71,6 @@ if is_torch_available():
         _compute_mask_indices,
         _sample_negative_indices,
     )
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
 
 
 if is_torchaudio_available():
@@ -1655,10 +1652,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     @require_pyctcdecode
     @require_torchaudio
-    @unittest.skipIf(
-        is_torch_less_than_1_9,
-        reason="`torchaudio.functional.resample` needs torchaudio >= 0.9 which requires torch >= 0.9",
-    )
     def test_wav2vec2_with_lm(self):
         ds = load_dataset("common_voice", "es", split="test", streaming=True)
         sample = next(iter(ds))
@@ -1683,10 +1676,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     @require_pyctcdecode
     @require_torchaudio
-    @unittest.skipIf(
-        is_torch_less_than_1_9,
-        reason="`torchaudio.functional.resample` needs torchaudio >= 0.9 which requires torch >= 0.9",
-    )
     def test_wav2vec2_with_lm_pool(self):
         ds = load_dataset("common_voice", "es", split="test", streaming=True)
         sample = next(iter(ds))
