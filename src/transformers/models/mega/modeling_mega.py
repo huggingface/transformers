@@ -56,22 +56,63 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# utility for causal LM masking in the format that Mega expects
-def generate_causal_mask(seq_len):
+class MegaEmbeddings(nn.Module):
     """
-    Tiny utility to generate a `seq_len` by `seq_len` causal mask, where 1 corresponds to *not masked* and 0
-    corresponds to *masked*
-
-    causal_mask[i][j] corresponds to whether token `i` can attend to token `j`
+    Mega's basic implementation does not incorporate token type embeddings, so this is a stripped-down version of
+    RoBERTa's embeddings which optionally includes token types
     """
-    seq_ids = torch.arange(seq_len)
-    causal_mask = seq_ids[None, :].repeat(seq_len, 1) <= seq_ids[:, None]
-    return causal_mask.to(torch.long)
+
+    def __init__(self, config: MegaConfig):
+        super().__init__()
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.use_token_types = config.add_token_type_embeddings
+        if self.use_token_types:
+            self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+            # registering a buffer here allows model tracing when not passing optional token type IDs
+            # more info at transformers issue #5664
+            self.register_buffer(
+                "token_type_ids", torch.zeros(config.max_positions, dtype=torch.long).expand((1, -1)), persistent=False
+            )
+
+        self.padding_idx = config.pad_token_id
+
+    def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
+        if (input_ids is None) and (inputs_embeds is None):
+            raise ValueError("Must provide one of input_ids or inputs_embeds")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+
+            # get the word embeddings if only IDs are provided
+            inputs_embeds = self.word_embeddings(input_ids)
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        # the original Mega implementation did not include token type embeddings, so we add
+        # an option to use them if desired; if embeddings are present and token type IDs are
+        # not provided, we will use a registered buffer (which helps with tracing)
+        if self.use_token_types:
+            if token_type_ids is None:
+                if hasattr(self, "token_type_ids"):
+                    buffered_token_type_ids = self.token_type_ids[:, : input_shape[1]]
+                    buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], input_shape[1])
+                    token_type_ids = buffered_token_type_ids_expanded
+                else:
+                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=input_ids.device)
+
+            # access token type embeddings
+            token_type_embeddings = self.token_type_embeddings(token_type_ids)
+            # add the token type embeddings to the word embeddings
+            embeddings = inputs_embeds + token_type_embeddings
+        else:
+            embeddings = inputs_embeds
+        return embeddings
 
 
-# Positional embeddings
-# copied from original Mega code and renamed variables for better readability
 class SimpleRelativePositionalBias(nn.Module):
+    """
+    Simple relative positional embeddings copied from the Mega repo; renamed variables
+    for better readability
+    """
     def __init__(self, config: MegaConfig):
         super().__init__()
         self.config = config
@@ -97,9 +138,15 @@ class SimpleRelativePositionalBias(nn.Module):
         return tile
 
 
-# rotary positional bias similar to RoPE
-# taken from original Mega repo
 class RotaryRelativePositionalBias(nn.Module):
+    """
+    Rotary relative bias for positional information; similar in concept to RoPE (i.e. 
+    RoFormer) but taken from the Mega repo due to differences in implementation.
+
+    When initialized, produces a positional bias which ranges from position 0 to 
+    config.max_positions, but can extrapolate to longer sequences. Can be indexed 
+    according to input position IDs
+    """
     def __init__(self, config: MegaConfig):
         super().__init__()
         if config.hidden_size % 2 != 0:
@@ -124,18 +171,18 @@ class RotaryRelativePositionalBias(nn.Module):
         emb = torch.arange(max_positions, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
         return torch.sin(emb), torch.cos(emb)
 
-    def rotary(self, x):
-        n, d = x.size()
-        x1, x2 = torch.chunk(x, 2, dim=-1)
-        if self.sine is None or n > self.sine.size(0):
-            self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(n, d)
-            self.max_positions = n
+    def rotary(self, input):
+        seq_len, embed_dim = input.size()
+        chunk_1, chunk_2 = torch.chunk(input, 2, dim=-1)
+        if self.sine is None or seq_len > self.sine.size(0):
+            self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(seq_len, embed_dim)
+            self.max_positions = seq_len
         self.sine = self.sine.to(self._float_tensor)
         self.cosine = self.cosine.to(self._float_tensor)
 
-        sin = self.sine[:n]
-        cos = self.cosine[:n]
-        return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=1)
+        sin = self.sine[:seq_len]
+        cos = self.cosine[:seq_len]
+        return torch.cat([chunk_1 * cos - chunk_2 * sin, chunk_2 * cos + chunk_1 * sin], dim=1)
 
     def forward(self, seq_len):
         rotary_alpha = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
@@ -144,10 +191,106 @@ class RotaryRelativePositionalBias(nn.Module):
         return bias
 
 
-# EMA attention module
-# largely left unmodified from original Mega repo except the incremental state and variable names
+class MegaDropout(nn.Module):
+    """
+    A unified class for standard dropout functionality and featurewise dropout.
+
+    The original fairseq Mega repo used 2 classes for these, which included some 
+    unnecessary handling of training logic and an unused `inplace` option. The 
+    original implementation used torch.nn.functional instead of submodules, which
+    is retained here as well.
+    """
+    def __init__(self, dropout_probability, is_featurewise=False):
+        super().__init__()
+        self.dropout_probability = dropout_probability
+        self.is_featurewise = is_featurewise
+
+    def forward(self, input, batch_first: bool = False):
+        if self.is_featurewise:
+            if batch_first:
+                # (batch_size X sequence_length X feature_dimension)
+                # -> (batch_size X feature_dimension X sequence_length)
+                # -> (batch_size X sequence_length X feature_dimension)
+                return F.dropout2d(input.transpose(-1, -2), p=self.dropout_probability, training=self.training).transpose(-1, -2)
+            else:
+                if input.dim() != 3:
+                    raise ValueError(
+                        "Feature dropout inputs must be exactly 3-dimensional if inputs are ordered [sequence length, batch size, hidden dimension]"
+                    )
+                # (sequence_length X batch_size X feature_dimension)
+                # -> (batch_size X feature_dimension X sequence_length)
+                # -> (sequence_length X batch_size X feature_dimension)
+                return F.dropout2d(input.permute(1, 2, 0), p=self.dropout_probability, training=self.training).permute(2, 0, 1)
+        else:
+            return F.dropout(input, p=self.dropout_probability, training=self.training)
+
+
+class MegaRMSNorm(nn.Module):
+    """
+    RMSNorm used in Mega implementation. Differs from T5's RMSNorm by applying the
+    weight prior to taking the square root (as opposed to after in T5)
+    """
+    def __init__(self, number_features, eps=1e-6, affine=True):
+        super().__init__()
+        self.num_features = number_features
+        self.eps = eps
+        self.affine = affine
+        if affine:
+            self.weight = nn.Parameter(torch.Tensor(self.num_features))
+        else:
+            self.register_parameter("weight", None)
+
+    def forward(self, input):
+        mean_square = torch.mean(torch.square(input), dim=-1, keepdim=True)
+        if self.weight is not None:
+            input = input * self.weight
+
+        input * torch.rsqrt(mean_square + self.eps)
+        return input
+
+
+# original Mega repo used a parent class to organize normalization functions; Hugging Face's
+# preferred method is to use a dictionary. since these normalization classes require different
+# inputs, we handle this with lambda functions to return the instantiated class
+NORM2FN = {
+    "layernorm": lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
+    "scalenorm": lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
+    "rmsnorm": lambda embedding_dim, eps, affine: MegaRMSNorm(embedding_dim, eps=eps, affine=affine),
+    "batchnorm": lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
+    "syncbatchnorm": lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine),
+}
+
+
+class MegaSequenceNorm(nn.Module):
+    """
+    A wrapper class for various layer normalization options used in Mega. Used
+    to handle differences in expectations on input axis locations for different
+    normalization methods.
+    """
+    def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
+        super().__init__()
+        self.norm = NORM2FN[norm_type](embedding_dim, eps, affine)
+
+    def forward(self, input):
+        if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
+            if input.dim() != 3:
+                raise ValueError("BatchNorm inputs must be exactly 3-dimensional")
+            input = input.permute(1, 2, 0)
+            input = self.norm(input)
+            return input.permute(2, 0, 1)
+        else:
+            return self.norm(input)
+
+
+# add this layernorm class to ALL_LAYERNORM_LAYERS
+ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
+
+
 class MultiDimensionDampedEMA(nn.Module):
-    """Exponential Moving Average Layer.
+    """
+    Mega's Exponential Moving Average layer, largely left unmodified from the original 
+    repo with the exception of variable names and stateful representation of incremental 
+    decoding state.
     See "https://arxiv.org/abs/2209.10655" for more details.
     """
 
@@ -353,12 +496,12 @@ class MultiDimensionDampedEMA(nn.Module):
             return gated_ema_output, None
 
 
-# Gated cross-attention
-# removed before_attn_fn argument and unused static_kv
-# otherwise left as-is with the exception of hidden states
 class MegaGatedCrossAttention(nn.Module):
-    """Gated Structured State Attention for use in encoder-decoder model
-    See Mega paper for more details.
+    """
+    Gated Structured State Attention for use in encoder-decoder model.
+    See Mega paper for more details. Only modifications from original implementation
+    are variable names, removing the unnecessary `before_attn_fn` and `static_kv` arguments,
+    and the stateful representation of incremental decoder state.
     """
 
     def __init__(self, config: MegaConfig):
@@ -400,16 +543,16 @@ class MegaGatedCrossAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
 
     def element_attention(self, query, key, key_padding_mask, pidx):
-        bsz, clen, _ = key.size()
-        slen = query.size(1) if pidx is None else pidx + 1
+        bsz, src_len, _ = key.size()
+        tgt_len = query.size(1) if pidx is None else pidx + 1
         if key_padding_mask is not None:
             # (batch_size X source_sequence_length) --> (batch_size X 1 X 1)
             lengths = key_padding_mask.sum(dim=-1).view(bsz, 1, 1)
         else:
-            lengths = clen
+            lengths = src_len
 
         # (target_sequence_length X source_sequence_length)
-        bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
+        bias = self.rel_pos_bias(max(tgt_len, src_len))[:, :src_len]
         if pidx is not None:
             if query.size(1) != 1:
                 raise ValueError("Position offset provided with queries longer than 1 token")
@@ -417,7 +560,7 @@ class MegaGatedCrossAttention(nn.Module):
             bias = bias[pidx]
         else:
             # (target_sequence_length X source_sequence_length)
-            bias = bias[:slen]
+            bias = bias[:tgt_len]
 
         # (batch_size X target_sequence_length X source_sequence_length)
         qk = torch.bmm(query, key.transpose(1, 2)) / lengths + bias
@@ -430,11 +573,11 @@ class MegaGatedCrossAttention(nn.Module):
         return attn_weights
 
     def softmax_attention(self, query, key, key_padding_mask, pidx):
-        bsz, clen, _ = key.size()
-        slen = query.size(1) if pidx is None else pidx + 1
+        bsz, src_len, _ = key.size()
+        tgt_len = query.size(1) if pidx is None else pidx + 1
 
         # (target_sequence_length X source_sequence_length)
-        bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
+        bias = self.rel_pos_bias(max(tgt_len, src_len))[:, :src_len]
         if pidx is not None:
             if query.size(1) != 1:
                 raise ValueError("Position offset provided with queries longer than 1 token")
@@ -442,7 +585,7 @@ class MegaGatedCrossAttention(nn.Module):
             bias = bias[pidx]
         else:
             # (target_sequence_length X source_sequence_length)
-            bias = bias[:slen]
+            bias = bias[:tgt_len]
 
         # scaled attention
         query = query * self.scaling
@@ -635,94 +778,13 @@ class ScaleNorm(nn.Module):
         return output
 
 
-class RMSNorm(nn.Module):
-    def __init__(self, number_features, eps=1e-6, affine=True):
-        super().__init__()
-        self.num_features = number_features
-        self.eps = eps
-        self.affine = affine
-        if affine:
-            self.weight = nn.Parameter(torch.Tensor(self.num_features))
-        else:
-            self.register_parameter("weight", None)
-
-    def forward(self, input):
-        mean_square = torch.mean(torch.square(input), dim=-1, keepdim=True)
-        if self.weight is not None:
-            input = input * self.weight
-
-        input * torch.rsqrt(mean_square + self.eps)
-        return input
-
-
-# original Mega repo used a parent class to organize normalization functions; Hugging Face's
-# preferred method is to use a dictionary. since these normalization classes require different
-# inputs, we handle this with lambda functions to return the instantiated class
-NORM2FN = {
-    "layernorm": lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
-    "scalenorm": lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
-    "rmsnorm": lambda embedding_dim, eps, affine: RMSNorm(embedding_dim, eps=eps, affine=affine),
-    "batchnorm": lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
-    "syncbatchnorm": lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine),
-}
-
-
-# we retain the parent class to handle input permutation for batch norm
-class MegaSequenceNorm(nn.Module):
-    def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
-        super().__init__()
-        self.norm = NORM2FN[norm_type](embedding_dim, eps, affine)
-
-    def forward(self, input):
-        if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
-            if input.dim() != 3:
-                raise ValueError("BatchNorm inputs must be exactly 3-dimensional")
-            input = input.permute(1, 2, 0)
-            input = self.norm(input)
-            return input.permute(2, 0, 1)
-        else:
-            return self.norm(input)
-
-
-# add this layernorm class to ALL_LAYERNORM_LAYERS
-ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
-
-
-# a unified class for both standard and featurewise dropout
-# the original fairseq mega repo used 2 classes for these and included some unnecessary handling of training logic and unused `inplace` option
-# original used torch.functional version of dropout instead of submodules, so retaining that behavior here as well
-class MegaDropout(nn.Module):
-    def __init__(self, p, is_featurewise=False):
-        super().__init__()
-        self.p = p
-        self.is_featurewise = is_featurewise
-
-    def forward(self, input, batch_first: bool = False):
-        if self.is_featurewise:
-            if batch_first:
-                # (batch_size X sequence_length X feature_dimension)
-                # -> (batch_size X feature_dimension X sequence_length)
-                # -> (batch_size X sequence_length X feature_dimension)
-                return F.dropout2d(input.transpose(-1, -2), p=self.p, training=self.training).transpose(-1, -2)
-            else:
-                if input.dim() != 3:
-                    raise ValueError(
-                        "Feature dropout inputs must be exactly 3-dimensional if inputs are ordered [sequence length, batch size, hidden dimension]"
-                    )
-                # (sequence_length X batch_size X feature_dimension)
-                # -> (batch_size X feature_dimension X sequence_length)
-                # -> (sequence_length X batch_size X feature_dimension)
-                return F.dropout2d(input.permute(1, 2, 0), p=self.p, training=self.training).permute(2, 0, 1)
-        else:
-            return F.dropout(input, p=self.p, training=self.training)
-
-
-# Mega attention: EMA + self-attention
-# differences from original include hidden state refactor and fixed inconsistency with additive/multiplicative attention masks
 class MovingAverageGatedAttention(nn.Module):
     """
     Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
+
+    Differences from original implementation include hidden state refactor and fixed inconsistency with additive / 
+    multiplicative attention masks
     """
 
     def __init__(self, config: MegaConfig):
@@ -751,10 +813,6 @@ class MovingAverageGatedAttention(nn.Module):
         )
         self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
-        # renamed gamma and beta to g_param and b_param respectively due to Hugging Face renaming weights upon `.from_pretrained`
-        # gamma and beta here are used as elementwise scalar weight and bias applied to queries and keys in self-attention
-        # (after EMA and gating, prior to chunking)
-        # renamed due to collision with tf/flax gamma and beta, and to improve readability
         self.qk_weight = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
         self.qk_bias = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
@@ -773,26 +831,24 @@ class MovingAverageGatedAttention(nn.Module):
     def element_attention(self, query, key, padding_mask, causal_mask):
         """
         Apply element-wise attention via relu^2 or laplace. Same as original implementation but with standardized
-        causal attention mask
+        causal attention mask. Expects the Hugging Face standard attention mask paradigm: 1 for not masked, and 0
+        for masked.
         """
-        slen = key.size(2)
+        seq_len = key.size(2)
         if padding_mask is not None:
-            # 1 for *not masked*
-            # 0 for *masked*
-
             # (batch_size X number of chunks X 1)
             lengths = padding_mask.sum(-1, keepdim=True)
             # (batch_size X number of chunks X 1 X 1)
             lengths = lengths.clamp(min=1.0).unsqueeze(-1)
         else:
-            lengths = slen
+            lengths = seq_len
 
         if causal_mask is not None:
             lengths = causal_mask.sum(dim=-1, keepdim=True)
 
         # (sequence_length X sequence_length)
-        bias = self.rel_pos_bias(slen)
-        if slen != query.size(2):
+        bias = self.rel_pos_bias(seq_len)
+        if seq_len != query.size(2):
             if query.size(2) != 1:
                 raise ValueError("Size mismatch between Q and K in element attention")
             # (1 X sequence_length)
@@ -813,10 +869,10 @@ class MovingAverageGatedAttention(nn.Module):
 
     def softmax_attention(self, query, key, padding_mask, causal_mask):
         "Standard softmax self-attention, as in the original Transformer paper"
-        slen = key.size(2)
+        seq_len = key.size(2)
         # (sequence_length X sequence_length)
-        bias = self.rel_pos_bias(slen)
-        if slen != query.size(2):
+        bias = self.rel_pos_bias(seq_len)
+        if seq_len != query.size(2):
             if query.size(2) != 1:
                 raise ValueError("Size mismatch between Q and K in softmax attention")
             # (1 X sequence_length)
@@ -862,7 +918,7 @@ class MovingAverageGatedAttention(nn.Module):
         Mega's self-attention block, which combines multi-headed EMA with traditional self-attention
 
         Args:
-            input (`torch.Tensor`` of shape `(sequence_length, batch_size, hidden_size)`):
+            input (`torch.Tensor` of shape `(sequence_length, batch_size, hidden_size)`):
                 Hidden states to be updated by Mega's self-attention
             padding_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked*
@@ -1056,11 +1112,10 @@ class MovingAverageGatedAttention(nn.Module):
         return return_values
 
 
-# Normalized feed-forward network
-# left as-is from original Mega repo aside from retrieving args from Hugging Face config
 class MegaNormalizedFeedForwardNetwork(nn.Module):
     """
-    Normalized feed-forward network used in Mega blocks
+    Normalized feed-forward network used in Mega blocks. 
+    Left as-is from original Mega repo aside from retrieving args from Hugging Face config
     """
 
     def __init__(self, config: MegaConfig):
@@ -1102,59 +1157,6 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         return output
 
 
-class MegaEmbeddings(nn.Module):
-    """
-    Mega's basic implementation does not incorporate token type embeddings, so this is a stripped-down version of
-    RoBERTa's embeddings which optionally includes token types
-    """
-
-    def __init__(self, config: MegaConfig):
-        super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.use_token_types = config.add_token_type_embeddings
-        if self.use_token_types:
-            self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-            # registering a buffer here allows model tracing when not passing optional token type IDs
-            # more info at transformers issue #5664
-            self.register_buffer(
-                "token_type_ids", torch.zeros(config.max_positions, dtype=torch.long).expand((1, -1)), persistent=False
-            )
-
-        # End copy
-        self.padding_idx = config.pad_token_id
-
-    def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
-        if (input_ids is None) and (inputs_embeds is None):
-            raise ValueError("Must provide one of input_ids or inputs_embeds")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-
-            # get the word embeddings if only IDs are provided
-            inputs_embeds = self.word_embeddings(input_ids)
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-
-        # the original Mega implementation did not include token type embeddings, so we add
-        # an option to use them if desired; if embeddings are present and token type IDs are
-        # not provided, we will use a registered buffer (which helps with tracing)
-        if self.use_token_types:
-            if token_type_ids is None:
-                if hasattr(self, "token_type_ids"):
-                    buffered_token_type_ids = self.token_type_ids[:, : input_shape[1]]
-                    buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], input_shape[1])
-                    token_type_ids = buffered_token_type_ids_expanded
-                else:
-                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=input_ids.device)
-
-            # access token type embeddings
-            token_type_embeddings = self.token_type_embeddings(token_type_ids)
-            # add the token type embeddings to the word embeddings
-            embeddings = inputs_embeds + token_type_embeddings
-        else:
-            embeddings = inputs_embeds
-        return embeddings
-
-
 class MegaBlock(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
@@ -1173,7 +1175,8 @@ class MegaBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        causal_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
@@ -1185,7 +1188,7 @@ class MegaBlock(nn.Module):
         feed-forward layer
 
         Args:
-            hidden_states (`torch.Tensor`` of shape `(target_sequence_length, batch_size, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(target_sequence_length, batch_size, hidden_size)`):
                 Hidden states to be updated by the Mega block
             attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
                 Indicates which entries in the self/target sequence are to be ignored (mostly due to padding), where
@@ -1232,15 +1235,6 @@ class MegaBlock(nn.Module):
               `torch.FloatTensor` of shape `(batch_size, source_sequence_length, config.hidden_size)` -- The
               cross-attention value state for use in the next step of incremental decoding
         """
-
-        # Mega self-attention
-        # create a causal mask for self-attention if we're decoding
-        # note that the Mega code does not account for any past key values in the causal mask - only the input sequence
-        if self.is_decoder:
-            sequence_length = hidden_states.size(0)
-            causal_mask = generate_causal_mask(sequence_length)
-        else:
-            causal_mask = None
 
         # incremental decoding in the MultiDimensionDampedEMA module requires that the attention mask has the same
         # sequence length as the input tensor; if we're caching incremental states, we assume the input
@@ -1360,7 +1354,7 @@ class MegaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ScaleNorm):
             if self.config.norm_affine:
                 nn.init.constant_(module.scalar, 1.0)
-        elif isinstance(module, RMSNorm):
+        elif isinstance(module, MegaRMSNorm):
             if self.config.norm_affine:
                 nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, MovingAverageGatedAttention):
@@ -1458,7 +1452,7 @@ class MegaModel(MegaPreTrainedModel):
     Equipped Gated Attention*_ by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig,
     Jonathan May, and Luke Zettlemoyer
 
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
+    To behave as a decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
     to `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with
     both `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
@@ -1474,7 +1468,7 @@ class MegaModel(MegaPreTrainedModel):
         self.config = config
 
         self.embedding_layer = MegaEmbeddings(config)
-        self.encoders = nn.ModuleList([MegaBlock(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MegaBlock(config) for _ in range(config.num_hidden_layers)])
 
         self.pooler = MegaPooler(config) if add_pooling_layer else None
 
@@ -1540,21 +1534,33 @@ class MegaModel(MegaPreTrainedModel):
                     f"config.use_chunking is activated; input sequence length must be shorter than or a multiple of config.chunk_size\nreceived sequence length of {input_ids.size(1)} with chunk size {self.config.chunk_size}"
                 )
 
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            device = input_ids.device
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, sequence_length = input_shape
+
+        if self.config.is_decoder:
+            use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+            # Mega expects the causal mask to be a 2D square matrix of (from) x (to) over the input sequence length
+            # the HF utility function generates a 3D causal mask which includes batch size, so we'll create a dummy 
+            # mask with the correct device and all ones
+            temp_mask_for_extension = torch.ones((1, sequence_length), dtype=torch.long, device=device)
+            causal_mask = self.create_extended_attention_mask_for_decoder(input_shape, temp_mask_for_extension)
+
+            # get rid of batch dimension in the generated mask; result is (sequence_length X sequence_length)
+            causal_mask = causal_mask.squeeze(0)
+        else:
+            use_cache = False
+            causal_mask = None
 
         # if using cache, make sure we have a tuple of tuples which matches the length of our hidden layers
         if (past_key_values is not None) and (len(past_key_values) != self.config.num_hidden_layers):
@@ -1581,11 +1587,12 @@ class MegaModel(MegaPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         next_decoder_cache = () if use_cache else None
-        for i, mega_layer in enumerate(self.encoders):
+        for i, mega_layer in enumerate(self.layers):
             current_decoder_cache = past_key_values[i] if past_key_values is not None else None
             mega_outputs = mega_layer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
+                causal_mask=causal_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=current_decoder_cache,

@@ -225,7 +225,8 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
         original_state_dict[new] = original_state_dict.pop(old)
 
     # now attempt to load the state dictionary with updated names
-    print("HF Mega encoder:", hf_mlm.mega.encoders.load_state_dict(original_state_dict))
+    # note that we now call it `mega.layers` instead of `mega.encoders` due to hugging face style
+    print("HF Mega encoder:", hf_mlm.mega.layers.load_state_dict(original_state_dict))
 
     # load the MLM head weights directly
     print(

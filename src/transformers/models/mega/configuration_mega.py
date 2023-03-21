@@ -30,7 +30,7 @@ MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MegaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MegaModel`] or a [`TFMegaModel`]. It is used to
+    This is the configuration class to store the configuration of a [`MegaModel`]. It is used to
     instantiate a Mega model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Mega
     [mnaylor/mega-base-wikitext](https://huggingface.co/mnaylor/mega-base-wikitext) architecture.
