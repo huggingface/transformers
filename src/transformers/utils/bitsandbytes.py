@@ -113,6 +113,7 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, curre
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
