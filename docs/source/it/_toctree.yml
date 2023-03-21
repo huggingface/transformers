@@ -37,10 +37,10 @@
     title: Addestramento efficiente su CPU
   - local: perf_train_cpu_many
     title: Addestramento efficiente su multiple CPU
-  - local: big_models
-    title: Istanziare un big model
   - local: perf_infer_gpu_one
     title: Inferenza su una GPU
+  - local: big_models
+    title: Istanziare un big model
   - local: debugging
     title: Debugging
   title: Guide pratiche
