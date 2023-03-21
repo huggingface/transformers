@@ -141,14 +141,17 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`).
 """
 
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
 # TODO update path here
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "nielsr/udop-large": "https://huggingface.co/nielsr/udop-large/resolve/main/spiece.model",
-    }
+    },
+    "tokenizer_file": {
+        "nielsr/udop-large": "https://huggingface.co/nielsr/udop-large/resolve/main/tokenizer.json",
+    },
 }
 
 
