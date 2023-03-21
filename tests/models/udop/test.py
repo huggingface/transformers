@@ -1,15 +1,11 @@
-from transformers import UdopTokenizer, UdopTokenizerFast
-from transformers.testing_utils import get_tests_dir
+from transformers import UdopTokenizerFast
+# from transformers.testing_utils import get_tests_dir
 
 
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+# SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
-slow_tokenizer = UdopTokenizer(SAMPLE_VOCAB)
+tokenizer = UdopTokenizerFast.from_pretrained("t5-base")
+tokenizer.save_pretrained(".", legacy_format=False)
 
-print("------SAVING SLOW TOKENIZER----------")
-slow_tokenizer.save_pretrained(".")
 
-print("------INSTANTIATING FAST TOKENIZER----------")
-# slow_tokenizer = UdopTokenizer.from_pretrained(".")
-
-fast_tokenizer = UdopTokenizerFast.from_pretrained(".")
+new_tokenizer = UdopTokenizerFast.from_pretrained(".")

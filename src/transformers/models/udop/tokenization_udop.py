@@ -144,24 +144,17 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
+# TODO update path here
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
+        "nielsr/udop-large": "https://huggingface.co/nielsr/udop-large/resolve/main/spiece.model",
     }
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
+    "nielsr/udop-large": 512,
 }
 
 
