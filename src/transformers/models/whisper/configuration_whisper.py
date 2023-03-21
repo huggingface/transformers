@@ -140,6 +140,41 @@ class WhisperConfig(PretrainedConfig):
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
         condition_on_previous_text (`bool`, *optional*, defaults to `True`):
             If True, provide the previous output of the model as a prompt for the next window; disabling may make the text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop
+        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+            instance of [`WhisperForAudioClassification`].
+        classifier_proj_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the projection before token mean-pooling for classification. Only relevant when using an
+            instance of [`WhisperForAudioClassification`].
+        apply_spec_augment (`bool`, *optional*, defaults to `False`):
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Recognition](https://arxiv.org/abs/1904.08779).
+        mask_time_prob (`float`, *optional*, defaults to 0.05):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+            actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
+        mask_time_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the time axis.
+        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
+        mask_feature_prob (`float`, *optional*, defaults to 0.0):
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+            True`.
+        mask_feature_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the feature axis.
+        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
 
     Example:
 
@@ -190,7 +225,16 @@ class WhisperConfig(PretrainedConfig):
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
         condition_on_previous_text=True,
-        **kwargs
+        use_weighted_layer_sum=False,
+        classifier_proj_size=256,
+        apply_spec_augment=False,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_time_min_masks=2,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        mask_feature_min_masks=0,
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
@@ -213,8 +257,23 @@ class WhisperConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
+
         self.condition_on_previous_text = condition_on_previous_text
         self.ts_start_token_id = ts_start_token_id
+
+        # Audio Classification-specific parameters. Feel free to ignore for other classes.
+        self.classifier_proj_size = classifier_proj_size
+        self.use_weighted_layer_sum = use_weighted_layer_sum
+
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

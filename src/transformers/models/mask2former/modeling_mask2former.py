@@ -24,9 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone, SwinConfig
-from transformers.utils import logging
-
+from ... import AutoBackbone, SwinConfig
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -38,6 +36,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from .configuration_mask2former import Mask2FormerConfig
 
 

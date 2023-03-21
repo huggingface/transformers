@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -220,7 +221,7 @@ class M2M100ModelTester:
 
 
 @require_torch
-class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             M2M100Model,
@@ -230,10 +231,31 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": M2M100ForConditionalGeneration,
+            "feature-extraction": M2M100Model,
+            "summarization": M2M100ForConditionalGeneration,
+            "text2text-generation": M2M100ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TranslationPipelineTests":
+            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
+            # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = M2M100ModelTester(self)

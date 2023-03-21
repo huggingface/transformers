@@ -50,6 +50,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
@@ -79,6 +80,7 @@ def _generate_supported_model_class_names(
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
@@ -984,7 +986,13 @@ class HFTracer(Tracer):
                     continue
                 if param.default is inspect.Parameter.empty:
                     raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
-            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+            concrete_args.update(
+                {
+                    p.name: p.default
+                    for p in sig.parameters.values()
+                    if (p.name not in dummy_inputs and p.name not in concrete_args)
+                }
+            )
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 

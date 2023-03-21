@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -147,13 +148,18 @@ class ViTHybridModelTester:
 
 
 @require_torch
-class ViTHybridModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (ViTHybridModel, ViTHybridForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False

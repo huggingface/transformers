@@ -19,10 +19,12 @@ import json
 import os
 import unittest
 from copy import deepcopy
+from functools import partial
 
 import datasets
 from parameterized import parameterized
 
+import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
@@ -49,8 +51,10 @@ if is_torch_available():
     from tests.trainer.test_trainer import (  # noqa
         RegressionModelConfig,
         RegressionPreTrainedModel,
-        get_regression_trainer,
     )
+
+    # hack to restore original logging level pre #21700
+    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
 
 set_seed(42)
@@ -422,6 +426,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
         # force cpu offload
         ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
+        ds_config_dict["zero_force_ds_cpu_optimizer"] = False  # offload is not efficient w/o CPUAdam
         with mockenv_context(**self.dist_env_1_gpu):
             kwargs = {"local_rank": 0, "deepspeed": ds_config_dict}
             kwargs[dtype] = True
@@ -772,6 +777,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         ds_config_dict = self.get_config_dict(stage)
         del ds_config_dict["optimizer"]  # will use HF Trainer optimizer
         del ds_config_dict["scheduler"]  # will use HF Trainer scheduler
+        ds_config_dict["zero_force_ds_cpu_optimizer"] = False  # offload is not efficient w/o CPUAdam
         # must use this setting to get the reload path exercised
         ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 

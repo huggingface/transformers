@@ -42,6 +42,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -856,8 +857,9 @@ class FlavaModelTester:
 
 
 @require_torch
-class FlavaModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False

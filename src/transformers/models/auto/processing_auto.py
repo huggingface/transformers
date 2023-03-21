@@ -41,6 +41,7 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
@@ -55,8 +56,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("hubert", "Wav2Vec2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
-        ("layoutxlm", "LayoutXLMProcessor"),
         ("markuplm", "MarkupLMProcessor"),
+        ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
         ("sew", "Wav2Vec2Processor"),
@@ -65,13 +66,13 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
         ("trocr", "TrOCRProcessor"),
+        ("tvlt", "TvltProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
-        ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("wavlm", "Wav2Vec2Processor"),
         ("whisper", "WhisperProcessor"),
         ("xclip", "XCLIPProcessor"),

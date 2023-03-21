@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("align", "EfficientNetImageProcessor"),
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
         ("blip", "BlipImageProcessor"),
@@ -47,6 +48,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "ViTImageProcessor"),
         ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
+        ("convnextv2", "ConvNextImageProcessor"),
         ("cvt", "ConvNextImageProcessor"),
         ("data2vec-vision", "BeitImageProcessor"),
         ("deformable_detr", "DeformableDetrImageProcessor"),
@@ -68,6 +70,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitImageProcessor"),
         ("mask2former", "Mask2FormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
+        ("mgp-str", "ViTImageProcessor"),
         ("mobilenet_v1", "MobileNetV1ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
@@ -86,6 +89,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
+        ("tvlt", "TvltImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),

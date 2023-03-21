@@ -22,9 +22,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils import BaseImageProcessor, get_size_dict
-from transformers.image_transforms import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
@@ -36,7 +36,7 @@ from transformers.image_transforms import (
     rgb_to_id,
     to_channel_dimension_format,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
@@ -50,7 +50,9 @@ from transformers.image_utils import (
     valid_coco_panoptic_annotations,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
+    ExplicitEnum,
+    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_scipy_available,
@@ -60,12 +62,13 @@ from transformers.utils import (
     is_torch_tensor,
     is_vision_available,
 )
-from transformers.utils.generic import ExplicitEnum, TensorType
 
 
 if is_torch_available():
     import torch
     from torch import nn
+
+    from ...pytorch_utils import torch_int_div
 
 
 if is_vision_available():
@@ -1096,12 +1099,12 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess.
             annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotionation is for object
+                List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
@@ -1309,7 +1312,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
         scores = topk_values
-        topk_boxes = topk_indexes // out_logits.shape[2]
+        topk_boxes = torch_int_div(topk_indexes, out_logits.shape[2])
         labels = topk_indexes % out_logits.shape[2]
         boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
@@ -1354,7 +1357,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
         scores = topk_values
-        topk_boxes = topk_indexes // out_logits.shape[2]
+        topk_boxes = torch_int_div(topk_indexes, out_logits.shape[2])
         labels = topk_indexes % out_logits.shape[2]
         boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
