@@ -107,10 +107,6 @@ class Mask2FormerConfig(PretrainedConfig):
             Whether the input being passed to the model is a video or not.
         num_frames (`int`, *optional*, defaults to 2):
             Number of frames in the video.
-        frame_range (`int`, *optional*, defaults to 20):
-            The range of the frames in the video.
-        frame_shuffle (`boolean`, *optional*, defaults to False):
-            Whether to shuffle the frames in the video or not.
 
     Examples:
 
@@ -167,8 +163,6 @@ class Mask2FormerConfig(PretrainedConfig):
         output_auxiliary_logits: bool = None,
         is_video: bool = False,
         num_frames: int = 2,
-        frame_range: int = 20,
-        frame_shuffle: bool = False,
         **kwargs,
     ):
         if backbone_config is None:
@@ -221,8 +215,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
         self.is_video = is_video
         self.num_frames = num_frames
-        self.frame_range = frame_range
-        self.frame_shuffle = frame_shuffle
 
         super().__init__(**kwargs)
 
