@@ -139,7 +139,8 @@ class WhisperConfig(PretrainedConfig):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
         condition_on_previous_text (`bool`, *optional*, defaults to `True`):
-            If True, provide the previous output of the model as a prompt for the next window; disabling may make the text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop
+            If True, provide the previous output of the model as a prompt for the next window; disabling may make the
+            text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
             instance of [`WhisperForAudioClassification`].
