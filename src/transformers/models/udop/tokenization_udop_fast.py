@@ -222,7 +222,8 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and (additional_special_tokens is None or "<extra_id_0>" not in additional_special_tokens):
-            additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+            if additional_special_tokens is None:
+                additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
             additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids)])
@@ -249,6 +250,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 

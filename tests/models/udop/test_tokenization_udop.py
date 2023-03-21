@@ -60,7 +60,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True
-    maxDiff = None
 
     def get_words_and_boxes(self):
         words = ["a", "weirdly", "test", "hello"]
