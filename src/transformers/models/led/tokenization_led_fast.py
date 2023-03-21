@@ -55,7 +55,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LEDTokenizerFast
     >>> tokenizer = LEDTokenizerFast.from_pretrained("allenai/led-base-16384")
     >>> tokenizer("Hello world")['input_ids']

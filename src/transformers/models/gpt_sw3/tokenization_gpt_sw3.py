@@ -47,7 +47,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Example usage:
-    ```
+    ```python
     >>> from transformers import GPTSw3Tokenizer
     >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
     >>> tokenizer("Svenska är kul!")['input_ids']

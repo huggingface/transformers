@@ -108,7 +108,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import GPT2Tokenizer
     >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     >>> tokenizer("Hello world")['input_ids']
