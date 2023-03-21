@@ -70,7 +70,12 @@ class GLPNImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
     def resize(
-        self, image: np.ndarray, size_divisor: int, resample, data_format: Optional[ChannelDimension] = None, **kwargs
+        self,
+        image: np.ndarray,
+        size_divisor: int,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[ChannelDimension] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image, rounding the (height, width) dimensions down to the closest multiple of size_divisor.
@@ -100,6 +105,29 @@ class GLPNImageProcessor(BaseImageProcessor):
         new_w = width // size_divisor * size_divisor
         image = resize(image, (new_h, new_w), resample=resample, data_format=data_format, **kwargs)
         return image
+
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

@@ -15,7 +15,7 @@
 """Image processor class for Beit."""
 
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -434,8 +434,9 @@ class BeitImageProcessor(BaseImageProcessor):
             outputs ([`BeitForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If left to
-                None, predictions will not be resized.
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is

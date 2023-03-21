@@ -229,6 +229,60 @@ class ViltImageProcessor(BaseImageProcessor):
         output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.rescale
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -250,37 +304,39 @@ class ViltImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
+        constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> BatchFeature:
         """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
-        their corresponding pixel mask.
+        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
+        in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
+            image (`np.ndarray`):
+                Image to pad.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
-                Whether to return the pixel mask.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+                Whether to return a pixel mask.
+            input_channel_dimension (`ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be inferred from the input image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
+
         padded_images = [
-            self._pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
+            self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format)
+            for image in images
         ]
         data = {"pixel_values": padded_images}
+
         if return_pixel_mask:
             masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
             data["pixel_mask"] = masks

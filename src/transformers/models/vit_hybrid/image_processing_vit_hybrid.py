@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViT hybrid."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -118,6 +118,7 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,

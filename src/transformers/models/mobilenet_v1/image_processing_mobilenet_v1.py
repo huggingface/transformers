@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for MobileNetV1."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -111,6 +111,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,

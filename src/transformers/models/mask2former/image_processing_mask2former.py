@@ -253,6 +253,7 @@ def compute_segments(
 
 
 # TODO: (Amy) Move to image_transforms
+# Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
@@ -289,6 +290,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
+# Copied from transformers.models.maskformer.image_processing_maskformer.get_maskformer_resize_output_image_size with maskformer->mask2former
 def get_mask2former_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
@@ -440,6 +442,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
         return super().from_dict(image_processor_dict, **kwargs)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     def resize(
         self,
         image: np.ndarray,
@@ -483,14 +486,60 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:
         """
-        Rescale the image by the given factor.
-        """
-        return rescale(image, rescale_factor, data_format=data_format)
+        Rescale an image by a scale factor. image = image * scale.
 
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
@@ -719,7 +768,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
+    ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
@@ -750,6 +799,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.encode_inputs with MaskFormer->Mask2Former
     def encode_inputs(
         self,
         pixel_values_list: List[ImageInput],
@@ -807,7 +857,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
+        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
+
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
