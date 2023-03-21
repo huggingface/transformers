@@ -40,7 +40,7 @@
   - local: big_models
     title: Istanziare un big model
   - local: perf_infer_gpu_one
-    title: Inference on one GPU
+    title: Inference su una GPU
   - local: debugging
     title: Debugging
   title: Guide pratiche
