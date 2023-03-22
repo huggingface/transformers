@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -196,6 +195,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             )
         self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
 
+    @slow
     @require_torch
     def test_chunking(self):
         NER_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
@@ -277,32 +277,44 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    def test_regular_chunk(self):
-        NER_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
-        model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
-        regular_tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-        chunked_tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-        chunked_tokenizer.model_max_length = 10
-        stride = 5
-        sentence = (
-            "Hugging Face, Inc. is a French company that develops tools for building applications using machine learning. "
-            "The company, based in New York City was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf."
+    def test_chunking_fast(self):
+        # Note: We cannot run the test on "conflicts" on the chunking.
+        # The problem is that the model is random, and thus the results do heavily
+        # depend on the chunking, so we cannot expect "abcd" and "bcd" to find
+        # the same entities. We defer to slow tests for this.
+        pipe = pipeline(model="hf-internal-testing/tiny-bert-for-token-classification")
+        sentence = "The company, based in New York City was founded in 2016 by French entrepreneurs"
+
+        results = pipe(sentence, aggregation_strategy="first")
+        # This is what this random model gives on the full sentence
+        self.assertEqual(
+            nested_simplify(results),
+            [
+                # This is 2 actual tokens
+                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+            ],
         )
 
-        for aggregation_strategy in ["simple", "first", "max", "average"]:
-            regular_token_classifier = TokenClassificationPipeline(
-                model=model, tokenizer=regular_tokenizer, aggregation_strategy=aggregation_strategy
-            )
-            chunked_token_classifier = TokenClassificationPipeline(
-                model=model, tokenizer=chunked_tokenizer, aggregation_strategy=aggregation_strategy, stride=stride
-            )
-            regular_output = regular_token_classifier(sentence)
-            chunked_output = chunked_token_classifier(sentence)
-            for item in regular_output:
-                item.pop("score")
-            for item in chunked_output:
-                item.pop("score")
-            self.assertEqual(regular_output, chunked_output)
+        # This will force the tokenizer to split after "city was".
+        pipe.tokenizer.model_max_length = 12
+        self.assertEqual(
+            pipe.tokenizer.decode(pipe.tokenizer.encode(sentence, truncation=True)),
+            "[CLS] the company, based in new york city was [SEP]",
+        )
+
+        stride = 4
+        results = pipe(sentence, aggregation_strategy="first", stride=stride)
+        self.assertEqual(
+            nested_simplify(results),
+            [
+                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                # This is an extra entity found by this random model, but at least both original
+                # entities are there
+                {"end": 58, "entity_group": "MISC", "score": 0.115, "start": 56, "word": "by"},
+                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+            ],
+        )
 
     @require_torch
     @slow
