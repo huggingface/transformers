@@ -467,3 +467,16 @@ src/transformers/models/mvp/tokenization_mvp.py
 src/transformers/models/mvp/tokenization_mvp_fast.py
 src/transformers/models/roberta/tokenization_roberta.py
 src/transformers/models/roberta/tokenization_roberta_fast.py
+src/transformers/models/auto/feature_extraction_auto.py
+src/transformers/models/auto/image_processing_auto.py
+src/transformers/models/auto/processing_auto.py
+src/transformers/models/auto/tokenization_auto.py
+src/transformers/models/bertweet/tokenization_bertweet.py
+src/transformers/models/dpr/tokenization_dpr.py
+src/transformers/models/dpr/tokenization_dpr_fast.py
+src/transformers/models/gptsan_japanese/tokenization_gptsan_japanese.py
+src/transformers/models/m2m_100/tokenization_m2m_100.py
+src/transformers/models/marian/tokenization_marian.py
+src/transformers/models/roformer/tokenization_roformer.py
+src/transformers/models/roformer/tokenization_roformer_fast.py
+src/transformers/models/transfo_xl/tokenization_transfo_xl.py
