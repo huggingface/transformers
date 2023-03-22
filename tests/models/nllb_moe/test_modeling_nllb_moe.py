@@ -404,7 +404,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[1, 0, :30].cpu(), EXPECTED_LOGTIS, atol=TOLERANCE))
 
-    # @tooslow
+    @tooslow
     @require_accelerate
     def test_large_logits(self):
         model = NllbMoeForConditionalGeneration.from_pretrained(
@@ -444,9 +444,11 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "facebook/nllb-moe-54b",
             device_map="auto",
             offload_folder="/home/arthur_huggingface_co/transformers/Arthur",
-            dtype=torch.float16,
         )
-        src_fr = [
+        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
+
+        # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth from the fairseq translation files
+        FIRST_6_FLORES_200 = [
             'We now have 4-month-old mice that are non-diabetic that used to be diabetic," he added.',
             "Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia and chair of the clinical and scientific division of the Canadian Diabetes Association cautioned that the research is still in its early days."
             "Like some other experts, he is skeptical about whether diabetes can be cured, noting that these findings have no relevance to people who already have Type 1 diabetes."
@@ -454,15 +456,15 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             'Danius said, "Right now we are doing nothing. I have called and sent emails to his closest collaborator and received very friendly replies. For now, that is certainly enough."',
             "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage.",
         ]
-        dct = self.default_tokenizer(src_fr, padding=True, return_tensors="pt")
+        dct = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt")
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            forced_bos_token_id=self.default_tokenizer.lang_code_to_id["fra_Latn"],
+            forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"],
         )  # takes about 38.176 seconds
 
-        expected_en = [
+        EXPECTED_FAIRSEQ_TRANSLATION = [
             '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
             "Le docteur Ehud Ur, professeur de médecine à l'université Dalhousie, à Halifax, en Nouvelle-Écosse, et président de la division clinique et scientifique de l'Association canadienne du diabète, prévient que la recherche n'en est qu'à ses débuts.",
             "Comme d'autres spécialistes, il est sceptique quant à la guérison du diabète, notant que ces résultats ne sont pas pertinents pour les personnes atteintes de diabète de type 1.",
@@ -472,10 +474,10 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "Il a construit une sonnette WiFi, il a dit.",
         ]
 
-        generated = self.default_tokenizer.batch_decode(
+        tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
-        assert generated == expected_en
+        assert FIRST_6_FLORES_200 == EXPECTED_FAIRSEQ_TRANSLATION
 
 
 @require_torch
