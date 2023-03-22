@@ -14,8 +14,10 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
+from .generation.configuration_utils import GenerationConfig
 from .training_args import TrainingArguments
 from .utils import add_start_docstrings
 
@@ -36,33 +38,25 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             for the training set.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-        generation_max_length (`int`, *optional*):
-            The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
-            `max_length` value of the model configuration.
-        generation_num_beams (`int`, *optional*):
-            The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
-            `num_beams` value of the model configuration.
+        generation_config_from_pretrained (`str` or `Path` or [`~trainer_utils.GenerationConfig`], *optional*):
+            Loading a [`~trainer_utils.GenerationConfig`] from the `from_pretrained` method.
+            This can be either:
+
+            - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+              namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+            - a path to a *directory* containing a configuration file saved using the
+              [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+            - a [`~trainer_utils.GenerationConfig`] object.
     """
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_max_length: Optional[int] = field(
+    generation_config_from_pretrained: Optional[Union[str, Path, GenerationConfig]] = field(
         default=None,
         metadata={
-            "help": (
-                "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
-                "to the `max_length` value of the model configuration."
-            )
-        },
-    )
-    generation_num_beams: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
-                "to the `num_beams` value of the model configuration."
-            )
+            "help": "Model id, file path or url pointing to a GenerationConfig json file," "to use during prediction."
         },
     )
