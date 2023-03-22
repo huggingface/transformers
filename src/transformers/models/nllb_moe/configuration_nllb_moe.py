@@ -122,7 +122,6 @@ class NllbMoeConfig(PretrainedConfig):
         decoder_start_token_id=2,
         scale_embedding=True,
         router_bias=False,
-        router_jitter_noise=0.01,
         router_dtype="float32",
         router_ignore_padding_tokens=False,
         num_experts=128,
@@ -167,7 +166,6 @@ class NllbMoeConfig(PretrainedConfig):
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias
-        self.router_jitter_noise = router_jitter_noise
         if router_dtype not in ["float32", "float16", "bfloat16"]:
             raise ValueError(f"`router_dtype` must be one of 'float32', 'float16' or 'bfloat16', got {router_dtype}")
         self.router_dtype = router_dtype
