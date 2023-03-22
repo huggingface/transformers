@@ -1725,14 +1725,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if greedy_search_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _ = tf.while_loop(
-                greedy_search_cond_fn,
-                greedy_search_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _ = tf.while_loop(
+            greedy_search_cond_fn,
+            greedy_search_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:
@@ -2016,14 +2015,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if sample_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _ = tf.while_loop(
-                sample_cond_fn,
-                sample_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _ = tf.while_loop(
+            sample_cond_fn,
+            sample_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:
@@ -2565,7 +2563,8 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
         # NOT yield EOS token though)
-        if beam_search_cond_fn(
+        maximum_iterations = max_length - cur_len
+        (
             cur_len,
             running_sequences,
             running_scores,
@@ -2574,9 +2573,10 @@ class TFGenerationMixin:
             scores,
             beam_indices,
             is_sent_finished,
-            model_kwargs,
-        ):
-            maximum_iterations = max_length - cur_len
+            _,
+        ) = tf.while_loop(
+            beam_search_cond_fn,
+            beam_search_body_fn,
             (
                 cur_len,
                 running_sequences,
@@ -2586,23 +2586,10 @@ class TFGenerationMixin:
                 scores,
                 beam_indices,
                 is_sent_finished,
-                _,
-            ) = tf.while_loop(
-                beam_search_cond_fn,
-                beam_search_body_fn,
-                (
-                    cur_len,
-                    running_sequences,
-                    running_scores,
-                    running_beam_indices,
-                    sequences,
-                    scores,
-                    beam_indices,
-                    is_sent_finished,
-                    model_kwargs,
-                ),
-                maximum_iterations=maximum_iterations,
-            )
+                model_kwargs,
+            ),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         # Account for the edge-case where there are no finished sequences for a particular batch item. If so, return
@@ -3019,22 +3006,13 @@ class TFGenerationMixin:
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if contrastive_search_cond_fn(
-            generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
-        ):
-            maximum_iterations = max_length - cur_len
-            (
-                generated,
-                _,
-                cur_len,
-                _,
-                _,
-            ) = tf.while_loop(
-                contrastive_search_cond_fn,
-                contrastive_search_body_fn,
-                (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),
-                maximum_iterations=maximum_iterations,
-            )
+        maximum_iterations = max_length - cur_len
+        generated, _, cur_len, _, _ = tf.while_loop(
+            contrastive_search_cond_fn,
+            contrastive_search_body_fn,
+            (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),
+            maximum_iterations=maximum_iterations,
+        )
 
         # 6. prepare outputs
         if not use_xla:
