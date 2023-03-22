@@ -1224,7 +1224,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_topk_queries, sorted=False)
             labels_per_image = labels[topk_indices]
 
-            topk_indices = torch_int_div(topk_indices, num_classes)
+            topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
             mask_pred = mask_pred[topk_indices]
 
             pred_masks = mask_pred[:, : img_size[0], : img_size[1]]
