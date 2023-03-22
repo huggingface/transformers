@@ -553,11 +553,8 @@ class FocalNetEncoder(nn.Module):
         self.num_stages = len(config.depths)
         self.config = config
 
-        # stochastic depth
-        dpr = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
-        ]  # stochastic depth decay rule
-
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         embed_dim = [config.embed_dim * (2**i) for i in range(self.num_stages)]
 
         self.stages = nn.ModuleList(
