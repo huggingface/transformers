@@ -1497,6 +1497,32 @@ class GenerationTesterMixin:
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
+    def test_left_padding_compatibility(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            if config.is_encoder_decoder:
+                continue  # skip for encoder-decoder models
+            model = model_class(config).to(torch_device)
+            signature = inspect.signature(model.forward).parameters.keys()
+
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+
+            padded_input_ids = torch.cat((torch.ones_like(input_ids) * config.pad_token_id, input_ids), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros_like(attention_mask), attention_mask), dim=1)
+            model_kwargs = {"input_ids": padded_input_ids, "attention_mask": padded_attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(padded_attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(padded_attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
+
+            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, rtol=1e-3))
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
