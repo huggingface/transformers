@@ -130,7 +130,7 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
-    low_cpu_mem_usage: Optional[str] = field(
+    low_cpu_mem_usage: bool = field(
         default=False,
         metadata={
             "help": (
