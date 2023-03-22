@@ -122,7 +122,7 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
             Masked image modeling (MLM) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        reconstruction (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Reconstructed pixel values.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -138,7 +138,7 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    reconstruction: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -415,7 +415,7 @@ class FocalNetLayer(nn.Module):
     r"""Focal Modulation Network Block.
 
     Args:
-        config (`FocalNetConfig()`):
+        config (`FocalNetConfig`):
             Model config.
         dim (`int`):
             Number of input channels.
@@ -429,15 +429,7 @@ class FocalNetLayer(nn.Module):
             Stochastic depth rate.
     """
 
-    def __init__(
-        self,
-        config,
-        dim,
-        input_resolution,
-        focal_level=1,
-        focal_window=3,
-        drop_path=0.0,
-    ):
+    def __init__(self, config, dim, input_resolution, focal_level=1, focal_window=3, drop_path=0.0):
         super().__init__()
 
         self.config = config
@@ -896,7 +888,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 
         return FocalNetMaskedImageModelingOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )

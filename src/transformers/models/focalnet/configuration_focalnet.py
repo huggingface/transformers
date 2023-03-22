@@ -74,7 +74,7 @@ class FocalNetConfig(PretrainedConfig):
             Whether to normalize the modulator.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.

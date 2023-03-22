@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class FocalNetModelTester:
@@ -374,16 +374,16 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class FocalNetModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("microsoft/focalnet-tiny") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("microsoft/focalnet-tiny") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = FocalNetForImageClassification.from_pretrained("microsoft/focalnet-tiny").to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
