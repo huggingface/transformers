@@ -179,11 +179,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
             if (
                 aggregation_strategy
-                in {
-                    AggregationStrategy.FIRST,
-                    AggregationStrategy.MAX,
-                    AggregationStrategy.AVERAGE,
-                }
+                in {AggregationStrategy.FIRST, AggregationStrategy.MAX, AggregationStrategy.AVERAGE}
                 and not self.tokenizer.is_fast
             ):
                 raise ValueError(
@@ -414,10 +410,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         return pre_entities
 
     def aggregate(self, pre_entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
-        if aggregation_strategy in {
-            AggregationStrategy.NONE,
-            AggregationStrategy.SIMPLE,
-        }:
+        if aggregation_strategy in {AggregationStrategy.NONE, AggregationStrategy.SIMPLE}:
             entities = []
             for pre_entity in pre_entities:
                 entity_idx = pre_entity["scores"].argmax()
