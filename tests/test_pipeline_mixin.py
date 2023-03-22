@@ -19,7 +19,6 @@ import os
 import random
 from pathlib import Path
 
-from transformers.utils import logging
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -29,7 +28,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     require_vision,
 )
-from transformers.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import, logging
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
