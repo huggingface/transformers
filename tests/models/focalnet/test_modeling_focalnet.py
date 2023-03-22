@@ -145,7 +145,7 @@ class FocalNetModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -156,7 +156,7 @@ class FocalNetModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -372,11 +372,13 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
 class FocalNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("microsoft/focalnet-tiny") if is_vision_available() else None
+        # TODO update organization
+        return AutoImageProcessor.from_pretrained("nielsr/focalnet-tiny") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = FocalNetForImageClassification.from_pretrained("microsoft/focalnet-tiny").to(torch_device)
+        # TODO update organization
+        model = FocalNetForImageClassification.from_pretrained("nielsr/focalnet-tiny").to(torch_device)
         image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -389,5 +391,6 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
+        expected_slice = torch.tensor([0.2166, -0.4368, 0.2191]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(outputs.logits.argmax(dim=-1).item(), 281)
