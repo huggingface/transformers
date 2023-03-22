@@ -575,7 +575,7 @@ class AutoTokenizer:
         >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
-        >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
+        >>> # tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base", add_prefix_space=True)

@@ -539,9 +539,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
     """
 
-    # meta device was added in pt=1.9
-    require_version_core("torch>=1.9")
-
     # dematerialize param storage for keys that are going to be replaced by state_dict, by
     # putting those on the meta device
     for k in loaded_state_dict_keys:
@@ -2100,8 +2097,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
-            # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
-            require_version_core("torch>=1.9")
             if device_map is not None:
                 # The max memory utils require PyTorch >= 1.10 to have torch.cuda.mem_get_info.
                 require_version_core("torch>=1.10")
@@ -2563,7 +2558,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif device_map in ["balanced", "balanced_low_0"] and get_balanced_memory is None:
                 raise ValueError(f"`device_map={device_map}` requires a source install of Accelerate.")
 
-            kwargs = {"no_split_module_classes": no_split_modules, "max_memory": max_memory}
+            kwargs = {"no_split_module_classes": no_split_modules}
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
                 kwargs["special_dtypes"] = special_dtypes
             elif len(special_dtypes) > 0:
@@ -2578,6 +2573,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     low_zero=(device_map == "balanced_low_0"),
                     **kwargs,
                 )
+            kwargs["max_memory"] = max_memory
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=torch_dtype if not load_in_8bit else torch.int8, **kwargs)

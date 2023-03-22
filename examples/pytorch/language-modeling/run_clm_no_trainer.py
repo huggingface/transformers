@@ -220,6 +220,14 @@ def parse_args():
             "Only applicable when `--with_tracking` is passed."
         ),
     )
+    parser.add_argument(
+        "--low_cpu_mem_usage",
+        action="store_true",
+        help=(
+            "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded."
+            "If passed, LLM loading time and RAM consumption will be benefited."
+        ),
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -374,6 +382,7 @@ def main():
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
+            low_cpu_mem_usage=args.low_cpu_mem_usage,
         )
     else:
         logger.info("Training new model from scratch")
