@@ -205,7 +205,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     preprocess_params["tokenizer_params"] = tokenizer_params
                 else:
                     raise ValueError(
-                        "`stride` was provided to process all the text but you're using slow tokenizer."
+                        "`stride` was provided to process all the text but you're using a slow tokenizer."
                         " Please use a fast tokenizer."
                     )
         return preprocess_params, {}, postprocess_params
