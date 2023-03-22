@@ -640,9 +640,17 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
-        >>> from nltk.tokenize.casual import _replace_html_entities >>> _replace_html_entities(b'Price: &pound;100')
-        'Price: \\xa3100' >>> print(_replace_html_entities(b'Price: &pound;100')) Price: £100 >>>
-    """
+    Examples:
+
+    ```python
+    >>> from nltk.tokenize.casual import _replace_html_entities
+
+    >>> _replace_html_entities(b"Price: &pound;100")
+    'Price: \\xa3100'
+
+    >>> print(_replace_html_entities(b"Price: &pound;100"))
+    Price: £100
+    ```"""
 
     def _convert_entity(match):
         entity_body = match.group(3)
