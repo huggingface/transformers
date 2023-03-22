@@ -21,8 +21,14 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from tests.test_modeling_common import floats_tensor
-from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers import Mask2FormerConfig, is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -32,12 +38,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    import torchvision
 
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessor
+
+if is_torchvision_available():
+    import torchvision
 
 if is_vision_available():
     from PIL import Image
