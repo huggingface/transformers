@@ -118,6 +118,7 @@ from . import (
     mctct,
     megatron_bert,
     megatron_gpt2,
+    megatron_t5,
     mgp_str,
     mluke,
     mmbt,

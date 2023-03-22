@@ -372,6 +372,7 @@ _import_structure = {
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
+    "models.megatron_t5": ["MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP","MegatronT5Config"],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
@@ -675,6 +676,7 @@ else:
     _import_structure["models.mbart50"].append("MBart50Tokenizer")
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
+    _import_structure["models.megatron_t5"].append("T5Tokenizer")
     _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
@@ -735,10 +737,11 @@ else:
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
-    _import_structure["models.mbart50"].append("MBart50TokenizerFast")
+    _import_structure["models.mbart50"].append("MBart50TokenizerFast")    
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
+    _import_structure["models.megatron_t5"].append("T5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
@@ -1918,6 +1921,15 @@ else:
             "MegatronBertForTokenClassification",
             "MegatronBertModel",
             "MegatronBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.megatron_t5"].extend(
+        [
+            "MEGATRON_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegatronT5EncoderModel",
+            "MegatronT5ForConditionalGeneration",
+            "MegatronT5Model",
+            "MegatronT5PreTrainedModel",
         ]
     )
     _import_structure["models.mgp_str"].extend(
@@ -3988,6 +4000,7 @@ if TYPE_CHECKING:
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
+    from .models.megatron_t5 import MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronT5Config
     from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
@@ -5284,6 +5297,13 @@ if TYPE_CHECKING:
             MegatronBertForTokenClassification,
             MegatronBertModel,
             MegatronBertPreTrainedModel,
+        )
+        from .models.megatron_t5 import (
+            MEGATRON_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronT5EncoderModel,
+            MegatronT5ForConditionalGeneration,
+            MegatronT5Model,
+            MegatronT5PreTrainedModel,
         )
         from .models.mgp_str import (
             MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
