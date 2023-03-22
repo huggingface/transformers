@@ -1162,7 +1162,7 @@ class GenerationMixin:
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
                 Retrieval](https://arxiv.org/abs/2010.00904).
-            synced_gpus (`bool`, *optional*, defaults to `None`):
+            synced_gpus (`bool`, *optional*):
                 Whether to continue running the while loop until max_length. Unless overridden this flag will be set to
                 `True` under DeepSpeed ZeRO Stage 3 multiple GPUs environment to avoid hanging if one GPU finished
                 generating before other GPUs. Otherwise it'll be set to `False`.
