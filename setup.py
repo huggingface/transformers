@@ -106,7 +106,7 @@ _deps = [
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.6.5",
+    "deepspeed>=0.8.3",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
