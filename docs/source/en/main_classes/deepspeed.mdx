@@ -2268,6 +2268,14 @@ rank1:
 
 This was a very basic example and you will want to adapt it to your needs.
 
+### `generate` nuances
+
+When using multiple GPUs with ZeRO Stage-3, one has to synchronize the GPUs by calling `generate(..., synced_gpus=True)`. If this is not done if one GPU finished generating before other GPUs the whole system will hang as the rest of the GPUs will not be able to received the shard of weights from the GPU that stopped generating.
+
+Starting from `transformers>=4.28`, if `synced_gpus` isn't explicitly specified, it'll be set to `True` automatically if these conditions are detected. But you can still override the value of `synced_gpus` if need to.
+
+
+
 ## Testing Deepspeed Integration
 
 If you submit a PR that involves DeepSpeed integration please note our CircleCI PR CI setup has no GPUs, so we only run tests requiring gpus on a different CI nightly. Therefore if you get a green CI report in your PR it doesn't mean DeepSpeed tests pass.
