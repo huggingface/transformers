@@ -81,11 +81,13 @@ class MegaEmbeddings(nn.Module):
             raise ValueError("Must provide one of input_ids or inputs_embeds")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            device = input_ids.device
 
             # get the word embeddings if only IDs are provided
             inputs_embeds = self.word_embeddings(input_ids)
         else:
             input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
 
         # the original Mega implementation did not include token type embeddings, so we add
         # an option to use them if desired; if embeddings are present and token type IDs are
@@ -97,7 +99,7 @@ class MegaEmbeddings(nn.Module):
                     buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], input_shape[1])
                     token_type_ids = buffered_token_type_ids_expanded
                 else:
-                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=input_ids.device)
+                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
             # access token type embeddings
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -1196,6 +1198,9 @@ class MegaBlock(nn.Module):
             attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
                 Indicates which entries in the self/target sequence are to be ignored (mostly due to padding), where
                 elements are either 1 for *not masked* or 0 for *masked*. Causal attention is enforced internally.
+            causal_mask (`torch.LongTensor` of shape `(sequence_length, sequence_length)`, *optional*):
+                Indicates which inputs are to be ignored due to causal attention, where elements are either 1 for *not
+                masked* or 0 for *masked*
             encoder_hidden_states (`torch.Tensor`, of shape `(source_sequence_length, batch_size, hidden_size)`, *optional*):
                 Encoder hidden states to be used for cross-attention (and required for encoder-decoder model setup)
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, source_sequence_length)`, *optional*):
