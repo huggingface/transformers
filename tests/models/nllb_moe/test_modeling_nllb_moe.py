@@ -474,9 +474,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "Il a construit une sonnette WiFi, il a dit.",
         ]
 
-        tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        tokenizer.batch_decode(hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True)
         assert FIRST_6_FLORES_200 == EXPECTED_FAIRSEQ_TRANSLATION
 
 
