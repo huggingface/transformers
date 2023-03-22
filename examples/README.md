@@ -99,7 +99,11 @@ and run the example command as usual afterward.
 
 If you want to run the examples on a remote machine, you can use the `run_on_remote.py` script. It will optionally
 spin up that machine on-demand from a cloud provider, automatically install the required dependencies and 
-run the example on the remote machine. You can run it with the following command:
+run the example on the remote machine, via [Runhouse](https://github.com/run-house/runhouse). See the 
+[Runhouse compute overview](https://runhouse-docs.readthedocs-hosted.com/en/latest/overview/compute.html) for more 
+information about hardware and dependency setup. 
+
+You can run it with the following command:
 
 ```bash
 # First install runhouse:
@@ -113,7 +117,7 @@ python run_on_remote.py \
     --prompt "This is a test"
 
 # For byo (bring your own) cluster:
-python run_on_remote.py --host <cluster_ip> --user <user> --key_path <key_path> \
+python run_on_remote.py --host <cluster_ip> --user <ssh_user> --key_path <ssh_key_path> \
   --example <example> <args>
 
 # For on-demand instances
