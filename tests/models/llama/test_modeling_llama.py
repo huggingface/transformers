@@ -20,8 +20,10 @@ import unittest
 from transformers import LlamaConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -254,10 +256,21 @@ class LlamaModelTester:
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
+class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LlamaModel,
+            "text-classification": LlamaForSequenceClassification,
+            "text-generation": LlamaForCausalLM,
+            "zero-shot": LlamaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
@@ -315,22 +328,6 @@ class LlamaModelTest(ModelTesterMixin, unittest.TestCase):
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @unittest.skip("LLaMA does not support head pruning.")
-    def test_head_pruning(self):
-        pass
-
-    @unittest.skip("LLaMA does not support head pruning.")
-    def test_head_pruning_integration(self):
-        pass
-
-    @unittest.skip("LLaMA does not support head pruning.")
-    def test_head_pruning_save_load_from_config_init(self):
-        pass
-
-    @unittest.skip("LLaMA does not support head pruning.")
-    def test_head_pruning_save_load_from_pretrained(self):
-        pass
 
     @unittest.skip("LLaMA buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
