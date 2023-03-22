@@ -1293,8 +1293,17 @@ If you want to use another optimizer which is not listed above, you will have to
 }
 ```
 
-Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that may have different
-config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that those may have different config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+
+Additionally, offload works the best when it's used with Deepspeed's CPU Adam optimizer. If you want to use a different optimizer with offload, since `deepspeed==0.8.3` you need to also add:
+
+
+```json
+{
+   "zero_force_ds_cpu_optimizer": false
+}
+```
+to the top level configuration.
 
 
 
