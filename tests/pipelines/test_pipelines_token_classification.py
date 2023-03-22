@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
