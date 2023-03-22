@@ -372,7 +372,7 @@ _import_structure = {
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
-    "models.megatron_t5": ["MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP","MegatronT5Config"],
+    "models.megatron_t5": ["MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronT5Config"],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
@@ -737,7 +737,7 @@ else:
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
-    _import_structure["models.mbart50"].append("MBart50TokenizerFast")    
+    _import_structure["models.mbart50"].append("MBart50TokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")

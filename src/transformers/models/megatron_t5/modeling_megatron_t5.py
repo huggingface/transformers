@@ -247,7 +247,6 @@ class T5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -262,11 +261,15 @@ class T5LayerNorm(nn.Module):
 
         return self.weight * hidden_states
 
+
 ALL_LAYERNORM_LAYERS_len = len(ALL_LAYERNORM_LAYERS)
+
+
 def get_layernorm_layer(normalization):
-    try:    
+    try:
         if normalization == "rmsnorm":
             from apex.normalization import FusedRMSNorm
+
             _T5LayerNorm = FusedRMSNorm  # noqa
             logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of T5LayerNorm")
 
@@ -276,6 +279,7 @@ def get_layernorm_layer(normalization):
 
         elif normalization == "layernorm":
             from apex.transformer.layers.layer_norm import FastLayerNorm
+
             _T5LayerNorm = FastLayerNorm
             logger.info("Discovered apex.normalization.FastLayerNorm - will use it instead of T5LayerNorm")
 
@@ -298,8 +302,6 @@ def get_layernorm_layer(normalization):
     return T5LayerNorm
 
 
-
-
 class T5DenseActDense(nn.Module):
     def __init__(self, config: MegatronT5Config):
         super().__init__()
@@ -315,6 +317,7 @@ class T5DenseActDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
 class T5DenseGatedActDense(nn.Module):
     def __init__(self, config: MegatronT5Config):
         super().__init__()
@@ -327,7 +330,7 @@ class T5DenseGatedActDense(nn.Module):
     def forward(self, hidden_states):
         hidden_gelu = self.act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear    
+        hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -365,12 +368,12 @@ class T5Attention(nn.Module):
         self.apply_query_key_layer_scaling = config.apply_query_key_layer_scaling
         self.position_embedding_type = config.position_embedding_type
         self.inner_dim = self.n_heads * self.key_value_proj_dim
-        self.layer_number = max(1, layer_number)        
+        self.layer_number = max(1, layer_number)
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=config.use_bias)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=config.use_bias)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=config.use_bias)        
+        self.v = nn.Linear(self.d_model, self.inner_dim, bias=config.use_bias)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=config.use_bias)
 
         if self.has_relative_attention_bias:
@@ -508,9 +511,9 @@ class T5Attention(nn.Module):
             )
             mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
             (query_states, key_states, value_states) = torch.chunk(mixed_x_layer, 3, dim=-1)
-            query_states = query_states.transpose(1,2)
-            key_states = key_states.transpose(1,2)
-            value_states = value_states.transpose(1,2)
+            query_states = query_states.transpose(1, 2)
+            key_states = key_states.transpose(1, 2)
+            value_states = value_states.transpose(1, 2)
 
         elif past_key_value is None:
             # cross-attn
@@ -521,23 +524,23 @@ class T5Attention(nn.Module):
                 2 * self.key_value_proj_dim,
             )
             mixed_kv_layer = mixed_kv_layer.view(*new_tensor_shape)
-            (key_states, value_states) = torch.chunk(mixed_kv_layer, 2, dim=-1)                        
+            (key_states, value_states) = torch.chunk(mixed_kv_layer, 2, dim=-1)
 
             new_query_tensor_shape = hidden_states.size()[:-1] + (
                 self.n_heads,
                 self.key_value_proj_dim,
             )
-            # get query states  
+            # get query states
             query_states = self.q(hidden_states).view(*new_query_tensor_shape)
-            query_states = query_states.transpose(1,2)
-            key_states = key_states.transpose(1,2)
-            value_states = value_states.transpose(1,2)
+            query_states = query_states.transpose(1, 2)
+            key_states = key_states.transpose(1, 2)
+            value_states = value_states.transpose(1, 2)
         else:
             new_query_tensor_shape = hidden_states.size()[:-1] + (
                 self.n_heads,
                 self.key_value_proj_dim,
-            )            
-            query_states = self.q(hidden_states).view(*new_query_tensor_shape).transpose(1,2)
+            )
+            query_states = self.q(hidden_states).view(*new_query_tensor_shape).transpose(1, 2)
 
         # get key states
         if past_key_value is not None and past_key_value[0] is not None:
@@ -575,9 +578,9 @@ class T5Attention(nn.Module):
         if self.apply_query_key_layer_scaling:
             coeff = self.layer_number
             self.norm_factor *= coeff
-        scores *= 1/self.norm_factor
+        scores *= 1 / self.norm_factor
 
-        if self.position_embedding_type in ['relative']:
+        if self.position_embedding_type in ["relative"]:
             # relative
             if position_bias is None:
                 if not self.has_relative_attention_bias:
@@ -640,7 +643,9 @@ class T5Attention(nn.Module):
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, layer_number, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = T5Attention(config, layer_number=layer_number, has_relative_attention_bias=has_relative_attention_bias)
+        self.SelfAttention = T5Attention(
+            config, layer_number=layer_number, has_relative_attention_bias=has_relative_attention_bias
+        )
         T5LayerNorm = get_layernorm_layer(config.normalization)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -679,7 +684,6 @@ class T5LayerCrossAttention(nn.Module):
         T5LayerNorm = get_layernorm_layer(config.normalization)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
-        
 
     def forward(
         self,
@@ -716,7 +720,11 @@ class T5Block(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_number = max(1, layer_number)
         self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, layer_number=self.layer_number, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(
+            T5LayerSelfAttention(
+                config, layer_number=self.layer_number, has_relative_attention_bias=has_relative_attention_bias
+            )
+        )
         if self.is_decoder:
             self.layer.append(T5LayerCrossAttention(config, layer_number=self.layer_number))
 
@@ -737,7 +745,6 @@ class T5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -932,15 +939,21 @@ class T5Stack(MegatronT5PreTrainedModel):
         self.is_decoder = config.is_decoder
         self.position_embedding_type = config.position_embedding_type
 
-        if self.position_embedding_type in ['relative']:
+        if self.position_embedding_type in ["relative"]:
             # relative
             self.block = nn.ModuleList(
-                [T5Block(config, layer_number=i+1, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+                [
+                    T5Block(config, layer_number=i + 1, has_relative_attention_bias=bool(i == 0))
+                    for i in range(config.num_layers)
+                ]
             )
-        else: 
+        else:
             # learned_absolute
             self.block = nn.ModuleList(
-                [T5Block(config, layer_number=i+1, has_relative_attention_bias=False) for i in range(config.num_layers)]
+                [
+                    T5Block(config, layer_number=i + 1, has_relative_attention_bias=False)
+                    for i in range(config.num_layers)
+                ]
             )
         T5LayerNorm = get_layernorm_layer(config.normalization)
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -1042,13 +1055,17 @@ class T5Stack(MegatronT5PreTrainedModel):
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
-            if self.position_embedding_type in ['learned_absolute']:
-                assert self.position_embeddings is not None, "You have to initialize the model with valid position embeddings"
+            if self.position_embedding_type in ["learned_absolute"]:
+                assert (
+                    self.position_embeddings is not None
+                ), "You have to initialize the model with valid position embeddings"
 
-                inputs_embeds = self.embed_tokens(input_ids) + self.position_embeddings(self.build_position_ids(input_ids))
+                inputs_embeds = self.embed_tokens(input_ids) + self.position_embeddings(
+                    self.build_position_ids(input_ids)
+                )
             else:
                 inputs_embeds = self.embed_tokens(input_ids)
-        
+
         batch_size, seq_length = input_shape
 
         # required mask seq length can be calculated via length of past
@@ -1393,10 +1410,10 @@ class MegatronT5Model(MegatronT5PreTrainedModel):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
-        if config.position_embedding_type in ['learned_absolute']: 
+        if config.position_embedding_type in ["learned_absolute"]:
             # learned_absolute
             self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-            self.position_embeddings.weight.data.fill_(0)        
+            self.position_embeddings.weight.data.fill_(0)
             self.position_embeddings.weight.shared = True
         else:
             # relative
@@ -1593,12 +1610,12 @@ class MegatronT5ForConditionalGeneration(MegatronT5PreTrainedModel):
         self.tie_word_embeddings = config.tie_word_embeddings
         self.use_rescale_tie_word_embeddings = config.use_rescale_tie_word_embeddings
 
-        self.shared = nn.Embedding(config.vocab_size, config.d_model) 
-               
-        if config.position_embedding_type in ['learned_absolute']: 
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        if config.position_embedding_type in ["learned_absolute"]:
             # learned_absolute
             self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-            self.position_embeddings.weight.data.fill_(0)        
+            self.position_embeddings.weight.data.fill_(0)
             self.position_embeddings.weight.shared = True
         else:
             # relative
@@ -1833,9 +1850,8 @@ class MegatronT5ForConditionalGeneration(MegatronT5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]
@@ -1892,10 +1908,10 @@ class MegatronT5EncoderModel(MegatronT5PreTrainedModel):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
-        if config.position_embedding_type in ['learned_absolute']: 
+        if config.position_embedding_type in ["learned_absolute"]:
             # learned_absolute
             self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-            self.position_embeddings.weight.data.fill_(0)        
+            self.position_embeddings.weight.data.fill_(0)
             self.position_embeddings.weight.shared = True
         else:
             # relative

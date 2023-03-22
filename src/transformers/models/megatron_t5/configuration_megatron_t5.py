@@ -110,10 +110,10 @@ class MegatronT5Config(PretrainedConfig):
         use_bias=True,
         apply_query_key_layer_scaling=True,
         use_rescale_tie_word_embeddings=False,
-        position_embedding_type='learned_absolute',
+        position_embedding_type="learned_absolute",
         max_position_embeddings=512,
-        normalization='layernorm',
-        **kwargs
+        normalization="layernorm",
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -136,8 +136,8 @@ class MegatronT5Config(PretrainedConfig):
         self.use_rescale_tie_word_embeddings = use_rescale_tie_word_embeddings
         self.position_embedding_type = position_embedding_type
         self.max_position_embeddings = max_position_embeddings
-        self.normalization = normalization    
-        
+        self.normalization = normalization
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

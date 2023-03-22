@@ -29,7 +29,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_megatron_t5":["MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronT5Config"]}
+_import_structure = {"configuration_megatron_t5": ["MEGATRON_T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronT5Config"]}
 
 try:
     if not is_sentencepiece_available():
