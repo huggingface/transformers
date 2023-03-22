@@ -70,7 +70,7 @@ To set up the hardware environment to be able to seamlessly run the distributed 
 necessary for running the training function with accelerate.
 
 ```python
-reqs = ['./', 'torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117']
+reqs = ['./', 'transformers', 'torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117']
 ```
 
 Then, we can create a callable to launch our training function, setting the hardware/system that it is intended to be run on,
