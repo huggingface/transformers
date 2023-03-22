@@ -33,24 +33,26 @@ logger = logging.get_logger(__name__)
 class Seq2SeqTrainer(Trainer):
     def __load_generation_config(self, gen_kwargs: Dict[str, Any]) -> Union[GenerationConfig, None]:
         """
-        Loads the `~generation.GenerationConfig` from the `generation_config_from_pretrained` arguments.
-        Priority: gen_kwargs > self.args.generation_config_from_pretrained (`Seq2SeqTrainingArguments`)
+        Loads a `~generation.GenerationConfig` from the `generation_config_from_pretrained` arguments. Priority:
+        gen_kwargs > self.args.generation_config_from_pretrained (`Seq2SeqTrainingArguments`)
+
         If no `generation_config_from_pretrained` has been provided, this method return None and in this case
         `generate` will fallback to `model.generation_config` or the default `~generation.GenerationConfig` values.
 
-        Priority: gen_kwargs > generation_config_from_pretrained > model.generation_config > default GenerationConfig
-        This is handled in `generate`, here we just create `~generation.GenerationConfig` from the
+        Priority: gen_kwargs > generation_config_from_pretrained > model.generation_config > default GenerationConfig.
+
+        This is handled in `generate`, here we just create a `~generation.GenerationConfig` from the
         `generation_config_from_pretrained` argument.
 
         Args:
-            gen_kwargs:
+            gen_kwargs (`Dict[str, Any]`):
                 Additional `generate` specific kwargs as a dictionary. If `generation_config_from_pretrained` is
-                provided, it will use this argument instead of the one from training arguments, and the entry will
-                be popped to not interfere when calling `generate`.
+                provided, it will use this argument in priority, and the entry will be popped to not interfere when
+                calling `generate`.
 
         Returns:
-            A `~generation.GenerationConfig` or None if no `generation_config_from_pretrained` has been provided in
-            `self.args` (`Seq2SeqTrainingArguments`).
+            A `~generation.GenerationConfig`, or `None` if no `generation_config_from_pretrained` has been provided in
+            `self.args` (`Seq2SeqTrainingArguments`) or `gen_kwargs`.
         """
         # Select the generation config argument
         if "generation_config_from_pretrained" in gen_kwargs:
@@ -231,8 +233,8 @@ class Seq2SeqTrainer(Trainer):
         # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
         if self.model.generation_config._from_model_config:
             self.model.generation_config._from_model_config = False
-        # Retrieves GenerationConfig in case we did not provide a one to generate
-        # it used model.generation_config, or set the attribute if it didn't exist
+        # Retrieves GenerationConfig in case we did not provide one to generate.
+        # In this case, it used model.generation_config
         if gen_config is None:
             gen_config = model.generation_config
         # in case the batch is shorter than max length, the output should be padded
