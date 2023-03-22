@@ -332,11 +332,11 @@ class FocalNetModulation(nn.Module):
         self.use_post_layernorm_in_modulation = use_post_layernorm_in_modulation
         self.normalize_modulator = normalize_modulator
 
-        self.f = nn.Linear(dim, 2 * dim + (self.focal_level + 1), bias=bias)
-        self.h = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=bias)
+        self.projection_in = nn.Linear(dim, 2 * dim + (self.focal_level + 1), bias=bias)
+        self.projection_context = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=bias)
 
-        self.act = nn.GELU()
-        self.proj = nn.Linear(dim, dim)
+        self.activation = nn.GELU()
+        self.projection_out = nn.Linear(dim, dim)
         self.projection_dropout = nn.Dropout(projection_dropout)
         self.focal_layers = nn.ModuleList()
 
@@ -353,7 +353,7 @@ class FocalNetModulation(nn.Module):
             )
             self.kernel_sizes.append(kernel_size)
         if self.use_post_layernorm_in_modulation:
-            self.ln = nn.LayerNorm(dim)
+            self.layernorm = nn.LayerNorm(dim)
 
     def forward(self, hidden_state):
         """
@@ -364,15 +364,15 @@ class FocalNetModulation(nn.Module):
         num_channels = hidden_state.shape[-1]
 
         # pre linear projection
-        x = self.f(hidden_state).permute(0, 3, 1, 2).contiguous()
+        x = self.projection_in(hidden_state).permute(0, 3, 1, 2).contiguous()
         q, ctx, self.gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
         # context aggreation
         ctx_all = 0
-        for l in range(self.focal_level):
-            ctx = self.focal_layers[l](ctx)
-            ctx_all = ctx_all + ctx * self.gates[:, l : l + 1]
-        ctx_global = self.act(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
+        for level in range(self.focal_level):
+            ctx = self.focal_layers[level](ctx)
+            ctx_all = ctx_all + ctx * self.gates[:, level : level + 1]
+        ctx_global = self.activation(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
         ctx_all = ctx_all + ctx_global * self.gates[:, self.focal_level :]
 
         # normalize context
@@ -380,14 +380,14 @@ class FocalNetModulation(nn.Module):
             ctx_all = ctx_all / (self.focal_level + 1)
 
         # focal modulation
-        self.modulator = self.h(ctx_all)
+        self.modulator = self.projection_context(ctx_all)
         x_out = q * self.modulator
         x_out = x_out.permute(0, 2, 3, 1).contiguous()
         if self.use_post_layernorm_in_modulation:
-            x_out = self.ln(x_out)
+            x_out = self.layernorm(x_out)
 
         # post linear porjection
-        x_out = self.proj(x_out)
+        x_out = self.projection_out(x_out)
         x_out = self.projection_dropout(x_out)
         return x_out
 
@@ -398,21 +398,21 @@ class FocalNetMlp(nn.Module):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = ACT2FN[config.hidden_act]
+        self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.drop(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.drop(hidden_state)
+        return hidden_state
 
 
 class FocalNetLayer(nn.Module):
-    r"""Focal Modulation Network Block.
+    r"""Focal Modulation Network layer (block).
 
     Args:
         config (`FocalNetConfig`):

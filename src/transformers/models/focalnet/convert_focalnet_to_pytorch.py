@@ -97,6 +97,12 @@ def rename_key(name):
         name = name.replace("downsample.proj", "downsample.projection")
     if "blocks" in name:
         name = name.replace("blocks", "layers")
+    if "modulation.f.weight" in name or "modulation.f.bias" in name:
+        name = name.replace("modulation.f", "modulation.projection_in")
+    if "modulation.h.weight" in name or "modulation.h.bias" in name:
+        name = name.replace("modulation.h", "modulation.projection_context")
+    if "modulation.proj.weight" in name or "modulation.proj.bias" in name:
+        name = name.replace("modulation.proj", "modulation.projection_out")
 
     if name == "norm.weight":
         name = "layernorm.weight"
