@@ -272,8 +272,7 @@ class NllbMoeTop2Router(nn.Module):
         self.num_experts = config.num_experts
         self.expert_capacity = config.expert_capacity
         self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
-        self.jitter_noise = config.router_jitter_noise
-        self.ignore_padding_tokens = config.router_ignore_padding_tokens
+        self.router_ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
         self.second_expert_policy = config.second_expert_policy
@@ -333,7 +332,7 @@ class NllbMoeTop2Router(nn.Module):
             sampled = (2 * top_2_mask) > torch.rand_like(top_2_mask)
             top_2_mask = top_2_mask * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
-        if padding_mask is not None:
+        if padding_mask is not None and not self.router_ignore_padding_tokens:
             if len(padding_mask.shape) == 4:
                 # only get the last causal mask
                 padding_mask = padding_mask[:, :, -1, :].reshape(-1)[-nb_tokens:]
@@ -492,6 +491,9 @@ class NllbMoeSparseMLP(nn.Module):
             expert_output = expert(masked_hidden_states[idx, token_indices])
             if self.moe_token_dropout > 0:
                 if self.training:
+                    # Expert Output Masking EOM using 2D dropout TODO make sure this actually does what is needed:
+                    # Due to historical reasons, this class will perform 1D channel-wise dropout for 3D inputs (as done by nn.Dropout1d). Thus, it currently does NOT support inputs without a batch dimension of shape
+                    # (C,H,W). This behavior will change in a future release to interpret 3D inputs as no-batch-dim inputs. To maintain the old behavior, switch to nn.Dropout1d.
                     expert_output = self.token_dropout(expert_output)
                 else:
                     expert_output *= 1 - self.moe_token_dropout
@@ -1597,7 +1599,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for SwitchTransformersModel.
-        >>> # This is not needed for torch's SwitchTransformersForConditionalGeneration as it does this internally using labels arg.
+        >>> # This is not needed for torch's TODO THIS IS ERONG as it does this internally using labels arg.
         >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass

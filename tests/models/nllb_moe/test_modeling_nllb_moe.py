@@ -404,35 +404,72 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[1, 0, :30].cpu(), EXPECTED_LOGTIS, atol=TOLERANCE))
 
+    # @tooslow
+    @require_accelerate
+    def test_large_logits(self):
+        model = NllbMoeForConditionalGeneration.from_pretrained(
+            "facebook/nllb-moe-54b",
+            device_map="auto",
+            offload_folder="/home/arthur_huggingface_co/transformers/Arthur",
+        )
+        model = model.eval().to(torch_device)
+        src_text = ["Life is like a box of chocolates.", "I just want to code."]
+        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
+        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
+
+        with torch.no_grad():
+            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
+
+        # fmt: off
+        EXPECTED_FAIRSEQ_ENCODER_LAST_STATES = torch.Tensor([ 0.1696, -0.0059,  0.0489,  0.0479, -0.4222, -0.2178, -0.1372, -0.0860, -0.4249, -0.0081, -0.1186,  0.6678,  0.0160,  0.4140,  0.1799,  0.0672, -0.4941,  0.0173, -0.0740,  0.0845, -0.2197,  0.4465,  0.2268, -0.1752, -0.0562,  0.1033, -0.0869, -0.5490,  0.0582,  0.2165])
+        EXPECTED_FAIRSEQ_DECODER_STATES = torch.Tensor([ 0.0374, -0.1055, -0.1060, -0.1711, -0.0540, -0.1183, -0.0779,  0.0610, -0.0279, -0.0848,  0.0222,  0.0372, -0.0298, -0.0861, -0.0354, -0.0103,  0.0538, -0.0148, -0.0105,  0.0224,  0.0629, -0.0291, -0.0671,  0.0173, -0.0066, -0.0245, -0.0499,  0.0760, -0.0067,  0.0086])
+        EXPECTED_FAIRSEQ_LOGITS = torch.Tensor([ 0.3834,  0.2057,  4.5399,  0.8301,  0.4810,  0.9325,  0.9928,  0.9574,  0.5517,  0.9156,  0.2698,  0.6728,  0.7121,  0.3080,  0.4693,  0.5756,  1.0407,  0.2219,  0.3714,  0.5699,  0.5547,  0.8472,  0.3178,  0.1286,  0.1791,  0.9391,  0.5153, -0.2146,  0.1689,  0.6816])
+        # fmt: on
+
+        torch.testing.assert_allclose(
+            output.encoder_last_hidden_state[1, 0, :30].cpu(),
+            EXPECTED_FAIRSEQ_ENCODER_LAST_STATES,
+            rtol=6e-3,
+            atol=9e-3,
+        )
+        torch.testing.assert_allclose(
+            output.last_hidden_states[1, 0, :30].cpu(), EXPECTED_FAIRSEQ_DECODER_STATES, rtol=6e-3, atol=9e-3
+        )
+        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_FAIRSEQ_LOGITS, rtol=6e-3, atol=9e-3)
+
     @tooslow
     @require_accelerate
     def test_seq_to_seq_generation(self):
-        # TODO last test to run!
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
-
+        model = NllbMoeForConditionalGeneration.from_pretrained(
+            "facebook/nllb-moe-54b",
+            device_map="auto",
+            offload_folder="/home/arthur_huggingface_co/transformers/Arthur",
+            dtype=torch.float16,
+        )
         src_fr = [
-            "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
-            "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
-            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
-            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
-            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+            'We now have 4-month-old mice that are non-diabetic that used to be diabetic," he added.',
+            "Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia and chair of the clinical and scientific division of the Canadian Diabetes Association cautioned that the research is still in its early days."
+            "Like some other experts, he is skeptical about whether diabetes can be cured, noting that these findings have no relevance to people who already have Type 1 diabetes."
+            "On Monday, Sara Danius, permanent secretary of the Nobel Committee for Literature at the Swedish Academy, publicly announced during a radio program on Sveriges Radio in Sweden the committee, unable to reach Bob Dylan directly about winning the 2016 Nobel Prize in Literature, had abandoned its efforts to reach him.",
+            'Danius said, "Right now we are doing nothing. I have called and sent emails to his closest collaborator and received very friendly replies. For now, that is certainly enough."',
+            "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage.",
         ]
-
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
         dct = self.default_tokenizer(src_fr, padding=True, return_tensors="pt")
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            forced_bos_token_id=self.default_tokenizer.lang_code_to_id["eng_Latn"],
-        )
+            forced_bos_token_id=self.default_tokenizer.lang_code_to_id["fra_Latn"],
+        )  # takes about 38.176 seconds
 
         expected_en = [
-            "The NSA case highlights the total absence of intelligence debate",
-            "I think there are two levels of response from the French government.",
-            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
-            " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
-            " communications in France.",
+            '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
+            "Le docteur Ehud Ur, professeur de médecine à l'université Dalhousie, à Halifax, en Nouvelle-Écosse, et président de la division clinique et scientifique de l'Association canadienne du diabète, prévient que la recherche n'en est qu'à ses débuts.",
+            "Comme d'autres spécialistes, il est sceptique quant à la guérison du diabète, notant que ces résultats ne sont pas pertinents pour les personnes atteintes de diabète de type 1.",
+            "Lundi, Sara Danius, secrétaire permanente du Comité Nobel de littérature à l'Académie suédoise, a annoncé publiquement lors d'une émission de radio sur Sveriges Radio en Suède que le comité, incapable de contacter Bob Dylan directement au sujet du prix Nobel de littérature 2016, avait abandonné ses efforts pour le joindre.",
+            "Danius a déclaré: \"Pour le moment, nous ne faisons rien. J'ai appelé et envoyé des courriels à son plus proche collaborateur et j'ai reçu des réponses très amicales. Pour l'instant, c'est certainement suffisant\".",
+            "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage.",
+            "Il a construit une sonnette WiFi, il a dit.",
         ]
 
         generated = self.default_tokenizer.batch_decode(

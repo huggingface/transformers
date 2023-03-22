@@ -75,6 +75,9 @@ class NllbMoeConfig(PretrainedConfig):
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
+        moe_token_dropout:
+            Masking rate for MoE expert output masking (EOM), which is implemented via a Dropout2d on the expert
+            outputs.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
