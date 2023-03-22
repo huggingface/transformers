@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+import sys
+from typing import Sequence
+
+from transformers import AutoConfig
+from transformers import AutoModel
+from transformers import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING as imgcls_model_mapping
+from transformers import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP as ckpt_mapping
+
+imgcls_configs = [c.__name__ for c in imgcls_model_mapping.keys()]
+imgcls_ckpt = {}
+for ckpt in ckpt_mapping.keys():
+    try:
+        cfg = AutoConfig.from_pretrained(ckpt)
+    except:
+        print(f"Cannot load config for {ckpt}", file=sys.stderr)
+        continue
+
+    if type(cfg).__name__ in imgcls_configs:
+        try:
+            model = AutoModel.from_config(cfg)
+        except:
+            print(f"Cannot initiate model from {ckpt}", file=sys.stderr)
+            continue
+
+        model_name = type(model).__name__
+        imgcls_ckpt[ckpt] = model_name
+
+
+for k, v in imgcls_ckpt.items():
+    print(f"{k} {v}")
