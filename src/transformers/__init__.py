@@ -404,6 +404,13 @@ _import_structure = {
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
+    "models.pix2struct": [
+        "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Pix2StructConfig",
+        "Pix2StructProcessor",
+        "Pix2StructTextConfig",
+        "Pix2StructVisionConfig",
+    ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
@@ -862,6 +869,7 @@ else:
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
+    _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -2113,6 +2121,15 @@ else:
             "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pix2struct"].extend(
+        [
+            "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Pix2StructForConditionalGeneration",
+            "Pix2StructPreTrainedModel",
+            "Pix2StructTextModel",
+            "Pix2StructVisionModel",
         ]
     )
     _import_structure["models.plbart"].extend(
@@ -4029,6 +4046,13 @@ if TYPE_CHECKING:
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
+    from .models.pix2struct import (
+        PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pix2StructConfig,
+        Pix2StructProcessor,
+        Pix2StructTextConfig,
+        Pix2StructVisionConfig,
+    )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
@@ -4434,6 +4458,7 @@ if TYPE_CHECKING:
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
+        from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -5460,6 +5485,13 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.pix2struct import (
+            PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Pix2StructForConditionalGeneration,
+            Pix2StructPreTrainedModel,
+            Pix2StructTextModel,
+            Pix2StructVisionModel,
         )
         from .models.plbart import (
             PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,
