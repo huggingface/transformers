@@ -329,7 +329,7 @@ def prepare_img():
 
 # We will verify our results on a video of cars
 def prepare_video():
-    filepath = hf_hub_download(repo_id="shivi/video_demo", filename="cars.mp4", repo_type="dataset")
+    filepath = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
     video = torchvision.io.read_video(filepath)[0]
     return video
 
@@ -340,13 +340,18 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
         return "facebook/mask2former-swin-small-coco-instance"
-
+    
+    @cached_property
     def video_model_checkpoints(self):
         return "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
 
     @cached_property
     def default_image_processor(self):
         return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+    
+    @cached_property
+    def default_video_image_processor(self):
+        return Mask2FormerImageProcessor.from_pretrained(self.video_model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
@@ -428,9 +433,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_with_segmentation_maps_and_loss(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_image_processor
+        image_processor = self.default_image_processor
 
-        inputs = feature_extractor(
+        inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
@@ -448,29 +453,30 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
     def test_video_mask2former_inference_no_head(self):
         # load model and processor
         model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
-        image_processor = self.default_image_processor
+        image_processor = self.default_video_image_processor
 
         video = prepare_video()
-        image_size = (480, 640)
         video_frames = [
-            image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
-            for frame in video
+            image_processor(images=frame, return_tensors="pt").pixel_values
+            for frame in video[:5]
         ]
         video_frame_shape = video_frames[0].shape
 
         # check size is divisible by 32
         self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
-        # check size
-        self.assertTrue(video_frame_shape, (10, 3, 480, 640))
+        # check frame size
+        self.assertEqual(video_frame_shape, (1, 3, 480, 640))
 
         video_input = torch.cat(video_frames)
+        # check video size
+        self.assertEqual(video_input.shape, (5, 3, 480, 640))
 
         with torch.no_grad():
             outputs = model(video_input)
 
         # check if we are getting expected hidden states from backbone, pixel_decoder and transformer_decoder
         expected_slice_hidden_state = torch.tensor(
-            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
+            [[-0.4360,  0.7583,  0.9673], [-0.1426, -0.0267,  0.5829], [-0.2385,  0.0773, -0.1495]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -479,7 +485,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
+            [[-0.3904, -0.2753, -0.2319], [-0.3824, -0.1098, -0.2226], [-0.3643, -0.0688, -0.1076]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -488,7 +494,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
+            [[-1.7580, -0.5369, -0.9012], [-1.1428, -0.7896, -0.2773], [-1.3240, -0.3889, -0.1932]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -498,23 +504,25 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_video_mask2former_universal_segmentation_head_model(self):
         # load model and processor
-        model = Mask2FormerModel.from_pretrained(self.video_model_checkpoints).to(torch_device)
-        image_processor = self.default_image_processor
+        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.video_model_checkpoints).to(torch_device)
+        image_processor = self.default_video_image_processor
 
         video = prepare_video()
-        image_size = (480, 640)
         video_frames = [
-            image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
-            for frame in video
+            image_processor(images=frame, return_tensors="pt").pixel_values
+            for frame in video[:5]
         ]
         video_frame_shape = video_frames[0].shape
 
         # check size is divisible by 32
         self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
-        # check size
-        self.assertEqual(video_frame_shape, (10, 3, 480, 640))
+        # check frame size
+        self.assertEqual(video_frame_shape, (1, 3, 480, 640))
 
         video_input = torch.cat(video_frames)
+        # check video size
+        video_shape = video_input.shape
+        self.assertEqual(video_shape, (5, 3, 480, 640))
 
         with torch.no_grad():
             outputs = model(video_input)
@@ -523,14 +531,15 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             masks_queries_logits.shape,
-            (1, model.config.num_queries, video_frame_shape[-2] // 4, video_frame_shape[-1] // 4),
+            (model.config.num_queries, video_shape[0], video_shape[-2] // 4, video_shape[-1] // 4),
         )
         expected_slice = [
-            [-8.7839, -9.0056, -8.8121],
-            [-7.4104, -7.0313, -6.5401],
-            [-6.6105, -6.3427, -6.4675],
+            [-63.1859, -76.4797, -69.0339],
+            [-62.5494, -68.8616, -81.0631],
+            [-61.4500, -68.9583, -73.0472],
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
+        
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
 
         # class_queries_logits
@@ -539,9 +548,10 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [1.8324, -8.0835, -4.1922],
-                [0.8450, -9.0050, -3.6053],
-                [0.3045, -7.7293, -3.0275],
+                [-3.0352, -3.6200, -5.5203],
+                [-1.9340, -2.5809, -4.5011],
+                [-2.3295, -2.9547, -4.4537],
             ]
         ).to(torch_device)
+
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
