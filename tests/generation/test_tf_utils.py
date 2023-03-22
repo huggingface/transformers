@@ -255,13 +255,10 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             class CompleteSentenceTransformer(tf.keras.layers.Layer):
                 def __init__(self):
                     super().__init__()
-                    self._pad_token = 1
                     self.tokenizer = text.SentencepieceTokenizer(
                         model=tf.io.gfile.GFile(os.path.join(tmp_dir, "spiece.model"), "rb").read()
                     )
-                    self.model = TFAutoModelForSeq2SeqLM.from_pretrained(
-                        "hf-internal-testing/tiny-random-t5", from_pt=True
-                    )
+                    self.model = TFAutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
 
                 def call(self, inputs, *args, **kwargs):
                     tokens = self.tokenizer.tokenize(inputs)
