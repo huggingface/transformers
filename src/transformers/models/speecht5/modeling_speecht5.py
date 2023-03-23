@@ -573,7 +573,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
     def forward(
         self,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
     ):
         extract_features = self.feature_encoder(input_values)
@@ -848,7 +848,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
     ):
         if input_ids is not None:
@@ -1582,7 +1582,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1791,7 +1791,7 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
@@ -1845,7 +1845,7 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1892,7 +1892,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -2155,10 +2155,10 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -2171,11 +2171,11 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Depending on which encoder is being used, the `input_values` are either: float values of the input raw
             speech waveform, or indices of input sequence tokens in the vocabulary, or hidden states.
 
-        decoder_input_values (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        decoder_input_values (`torch.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Depending on which decoder is being used, the `decoder_input_values` are either: float values of log-mel
             filterbank features extracted from the raw speech waveform, or indices of decoder input sequence tokens in
             the vocabulary, or hidden states.
@@ -2314,9 +2314,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -2605,9 +2605,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -2720,7 +2720,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
     def _compute_loss(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.LongTensor,
         outputs_before_postnet: torch.FloatTensor,
         outputs_after_postnet: torch.FloatTensor,
         logits: torch.FloatTensor,
@@ -2867,9 +2867,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
