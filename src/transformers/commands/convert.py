@@ -167,7 +167,7 @@ class ConvertCommand(BaseTransformersCLICommand):
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
         elif self._model_type == "lxmert":
-            from ..models.lxmert.convert_lxmert_original_pytorch_checkpoint_to_pytorch import (
+            from ..models.lxmert.convert_lxmert_original_tf_checkpoint_to_pytorch import (
                 convert_lxmert_checkpoint_to_pytorch,
             )
 
