@@ -588,7 +588,12 @@ class Trainer:
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
-                if args.device == torch.device("cpu"):
+                if is_torch_neuroncore_available():
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` but this option is not yet supported on Neuron.")
+                    else:
+                        args.half_precision_backend = "cpu_amp"
+                elif args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                     elif _is_native_cpu_amp_available:
