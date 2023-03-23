@@ -46,7 +46,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
               under a user or organization name, like `dbmdz/bert-base-german-cased`.
             - a path to a *directory* containing a configuration file saved using the
               [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-            - a [`~trainer_utils.GenerationConfig`] object.
+            - a [`~generation.GenerationConfig`] object.
     """
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
