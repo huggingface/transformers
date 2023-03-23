@@ -2566,7 +2566,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
-            if device_map != "sequential" and get_balanced_memory is not None:
+            if device_map != "sequential" and get_balanced_memory is not None and max_memory is None:
                 max_memory = get_balanced_memory(
                     model,
                     dtype=torch_dtype,
