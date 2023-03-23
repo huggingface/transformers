@@ -106,17 +106,19 @@ class BitsAndBytesConfig(PushToHubMixin):
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
         """
-        Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
+        Instantiates a [`BitsAndBytesConfig`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+                Dictionary that will be used to instantiate the configuration object.
+            return_unused_kwargs (`bool`):
+                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
+                `PreTrainedModel`.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from those parameters.
+            [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
         """
         config = cls(**config_dict)
 
@@ -183,18 +185,6 @@ class BitsAndBytesConfig(PushToHubMixin):
                 commit_message=commit_message,
                 token=kwargs.get("use_auth_token"),
             )
-
-    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
-        """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
-        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
-        string, which can then be stored in the json format.
-        """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
-        for value in d.values():
-            if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
         """
@@ -273,29 +263,7 @@ class BitsAndBytesConfig(PushToHubMixin):
                 by the `return_unused_kwargs` keyword parameter.
         Returns:
             [`BitsAndBytesConfig`]: The configuration object instantiated from this pretrained model.
-        Examples:
-        ```python
-        >>> from transformers import BitsAndBytesConfig
-
-        >>> # Download configuration from huggingface.co and cache.
-        >>> quantization_config = BitsAndBytesConfig.from_pretrained("gpt2")
-        >>> # E.g. config was saved using *save_pretrained('./test/saved_model/')*
-        >>> quantization_config.save_pretrained("./test/saved_model/")
-        >>> quantization_config = BitsAndBytesConfig.from_pretrained("./test/saved_model/")
-        >>> # You can also specify configuration names to your quantization configuration file
-        >>> quantization_config.save_pretrained("./test/saved_model/", config_file_name="my_configuration.json")
-        >>> quantization_config = BitsAndBytesConfig.from_pretrained("./test/saved_model/", "my_configuration.json")
-        >>> # If you'd like to try a minor variation to an existing configuration, you can also pass quantization
-        >>> # arguments to `.from_pretrained()`. Be mindful that typos and unused arguments will be ignored
-        >>> quantization_config, unused_kwargs = BitsAndBytesConfig.from_pretrained(
-        ...     "gpt2", top_k=1, foo=False, return_unused_kwargs=True
-        ... )
-        >>> quantization_config.top_k
-        1
-
-        >>> unused_kwargs
-        {'foo': False}
-        ```"""
+        """
         config_file_name = config_file_name if config_file_name is not None else QUANTIZATION_CONFIG_NAME
 
         cache_dir = kwargs.pop("cache_dir", None)
@@ -385,7 +353,6 @@ class BitsAndBytesConfig(PushToHubMixin):
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
 
-        self.dict_torch_dtype_to_str(output)
         return output
 
     @classmethod
