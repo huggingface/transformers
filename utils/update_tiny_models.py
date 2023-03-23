@@ -179,6 +179,7 @@ def update_tiny_model_summary_file(report_path):
             data[key] = value
         else:
             for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
+                # we might get duplication here. We will remove them below when creating `updated_data`.
                 data[key][attr].extend(value[attr])
             new_sha = value["sha"]
             if new_sha is not None:
@@ -188,7 +189,8 @@ def update_tiny_model_summary_file(report_path):
     for key in sorted(data.keys()):
         updated_data[key] = {}
         for attr, value in data[key].items():
-            updated_data[key][attr] = sorted(value) if attr != "sha" else value
+            # deduplication and sort
+            updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
 
     with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
         json.dump(updated_data, fp, indent=4, ensure_ascii=False)
