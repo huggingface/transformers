@@ -56,6 +56,8 @@ class SentencePieceExtractor:
         merges = sorted(merges, key=lambda val: val[2], reverse=True)
         merges = [(val[0], val[1]) for val in merges]
 
+        return vocab, merges
+
 
 def check_number_comma(piece: str) -> bool:
     return len(piece) < 2 or piece[-1] != "," or not piece[-2].isdigit()
