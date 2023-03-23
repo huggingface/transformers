@@ -140,6 +140,7 @@ from . import (
     pegasus_x,
     perceiver,
     phobert,
+    pix2struct,
     plbart,
     poolformer,
     prophetnet,
