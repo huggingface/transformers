@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_gpu,
     slow,
     tooslow,
     torch_device,
@@ -343,6 +342,17 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_tokenizers
 @slow
 class NllbMoeModelIntegrationTests(unittest.TestCase):
+    model_inputs = {
+        "input_ids": torch.Tensor(
+            [
+                [28768, 248, 6399, 9, 65972, 452, 1925, 629, 123543, 248075, 2, 256047],
+                [117, 7027, 7195, 202, 44778, 248075, 2, 256047, 1, 1, 1, 1],
+            ]
+        ),
+        "attention_mask": torch.Tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]),
+        "decoder_input_ids": torch.tensor([[2, 256057], [2, 256057]]).long(),
+    }
+
     @cached_property
     def tokenizer(self):
         return NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
@@ -353,21 +363,15 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b"
         )
 
-    @require_torch_gpu
     def test_inference_logits(self):
         r"""
         Logits testing to check implementation consistency between `fairseq` implementation
         and `transformers` implementation of NLLB-MoE transformers. We only check the logits
         of the second sample of the batch, as it is padded.
         """
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
-        model = model.eval().to(torch_device)
-        src_text = ["Life is like a box of chocolates.", "I just want to code."]
-        model_inputs = self.tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
-        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
-
+        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
         with torch.no_grad():
-            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
+            output = model(**self.model_inputs)
 
         # fmt: off
         EXPECTED_ENCODER_STATE = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
@@ -376,24 +380,18 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_allclose(
-            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
         )
         torch.testing.assert_allclose(
-            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
+            output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
         )
-        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
     @tooslow("This test requires at least 340GB of RAM.")
     def test_large_logits(self):
         model = self.big_model
-        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
-        model = model.eval().to(torch_device)
-        src_text = ["Life is like a box of chocolates.", "I just want to code."]
-        model_inputs = tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
-        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
-
         with torch.no_grad():
-            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
+            output = model(**self.model_inputs)
 
         # fmt: off
         EXPECTED_ENCODER_STATE = torch.Tensor([ 0.1696, -0.0059,  0.0489,  0.0479, -0.4222, -0.2178, -0.1372, -0.0860, -0.4249, -0.0081, -0.1186,  0.6678,  0.0160,  0.4140,  0.1799,  0.0672, -0.4941,  0.0173, -0.0740,  0.0845, -0.2197,  0.4465,  0.2268, -0.1752, -0.0562,  0.1033, -0.0869, -0.5490,  0.0582,  0.2165])
@@ -402,12 +400,12 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_allclose(
-            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
         )
         torch.testing.assert_allclose(
-            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
+            output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
         )
-        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
     @tooslow("This test requires at least 340GB of RAM.")
     def test_seq_to_seq_generation(self):

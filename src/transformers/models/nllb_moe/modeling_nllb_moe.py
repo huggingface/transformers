@@ -1603,7 +1603,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
