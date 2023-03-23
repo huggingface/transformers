@@ -177,7 +177,7 @@ def torch_nn_embedding(self, input):
 def torch_nn_functional_embedding(
     input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
 ):
-    return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=self.weight.dtype)
+    return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=weight.dtype)
 
 
 def torch_nn_layernorm(self, input):
