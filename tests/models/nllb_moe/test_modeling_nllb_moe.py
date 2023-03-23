@@ -21,7 +21,6 @@ import unittest
 
 from transformers import NllbMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_accelerate,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -347,12 +346,14 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
-    
+
     @cached_property
     def big_model(self):
-        return  NllbMoeForConditionalGeneration.from_pretrained("/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b")
+        return NllbMoeForConditionalGeneration.from_pretrained(
+            "/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b"
+        )
 
-    #@require_torch_gpu
+    @require_torch_gpu
     def test_inference_logits(self):
         r"""
         Logits testing to check implementation consistency between `fairseq` implementation
@@ -382,7 +383,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    # @tooslow("This test requires at least 340GB of RAM.")
+    @tooslow("This test requires at least 340GB of RAM.")
     def test_large_logits(self):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
@@ -408,7 +409,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    # @tooslow("This test requires at least 340GB of RAM.")
+    @tooslow("This test requires at least 340GB of RAM.")
     def test_seq_to_seq_generation(self):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
@@ -499,7 +500,7 @@ class NllbMoeRouterTest(unittest.TestCase):
         self.assertTrue(torch.allclose(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
 
     def test_batch_prioritized_routing(self):
-        self.config.batch_prioritized_routing=True
+        self.config.batch_prioritized_routing = True
         NllbMoeTop2Router(self.config)
 
     def test_seconde_expert_policy(self):
