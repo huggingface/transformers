@@ -343,14 +343,14 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @slow
 class NllbMoeModelIntegrationTests(unittest.TestCase):
     model_inputs = {
-        "input_ids": torch.Tensor(
+        "input_ids": torch.LongTensor(
             [
                 [28768, 248, 6399, 9, 65972, 452, 1925, 629, 123543, 248075, 2, 256047],
                 [117, 7027, 7195, 202, 44778, 248075, 2, 256047, 1, 1, 1, 1],
             ]
         ),
         "attention_mask": torch.Tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]),
-        "decoder_input_ids": torch.tensor([[2, 256057], [2, 256057]]).long(),
+        "decoder_input_ids": torch.LongTensor([[2, 256057], [2, 256057]]),
     }
 
     @cached_property
