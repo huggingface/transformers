@@ -116,8 +116,7 @@ class FlaxResNetConvLayer(nn.Module):
     def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         hidden_state = self.convolution(x)
         hidden_state = self.normalization(hidden_state, use_running_average=deterministic)
-        if self.activation_func is not None:
-            hidden_state = self.activation_func(hidden_state)
+        hidden_state = self.activation_func(hidden_state)
         return hidden_state
 
 
@@ -181,7 +180,6 @@ class FlaxResNetShortCut(nn.Module):
 class FlaxResNetBasicLayerCollection(nn.Module):
     out_channels: int
     stride: int = 1
-    activation: Optional[str] = "relu"
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -314,7 +312,7 @@ class FlaxResNetStageLayersCollection(nn.Module):
     def setup(self):
         layer = FlaxResNetBottleNeckLayer if self.config.layer_type == "bottleneck" else FlaxResNetBasicLayer
 
-        self.layers = [
+        layers = [
             # downsampling is done in the first layer with stride of 2
             layer(
                 self.in_channels,
@@ -324,7 +322,10 @@ class FlaxResNetStageLayersCollection(nn.Module):
                 dtype=self.dtype,
                 name="0",
             ),
-            *[
+        ]
+
+        for i in range(self.depth - 1):
+            layers.append(
                 layer(
                     self.out_channels,
                     self.out_channels,
@@ -332,9 +333,9 @@ class FlaxResNetStageLayersCollection(nn.Module):
                     dtype=self.dtype,
                     name=str(i + 1),
                 )
-                for i in range(self.depth - 1)
-            ],
-        ]
+            )
+
+        self.layers = layers
 
     def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         hidden_state = x
