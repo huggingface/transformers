@@ -111,7 +111,6 @@ class SeaformerDropPath(nn.Module):
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
-    
 
 class SeaformerConv2d_BN(nn.Module):
     def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1,
