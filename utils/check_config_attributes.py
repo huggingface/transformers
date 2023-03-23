@@ -73,8 +73,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "InformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate the feature size
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
-    # used internally to calculate the sparse steps
-    "NllbMoeConfig": ["num_sparse_decoder_layers", "num_sparse_encoder_layers"],
 }
 
 # TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
