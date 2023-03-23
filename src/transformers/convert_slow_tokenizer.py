@@ -40,22 +40,21 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores: Dict[str, float]) -> Tuple[Dict[str, int], List[Tuple]]:
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        vocab_scores = dict(vocab_scores)
 
         # Merges
         merges = []
         for piece_l in vocab.keys():
             for piece_r in vocab.keys():
                 merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
-                if piece_id:
-                    merges += [(piece_l, piece_r, piece_id)]
-        merges = sorted(merges, key=lambda val: val[2])
+                piece_score = vocab_scores.get(merge, None)
+                if piece_score:
+                    merges += [(piece_l, piece_r, piece_score)]
+        merges = sorted(merges, key=lambda val: val[2], reverse=True)
         merges = [(val[0], val[1]) for val in merges]
-
-        return vocab, merges
 
 
 def check_number_comma(piece: str) -> bool:
@@ -458,14 +457,14 @@ class SpmConverter(Converter):
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
-        vocab = self.vocab(proto)
+        vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab, unk_id))
+            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
         elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,
