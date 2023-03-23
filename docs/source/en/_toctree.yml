@@ -596,6 +596,8 @@
         title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/pix2struct
+        title: Pix2Struct
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
