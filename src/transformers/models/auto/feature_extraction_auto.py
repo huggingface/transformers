@@ -73,7 +73,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
-        ("seaformer", "SeaformerFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),

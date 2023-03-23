@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaformerConfig", "SeaformerOnnxConfig"]
+    "configuration_seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaformerConfig"]
 }
 
 try:
@@ -31,7 +31,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_seaformer"] = ["SeaformerFeatureExtractor"]
     _import_structure["image_processing_seaformer"] = ["SeaformerImageProcessor"]
 
 try:
@@ -42,16 +41,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_seaformer"] = [
         "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SeaformerDecodeHead",
         "SeaformerForImageClassification",
         "SeaformerForSemanticSegmentation",
-        "SeaformerLayer",
         "SeaformerModel",
         "SeaformerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_seaformer import SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SeaformerConfig, SeaformerOnnxConfig
+    from .configuration_seaformer import SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SeaformerConfig
 
     try:
         if not is_vision_available():
@@ -59,7 +56,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_seaformer import SeaformerFeatureExtractor
         from .image_processing_seaformer import SeaformerImageProcessor
 
     try:

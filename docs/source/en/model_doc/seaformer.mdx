@@ -14,19 +14,28 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Seaformer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Seaformer model was proposed in [SeaFormer: Squeeze-enhanced Axial Transformer for Mobile Semantic Segmentation](https://arxiv.org/abs/2301.13156) by Qiang Wan, Zilong Huang, Jiachen Lu, Gang Yu, Li Zhang.
+SeaFormer is a mobile-friendly semantic segmentation model that proposes a squeeze-enhanced Axial TransFormer for detail enhancement at a lower computational cost.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Since the introduction of Vision Transformers, the landscape of many computer vision tasks (e.g., semantic segmentation), 
+which has been overwhelmingly dominated by CNNs, recently has significantly revolutionized. 
+However, the computational cost and memory requirement render these methods unsuitable on the mobile device, 
+especially for the high-resolution per-pixel semantic segmentation task. 
+In this paper, we introduce a new method squeeze-enhanced Axial TransFormer (SeaFormer) for mobile semantic segmentation. 
+Specifically, we design a generic attention block characterized by the formulation of squeeze Axial and detail enhancement. 
+It can be further used to create a family of backbone architectures with superior cost-effectiveness. 
+Coupled with a light segmentation head, we achieve the best trade-off between segmentation accuracy and latency on the ARM-based mobile devices on the ADE20K and Cityscapes datasets. 
+Critically, we beat both the mobile-friendly rivals and Transformer-based counterparts with better performance and lower latency without bells and whistles. 
+Beyond semantic segmentation, we further apply the proposed SeaFormer architecture to image classification problem, demonstrating the potentials of serving as a versatile mobile-friendly backbone.*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [Inderpreet01](https://huggingface.co/Inderpreet01).
+The original code can be found [fudan-zvg/SeaFormer](https://github.com/fudan-zvg/SeaFormer/tree/f64a6b5a5bfc72d91fbeae9ac4f54cccd72e5fe4/seaformer-seg).
 
 
 ## SeaformerConfig
