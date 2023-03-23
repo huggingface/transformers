@@ -1978,6 +1978,66 @@ class SpeechT5GuidedMultiheadAttentionLoss(nn.Module):
         return 1.0 - torch.exp(-((grid_y - grid_x) ** 2) / (2 * (sigma**2)))
 
 
+class SpeechT5SpectrogramLoss(nn.Module):
+    """
+    Loss computation used by SpeechT5ForTextToSpeech.
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__()
+        self.config = config
+        self.l1_criterion = L1Loss()
+        self.bce_criterion = BCEWithLogitsLoss(pos_weight=torch.tensor(5.0))
+
+        if self.config.use_guided_attention_loss:
+            self.attn_criterion = SpeechT5GuidedMultiheadAttentionLoss(
+                sigma=self.config.guided_attention_loss_sigma,
+                scale=self.config.guided_attention_loss_scale,
+            )
+
+    def forward(
+        self,
+        attention_mask: torch.LongTensor,
+        outputs_before_postnet: torch.FloatTensor,
+        outputs_after_postnet: torch.FloatTensor,
+        logits: torch.FloatTensor,
+        labels: torch.FloatTensor,
+        cross_attentions: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        padding_mask = labels != -100.0
+
+        # mask out the padded portions
+        labels = labels.masked_select(padding_mask)
+        outputs_before_postnet = outputs_before_postnet.masked_select(padding_mask)
+        outputs_after_postnet = outputs_after_postnet.masked_select(padding_mask)
+
+        # spectrogram loss
+        l1_loss = self.l1_criterion(outputs_after_postnet, labels) + self.l1_criterion(outputs_before_postnet, labels)
+
+        # construct stop labels from the padding mask
+        masks = padding_mask[:, :, 0]
+        stop_labels = torch.cat([~masks * 1.0, torch.ones(masks.size(0), 1).to(masks.device)], dim=1)
+        stop_labels = stop_labels[:, 1:].masked_select(masks)
+        logits = logits.masked_select(masks)
+
+        # stop token loss
+        bce_loss = self.bce_criterion(logits, stop_labels)
+
+        loss = l1_loss + bce_loss
+
+        # guided attention loss
+        if self.config.use_guided_attention_loss:
+            attn = torch.cat([x[:, : self.config.guided_attention_loss_num_heads] for x in cross_attentions], dim=1)
+            input_masks = attention_mask == 1
+            output_masks = padding_mask[:, :, 0]
+            if self.config.reduction_factor > 1:
+                output_masks = output_masks[:, self.config.reduction_factor - 1 :: self.config.reduction_factor]
+            attn_loss = self.attn_criterion(attn, input_masks, output_masks)
+            loss += attn_loss
+
+        return loss
+
+
 SPEECHT5_BASE_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -2693,7 +2753,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self._compute_loss(
+            criterion = SpeechT5SpectrogramLoss(self.config)
+            loss = criterion(
                 attention_mask,
                 outputs_before_postnet,
                 outputs_after_postnet,
@@ -2717,54 +2778,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def _compute_loss(
-        self,
-        attention_mask: torch.LongTensor,
-        outputs_before_postnet: torch.FloatTensor,
-        outputs_after_postnet: torch.FloatTensor,
-        logits: torch.FloatTensor,
-        labels: torch.FloatTensor,
-        cross_attentions: Optional[torch.FloatTensor] = None,
-    ):
-        padding_mask = labels != -100.0
-
-        # mask out the padded portions
-        labels = labels.masked_select(padding_mask)
-        outputs_before_postnet = outputs_before_postnet.masked_select(padding_mask)
-        outputs_after_postnet = outputs_after_postnet.masked_select(padding_mask)
-
-        # spectrogram loss
-        l1_criterion = L1Loss()
-        l1_loss = l1_criterion(outputs_after_postnet, labels) + l1_criterion(outputs_before_postnet, labels)
-
-        # construct stop labels from the padding mask
-        masks = padding_mask[:, :, 0]
-        stop_labels = torch.cat([~masks * 1.0, torch.ones(masks.size(0), 1).to(masks.device)], dim=1)
-        stop_labels = stop_labels[:, 1:].masked_select(masks)
-        logits = logits.masked_select(masks)
-
-        # stop token loss
-        bce_criterion = BCEWithLogitsLoss(pos_weight=torch.tensor(5.0))
-        bce_loss = bce_criterion(logits, stop_labels)
-
-        loss = l1_loss + bce_loss
-
-        # guided attention loss
-        if self.config.use_guided_attention_loss:
-            attn_criterion = SpeechT5GuidedMultiheadAttentionLoss(
-                sigma=self.config.guided_attention_loss_sigma,
-                scale=self.config.guided_attention_loss_scale,
-            )
-            attn = torch.cat([x[:, : self.config.guided_attention_loss_num_heads] for x in cross_attentions], dim=1)
-            input_masks = attention_mask == 1
-            output_masks = padding_mask[:, :, 0]
-            if self.config.reduction_factor > 1:
-                output_masks = output_masks[:, self.config.reduction_factor - 1 :: self.config.reduction_factor]
-            attn_loss = attn_criterion(attn, input_masks, output_masks)
-            loss += attn_loss
-
-        return loss
 
     @torch.no_grad()
     def generate_speech(
