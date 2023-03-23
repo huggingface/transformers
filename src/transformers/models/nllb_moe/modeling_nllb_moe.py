@@ -1125,7 +1125,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -1352,7 +1352,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -1603,7 +1603,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1732,7 +1732,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
         Returns:
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -1801,10 +1801,10 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                     encoder_aux_loss,
                     decoder_z_loss,
                     decoder_aux_loss,
-                    *outputs[1:],
+                    *outputs,
                 )
             else:
-                output += outputs[1:]
+                output += outputs
 
             return output
 
