@@ -51,16 +51,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             Whether to preprocess for `LogMelSpectrogram` or not. For the current implementation this must be `True`.
         padding_value (`int`, *optional*, defaults to 0):
             Padding value used to pad the audio. Should correspond to silences.
-        vocab_size_special (`int`, *optional*, defaults to 4):
-            Number of special values.
-        vocab_size_note (`int`, *optional*, defaults to 128):
-            This represents the number of Note Values. Note values indicate a pitch event for one of the MIDI pitches.
-            But only the 88 pitches corresponding to piano keys are actually used.
-        vocab_size_velocity (`int`, *optional*, defaults to 2):
-            Number of Velocity tokens.
-        vocab_size_time (`int`, *optional*, defaults to 100):
-            This represents the number of Beat Shifts. Beat Shift [100 values] Indicates the relative time shift within
-            the segment quantized into 8th-note beats(half-beats).
         n_fft (`int`, *optional*, defaults to 4096):
             Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
         hop_length (`int`, *optional*, defaults to 1024):
@@ -78,10 +68,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int = 22050,
         use_mel: int = True,
         padding_value: int = 0,
-        vocab_size_special: int = 4,
-        vocab_size_note: int = 128,
-        vocab_size_velocity: int = 2,
-        vocab_size_time: int = 100,
         n_fft: int = 4096,
         hop_length: int = 1024,
         f_min: float = 10.0,
@@ -99,10 +85,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.use_mel = use_mel
         self.padding_value = padding_value
-        self.vocab_size_special = vocab_size_special
-        self.vocab_size_note = vocab_size_note
-        self.vocab_size_velocity = vocab_size_velocity
-        self.vocab_size_time = vocab_size_time
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.f_min = f_min

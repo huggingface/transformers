@@ -20,15 +20,15 @@ import unittest
 
 from transformers import Pop2PianoConfig
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
-from transformers.utils import is_torch_available, is_torchaudio_available
+from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-if is_torch_available() and is_torchaudio_available():
+if is_torch_available():
     import torch
 
     from transformers import Pop2PianoForConditionalGeneration
@@ -36,7 +36,6 @@ if is_torch_available() and is_torchaudio_available():
 
 
 @require_torch
-@require_torchaudio
 class Pop2PianoModelTester:
     def __init__(
         self,
@@ -162,7 +161,7 @@ class Pop2PianoModelTester:
         # make sure that lm_labels are correctly padded from the right
         lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
 
-        # add casaul pad token mask
+        # add causal pad token mask
         triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
         lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
         decoder_input_ids = model._shift_right(lm_labels)
@@ -504,7 +503,6 @@ class Pop2PianoModelTester:
 
 
 @require_torch
-@require_torchaudio
 class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = ()
@@ -635,7 +633,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
 
 @require_torch
-@require_torchaudio
 class Pop2PianoModelIntegrationTests(unittest.TestCase):
     @slow
     def test_mel_conditioner_integration(self):

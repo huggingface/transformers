@@ -3764,6 +3764,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
+    _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
 
 
 # FLAX-backed objects
@@ -7172,7 +7173,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_music_objects import *
     else:
-        from .models.pop2piano import Pop2PianoFeatureExtractor
+        from .models.pop2piano import Pop2PianoFeatureExtractor, Pop2PianoTokenizer
 
     try:
         if not is_flax_available():

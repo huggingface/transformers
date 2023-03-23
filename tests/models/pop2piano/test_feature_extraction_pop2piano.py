@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import tempfile
 import unittest
@@ -21,9 +20,9 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import is_speech_available
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
+    is_torchaudio_available,
     require_essentia,
     require_librosa,
     require_pretty_midi,
@@ -43,7 +42,7 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 
 
 requirements = (
-    is_speech_available()
+    is_torchaudio_available()
     and is_torch_available()
     and is_essentia_available()
     and is_scipy_available()
@@ -52,9 +51,9 @@ requirements = (
 )
 
 if requirements:
-    from transformers import Pop2PianoFeatureExtractor
-if is_torch_available():
     import torch
+
+    from transformers import Pop2PianoFeatureExtractor
 
 
 @require_torch

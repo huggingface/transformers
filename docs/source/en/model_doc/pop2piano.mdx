@@ -37,11 +37,37 @@ Tips:
 
 1. Pop2Piano is an Encoder-Decoder based model like T5.
 2. Pop2Piano can be used to generate midi-audio files for a given audio sequence. This HuggingFace implementation allows to save midi_output as well as stereo-mix output of the audio sequence.
-3. Choosing different composers in Pop2PianoForConditionalGeneration.generate can lead to variety of different results. 
+3. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
 4. Please note that  HuggingFace implementation of Pop2Piano(both Pop2PianoForConditionalGeneration and Pop2PianoFeatureExtractor) can only work with one raw_audio sequence at a time. So if you want to process multiple files, please feed them one by one.  
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
+
+Example:
+```
+import librosa
+from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
+
+raw_audio, sr = librosa.load("audio.mp3", sr=44100)
+model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+
+model.eval()
+
+feature_extractor_outputs = fe(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
+model_outputs = model.generate(feature_extractor_outputs, composer="composer1")
+
+opt_postprocess = tokenizer(relative_tokens=model_outputs,
+                           beatsteps=feature_extractor_outputs["beatsteps"],
+                           ext_beatstep=feature_extractor_outputs["ext_beatstep"],
+                           raw_audio=raw_audio,
+                           sampling_rate=sr,
+                           save_path="./Music/Outputs/",
+                           audio_file_name="filename",
+                           save_midi=True
+                )
+```
 
 
 ## Pop2PianoConfig
@@ -58,4 +84,9 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 [[autodoc]] Pop2PianoForConditionalGeneration
     - forward
     - generate
+
+## Pop2PianoTokenizer
+
+[[autodoc]] Pop2PianoTokenizer
+    - __call__
 

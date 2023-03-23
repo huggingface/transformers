@@ -1174,10 +1174,10 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 MUSIC_IMPORT_ERROR = """
-{0} requires these libraries - pretty_midi, soundfile, essentia, librosa, scipy, torchaudio. But at least 
+{0} requires these libraries - pretty_midi, soundfile, essentia, librosa, scipy, torchaudio. But at least
 one of them were not found in your environment. You can install them with pip:
 `pip install pretty-midi==0.2.9 soundfile essentia==2.1b6.dev609 librosa scipy torchaudio`
-Please note that you may need to restart your runtime after installation.   
+Please note that you may need to restart your runtime after installation.
 """
 
 DECORD_IMPORT_ERROR = """

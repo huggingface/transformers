@@ -57,6 +57,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_pop2piano"] = ["Pop2PianoFeatureExtractor"]
+    _import_structure["tokenization_pop2piano"] = ["Pop2PianoTokenizer"]
 
 
 if TYPE_CHECKING:
@@ -89,6 +90,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor
+        from .tokenization_pop2piano import Pop2PianoTokenizer
 
 else:
     import sys

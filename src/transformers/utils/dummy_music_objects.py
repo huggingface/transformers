@@ -7,3 +7,10 @@ class Pop2PianoFeatureExtractor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["music"])
+
+
+class Pop2PianoTokenizer(metaclass=DummyObject):
+    _backends = ["music"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["music"])
