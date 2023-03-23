@@ -111,6 +111,11 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.
+
+    Args:
+        x: torch.Tensor x:
+
+    Returns: torch.Tensor
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
@@ -506,7 +511,7 @@ class NllbMoeSparseMLP(nn.Module):
         return hidden_states, (router_logits, top_1_expert_index)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe,key_value_states->encoder_hidden_states
 class NllbMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
