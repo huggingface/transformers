@@ -57,6 +57,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "LlamaDecoder",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
@@ -256,6 +257,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+    "Pix2StructForConditionalGeneration",
     "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
@@ -820,6 +824,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "AutoBackbone",
     "BitBackbone",
     "ConvNextBackbone",
+    "ConvNextV2Backbone",
     "DinatBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",

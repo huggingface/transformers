@@ -57,7 +57,7 @@ class EsmTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, **kwargs):
         super().__init__(**kwargs)
         self.all_tokens = load_vocab_file(vocab_file)
-        self._id_to_token = {ind: tok for ind, tok in enumerate(self.all_tokens)}
+        self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
         self.unk_token = "<unk>"
         self.cls_token = "<cls>"
