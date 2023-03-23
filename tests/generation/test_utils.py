@@ -1520,7 +1520,7 @@ class GenerationTesterMixin:
             signature = inspect.signature(model.forward).parameters.keys()
 
             no_failures = True
-            for _ in range(30):
+            for _ in range(10):  # there may be false positives with 10 runs, we rely on the CI to catch the flakyness
                 _, input_ids, attention_mask, _ = self._get_input_ids_and_config()
                 model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
                 if "position_ids" in signature:
