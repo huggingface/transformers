@@ -6010,16 +6010,6 @@ if TYPE_CHECKING:
             tf_top_k_top_p_filtering,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
-        from .modeling_tf_layoutlm import (
-            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFLayoutLMForMaskedLM,
-            TFLayoutLMForQuestionAnswering,
-            TFLayoutLMForSequenceClassification,
-            TFLayoutLMForTokenClassification,
-            TFLayoutLMMainLayer,
-            TFLayoutLMModel,
-            TFLayoutLMPreTrainedModel,
-        )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
 
         # TensorFlow model imports
@@ -6272,6 +6262,16 @@ if TYPE_CHECKING:
             TFHubertForCTC,
             TFHubertModel,
             TFHubertPreTrainedModel,
+        )
+        from .models.layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForQuestionAnswering,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
         )
         from .models.layoutlmv3 import (
             TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
