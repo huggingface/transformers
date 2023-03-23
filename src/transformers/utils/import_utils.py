@@ -419,6 +419,19 @@ def is_pretty_midi_available():
     return _pretty_midi_available
 
 
+def is_music_available():
+    if (
+        is_pretty_midi_available()
+        and is_soundfile_availble()
+        and is_essentia_available()
+        and is_librosa_available()
+        and is_scipy_available()
+        and is_torchaudio_available()
+    ):
+        return True
+    return False
+
+
 def is_torch_cuda_available():
     if is_torch_available():
         import torch
@@ -1159,6 +1172,14 @@ CCL_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+MUSIC_IMPORT_ERROR = """
+{0} requires these libraries - pretty_midi, soundfile, essentia, librosa, scipy, torchaudio. But at least 
+one of them were not found in your environment. You can install them with pip:
+`pip install pretty-midi==0.2.9 soundfile essentia==2.1b6.dev609 librosa scipy torchaudio`
+Please note that you may need to restart your runtime after installation.   
+"""
+
 DECORD_IMPORT_ERROR = """
 {0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
 decord`. Please note that you may need to restart your runtime after installation.
@@ -1204,6 +1225,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("music", (is_music_available, MUSIC_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),

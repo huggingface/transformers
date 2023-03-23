@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
+    is_music_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,
@@ -471,7 +472,6 @@ _import_structure = {
     "models.pop2piano": [
         "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Pop2PianoConfig",
-        "Pop2PianoFeatureExtractor",
     ],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
@@ -3752,6 +3752,20 @@ else:
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
+# music-backed objects
+try:
+    if not is_music_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_music_objects
+
+    _import_structure["utils.dummy_music_objects"] = [
+        name for name in dir(dummy_music_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
+
+
 # FLAX-backed objects
 try:
     if not is_flax_available():
@@ -4438,7 +4452,6 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Pop2PianoConfig,
-        Pop2PianoFeatureExtractor,
     )
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
@@ -7152,6 +7165,14 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer_tf import TFTrainer
+
+    try:
+        if not is_music_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_music_objects import *
+    else:
+        from .models.pop2piano import Pop2PianoFeatureExtractor
 
     try:
         if not is_flax_available():
