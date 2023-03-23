@@ -122,7 +122,7 @@ class NERTransformer(BaseTransformer):
         preds = np.argmax(preds, axis=2)
         out_label_ids = np.concatenate([x["target"] for x in outputs], axis=0)
 
-        label_map = {i: label for i, label in enumerate(self.labels)}
+        label_map = dict(enumerate(self.labels))
         out_label_list = [[] for _ in range(out_label_ids.shape[0])]
         preds_list = [[] for _ in range(out_label_ids.shape[0])]
 
@@ -140,7 +140,7 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-        ret = {k: v for k, v in results.items()}
+        ret = dict(results.items())
         ret["log"] = results
         return ret, preds_list, out_label_list
 

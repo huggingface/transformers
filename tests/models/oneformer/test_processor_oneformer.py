@@ -401,9 +401,7 @@ class OneFormerProcessingTest(unittest.TestCase):
             high = num_labels
             if is_instance_map:
                 labels_expanded = list(range(num_labels)) * 2
-                instance_id_to_semantic_id = {
-                    instance_id: label_id for instance_id, label_id in enumerate(labels_expanded)
-                }
+                instance_id_to_semantic_id = dict(enumerate(labels_expanded))
             annotations = [
                 np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
             ]

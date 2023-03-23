@@ -56,11 +56,8 @@ if is_torch_available():
 
 @is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
-    model_mapping = {
-        k: v
-        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
-        + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
-    }
+    model_mapping = dict((list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+        + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else []))
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:

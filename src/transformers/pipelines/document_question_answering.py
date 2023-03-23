@@ -418,7 +418,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         else:
             model_outputs = self.model(**model_inputs)
 
-        model_outputs = {k: v for (k, v) in model_outputs.items()}
+        model_outputs = dict(model_outputs.items())
         model_outputs["p_mask"] = p_mask
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words

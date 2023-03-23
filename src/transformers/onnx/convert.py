@@ -179,9 +179,7 @@ def export_pytorch(
                         f=output.as_posix(),
                         input_names=list(config.inputs.keys()),
                         output_names=onnx_outputs,
-                        dynamic_axes={
-                            name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())
-                        },
+                        dynamic_axes=dict(chain(config.inputs.items(), config.outputs.items())),
                         do_constant_folding=True,
                         use_external_data_format=config.use_external_data_format(model.num_parameters()),
                         enable_onnx_checker=True,
@@ -208,7 +206,7 @@ def export_pytorch(
                     f=output.as_posix(),
                     input_names=list(config.inputs.keys()),
                     output_names=onnx_outputs,
-                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                    dynamic_axes=dict(chain(config.inputs.items(), config.outputs.items())),
                     do_constant_folding=True,
                     opset_version=opset,
                 )
