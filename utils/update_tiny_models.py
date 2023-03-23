@@ -1,3 +1,26 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""A script running `create_dummy_models.py` with a pre-defined set of arguments.
+
+This file is intended to be used in a CI workflow file without the need of specifying arguments. It creates and uploads
+tiny models for all model classes (if their tiny versions are not on the Hub yet), as well as produces an updated
+version of `tests/utils/tiny_model_summary.json`. That updated file should be merged into the `main` branch of
+`transformers` so the pipeline testing will use the latest created/updated tiny models.
+"""
+
+
 import copy
 import json
 import os
