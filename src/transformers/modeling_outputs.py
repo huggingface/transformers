@@ -847,6 +847,7 @@ class Seq2SeqMoEOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
     logits: torch.FloatTensor = None
     encoder_z_loss: torch.FloatTensor = None
     decoder_z_loss: torch.FloatTensor = None

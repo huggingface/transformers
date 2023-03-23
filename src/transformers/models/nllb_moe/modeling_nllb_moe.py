@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch No Language Left Behind Mixture of Expert model."""
+""" PyTorch NLLB-MoE model."""
 
 
 import math
@@ -46,7 +46,7 @@ from .configuration_nllb_moe import NllbMoeConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "NllbMoeConfig"
-_CHECKPOINT_FOR_DOC = "facebook/nllb-moe"
+_CHECKPOINT_FOR_DOC = "hf-internal-testing/dummy-nllb-moe-2-experts"
 
 ####################################################
 # This dict contains ids and associated url
@@ -106,6 +106,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -117,6 +118,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
+# TODO I think this one is not used in the fairseq implenetation
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
@@ -137,6 +140,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
+# Copied from transformers.models.switch_transformers.modeling_switch_transformersd.load_balancing_loss_func
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -303,8 +307,7 @@ class NllbMoeTop2Router(nn.Module):
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple:
         """
-        Computes the `dispatch_mask` and the `dispatch_weights` for each experts.
-
+        Computes the `dispatch_mask` and the `dispatch_weights` for each experts. TODO add more dosctring
 
 
         """
@@ -363,9 +366,8 @@ class NllbMoeTop2Router(nn.Module):
         if not self.training and self.moe_eval_capacity_token_fraction > 0:
             self.expert_capacity = math.ceil(self.moe_eval_capacity_token_fraction * nb_tokens)
         else:
-            self.expert_capacity = (
-                2 * math.ceil(nb_tokens / self.num_experts) if self.expert_capacity is None else self.expert_capacity
-            )
+            capacity = 2 * math.ceil(nb_tokens / self.num_experts)
+            self.expert_capacity = capacity if self.expert_capacity is None else self.expert_capacity
 
         # Remove locations outside capacity from ( cumsum < capacity = False will not be routed)
         top_1_mask = top_1_mask * torch.lt(locations1, self.expert_capacity)
@@ -412,7 +414,7 @@ class NllbMoeTop2Router(nn.Module):
         return top_1_mask, router_probs, router_logits
 
 
-# Adapted from transformers.models.t5.modeling_t5.T5DenseActDense with T5->NllbMoe
+# Adapted from transformers.models.t5.modeling_t5.T5DenseActDense
 class NllbMoeDenseActDense(nn.Module):
     def __init__(self, config: NllbMoeConfig, ffn_dim: int):
         super().__init__()
@@ -435,10 +437,10 @@ class NllbMoeDenseActDense(nn.Module):
         return hidden_states
 
 
-# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->NllbMoe
+# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP
 class NllbMoeSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module.
+    Implementation of the NLLB-MoE sparse MLP module.
     """
 
     def __init__(self, config: NllbMoeConfig, ffn_dim: int, expert_class: nn.Module = NllbMoeDenseActDense):
@@ -452,7 +454,7 @@ class NllbMoeSparseMLP(nn.Module):
         for idx in range(self.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = False):
         r"""
         The goal of this forward pass is to have the same number of operation as the equivalent `NllbMoeDenseActDense`
         (mlp) layer. This means that all of the hidden states should be processed at most twice ( since we are using a
@@ -467,15 +469,15 @@ class NllbMoeSparseMLP(nn.Module):
         contribution of each experts when updating the masked hidden states.
 
         Args:
-            hidden_states (`torch.Tensor` of shape `batch_size, sequence_length, hidden_dim`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`):
                 The hidden states
-            padding_mask (`torch.Tensor`, *optional*):
+            padding_mask (`torch.Tensor`, *optional*, defaults to `False`):
                 Attention mask. Can be in the causal form or not.
 
         Returns:
-            hidden_states:
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_lenght, hidden_dim)`):
                 Updated hidden states
-            router_logits:
+            router_logits (`torch.Tensor` of shape `(batch_size, sequence_length, num_experts)`):
                 Needed for computing the loss
 
         """
@@ -491,7 +493,7 @@ class NllbMoeSparseMLP(nn.Module):
             expert_output = expert(masked_hidden_states[idx, token_indices])
             if self.moe_token_dropout > 0:
                 if self.training:
-                    # Expert Output Masking EOM using 2D dropout TODO make sure this actually does what is needed:
+                    # Expert Output Masking EOM using 2D dropout TODO check that it is okay
                     # Due to historical reasons, this class will perform 1D channel-wise dropout for 3D inputs (as done by nn.Dropout1d). Thus, it currently does NOT support inputs without a batch dimension of shape
                     # (C,H,W). This behavior will change in a future release to interpret 3D inputs as no-batch-dim inputs. To maintain the old behavior, switch to nn.Dropout1d.
                     expert_output = self.token_dropout(expert_output)
@@ -504,7 +506,7 @@ class NllbMoeSparseMLP(nn.Module):
         return hidden_states, (router_logits, top_1_expert_index)
 
 
-# Adapted from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
 class NllbMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -757,10 +759,7 @@ class NllbMoeDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.cross_attention = NllbMoeAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
+            self.embed_dim, config.decoder_attention_heads, config.attention_dropout, is_decoder=True
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
         if not self.is_sparse:
@@ -1159,19 +1158,15 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                     f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
                     f" {head_mask.size()[0]}."
                 )
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
-
+            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+                layer_outputs = (None, None, None)
+            else:
                 if self.gradient_checkpointing and self.training:
                     # create gradient checkpointing function
                     def create_custom_forward(module):
@@ -1196,9 +1191,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                     )
 
                 hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
@@ -1606,12 +1598,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1827,6 +1813,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             encoder_aux_loss=encoder_aux_loss,
             decoder_aux_loss=decoder_aux_loss,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            last_hiden_states=outputs.last_hiden_states,
             encoder_hidden_states=outputs.encoder_hidden_states,
             decoder_hidden_states=outputs.decoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,

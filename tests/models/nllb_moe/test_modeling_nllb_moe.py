@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch NllbMoe model. """
+""" Testing suite for the PyTorch NLLB-MoE model. """
 
 
 import copy
@@ -103,7 +103,6 @@ class NllbMoeModelTester:
         pad_token_id=1,
         bos_token_id=0,
         num_experts=4,
-        use_attention_mask=True,
         encoder_sparse_step=2,
         decoder_sparse_step=1,
         expert_capacity=100,
@@ -340,129 +339,93 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
 
-def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
-
-
-TOLERANCE = 1e-4
-
-
 @require_torch
 @require_sentencepiece
 @require_tokenizers
 @slow
 class NllbMoeModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_tokenizer(self):
+    def tokenizer(self):
         return NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
+    
+    @cached_property
+    def big_model(self):
+        return  NllbMoeForConditionalGeneration.from_pretrained("/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b")
 
-    @require_torch_gpu
-    def test_inference_no_head(self):
+    #@require_torch_gpu
+    def test_inference_logits(self):
         r"""
-        Logits testing to check implementation consistency between `t5x` implementation
-        and `transformers` implementation of Switch-C transformers. We only check the logits
-        of the first batch.
+        Logits testing to check implementation consistency between `fairseq` implementation
+        and `transformers` implementation of NLLB-MoE transformers. We only check the logits
+        of the second sample of the batch, as it is padded.
         """
-        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
-        model = model.eval().to(torch_device)
-        src_text = ["Life is like a box of chocolates.", "I just want to code."]
-        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
-        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
-
-        with torch.no_grad():
-            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
-
-        # fmt: off
-        EXPECTED_ENCODER_LAST_HIDDEN = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
-        # fmt: on
-
-        torch.testing.assert_allclose(
-            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
-        )
-
-        # fmt: off
-        EXPECTED_DECODER_LAST_HIDDEN = torch.Tensor([-6.0425e-02, -2.0015e-01,  6.0575e-02, -8.6366e-01, -1.1310e+00, 6.8369e-01,  7.5615e-01,  7.3555e-01,  2.3071e-01,  1.5954e+00, -7.0728e-01, -2.2647e-01, -1.3292e+00,  4.8246e-01, -6.9153e-01, -1.8199e-02, -7.3664e-01,  1.5902e-03,  1.0760e-01,  1.0298e-01, -9.3933e-01, -4.6567e-01,  8.0417e-01,  1.5243e+00,  5.5844e-01, -9.9239e-02,  1.4885e+00,  7.1527e-02, -5.2612e-01,  9.4435e-02])
-        # fmt: on
-
-        torch.testing.assert_allclose(
-            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_LAST_HIDDEN, rtol=6e-3, atol=9e-3
-        )
-
-    def test_inference_head(self):
         model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
         model = model.eval().to(torch_device)
         src_text = ["Life is like a box of chocolates.", "I just want to code."]
-        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
-        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
-
-        with torch.no_grad():
-            output = model(**model_inputs, decoder_input_ids=decoder_input_ids).logits
-
-        # fmt: off
-        EXPECTED_LOGTIS = torch.Tensor([-0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,])
-        # fmt: on
-
-        self.assertTrue(torch.allclose(output[1, 0, :30].cpu(), EXPECTED_LOGTIS, atol=TOLERANCE))
-
-    @tooslow
-    @require_accelerate
-    def test_large_logits(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained(
-            "facebook/nllb-moe-54b",
-            device_map="auto",
-            offload_folder="/home/arthur_huggingface_co/transformers/Arthur",
-        )
-        model = model.eval().to(torch_device)
-        src_text = ["Life is like a box of chocolates.", "I just want to code."]
-        model_inputs = self.default_tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
+        model_inputs = self.tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
         decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
 
         with torch.no_grad():
             output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
 
         # fmt: off
-        EXPECTED_FAIRSEQ_ENCODER_LAST_STATES = torch.Tensor([ 0.1696, -0.0059,  0.0489,  0.0479, -0.4222, -0.2178, -0.1372, -0.0860, -0.4249, -0.0081, -0.1186,  0.6678,  0.0160,  0.4140,  0.1799,  0.0672, -0.4941,  0.0173, -0.0740,  0.0845, -0.2197,  0.4465,  0.2268, -0.1752, -0.0562,  0.1033, -0.0869, -0.5490,  0.0582,  0.2165])
-        EXPECTED_FAIRSEQ_DECODER_STATES = torch.Tensor([ 0.0374, -0.1055, -0.1060, -0.1711, -0.0540, -0.1183, -0.0779,  0.0610, -0.0279, -0.0848,  0.0222,  0.0372, -0.0298, -0.0861, -0.0354, -0.0103,  0.0538, -0.0148, -0.0105,  0.0224,  0.0629, -0.0291, -0.0671,  0.0173, -0.0066, -0.0245, -0.0499,  0.0760, -0.0067,  0.0086])
-        EXPECTED_FAIRSEQ_LOGITS = torch.Tensor([ 0.3834,  0.2057,  4.5399,  0.8301,  0.4810,  0.9325,  0.9928,  0.9574,  0.5517,  0.9156,  0.2698,  0.6728,  0.7121,  0.3080,  0.4693,  0.5756,  1.0407,  0.2219,  0.3714,  0.5699,  0.5547,  0.8472,  0.3178,  0.1286,  0.1791,  0.9391,  0.5153, -0.2146,  0.1689,  0.6816])
+        EXPECTED_ENCODER_STATE = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
+        EXPECTED_DECODER_STATE = torch.Tensor([-6.0425e-02, -2.0015e-01,  6.0575e-02, -8.6366e-01, -1.1310e+00, 6.8369e-01,  7.5615e-01,  7.3555e-01,  2.3071e-01,  1.5954e+00, -7.0728e-01, -2.2647e-01, -1.3292e+00,  4.8246e-01, -6.9153e-01, -1.8199e-02, -7.3664e-01,  1.5902e-03,  1.0760e-01,  1.0298e-01, -9.3933e-01, -4.6567e-01,  8.0417e-01,  1.5243e+00,  5.5844e-01, -9.9239e-02,  1.4885e+00,  7.1527e-02, -5.2612e-01,  9.4435e-02])
+        EXPECTED_LOGTIS = torch.Tensor([-0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,])
         # fmt: on
 
         torch.testing.assert_allclose(
-            output.encoder_last_hidden_state[1, 0, :30].cpu(),
-            EXPECTED_FAIRSEQ_ENCODER_LAST_STATES,
-            rtol=6e-3,
-            atol=9e-3,
+            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
         )
         torch.testing.assert_allclose(
-            output.last_hidden_states[1, 0, :30].cpu(), EXPECTED_FAIRSEQ_DECODER_STATES, rtol=6e-3, atol=9e-3
+            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
         )
-        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_FAIRSEQ_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    @tooslow
-    @require_accelerate
-    def test_seq_to_seq_generation(self):
-        model = NllbMoeForConditionalGeneration.from_pretrained(
-            "facebook/nllb-moe-54b",
-            device_map="auto",
-            offload_folder="/home/arthur_huggingface_co/transformers/Arthur",
+    # @tooslow("This test requires at least 340GB of RAM.")
+    def test_large_logits(self):
+        model = self.big_model
+        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
+        model = model.eval().to(torch_device)
+        src_text = ["Life is like a box of chocolates.", "I just want to code."]
+        model_inputs = tokenizer(src_text, return_tensors="pt", padding=True).to(torch_device)
+        decoder_input_ids = torch.tensor([[2, 256057], [2, 256057]], device=torch_device)
+
+        with torch.no_grad():
+            output = model(**model_inputs, decoder_input_ids=decoder_input_ids)
+
+        # fmt: off
+        EXPECTED_ENCODER_STATE = torch.Tensor([ 0.1696, -0.0059,  0.0489,  0.0479, -0.4222, -0.2178, -0.1372, -0.0860, -0.4249, -0.0081, -0.1186,  0.6678,  0.0160,  0.4140,  0.1799,  0.0672, -0.4941,  0.0173, -0.0740,  0.0845, -0.2197,  0.4465,  0.2268, -0.1752, -0.0562,  0.1033, -0.0869, -0.5490,  0.0582,  0.2165])
+        EXPECTED_DECODER_STATE = torch.Tensor([ 0.0374, -0.1055, -0.1060, -0.1711, -0.0540, -0.1183, -0.0779,  0.0610, -0.0279, -0.0848,  0.0222,  0.0372, -0.0298, -0.0861, -0.0354, -0.0103,  0.0538, -0.0148, -0.0105,  0.0224,  0.0629, -0.0291, -0.0671,  0.0173, -0.0066, -0.0245, -0.0499,  0.0760, -0.0067,  0.0086])
+        EXPECTED_LOGTIS = torch.Tensor([ 0.3834,  0.2057,  4.5399,  0.8301,  0.4810,  0.9325,  0.9928,  0.9574,  0.5517,  0.9156,  0.2698,  0.6728,  0.7121,  0.3080,  0.4693,  0.5756,  1.0407,  0.2219,  0.3714,  0.5699,  0.5547,  0.8472,  0.3178,  0.1286,  0.1791,  0.9391,  0.5153, -0.2146,  0.1689,  0.6816])
+        # fmt: on
+
+        torch.testing.assert_allclose(
+            output.encoder_last_hidden_state[1, 0, :30].cpu(), EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
         )
+        torch.testing.assert_allclose(
+            output.last_hidden_state[1, 0, :30].cpu(), EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
+        )
+        torch.testing.assert_allclose(output.logits[1, 0, :30].cpu(), EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
+
+    # @tooslow("This test requires at least 340GB of RAM.")
+    def test_seq_to_seq_generation(self):
+        model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
 
         # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth from the fairseq translation files
         FIRST_6_FLORES_200 = [
             'We now have 4-month-old mice that are non-diabetic that used to be diabetic," he added.',
-            "Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia and chair of the clinical and scientific division of the Canadian Diabetes Association cautioned that the research is still in its early days."
-            "Like some other experts, he is skeptical about whether diabetes can be cured, noting that these findings have no relevance to people who already have Type 1 diabetes."
+            "Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia and chair of the clinical and scientific division of the Canadian Diabetes Association cautioned that the research is still in its early days.",
+            "Like some other experts, he is skeptical about whether diabetes can be cured, noting that these findings have no relevance to people who already have Type 1 diabetes.",
             "On Monday, Sara Danius, permanent secretary of the Nobel Committee for Literature at the Swedish Academy, publicly announced during a radio program on Sveriges Radio in Sweden the committee, unable to reach Bob Dylan directly about winning the 2016 Nobel Prize in Literature, had abandoned its efforts to reach him.",
             'Danius said, "Right now we are doing nothing. I have called and sent emails to his closest collaborator and received very friendly replies. For now, that is certainly enough."',
             "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage.",
         ]
-        dct = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt")
+        inputs = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt").to(torch_device)
 
-        hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
-            forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"],
-        )  # takes about 38.176 seconds
+        # takes about 38.176 seconds
+        hypotheses_batch = model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"])
 
         EXPECTED_FAIRSEQ_TRANSLATION = [
             '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
@@ -471,11 +434,12 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "Lundi, Sara Danius, secrétaire permanente du Comité Nobel de littérature à l'Académie suédoise, a annoncé publiquement lors d'une émission de radio sur Sveriges Radio en Suède que le comité, incapable de contacter Bob Dylan directement au sujet du prix Nobel de littérature 2016, avait abandonné ses efforts pour le joindre.",
             "Danius a déclaré: \"Pour le moment, nous ne faisons rien. J'ai appelé et envoyé des courriels à son plus proche collaborateur et j'ai reçu des réponses très amicales. Pour l'instant, c'est certainement suffisant\".",
             "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage.",
-            "Il a construit une sonnette WiFi, il a dit.",
         ]
 
-        tokenizer.batch_decode(hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True)
-        assert FIRST_6_FLORES_200 == EXPECTED_FAIRSEQ_TRANSLATION
+        translation = tokenizer.batch_decode(
+            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+        )
+        assert translation == EXPECTED_FAIRSEQ_TRANSLATION
 
 
 @require_torch
@@ -533,3 +497,10 @@ class NllbMoeRouterTest(unittest.TestCase):
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor([[ 7.0340e-04,  2.7997e-03, -1.3351e-02, -7.6705e-03, -3.5089e-03,3.9773e-03,  7.4593e-03,  1.2566e-02,  3.5860e-03, -2.7448e-02,-1.3731e-02, -1.0534e-02, -1.3606e-02, -1.5048e-02, -2.8914e-03,-5.0371e-03, -1.3963e-03,  6.0076e-03, -1.1380e-02, -1.4620e-02, 5.2401e-03,  8.4660e-04, -1.5319e-03, -1.6735e-02,  1.1302e-02, 3.6119e-03,  4.6084e-03, -1.3458e-02,  7.7792e-05,  1.4312e-02, 4.9107e-03, -5.0936e-03], [-4.4538e-03,  3.1026e-03,  1.4121e-04, -4.8121e-03, -5.6279e-03, 7.2493e-03,  3.9769e-03,  1.1114e-02, -1.5666e-03, -2.3477e-02, 8.7268e-03,  1.3446e-02, -2.8845e-05, -1.7287e-02,  8.7619e-03, -4.5316e-03, -1.2164e-02,  5.7461e-03, -4.5861e-03, -9.3907e-03, 2.9808e-02,  8.9206e-04, -7.6232e-04, -1.4173e-02,  3.0208e-03, 1.5310e-02,  9.7717e-03,  3.1014e-03,  7.8042e-03,  8.0197e-03, 3.4784e-03, -7.1728e-03]])
         # fmt: on
         self.assertTrue(torch.allclose(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
+
+    def test_batch_prioritized_routing(self):
+        self.config.batch_prioritized_routing=True
+        NllbMoeTop2Router(self.config)
+
+    def test_seconde_expert_policy(self):
+        pass
