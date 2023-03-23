@@ -149,7 +149,6 @@ Here, we'll show some of the parameters that control the decoding strategies and
 ### Greedy Search
 
 [`generate`] uses greedy search decoding by default so you don't have to pass any parameters to enable it. This means the parameters `num_beams` is set to 1 and `do_sample=False`.
-`do_sample=False`. Because it is a default strategy, you do not have to pass any parameters to `generate()` method to enable it.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
