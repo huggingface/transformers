@@ -25,7 +25,7 @@ from .base import ChunkPipeline
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
-    from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+    from ..feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
 
