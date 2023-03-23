@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import os
 import tempfile
 import unittest
 
@@ -108,6 +109,28 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         gc.collect()
         torch.cuda.empty_cache()
+
+    def test_config_save_pretrained(self):
+        r"""
+        A simple test to test if the config is saved correctly.
+        """
+        config = BitsAndBytesConfig()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = BitsAndBytesConfig.from_pretrained(tmp_dir)
+            self.assertFalse(config.llm_int8_enable_fp32_cpu_offload)
+
+            # assert that `quantization_config.json` is inside the directory
+            self.assertTrue("quantization_config.json" in os.listdir(tmp_dir))
+
+        config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = BitsAndBytesConfig.from_pretrained(tmp_dir)
+            self.assertTrue(config.llm_int8_enable_fp32_cpu_offload)
+
+            # assert that `quantization_config.json` is inside the directory
+            self.assertTrue("quantization_config.json" in os.listdir(tmp_dir))
 
     def test_memory_footprint(self):
         r"""
