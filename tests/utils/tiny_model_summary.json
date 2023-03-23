@@ -1422,24 +1422,30 @@
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "d16d04449d532044ee029472e9d0396674a6df36"
+        "model_classes": [
+            "DinatBackbone"
+        ],
+        "sha": "3ba13790a0796d90104c207f75bb3d5d79723d51"
     },
     "DinatForImageClassification": {
         "tokenizer_classes": [],
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "27b61c04f94937afe36e7f40d1be6719e0c5743b"
+        "model_classes": [
+            "DinatForImageClassification"
+        ],
+        "sha": "624cf2d864a7ea2f90e24014a213e34597e8bd76"
     },
     "DinatModel": {
         "tokenizer_classes": [],
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "6864ed56ef1170bf42af2b84433770e68afe0281"
+        "model_classes": [
+            "DinatModel"
+        ],
+        "sha": "d6c75bc51196f0a683afb12de6310fdda13efefd"
     },
     "DistilBertForMaskedLM": {
         "tokenizer_classes": [
@@ -3646,24 +3652,30 @@
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "3b5d53d54306b00a766e6bc56c8ab970b1215ba0"
+        "model_classes": [
+            "NatBackbone"
+        ],
+        "sha": "d5cc5eccba4da609c82e9f5c649301b9f9fee9fb"
     },
     "NatForImageClassification": {
         "tokenizer_classes": [],
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "f2f9a5df03946dea01c15fee46e9ee447c1bdaf6"
+        "model_classes": [
+            "NatForImageClassification"
+        ],
+        "sha": "2ff4c9e73c49c392c02a467e87b5511fd924242a"
     },
     "NatModel": {
         "tokenizer_classes": [],
         "processor_classes": [
             "ViTImageProcessor"
         ],
-        "model_classes": [],
-        "sha": "4cae1a05ab74edf958f0de7a0dc2c38067e52152"
+        "model_classes": [
+            "NatModel"
+        ],
+        "sha": "75e9756bb94d0ccdce98a8e963eeecbc66f9d573"
     },
     "NezhaForMaskedLM": {
         "tokenizer_classes": [
