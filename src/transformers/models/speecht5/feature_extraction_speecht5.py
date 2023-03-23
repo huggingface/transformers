@@ -177,7 +177,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         Extracts log-mel filterbank features for one waveform array (unbatched).
         """
         if self.n_fft != self.sample_size:
-            raise NotImplementedError("Currently the STFT frame size must be a power of two.")
+            raise NotImplementedError(f"Currently the STFT frame size must be a power of two, but got {self.sample_size} for a window length of {self.win_length} and sampling rate of {self.sampling_rate}. Ensure `win_length * sampling_rate // 1000` is divisible by two.")
 
         stft_out = self._stft(one_waveform, self.n_fft, self.sample_stride, self.window)
 
