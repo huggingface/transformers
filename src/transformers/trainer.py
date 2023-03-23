@@ -544,7 +544,10 @@ class Trainer:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
-            raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
+            raise ValueError(
+                "The train_dataset does not implement __len__, max_steps has to be specified. "
+                "The number of steps needs to be known in advance for the learning rate scheduler."
+            )
 
         if (
             train_dataset is not None
@@ -585,7 +588,12 @@ class Trainer:
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
-                if args.device == torch.device("cpu"):
+                if is_torch_neuroncore_available():
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` but this option is not yet supported on Neuron.")
+                    else:
+                        args.half_precision_backend = "cpu_amp"
+                elif args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                     elif _is_native_cpu_amp_available:

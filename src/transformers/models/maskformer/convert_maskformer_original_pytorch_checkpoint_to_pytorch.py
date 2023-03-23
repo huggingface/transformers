@@ -111,7 +111,7 @@ class OriginalMaskFormerConfigToOursConverter:
         swin = model.SWIN
 
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
-        id2label = {idx: label for idx, label in enumerate(dataset_catalog.stuff_classes)}
+        id2label = dict(enumerate(dataset_catalog.stuff_classes))
         label2id = {label: idx for idx, label in id2label.items()}
 
         config: MaskFormerConfig = MaskFormerConfig(
