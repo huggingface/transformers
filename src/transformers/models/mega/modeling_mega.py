@@ -629,7 +629,8 @@ class MegaGatedCrossAttention(nn.Module):
             past_key_values (`tuple(torch.FloatTensor)`, *optional*):
                 If provided, the hidden state returned from the previous timestep during incremental decoding; expects
                 that prior cross-attention keys and values will be the last two items in the tuple
-            output_attentions (`bool`, defaults to `False`): if true, cross-attention weights will be returned
+            output_attentions (`bool`, defaults to `False`): 
+                 Whether or not to return the cross-attention weights.
             use_cache (`bool`, defaults to `False`):
                 Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step

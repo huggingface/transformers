@@ -60,17 +60,17 @@ class MegaConfig(PretrainedConfig):
         use_chunking (`bool`, *optional*, defaults to `False`):
             Whether to chunk inputs for linear self-attention complexity (described as Mega-chunk in the paper)
         chunk_size (`int`, *optional*, defaults to -1):
-            If `use_chunking` is True, determines the size of the chunks to apply to the input sequence. If chunking is
+            If `use_chunking` is set to `True`, determines the size of the chunks to apply to the input sequence. If chunking is
             used, input sequences must be padded to a multiple of `chunk_size`
         truncation (`int`, *optional*):
             If specified, the sequence length for which to truncate MultiDimensionDampedEMA
         normalize_before_mega (`bool`, *optional*, defaults to `True`):
-            Whether to normalize before (True) or after (False) passing through Mega encoder blocks
+            Whether to normalize before (`True`) or after (`False`) passing through Mega encoder blocks
         normalization_type (`str`, *optional*, defaults to `"scalenorm"`):
             Type of normalization to use in Mega encoder blocks. Choose one of `"scalenorm"`, `"layernorm"`,
             `"rmsnorm"`, `"batchnorm"`, or `"syncbatchnorm"` (GPU required for syncbatchnorm)
         norm_affine (`bool`, *optional*, defaults to `True`):
-            If True, applies a parameterized affine transformation to inputs during normalization
+            If `True`, applies a parameterized affine transformation to inputs during normalization
         activation (`str`, *optional*, defaults to `"silu"`):
             Activation function to apply within Mega encoder blocks. Choose one of `"silu"`, `"relu"`, `"linear"`,
             `"gelu"`, or `"gelu_accurate"`
@@ -84,20 +84,20 @@ class MegaConfig(PretrainedConfig):
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         use_feature_dropout (`bool`, *optional*, defaults to `False`):
-            Whether to use feature-based (True) or standard dropout (False)
+            Whether to use feature-based (`True`) or standard dropout (`False`)
         use_normalized_ffn (`bool`, *optional*, defaults to `True`):
             Whether to use the normalized feed-forward sub-layer in Mega blocks (`True`) or pass Mega encoder output
             as-is (`False`)
         nffn_hidden_size (`int`, *optional*, defaults to 256):
-            If using the normalized feed-forward network (NFFN) layer within Mega (use_normalized_ffn = True), this is
+            If using the normalized feed-forward network (NFFN) layer within Mega (`use_normalized_ffn = True`), this is
             the hidden size of the NFFN
         normalize_before_ffn (`bool`, *optional*, defaults to `True`):
-            Whether to normalize before (True) or after (False) the feed-forward portion of NFFN
+            Whether to normalize before (`True`) or after (`False`) the feed-forward portion of NFFN
         nffn_activation_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the NFFN component.
         max_positions (`int`, *optional*, defaults to 2048):
-            The maximum sequence length to use for positional representations. For "simple" relative positional bias,
-            this is a hard limit on input length; "rotary" relative positional bias will extrapolate to longer
+            The maximum sequence length to use for positional representations. For `"simple"` relative positional bias,
+            this is a hard limit on input length; `"rotary"` relative positional bias will extrapolate to longer
             sequences
         add_token_type_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to account for token types in embeddings. Left as optional to maintain compatibility with original
