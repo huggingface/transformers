@@ -110,7 +110,7 @@ class MegaEmbeddings(nn.Module):
         return embeddings
 
 
-class SimpleRelativePositionalBias(nn.Module):
+class MegaSimpleRelativePositionalBias(nn.Module):
     """
     Simple relative positional embeddings copied from the Mega repo; renamed variables for better readability
     """
@@ -140,7 +140,7 @@ class SimpleRelativePositionalBias(nn.Module):
         return tile
 
 
-class RotaryRelativePositionalBias(nn.Module):
+class MegaRotaryRelativePositionalBias(nn.Module):
     """
     Rotary relative bias for positional information; similar in concept to RoPE (i.e. RoFormer) but taken from the Mega
     repo due to differences in implementation.
@@ -156,7 +156,7 @@ class RotaryRelativePositionalBias(nn.Module):
         self.config = config
         self.embed_dim = config.shared_representation_size
         self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
-        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(
+        self.sine, self.cosine = MegaRotaryRelativePositionalBias.get_sinusoid_embeddings(
             config.max_positions, self.embed_dim
         )
         # alpha and beta parameters for the rotary bias; beta renamed to b_param to avoid clashes with tf/flax weight handling
@@ -177,7 +177,7 @@ class RotaryRelativePositionalBias(nn.Module):
         seq_len, embed_dim = input.size()
         chunk_1, chunk_2 = torch.chunk(input, 2, dim=-1)
         if self.sine is None or seq_len > self.sine.size(0):
-            self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(seq_len, embed_dim)
+            self.sine, self.cosine = MegaRotaryRelativePositionalBias.get_sinusoid_embeddings(seq_len, embed_dim)
             self.max_positions = seq_len
         self.sine = self.sine.to(self._float_tensor)
         self.cosine = self.cosine.to(self._float_tensor)
@@ -256,16 +256,29 @@ class MegaRMSNorm(nn.Module):
         return input
 
 
-# original Mega repo used a parent class to organize normalization functions; Hugging Face's
-# preferred method is to use a dictionary. since these normalization classes require different
-# inputs, we handle this with lambda functions to return the instantiated class
-NORM2FN = {
-    "layernorm": lambda embedding_dim, eps, affine: nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine),
-    "scalenorm": lambda embedding_dim, eps, affine: ScaleNorm(dim=-1, eps=eps, affine=affine),
-    "rmsnorm": lambda embedding_dim, eps, affine: MegaRMSNorm(embedding_dim, eps=eps, affine=affine),
-    "batchnorm": lambda embedding_dim, eps, affine: nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine),
-    "syncbatchnorm": lambda embedding_dim, eps, affine: nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine),
-}
+class MegaScaleNorm(nn.Module):
+    """
+    Scale normalization introduced in MEGA which is similar to RMSNorm, but uses a 
+    single parameter for scalar multiplication instead of a vector, and applies over
+    a specified dimension
+    """
+    def __init__(self, dim, eps=1e-6, affine=True):
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        self.affine = affine
+        if affine:
+            self.scalar = nn.Parameter(torch.Tensor(1))
+        else:
+            self.register_parameter("scalar", None)
+
+    def forward(self, input):
+        mean_square = torch.mean(torch.square(input), dim=self.dim, keepdim=True)
+        if self.scalar is not None:
+            input = self.scalar * input
+
+        output = input * torch.rsqrt(mean_square + self.eps)
+        return output
 
 
 class MegaSequenceNorm(nn.Module):
@@ -276,7 +289,18 @@ class MegaSequenceNorm(nn.Module):
 
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
-        self.norm = NORM2FN[norm_type](embedding_dim, eps, affine)
+        if norm_type == "layernorm":
+            self.norm = nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine)
+        elif norm_type == "scalenorm":
+            self.norm = MegaScaleNorm(dim=-1, eps=eps, affine=affine)
+        elif norm_type == "rmsnorm":
+            self.norm = MegaRMSNorm(embedding_dim, eps=eps, affine=affine)
+        elif norm_type == "batchnorm":
+            self.norm = nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine)
+        elif norm_type == "syncbatchnorm":
+            self.norm = nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
+        else:
+            raise ValueError("Unknown norm type: {}".format(norm_type))
 
     def forward(self, input):
         if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
@@ -293,11 +317,11 @@ class MegaSequenceNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 
-class MultiDimensionDampedEMA(nn.Module):
+class MegaMultiDimensionDampedEma(nn.Module):
     """
     Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
-    variable names and stateful representation of incremental decoding state. See "https://arxiv.org/abs/2209.10655"
-    for more details.
+    variable names and moving away from the stateful representation of incremental decoding state. See 
+    "https://arxiv.org/abs/2209.10655" for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -539,9 +563,9 @@ class MegaGatedCrossAttention(nn.Module):
         self.h_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
 
         if self.config.relative_positional_bias == "simple":
-            self.rel_pos_bias = SimpleRelativePositionalBias(config)
+            self.rel_pos_bias = MegaSimpleRelativePositionalBias(config)
         elif self.config.relative_positional_bias == "rotary":
-            self.rel_pos_bias = RotaryRelativePositionalBias(config)
+            self.rel_pos_bias = MegaRotaryRelativePositionalBias(config)
         else:
             raise ValueError("unknown relative position bias: {}".format(self.config.relative_positional_bias))
 
@@ -762,29 +786,7 @@ class MegaGatedCrossAttention(nn.Module):
         return outputs
 
 
-# Normalization modules
-# copied from original Mega repo without modification except variable names
-class ScaleNorm(nn.Module):
-    def __init__(self, dim, eps=1e-6, affine=True):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.affine = affine
-        if affine:
-            self.scalar = nn.Parameter(torch.Tensor(1))
-        else:
-            self.register_parameter("scalar", None)
-
-    def forward(self, input):
-        mean_square = torch.mean(torch.square(input), dim=self.dim, keepdim=True)
-        if self.scalar is not None:
-            input = self.scalar * input
-
-        output = input * torch.rsqrt(mean_square + self.eps)
-        return output
-
-
-class MovingAverageGatedAttention(nn.Module):
+class MegaMovingAverageGatedAttention(nn.Module):
     """
     Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
@@ -810,7 +812,7 @@ class MovingAverageGatedAttention(nn.Module):
         self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
         )
-        self.move = MultiDimensionDampedEMA(config)
+        self.ema_gate = MegaMultiDimensionDampedEma(config)
 
         self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
         self.mx_proj = nn.Linear(
@@ -823,9 +825,9 @@ class MovingAverageGatedAttention(nn.Module):
         self.qk_bias = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
         if self.config.relative_positional_bias == "simple":
-            self.rel_pos_bias = SimpleRelativePositionalBias(config)
+            self.rel_pos_bias = MegaSimpleRelativePositionalBias(config)
         elif self.config.relative_positional_bias == "rotary":
-            self.rel_pos_bias = RotaryRelativePositionalBias(config)
+            self.rel_pos_bias = MegaRotaryRelativePositionalBias(config)
         else:
             raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
 
@@ -984,7 +986,7 @@ class MovingAverageGatedAttention(nn.Module):
 
         # ema output is (sequence_length x batch_size x hidden_size)
         # updated_ema_state will be None if use_cache=False; otherwise (batch_size, config.ndim)
-        ema_out, updated_ema_state = self.move(
+        ema_out, updated_ema_state = self.ema_gate(
             input, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache
         )
         ema_out = self.dropout(ema_out)
@@ -1010,9 +1012,11 @@ class MovingAverageGatedAttention(nn.Module):
         residual_weight = torch.sigmoid(residual_weight)
 
         # (sequence_length X batch_size X shared_representation_size + intermediate_size)
+        query_key_gates = F.silu(query_key_gates)
+
         # split into two different tensors: one for Q/K usage and the other for gating self-attention
         query_key, attention_gate = torch.split(
-            F.silu(query_key_gates), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1
+            query_key_gates, [self.config.shared_representation_size, self.config.intermediate_size], dim=-1
         )
 
         # (sequence_length X batch_size X shared_representation_size)
@@ -1167,7 +1171,7 @@ class MegaBlock(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
         self.seq_len_dim = 1
-        self.mega_layer = MovingAverageGatedAttention(config)
+        self.mega_layer = MegaMovingAverageGatedAttention(config)
         self.nffn = MegaNormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
@@ -1245,7 +1249,7 @@ class MegaBlock(nn.Module):
               cross-attention value state for use in the next step of incremental decoding
         """
 
-        # incremental decoding in the MultiDimensionDampedEMA module requires that the attention mask has the same
+        # incremental decoding in the MegaMultiDimensionDampedEma module requires that the attention mask has the same
         # sequence length as the input tensor; if we're caching incremental states, we assume the input
         # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final
         # token in the input (mask is received as [batch X sequence length])
@@ -1341,7 +1345,7 @@ class MegaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, MultiDimensionDampedEMA):
+        if isinstance(module, MegaMultiDimensionDampedEma):
             with torch.no_grad():
                 # delta & alpha
                 nn.init.normal_(module.damping_factor, mean=0.0, std=self.config.ema_delta_alpha_range)
@@ -1355,18 +1359,18 @@ class MegaPreTrainedModel(PreTrainedModel):
                 # gamma & omega
                 nn.init.normal_(module.kernel_projection_matrix, mean=0.0, std=self.config.ema_gamma_omega_range)
                 nn.init.normal_(module.residual_weight, mean=0.0, std=self.config.ema_gamma_omega_range)
-        elif isinstance(module, SimpleRelativePositionalBias):
+        elif isinstance(module, MegaSimpleRelativePositionalBias):
             nn.init.normal_(module.rel_pos_bias, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, RotaryRelativePositionalBias):
+        elif isinstance(module, MegaRotaryRelativePositionalBias):
             nn.init.normal_(module.alpha, mean=0.0, std=self.config.initializer_range)
             nn.init.normal_(module.b_param, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, ScaleNorm):
+        elif isinstance(module, MegaScaleNorm):
             if self.config.norm_affine:
                 nn.init.constant_(module.scalar, 1.0)
         elif isinstance(module, MegaRMSNorm):
             if self.config.norm_affine:
                 nn.init.constant_(module.weight, 1.0)
-        elif isinstance(module, MovingAverageGatedAttention):
+        elif isinstance(module, MegaMovingAverageGatedAttention):
             # linear layers covered separately by the generic nn.Linear init below
             nn.init.normal_(module.qk_weight, mean=0.0, std=self.config.initializer_range)
             nn.init.constant_(module.qk_bias, 0.0)

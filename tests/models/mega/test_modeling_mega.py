@@ -37,9 +37,7 @@ if is_torch_available():
         MegaForTokenClassification,
         MegaModel,
     )
-    from transformers.models.mega.modeling_mega import (
-        MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.mega.modeling_mega import MEGA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MegaModelTester:
@@ -398,9 +396,9 @@ class MegaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.use_chunking = True
-        config.chunk_size = (
-            input_ids.size(1) * 2
-        )  # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
+        
+        # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
+        config.chunk_size = input_ids.size(1) * 2
         model = MegaModel(config)
 
         result = model(

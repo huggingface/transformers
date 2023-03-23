@@ -188,10 +188,11 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
         # have to handle gamma, beta, and alpha differently due to their use
         # in multiple modules within the original repository;
         # beta is used in EMA, MovingAverageGatedAttention, and RotaryRelativePositionalBias, and must be renamed due to flax/tf weights
+        # the EMA sublayer was renamed from "move" to "ema_gate" for readability, so that is also done here
         if "beta" in module_name:
             # EMA sub-layers were always called "move" in the original repo
             if "move.beta" in module_name:
-                new_module_name = module_name.replace("beta", "ema_expansion_matrix")
+                new_module_name = module_name.replace("move.beta", "ema_gate.ema_expansion_matrix")
             elif "mega_layer.beta" in module_name:
                 new_module_name = module_name.replace("beta", "qk_bias")
             else:
@@ -199,20 +200,20 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
         # beta is used in EMA and MovingAverageGatedAttention, and must be renamed due to flax/tf weights
         elif "gamma" in module_name:
             if "move.gamma" in module_name:
-                new_module_name = module_name.replace("gamma", "kernel_projection_matrix")
+                new_module_name = module_name.replace("move.gamma", "ema_gate.kernel_projection_matrix")
             elif "mega_layer.gamma" in module_name:
                 new_module_name = module_name.replace("gamma", "qk_weight")
             else:
                 new_module_name = module_name.replace("gamma", "g_param")
         # alpha is used in EMA and positional bias; renaming to improve readability
         elif "move.alpha" in module_name:
-            new_module_name = module_name.replace("alpha", "decay_factor")
+            new_module_name = module_name.replace("move.alpha", "ema_gate.decay_factor")
         # delta is only used in EMA; renaming to improve readability
-        elif "delta" in module_name:
-            new_module_name = module_name.replace("delta", "damping_factor")
+        elif "move.delta" in module_name:
+            new_module_name = module_name.replace("move.delta", "ema_gate.damping_factor")
         # omega is only used in EMA; renaming to improve readability
         elif "omega" in module_name:
-            new_module_name = module_name.replace("omega", "residual_weight")
+            new_module_name = module_name.replace("move.omega", "ema_gate.residual_weight")
 
         if new_module_name:
             updated_keys[module_name] = new_module_name

@@ -50,9 +50,9 @@ class MegaConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 256):
             Dimensionality of the hidden size (self-attention value projection) within the Mega encoder
         ema_projection_size (`int`, *optional*, defaults to 16):
-            Dimensionality of the MultiDimensionDampedEMA
+            Dimensionality of the MegaMultiDimensionDampedEma
         bidirectional (`bool`, *optional*, defaults to `True`):
-            Whether the MultiDimensionDampedEMA used in Mega's self-attention should work bidirectionally (`True`) or
+            Whether the MegaMultiDimensionDampedEma used in Mega's self-attention should work bidirectionally (`True`) or
             unidirectionally (`False`). Bidirectional EMA is incompatible with causal decoding, so this should be False
             if you intend to use the model as a decoder.
         shared_representation_size (`int`, *optional*, defaults to 64):
@@ -63,7 +63,7 @@ class MegaConfig(PretrainedConfig):
             If `use_chunking` is set to `True`, determines the size of the chunks to apply to the input sequence. If chunking is
             used, input sequences must be padded to a multiple of `chunk_size`
         truncation (`int`, *optional*):
-            If specified, the sequence length for which to truncate MultiDimensionDampedEMA
+            If specified, the sequence length for which to truncate MegaMultiDimensionDampedEma
         normalize_before_mega (`bool`, *optional*, defaults to `True`):
             Whether to normalize before (`True`) or after (`False`) passing through Mega encoder blocks
         normalization_type (`str`, *optional*, defaults to `"scalenorm"`):
@@ -109,9 +109,9 @@ class MegaConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         ema_delta_alpha_range (`float`, *optional*, defaults to 0.2):
             The standard deviation for initializing the delta (damping factor) and alpha (decay factor) parameters in
-            MultiDimensionDampedEMA.
+            MegaMultiDimensionDampedEma.
         ema_beta_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing the beta parameter (expansion matrix) in MultiDimensionDampedEMA.
+            The standard deviation for initializing the beta parameter (expansion matrix) in MegaMultiDimensionDampedEma.
         ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
             The standard deviation for initializing the gamma (projection matrix) and omega (residual weight)
             parameters in MultiDimensionEMA.
