@@ -665,7 +665,6 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-
     ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         outputs = self.deit(
             pixel_values=pixel_values,
