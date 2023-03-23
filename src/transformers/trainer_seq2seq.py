@@ -51,7 +51,7 @@ class Seq2SeqTrainer(Trainer):
                 calling `generate`.
 
         Returns:
-            A `~generation.GenerationConfig`, or `None` if no `generation_config_from_pretrained` has been provided in
+            A [`~generation.GenerationConfig`], or `None` if no `generation_config_from_pretrained` has been provided in
             `self.args` (`Seq2SeqTrainingArguments`) or `gen_kwargs`.
         """
         # Select the generation config argument
