@@ -1919,7 +1919,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         return outputs
 
 
-class SpeechT5GuidedMultiheadAttentionLoss(torch.nn.Module):
+class SpeechT5GuidedMultiheadAttentionLoss(nn.Module):
     """
     Guided attention loss from the paper [Efficiently Trainable Text-to-Speech System Based on Deep Convolutional
     Networks with Guided Attention](https://arxiv.org/abs/1710.08969), adapted for multi-head attention.
