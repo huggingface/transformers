@@ -52,16 +52,16 @@ class MegaConfig(PretrainedConfig):
         ema_projection_size (`int`, *optional*, defaults to 16):
             Dimensionality of the MegaMultiDimensionDampedEma
         bidirectional (`bool`, *optional*, defaults to `True`):
-            Whether the MegaMultiDimensionDampedEma used in Mega's self-attention should work bidirectionally (`True`) or
-            unidirectionally (`False`). Bidirectional EMA is incompatible with causal decoding, so this should be False
-            if you intend to use the model as a decoder.
+            Whether the MegaMultiDimensionDampedEma used in Mega's self-attention should work bidirectionally (`True`)
+            or unidirectionally (`False`). Bidirectional EMA is incompatible with causal decoding, so this should be
+            False if you intend to use the model as a decoder.
         shared_representation_size (`int`, *optional*, defaults to 64):
             Dimensionality of the linear projection for shared representation of self-attention queries and keys
         use_chunking (`bool`, *optional*, defaults to `False`):
             Whether to chunk inputs for linear self-attention complexity (described as Mega-chunk in the paper)
         chunk_size (`int`, *optional*, defaults to -1):
-            If `use_chunking` is set to `True`, determines the size of the chunks to apply to the input sequence. If chunking is
-            used, input sequences must be padded to a multiple of `chunk_size`
+            If `use_chunking` is set to `True`, determines the size of the chunks to apply to the input sequence. If
+            chunking is used, input sequences must be padded to a multiple of `chunk_size`
         truncation (`int`, *optional*):
             If specified, the sequence length for which to truncate MegaMultiDimensionDampedEma
         normalize_before_mega (`bool`, *optional*, defaults to `True`):
@@ -89,8 +89,8 @@ class MegaConfig(PretrainedConfig):
             Whether to use the normalized feed-forward sub-layer in Mega blocks (`True`) or pass Mega encoder output
             as-is (`False`)
         nffn_hidden_size (`int`, *optional*, defaults to 256):
-            If using the normalized feed-forward network (NFFN) layer within Mega (`use_normalized_ffn = True`), this is
-            the hidden size of the NFFN
+            If using the normalized feed-forward network (NFFN) layer within Mega (`use_normalized_ffn = True`), this
+            is the hidden size of the NFFN
         normalize_before_ffn (`bool`, *optional*, defaults to `True`):
             Whether to normalize before (`True`) or after (`False`) the feed-forward portion of NFFN
         nffn_activation_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -111,7 +111,8 @@ class MegaConfig(PretrainedConfig):
             The standard deviation for initializing the delta (damping factor) and alpha (decay factor) parameters in
             MegaMultiDimensionDampedEma.
         ema_beta_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing the beta parameter (expansion matrix) in MegaMultiDimensionDampedEma.
+            The standard deviation for initializing the beta parameter (expansion matrix) in
+            MegaMultiDimensionDampedEma.
         ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
             The standard deviation for initializing the gamma (projection matrix) and omega (residual weight)
             parameters in MultiDimensionEMA.

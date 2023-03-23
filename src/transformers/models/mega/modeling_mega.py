@@ -258,10 +258,10 @@ class MegaRMSNorm(nn.Module):
 
 class MegaScaleNorm(nn.Module):
     """
-    Scale normalization introduced in MEGA which is similar to RMSNorm, but uses a 
-    single parameter for scalar multiplication instead of a vector, and applies over
-    a specified dimension
+    Scale normalization introduced in MEGA which is similar to RMSNorm, but uses a single parameter for scalar
+    multiplication instead of a vector, and applies over a specified dimension
     """
+
     def __init__(self, dim, eps=1e-6, affine=True):
         super().__init__()
         self.dim = dim
@@ -320,7 +320,7 @@ ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 class MegaMultiDimensionDampedEma(nn.Module):
     """
     Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
-    variable names and moving away from the stateful representation of incremental decoding state. See 
+    variable names and moving away from the stateful representation of incremental decoding state. See
     "https://arxiv.org/abs/2209.10655" for more details.
     """
 
@@ -653,8 +653,8 @@ class MegaGatedCrossAttention(nn.Module):
             past_key_values (`tuple(torch.FloatTensor)`, *optional*):
                 If provided, the hidden state returned from the previous timestep during incremental decoding; expects
                 that prior cross-attention keys and values will be the last two items in the tuple
-            output_attentions (`bool`, defaults to `False`): 
-                 Whether or not to return the cross-attention weights.
+            output_attentions (`bool`, defaults to `False`):
+                Whether or not to return the cross-attention weights.
             use_cache (`bool`, defaults to `False`):
                 Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
