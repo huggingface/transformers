@@ -22,7 +22,7 @@ ARG CUDA='cu117'
 #RUN [ ${#TORCH_VISION} -gt 0 ] && VERSION='torchvision=='TORCH_VISION'.*' ||  VERSION='torchvision'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
 #RUN [ ${#TORCH_AUDIO} -gt 0 ] && VERSION='torchaudio=='TORCH_AUDIO'.*' ||  VERSION='torchaudio'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu117
+RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
 
 RUN python3 -m pip uninstall -y tensorflow flax
 
