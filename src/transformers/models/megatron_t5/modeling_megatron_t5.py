@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch T5 model."""
-
+""" PyTorch MegatronT5 model."""
 
 import copy
 import math
@@ -25,7 +24,6 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (

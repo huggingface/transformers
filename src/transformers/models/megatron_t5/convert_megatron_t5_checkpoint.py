@@ -17,13 +17,11 @@
 ####################################################################################################
 
 import argparse
-import os
-import re
-import zipfile
 import json
-from omegaconf.omegaconf import OmegaConf, open_dict
-import torch
+import os
 
+import torch
+from omegaconf.omegaconf import OmegaConf
 from transformers import T5Config
 
 
@@ -141,7 +139,6 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         config.num_hidden_layers = ds_args.num_layers
         config.num_attention_heads = ds_args.num_attention_heads
         config.intermediate_size = ds_args.ffn_hidden_size if "ffn_hidden_size" in ds_args else 4 * ds_args.hidden_size
-        # pprint(config)
 
     # # The number of heads.
     heads = config.num_heads
