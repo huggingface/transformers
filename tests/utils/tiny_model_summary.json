@@ -1423,7 +1423,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "5892e8a234cac22cf9248c99229a5cdc25790347"
+        "sha": "d16d04449d532044ee029472e9d0396674a6df36"
     },
     "DinatForImageClassification": {
         "tokenizer_classes": [],
@@ -1431,7 +1431,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "94bc24489e9690492644af06b811e927bffbdc42"
+        "sha": "27b61c04f94937afe36e7f40d1be6719e0c5743b"
     },
     "DinatModel": {
         "tokenizer_classes": [],
@@ -1439,7 +1439,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "92a2f1dd0c13631f669d882b16e67082095058c1"
+        "sha": "6864ed56ef1170bf42af2b84433770e68afe0281"
     },
     "DistilBertForMaskedLM": {
         "tokenizer_classes": [
@@ -3647,7 +3647,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "2016da24c585b471a27c5ce01c2742442bddf024"
+        "sha": "3b5d53d54306b00a766e6bc56c8ab970b1215ba0"
     },
     "NatForImageClassification": {
         "tokenizer_classes": [],
@@ -3655,7 +3655,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "cd0d0dbd3dce15d4171daddadac191af9b299e58"
+        "sha": "f2f9a5df03946dea01c15fee46e9ee447c1bdaf6"
     },
     "NatModel": {
         "tokenizer_classes": [],
@@ -3663,7 +3663,7 @@
             "ViTImageProcessor"
         ],
         "model_classes": [],
-        "sha": "41592e0f681155c53477f43a907cf7db4bb662e9"
+        "sha": "4cae1a05ab74edf958f0de7a0dc2c38067e52152"
     },
     "NezhaForMaskedLM": {
         "tokenizer_classes": [
