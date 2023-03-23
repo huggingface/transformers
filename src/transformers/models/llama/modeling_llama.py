@@ -786,8 +786,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model/pipeline parallelism
-            if shift_logits.device != shift_labels.device:
-                shift_labels = shift_labels.to(shift_logits.device)
+           shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
