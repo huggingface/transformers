@@ -577,7 +577,13 @@ def is_optimum_available():
 
 
 def is_safetensors_available():
-    return importlib.util.find_spec("safetensors") is not None
+    if is_torch_available():
+        if version.parse(_torch_version) >= version.parse("1.10"):
+            return importlib.util.find_spec("safetensors") is not None
+        else:
+            return False
+    else:
+        return importlib.util.find_spec("safetensors") is not None
 
 
 def is_tokenizers_available():
