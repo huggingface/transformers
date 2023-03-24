@@ -47,7 +47,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_gpt_neo"] = [
+    _import_structure["modeling_tf_gpt_neo"] = [
         "TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFGPTNeoForCausalLM",
         "TFGPTNeoForSequenceClassification",
