@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
+
 from transformers.testing_utils import CaptureStdout
 
 
@@ -28,7 +29,7 @@ REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__fi
 sys.path.append(os.path.join(REPO_PATH, "utils"))
 
 import tests_fetcher  # noqa: E402
-from tests_fetcher import ( # noqa: E402
+from tests_fetcher import (  # noqa: E402
     checkout_commit,
     clean_code,
     create_module_to_test_map,
@@ -489,9 +490,9 @@ src/transformers/configuration_utils.py
             with patch_transformer_repo_path(tmp_folder), CaptureStdout() as cs:
                 print_tree_deps_of("src/transformers/models/bert/modeling_bert.py")
                 print_tree_deps_of("src/transformers/configuration_utils.py")
-            
+
             assert cs.out.strip() in [expected_std_out, expected_std_out_2]
-    
+
     def test_create_reverse_dependency_map(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -529,7 +530,7 @@ src/transformers/configuration_utils.py
                 "tests/models/bert/test_modeling_bert.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
-    
+
             # Test that with more models init of bert only gets deps to bert.
             create_tmp_repo(tmp_folder, models=["bert", "gpt2"])
             with patch_transformer_repo_path(tmp_folder):
@@ -543,17 +544,19 @@ src/transformers/configuration_utils.py
                 "tests/models/bert/test_modeling_bert.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
-    
+
     def test_create_module_to_test_map(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
-            models = models=["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
+            models = models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
             create_tmp_repo(tmp_folder, models=models)
             with patch_transformer_repo_path(tmp_folder):
                 test_map = create_module_to_test_map(filter_models=True)
 
             for model in models:
-                assert test_map[f"src/transformers/models/{model}/modeling_{model}.py"] == [f"tests/models/{model}/test_modeling_{model}.py"]
+                assert test_map[f"src/transformers/models/{model}/modeling_{model}.py"] == [
+                    f"tests/models/{model}/test_modeling_{model}.py"
+                ]
 
             # Init got filtered
             expected_init_tests = {
@@ -562,20 +565,22 @@ src/transformers/configuration_utils.py
                 "tests/models/gpt2/test_modeling_gpt2.py",
             }
             assert set(test_map["src/transformers/__init__.py"]) == expected_init_tests
-    
+
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
-            models = models=["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
+            models = models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
             repo = create_tmp_repo(tmp_folder, models=models)
 
             commit_changes("src/transformers/models/bert/modeling_bert.py", BERT_MODEL_FILE_NEW_CODE, repo)
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-            
-            # TODO read file output and test.
-            
+                with open(tmp_folder / "test-output.txt", "r") as f:
+                    tests_to_run = f.read()
+
+            assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
+
             # Fake a new model addition
             repo = create_tmp_repo(tmp_folder, models=models)
 
@@ -589,23 +594,42 @@ src/transformers/configuration_utils.py
             model_dir.mkdir(exist_ok=True)
 
             with open(model_dir / "__init__.py", "w") as f:
-                f.write(f"from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n")
-            with open(model_dir / f"configuration_t5.py", "w") as f:
+                f.write("from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n")
+            with open(model_dir / "configuration_t5.py", "w") as f:
                 f.write("from ...configuration_utils import PretrainedConfig\ncode")
-            with open(model_dir / f"modeling_t5.py", "w") as f:
+            with open(model_dir / "modeling_t5.py", "w") as f:
                 modeling_code = BERT_MODEL_FILE.replace("bert", "t5").replace("Bert", "T5")
                 f.write(modeling_code)
 
             test_dir = tmp_folder / "tests/models/t5"
             test_dir.mkdir(exist_ok=True)
             (test_dir / "__init__.py").touch()
-            with open(test_dir / f"test_modeling_t5.py", "w") as f:
-                f.write(f"from transformers import T5Config, T5Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode")
+            with open(test_dir / "test_modeling_t5.py", "w") as f:
+                f.write(
+                    "from transformers import T5Config, T5Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
+                )
 
             repo.index.add(["src", "tests"])
-            commit = repo.index.commit("Add T5 model")
+            repo.index.commit("Add T5 model")
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt")
-            
-            # TODO read file output and test.
+                with open(tmp_folder / "test-output.txt", "r") as f:
+                    tests_to_run = f.read()
+
+            expected_tests = {
+                "tests/models/bert/test_modeling_bert.py",
+                "tests/models/gpt2/test_modeling_gpt2.py",
+                "tests/models/t5/test_modeling_t5.py",
+                "tests/test_modeling_common.py",
+            }
+            assert set(tests_to_run.split(" ")) == expected_tests
+
+            with patch_transformer_repo_path(tmp_folder):
+                infer_tests_to_run(tmp_folder / "test-output.txt", filter_models=False)
+                with open(tmp_folder / "test-output.txt", "r") as f:
+                    tests_to_run = f.read()
+
+            expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
+            expected_tests = set(expected_tests + ["tests/test_modeling_common.py"])
+            assert set(tests_to_run.split(" ")) == expected_tests

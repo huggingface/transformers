@@ -31,7 +31,7 @@ Caveats:
   - This module only filter tests by files (not individual tests) so it's better to have tests for different things
     in different files.
   - This module assumes inits are just importing things, not really building objects, so it's better to structure
-    them this way and move objects building in separate submodules. 
+    them this way and move objects building in separate submodules.
 """
 
 import argparse
@@ -57,6 +57,7 @@ IMPORTANT_MODELS = [
     "vit",
     "wav2vec2",
 ]
+
 
 @contextmanager
 def checkout_commit(repo, commit_id):
@@ -203,7 +204,7 @@ _re_single_line_relative_imports = re.compile(r"(?:^|\n)\s*from\s+(\.+\S+)\s+imp
 # yyy will take multiple lines otherwise there wouldn't be parenthesis.
 _re_multi_line_relative_imports = re.compile(r"(?:^|\n)\s*from\s+(\.+\S+)\s+import\s+\(([^\)]+)\)")
 # (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
-# \s*from\s+transformers(\S*)\s+import\s+([^\n]+) -> Line only contains from transformers.xxx import yyy and we catch 
+# \s*from\s+transformers(\S*)\s+import\s+([^\n]+) -> Line only contains from transformers.xxx import yyy and we catch
 #           .xxx and yyy
 # (?=\n) -> Look-ahead to a new line. We can't just put \n here or using find_all on this re will only catch every
 #           other import.
@@ -212,6 +213,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 # \s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\) -> Line continues with from transformers.xxx import (yyy) and we
 # catch .xxx and yyy. yyy will take multiple lines otherwise there wouldn't be parenthesis.
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
+
 
 def extract_imports(module_fname, cache=None):
     """
@@ -415,7 +417,7 @@ def create_reverse_dependency_map():
     for m in all_modules:
         for d in direct_deps[m]:
             reverse_map[d].append(m)
-    
+
     for m in [f for f in all_modules if f.endswith("__init__.py")]:
         direct_deps = get_module_dependencies(m, cache=cache)
         deps = sum([reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")], direct_deps)
@@ -430,20 +432,20 @@ def create_module_to_test_map(reverse_map=None, filter_models=False):
     """
     if reverse_map is None:
         reverse_map = create_reverse_dependency_map()
-    test_map = {module : [f for f in deps if f.startswith("tests")] for module, deps in reverse_map.items()}
-    
+    test_map = {module: [f for f in deps if f.startswith("tests")] for module, deps in reverse_map.items()}
+
     if not filter_models:
         return test_map
-    
+
     num_model_tests = len(list(PATH_TO_TESTS.glob("models/*")))
 
     def has_many_models(tests):
-        model_tests = set(Path(t).parts[2] for t in tests if t.startswith("tests/models/"))
+        model_tests = {Path(t).parts[2] for t in tests if t.startswith("tests/models/")}
         return len(model_tests) > num_model_tests // 2
 
     def filter_tests(tests):
         return [t for t in tests if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS]
-    
+
     return {module: (filter_tests(tests) if has_many_models(tests) else tests) for module, tests in test_map.items()}
 
 
@@ -456,7 +458,7 @@ def check_imports_all_exist():
     all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
-    
+
     for module, deps in direct_deps.items():
         for dep in deps:
             if not (PATH_TO_REPO / dep).is_file():
@@ -467,7 +469,9 @@ def _print_list(l):
     return "\n".join([f"- {f}" for f in l])
 
 
-def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, filter_models=True, json_output_file=None):
+def infer_tests_to_run(
+    output_file, diff_with_last_commit=False, filters=None, filter_models=True, json_output_file=None
+):
     modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -501,7 +505,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, f
             for _filter in filters:
                 filtered_files.extend([f for f in test_files_to_run if f.startswith(_filter)])
             test_files_to_run = filtered_files
-        
+
         repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in modified_files)
 
     if repo_utils_launch:
@@ -581,9 +585,6 @@ def filter_tests(output_file, filters):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--sanity_check", action="store_true", help="Only test that all tests and modules are accounted for."
-    )
-    parser.add_argument(
         "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
     )
     parser.add_argument(
@@ -618,8 +619,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.print_dependencies_of is not None:
         print_tree_deps_of(args.print_dependencies_of)
-    elif args.sanity_check:
-        sanity_check()
     elif args.filter_tests:
         filter_tests(args.output_file, ["pipelines", "repo_utils"])
     else:
