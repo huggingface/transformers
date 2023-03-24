@@ -323,7 +323,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
 """
 
 
-class GPTNeoPreTrainedModel(TFPreTrainedModel):
+class TFGPTNeoPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -342,7 +342,7 @@ class GPTNeoPreTrainedModel(TFPreTrainedModel):
     "The bare GPT Neo Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoModel(GPTNeoPreTrainedModel, tf.keras.layers.Layer):
+class TFGPTNeoModel(TFGPTNeoPreTrainedModel, tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.embed_dim = config.hidden_size
@@ -467,7 +467,7 @@ class TFGPTNeoModel(GPTNeoPreTrainedModel, tf.keras.layers.Layer):
     """,
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoForCausalLM(GPTNeoPreTrainedModel, tf.keras.layers.Layer):
+class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel, tf.keras.layers.Layer):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
         r"lm_head.weight",
@@ -607,7 +607,7 @@ class TFGPTNeoForCausalLM(GPTNeoPreTrainedModel, tf.keras.layers.Layer):
     """,
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoForSequenceClassification(GPTNeoPreTrainedModel, tf.keras.layers.Layer):
+class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel, tf.keras.layers.Layer):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config, *args, **kwargs):
