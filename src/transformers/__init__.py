@@ -3637,6 +3637,9 @@ else:
             "FlaxPegasusPreTrainedModel",
         ]
     )
+    _import_structure["models.resnet"].extend(
+        ["FlaxResNetForImageClassification", "FlaxResNetModel", "FlaxResNetPreTrainedModel"]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForCausalLM",
@@ -6692,6 +6695,7 @@ if TYPE_CHECKING:
         from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
+        from .models.resnet import FlaxResNetForImageClassification, FlaxResNetModel, FlaxResNetPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
