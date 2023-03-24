@@ -57,7 +57,7 @@ SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Seaformer models at https://huggingface.co/models?filter=seaformer
 ]
 
-def _make_divisible(v, divisor, min_value=None):
+def _make_divisible(value, divisor, min_value=None):
     """
     This function is taken from the original tf repo.
     It ensures that all layers have a channel number that is divisible by 8
@@ -66,9 +66,9 @@ def _make_divisible(v, divisor, min_value=None):
     """
     if min_value is None:
         min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    new_v = max(min_value, int(value + divisor / 2) // divisor * divisor)
     # Make sure that round down does not go down by more than 10%.
-    if new_v < 0.9 * v:
+    if new_v < 0.9 * value:
         new_v += divisor
     return new_v
 
@@ -108,6 +108,7 @@ class SeaformerDropPath(nn.Module):
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
 
+
 class SeaformerConv2d_BN(nn.Module):
     def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1,
                  groups=1, bn_weight_init=1, bias=False):
@@ -127,8 +128,9 @@ class SeaformerConv2d_BN(nn.Module):
         nn.init.constant_(bn.bias, 0)
         self.add_module('bn', bn)
         
-    def forward(self, x):
-        return self.bn(self.c(x))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.bn(self.c(hidden_states))
+
 
 class SeaformerMLP(nn.Module):
     """
@@ -144,14 +146,15 @@ class SeaformerMLP(nn.Module):
         self.fc2 = SeaformerConv2d_BN(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x):
-        x = self.fc1(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(hidden_states)
         x = self.dwconv(x)
         x = self.act(x)
         x = self.drop(x)
         x = self.fc2(x)
         x = self.drop(x)
         return x
+
 
 class SeaformerInvertedResidual(nn.Module):
     def __init__(
@@ -190,11 +193,11 @@ class SeaformerInvertedResidual(nn.Module):
         self.out_channels = oup
         self._is_cn = stride > 1
 
-    def forward(self, x):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.use_res_connect:
-            return x + self.conv(x)
+            return hidden_states + self.conv(hidden_states)
         else:
-            return self.conv(x)
+            return self.conv(hidden_states)
 
 
 class SeaformerStackedMV2Block(nn.Module):
@@ -228,13 +231,13 @@ class SeaformerStackedMV2Block(nn.Module):
             inp_channel = output_channel
             self.layers.append(layer_name)
 
-    def forward(self, x):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.stem:
-            x = self.stem_block(x)
+            hidden_states = self.stem_block(hidden_states)
         for i, layer_name in enumerate(self.layers):
             layer = getattr(self, layer_name)
-            x = layer(x)
-        return x
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
     
 class SeaformerSqueezeAxialPositionalEmbedding(nn.Module):
@@ -243,19 +246,19 @@ class SeaformerSqueezeAxialPositionalEmbedding(nn.Module):
         
         self.pos_embed = nn.Parameter(torch.randn([1, dim, shape]))
 
-    def forward(self, x):
-        B, C, N = x.shape
-        x = x + F.interpolate(self.pos_embed, size=(N), mode='linear', align_corners=False)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        B, C, N = hidden_states.shape
+        hidden_states = hidden_states + F.interpolate(self.pos_embed, size=(N), mode='linear', align_corners=False)
         
-        return x
+        return hidden_states
     
 class h_sigmoid(nn.Module):
     def __init__(self, inplace=True):
         super(h_sigmoid, self).__init__()
         self.relu = nn.ReLU6(inplace=inplace)
 
-    def forward(self, x):
-        return self.relu(x + 3) / 6
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.relu(hidden_states + 3) / 6
     
 
 class SeaformerAttention(nn.Module):
@@ -302,12 +305,12 @@ class SeaformerAttention(nn.Module):
         self.sigmoid = h_sigmoid()
 
         
-    def forward(self, x):  
-        B, C, H, W = x.shape
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:  
+        B, C, H, W = hidden_states.shape
 
-        q = self.to_q(x)
-        k = self.to_k(x)
-        v = self.to_v(x)
+        q = self.to_q(hidden_states)
+        k = self.to_k(hidden_states)
+        v = self.to_v(hidden_states)
         
         # detail enhance
         qkv = torch.cat([q, k, v], dim=1)
@@ -357,10 +360,10 @@ class SeaformerBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = SeaformerMLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x1):
-        x1 = x1 + self.drop_path(self.attn(x1))
-        x1 = x1 + self.drop_path(self.mlp(x1))
-        return x1
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states + self.drop_path(self.attn(hidden_states))
+        hidden_states = hidden_states + self.drop_path(self.mlp(hidden_states))
+        return hidden_states
     
 
 class SeaformerBasicLayer(nn.Module):
@@ -378,12 +381,13 @@ class SeaformerBasicLayer(nn.Module):
                 drop=drop, drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                 act_layer=act_layer))
 
-    def forward(self, x):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # token * N
         for i in range(self.block_num):
-            x = self.transformer_blocks[i](x)
-        return x
-    
+            hidden_states = self.transformer_blocks[i](hidden_states)
+        return hidden_states
+
+
 class SeaformerFusionBlock(nn.Module):
     def __init__(
             self,
@@ -409,19 +413,20 @@ class SeaformerFusionBlock(nn.Module):
 
         self.act = h_sigmoid()
 
-    def forward(self, x_l, x_g):
+    def forward(self, x_local: torch.Tensor, x_global: torch.Tensor) -> torch.Tensor:
         '''
         x_g: global features
         x_l: local features
         '''
-        B, C, H, W = x_l.shape
-        B, C_c, H_c, W_c = x_g.shape
+        B, C, H, W = x_local.shape
+        B, C_c, H_c, W_c = x_global.shape
 
-        local_feat = self.local_embedding(x_l)
-        global_act = self.global_act(x_g)
+        local_feat = self.local_embedding(x_local)
+        global_act = self.global_act(x_global)
         sig_act = F.interpolate(self.act(global_act), size=(H, W), mode='bilinear', align_corners=False)
         out = local_feat * sig_act
         return out
+
 
 class SeaformerEncoder(nn.Module):
     def __init__(self, config):
@@ -503,7 +508,8 @@ class SeaformerEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-    
+
+
 class SeaformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -621,6 +627,7 @@ class SeaformerModel(SeaformerPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 class SeaformerDecodeHead(SeaformerPreTrainedModel):
     def __init__(self, config):
