@@ -129,7 +129,7 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
             ]
         config.emb_dims = [192, 256, 320]
         config.key_dims = [16, 20, 24]
-        config.num_heads = 8
+        config.num_attention_heads = 8
         config.mlp_ratios = [2, 4, 6]
         config.in_channels = [128, 192, 256, 320]
         config.in_index = [0, 1, 2, 3]

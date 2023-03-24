@@ -263,17 +263,17 @@ class h_sigmoid(nn.Module):
     
 
 class SeaformerAttention(nn.Module):
-    def __init__(self, dim=3, key_dim=64, num_heads=8,
+    def __init__(self, dim=3, key_dim=64, num_attention_heads=8,
                  attn_ratio=2,
                  activation=None):
         
         super().__init__()
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.scale = key_dim ** -0.5
         self.key_dim = key_dim
-        self.nh_kd = nh_kd = key_dim * num_heads  # num_head key_dim
+        self.nh_kd = nh_kd = key_dim * num_attention_heads  # num_head key_dim
         self.d = int(attn_ratio * key_dim)
-        self.dh = int(attn_ratio * key_dim) * num_heads
+        self.dh = int(attn_ratio * key_dim) * num_attention_heads
         self.attn_ratio = attn_ratio
 
         self.to_q = SeaformerConv2d_BN(dim, nh_kd, 1)
@@ -320,18 +320,18 @@ class SeaformerAttention(nn.Module):
 
         # squeeze axial attention
         ## squeeze row
-        qrow = self.pos_emb_rowq(q.mean(-1)).reshape(B, self.num_heads, -1, H).permute(0, 1, 3, 2)
-        krow = self.pos_emb_rowk(k.mean(-1)).reshape(B, self.num_heads, -1, H)
-        vrow = v.mean(-1).reshape(B, self.num_heads, -1, H).permute(0, 1, 3, 2)
+        qrow = self.pos_emb_rowq(q.mean(-1)).reshape(B, self.num_attention_heads, -1, H).permute(0, 1, 3, 2)
+        krow = self.pos_emb_rowk(k.mean(-1)).reshape(B, self.num_attention_heads, -1, H)
+        vrow = v.mean(-1).reshape(B, self.num_attention_heads, -1, H).permute(0, 1, 3, 2)
         attn_row = torch.matmul(qrow, krow) * self.scale
         attn_row = attn_row.softmax(dim=-1)
         xx_row = torch.matmul(attn_row, vrow)  # B nH H C
         xx_row = self.proj_encode_row(xx_row.permute(0, 1, 3, 2).reshape(B, self.dh, H, 1))
 
         ## squeeze column
-        qcolumn = self.pos_emb_columnq(q.mean(-2)).reshape(B, self.num_heads, -1, W).permute(0, 1, 3, 2)
-        kcolumn = self.pos_emb_columnk(k.mean(-2)).reshape(B, self.num_heads, -1, W)
-        vcolumn = v.mean(-2).reshape(B, self.num_heads, -1, W).permute(0, 1, 3, 2)
+        qcolumn = self.pos_emb_columnq(q.mean(-2)).reshape(B, self.num_attention_heads, -1, W).permute(0, 1, 3, 2)
+        kcolumn = self.pos_emb_columnk(k.mean(-2)).reshape(B, self.num_attention_heads, -1, W)
+        vcolumn = v.mean(-2).reshape(B, self.num_attention_heads, -1, W).permute(0, 1, 3, 2)
         attn_column = torch.matmul(qcolumn, kcolumn) * self.scale
         attn_column = attn_column.softmax(dim=-1)
         xx_column = torch.matmul(attn_column, vcolumn)  # B nH W C
@@ -347,14 +347,14 @@ class SeaformerAttention(nn.Module):
 
 class SeaformerBlock(nn.Module):
 
-    def __init__(self, dim=3, key_dim=64, num_heads=8, mlp_ratio=4., attn_ratio=2., drop=0.,
+    def __init__(self, dim=3, key_dim=64, num_attention_heads=8, mlp_ratio=4., attn_ratio=2., drop=0.,
                  drop_path=0., act_layer=nn.ReLU):
         super().__init__()
         self.dim = dim
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
        
-        self.attn = SeaformerAttention(dim, key_dim=key_dim, num_heads=num_heads, attn_ratio=attn_ratio,
+        self.attn = SeaformerAttention(dim, key_dim=key_dim, num_attention_heads=num_attention_heads, attn_ratio=attn_ratio,
                                       activation=act_layer)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = SeaformerDropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -368,7 +368,7 @@ class SeaformerBlock(nn.Module):
     
 
 class SeaformerBasicLayer(nn.Module):
-    def __init__(self, block_num=4, embedding_dim=3, key_dim=64, num_heads=8,
+    def __init__(self, block_num=4, embedding_dim=3, key_dim=64, num_attention_heads=8,
                  mlp_ratio=4., attn_ratio=2., drop=0., attn_drop=0., drop_path=0.,
                  act_layer=nn.ReLU):
         super().__init__()
@@ -377,7 +377,7 @@ class SeaformerBasicLayer(nn.Module):
         self.transformer_blocks = nn.ModuleList()
         for i in range(self.block_num):
             self.transformer_blocks.append(SeaformerBlock(
-                embedding_dim, key_dim=key_dim, num_heads=num_heads,
+                embedding_dim, key_dim=key_dim, num_attention_heads=num_attention_heads,
                 mlp_ratio=mlp_ratio, attn_ratio=attn_ratio,
                 drop=drop, drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                 act_layer=act_layer))
@@ -439,7 +439,7 @@ class SeaformerEncoder(nn.Module):
         #     self.pretrained = self.init_cfg['checkpoint']
         
         for i in range(len(config.cfgs)):
-            smb = SeaformerStackedMV2Block(cfgs=config.cfgs[i], stem=True if i == 0 else False, inp_channel=config.channels[i])
+            smb = SeaformerStackedMV2Block(cfgs=config.cfgs[i], stem=True if i == 0 else False, inp_channel=self.channels[i])
             setattr(self, f"smb{i + 1}", smb)
 
         for i in range(len(config.depths)):
@@ -448,7 +448,7 @@ class SeaformerEncoder(nn.Module):
                 block_num=config.depths[i],
                 embedding_dim=config.emb_dims[i],
                 key_dim=config.key_dims[i],
-                num_heads=config.num_heads,
+                num_attention_heads=config.num_attention_heads,
                 mlp_ratio=config.mlp_ratios[i],
                 attn_ratio=config.attn_ratios,
                 drop=0, attn_drop=0,
@@ -636,7 +636,7 @@ class SeaformerDecodeHead(SeaformerPreTrainedModel):
 
         self.linear_fuse = nn.Sequential()
         self.linear_fuse.add_module('conv', nn.Conv2d(in_channels=head_channels, out_channels=head_channels, kernel_size=1, 
-                                                     stride=1, groups=head_channels if config.is_dw else 1, bias=False))
+                                                     stride=1, groups=head_channels if config.is_depthwise else 1, bias=False))
         bn = nn.BatchNorm2d(head_channels)
         nn.init.constant_(bn.weight, 1)
         nn.init.constant_(bn.bias, 0)

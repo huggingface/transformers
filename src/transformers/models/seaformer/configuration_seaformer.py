@@ -21,7 +21,6 @@ from typing import Mapping
 from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -46,40 +45,58 @@ class SeaformerConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_encoder_blocks (`int`, *optional*, defaults to 4):
+        num_encoder_blocks (`int`, *optional*, defaults to 3):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to [2, 2, 2, 2]):
+        depths (`List[int]`, *optional*, defaults to `[3, 3, 3]`):
             The number of layers in each encoder block.
-        sr_ratios (`List[int]`, *optional*, defaults to [8, 4, 2, 1]):
-            Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to [32, 64, 160, 256]):
+        num_labels (`int`, *optional*, defaults to 150):
+            Number of classes in output
+        channels (`List[int]`, *optional*, defaults to `[32, 64, 128, 192, 256, 320]`):
+            Number of input channels in each StackedMV2Block
+        cfgs (`List[List[List[int]]]`, *optional*, defaults to `[
+                [   [3, 3, 32, 1],  
+                    [3, 4, 64, 2], 
+                    [3, 4, 64, 1]],  
+                [
+                    [5, 4, 128, 2],  
+                    [5, 4, 128, 1]],  
+                [
+                    [3, 4, 192, 2],  
+                    [3, 4, 192, 1]],
+                [
+                    [5, 4, 256, 2]],  
+                [
+                    [3, 6, 320, 2]]
+            ]`):
+            Input parameters [kernel_size, expand_ratio, out_channels, stride]
+            for all Inverted Residual blocks within each StackedMV2Block
+        emb_dims (`List[int]`, *optional*, defaults to `[192, 256, 320]`): 
+            Dimension of Seaformer Attention block
+        key_dims (`List[int]`, *optional*, defaults to `[16, 20, 24]`):
+            Dimension into which key and query will be projected
+        attn_ratios (`int`, *optional*, defaults to 2):
+            Ratio of dimension of value to query
+        in_channels (`List[int]`, *optional*, defaults to `[128, 192, 256, 320]`):
+            Input channels in fusion block
+        in_index (`List[int]`, *optional*, defaults to `[0, 1, 2, 3]`):
+            Indexes required by decoder head from hidden_states 
+        decoder_channels (`int`, *optional*, defaults to 192):
+            Dimension of last fusion block output which will be fed to decoder head
+        embed_dims (`List[int]`, *optional*, defaults to `[128, 160, 192]`):
+            Embedding dimension of Fusion block
+        is_depthwise (`bool`, *optional*, defaults to True):
+            Flag if set True will perform depthwise convolution
+        hidden_sizes (`List[int]`, *optional*, defaults to `[128]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
-            Patch size before each encoder block.
-        strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
-            Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 5, 8]):
+        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to [4, 4, 4, 4]):
+        mlp_ratios (`List[int]`, *optional*, defaults to `[2, 4, 6]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability before the classification head.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        decoder_hidden_size (`int`, *optional*, defaults to 256):
-            The dimension of the all-MLP decode head.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
 
@@ -124,16 +141,15 @@ class SeaformerConfig(PretrainedConfig):
         drop_path_rate = 0.1,
         emb_dims = [192, 256, 320],
         key_dims = [16, 20, 24],
-        num_heads=8,
+        num_attention_heads=8,
         mlp_ratios=[2,4,6],
         attn_ratios = 2,
         act_layer = None,
         in_channels = [128, 192, 256, 320],
         in_index = [0, 1, 2, 3],
         decoder_channels = 192,
-        dropout_ratio = 0.1,
         embed_dims = [128, 160, 192],
-        is_dw = True,
+        is_depthwise = True,
         align_corners = False,
         semantic_loss_ignore_index=255,
         hidden_sizes = [128],
@@ -156,37 +172,17 @@ class SeaformerConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.emb_dims = emb_dims
         self.key_dims = key_dims
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.mlp_ratios = mlp_ratios
         self.attn_ratios = attn_ratios
         self.act_layer = act_layer
         self.in_channels = in_channels
         self.in_index = in_index
-        self.dropout_ratio = dropout_ratio
         self.embed_dims = embed_dims
         self.decoder_channels = decoder_channels
-        self.is_dw = is_dw
+        self.is_depthwise = is_depthwise
         self.align_corners = align_corners
         self.num_labels = num_labels
         self.hidden_sizes = hidden_sizes
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
-        
-class SeaformerOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
