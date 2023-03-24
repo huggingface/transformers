@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blip model. """
+""" Testing suite for the TensorFlow Blip model. """
 import unittest
 
 import numpy as np
@@ -29,7 +29,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBlipTextModel
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BlipTextModelTester:
@@ -159,7 +159,7 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             try:
                 model = TFBlipTextModel.from_pretrained(model_name)
             except OSError:

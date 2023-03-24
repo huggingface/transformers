@@ -42,7 +42,7 @@ if is_tf_available():
         TFBlipTextModel,
         TFBlipVisionModel,
     )
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -194,7 +194,7 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             try:
                 model = TFBlipVisionModel.from_pretrained(model_name)
             except OSError:
@@ -331,7 +331,7 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             try:
                 model = TFBlipTextModel.from_pretrained(model_name)
             except OSError:
@@ -440,7 +440,7 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
@@ -640,7 +640,7 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
@@ -762,7 +762,7 @@ class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             try:
                 model = TFBlipModel.from_pretrained(model_name)
             except OSError:
