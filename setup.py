@@ -91,8 +91,6 @@ if stale_egg_info.exists():
     )
     shutil.rmtree(stale_egg_info)
 
-# TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-_tf_pin = "<2.12"
 
 # IMPORTANT:
 # 1. all dependencies should be listed here with their version requirements if any
@@ -166,9 +164,10 @@ _deps = [
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
-    f"tensorflow-cpu>=2.4,{_tf_pin}",
-    f"tensorflow>=2.4,{_tf_pin}",
-    f"tensorflow-text<{_tf_pin}",
+    # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
+    "tensorflow-cpu>=2.4,<2.12",
+    "tensorflow>=2.4,<2.12",
+    "tensorflow-text<2.12",
     "tf2onnx",
     "timeout-decorator",
     "timm",
