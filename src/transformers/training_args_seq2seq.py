@@ -38,8 +38,14 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             for the training set.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-        generation_config_from_pretrained (`str` or `Path` or [`~trainer_utils.GenerationConfig`], *optional*):
-            Allows to load a [`~trainer_utils.GenerationConfig`] from the `from_pretrained` method. This can be either:
+        generation_max_length (`int`, *optional*):
+            The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
+            `max_length` value of the model configuration.
+        generation_num_beams (`int`, *optional*):
+            The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
+            `num_beams` value of the model configuration.
+        generation_config (`str` or `Path` or [`~generation.GenerationConfig`], *optional*):
+            Allows to load a [`~generation.GenerationConfig`] from the `from_pretrained` method. This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
@@ -53,7 +59,25 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_config_from_pretrained: Optional[Union[str, Path, GenerationConfig]] = field(
+    generation_max_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+                "to the `max_length` value of the model configuration."
+            )
+        },
+    )
+    generation_num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+                "to the `num_beams` value of the model configuration."
+            )
+        },
+    )
+    generation_config: Optional[Union[str, Path, GenerationConfig]] = field(
         default=None,
         metadata={
             "help": "Model id, file path or url pointing to a GenerationConfig json file, to use during prediction."

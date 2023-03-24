@@ -31,62 +31,50 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    def __load_generation_config(self, gen_kwargs: Dict[str, Any]) -> Union[GenerationConfig, None]:
+    def __init__(self, *args_, **kwargs):
+        super().__init__(*args_, **kwargs)
+
+        # Override self.model.generation_config if a GenerationConfig is specified in args.
+        # Priority: args.generation_config > model.generation_config > default GenerationConfig.
+        if self.args.generation_config is not None:
+            gen_config = self.load_generation_config(self.args.generation_config)
+            self.model.generation_config = gen_config
+
+    @staticmethod
+    def load_generation_config(gen_config_arg: Union[str, GenerationConfig]) -> GenerationConfig:
         """
-        Loads a `~generation.GenerationConfig` from the `generation_config_from_pretrained` arguments. Priority:
-        gen_kwargs > self.args.generation_config_from_pretrained (`Seq2SeqTrainingArguments`)
-
-        If no `generation_config_from_pretrained` has been provided, this method return None and in this case
-        `generate` will fallback to `model.generation_config` or the default `~generation.GenerationConfig` values.
-
-        Priority: gen_kwargs > generation_config_from_pretrained > model.generation_config > default GenerationConfig.
-
-        This is handled in `generate`, here we just create a `~generation.GenerationConfig` from the
-        `generation_config_from_pretrained` argument.
+        Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_kwargs (`Dict[str, Any]`):
-                Additional `generate` specific kwargs as a dictionary. If `generation_config_from_pretrained` is
-                provided, it will use this argument in priority, and the entry will be popped to not interfere when
-                calling `generate`.
+            gen_config_arg (`str` or [`~generation.GenerationConfig`]):
+                `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:
-            A [`~generation.GenerationConfig`], or `None` if no `generation_config_from_pretrained` has been provided in
-            `self.args` (`Seq2SeqTrainingArguments`) or `gen_kwargs`.
+            A `~generation.GenerationConfig`.
         """
-        # Select the generation config argument
-        if "generation_config_from_pretrained" in gen_kwargs:
-            gen_config_arg = gen_kwargs.pop("generation_config_from_pretrained")
-        else:
-            gen_config_arg = self.args.generation_config_from_pretrained
-
-        # No gen config arg, returns None
-        if gen_config_arg is None:
-            return None
 
         # GenerationConfig provided, nothing to do
-        elif isinstance(gen_config_arg, GenerationConfig):
+        if isinstance(gen_config_arg, GenerationConfig):
             return deepcopy(gen_config_arg)
 
         # str or Path
+        pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
+        config_file_name = None
+
+        # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
+        # This step is required in order to determine config_file_name
+        if pretrained_model_name.is_file():
+            config_file_name = pretrained_model_name.name
+            pretrained_model_name = pretrained_model_name.parent
+        # dir path
+        elif pretrained_model_name.is_dir():
+            pass
+        # model id or URL
         else:
-            pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
-            config_file_name = None
+            pretrained_model_name = gen_config_arg
 
-            # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
-            # This step is required in order to determine config_file_name
-            if pretrained_model_name.is_file():
-                config_file_name = pretrained_model_name.name
-                pretrained_model_name = pretrained_model_name.parent
-            # dir path
-            elif pretrained_model_name.is_dir():
-                pass
-            # model id or URL
-            else:
-                pretrained_model_name = gen_config_arg
-
-            gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
-            return gen_config
+        gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
+        return gen_config
 
     def evaluate(
         self,
@@ -122,10 +110,7 @@ class Seq2SeqTrainer(Trainer):
             dictionary also contains the epoch number which comes from the training state.
         """
 
-        gen_kwargs = gen_kwargs.copy()
-        self._gen_config = self.__load_generation_config(gen_kwargs)
-        self._gen_kwargs = gen_kwargs
-
+        self._gen_kwargs = gen_kwargs.copy()
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -170,10 +155,7 @@ class Seq2SeqTrainer(Trainer):
               labels).
         """
 
-        gen_kwargs = gen_kwargs.copy()
-        self._gen_config = self.__load_generation_config(gen_kwargs)
-        self._gen_kwargs = gen_kwargs
-
+        self._gen_kwargs = gen_kwargs.copy()
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def prediction_step(
@@ -212,12 +194,15 @@ class Seq2SeqTrainer(Trainer):
         has_labels = "labels" in inputs
         inputs = self._prepare_inputs(inputs)
 
-        # Priority (handled in generate):
-        # gen_kwargs > generation_config_from_pretrained > model.generation_config > default GenerationConfig()
-        gen_config = self._gen_config
-        gen_kwargs = self._gen_kwargs.copy()
-
         # XXX: adapt synced_gpus for fairscale as well
+        # Priority (handled in generate):
+        # gen_kwargs > model.generation_config > default GenerationConfig()
+        gen_kwargs = self._gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.model.config.max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
+        )
         default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
         gen_kwargs["synced_gpus"] = (
             gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
@@ -226,17 +211,16 @@ class Seq2SeqTrainer(Trainer):
         # TODO (Joao): the following line is needed to keep a consistent result on SQUAD. Ideally, we should not block
         # users from preparing a dataset with `decoder_input_ids`.
         inputs = {k: v for k, v in inputs.items() if k != "decoder_input_ids"}
-        generated_tokens = self.model.generate(**inputs, generation_config=gen_config, **gen_kwargs)
+        generated_tokens = self.model.generate(**inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
         # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
         if self.model.generation_config._from_model_config:
             self.model.generation_config._from_model_config = False
-        # Retrieves GenerationConfig in case we did not provide one to generate.
-        # In this case, it used model.generation_config
-        if gen_config is None:
-            gen_config = model.generation_config
+
+        # Retrieves GenerationConfig from model.generation_config
+        gen_config = model.generation_config
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_config.max_length:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
