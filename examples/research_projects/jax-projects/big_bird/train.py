@@ -6,7 +6,6 @@ from bigbird_flax import Args, DataCollator, FlaxBigBirdForNaturalQuestions, Tra
 from datasets import load_dataset
 from flax import jax_utils
 
-import wandb
 from transformers import BigBirdTokenizerFast
 
 
