@@ -23,6 +23,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -170,9 +171,14 @@ class Swinv2ModelTester:
 
 
 @require_torch
-class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Swinv2Model, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": Swinv2Model, "image-classification": Swinv2ForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = False
@@ -195,6 +201,11 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="Swinv2 does not use inputs_embeds")
     def test_inputs_embeds(self):

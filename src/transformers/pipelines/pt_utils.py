@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
-from transformers.utils.generic import ModelOutput
+from ..utils.generic import ModelOutput
 
 
 class PipelineDataset(Dataset):

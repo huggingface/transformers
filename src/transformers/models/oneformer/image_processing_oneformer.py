@@ -21,8 +21,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     normalize,
@@ -32,7 +32,7 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -41,7 +41,7 @@ from transformers.image_utils import (
     make_list_of_images,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,
@@ -1120,7 +1120,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
             labels_per_image = labels[topk_indices]
 
-            topk_indices = topk_indices // num_classes
+            topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
             # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
             mask_pred = masks_queries_logits[i][topk_indices]
 

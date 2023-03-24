@@ -45,7 +45,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 require_version("datasets>=1.14.0", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
@@ -289,24 +289,27 @@ def main():
         data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
     )
 
+    model_input_name = feature_extractor.model_input_names[0]
+
     def train_transforms(batch):
         """Apply train_transforms across a batch."""
-        output_batch = {"input_values": []}
+        subsampled_wavs = []
         for audio in batch[data_args.audio_column_name]:
             wav = random_subsample(
                 audio["array"], max_length=data_args.max_length_seconds, sample_rate=feature_extractor.sampling_rate
             )
-            output_batch["input_values"].append(wav)
+            subsampled_wavs.append(wav)
+        inputs = feature_extractor(subsampled_wavs, sampling_rate=feature_extractor.sampling_rate)
+        output_batch = {model_input_name: inputs.get(model_input_name)}
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch
 
     def val_transforms(batch):
         """Apply val_transforms across a batch."""
-        output_batch = {"input_values": []}
-        for audio in batch[data_args.audio_column_name]:
-            wav = audio["array"]
-            output_batch["input_values"].append(wav)
+        wavs = [audio["array"] for audio in batch[data_args.audio_column_name]]
+        inputs = feature_extractor(wavs, sampling_rate=feature_extractor.sampling_rate)
+        output_batch = {model_input_name: inputs.get(model_input_name)}
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch

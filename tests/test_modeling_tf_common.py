@@ -28,7 +28,7 @@ from math import isnan
 from typing import List, Tuple, get_type_hints
 
 from datasets import Dataset
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
@@ -85,12 +85,15 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertForMaskedLM,
+        TFBertForSequenceClassification,
         TFBertModel,
+        TFPreTrainedModel,
         TFRagModel,
         TFSharedEmbeddings,
     )
@@ -106,6 +109,8 @@ if is_tf_available():
     )
     from transformers.modeling_tf_utils import tf_shard_checkpoint, unpack_inputs
     from transformers.tf_utils import stable_softmax
+
+    tf.config.experimental.enable_tensor_float_32_execution(False)
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -2140,6 +2145,18 @@ class UtilsFunctionsTest(unittest.TestCase):
         for p1, p2 in zip(model.weights, ref_model.weights):
             assert np.allclose(p1.numpy(), p2.numpy())
 
+    def test_sharded_checkpoint_with_prefix(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", load_weight_prefix="a/b")
+        sharded_model = TFBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded", load_weight_prefix="a/b")
+        for p1, p2 in zip(model.weights, sharded_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+            self.assertTrue(p1.name.startswith("a/b/"))
+            self.assertTrue(p2.name.startswith("a/b/"))
+
+    def test_sharded_checkpoint_transfer(self):
+        # If this doesn't throw an error then the test passes
+        TFBertForSequenceClassification.from_pretrained("ArthurZ/tiny-random-bert-sharded")
+
     @is_pt_tf_cross_test
     def test_checkpoint_sharding_local_from_pt(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2149,6 +2166,16 @@ class UtilsFunctionsTest(unittest.TestCase):
             ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             for p1, p2 in zip(model.weights, ref_model.weights):
                 assert np.allclose(p1.numpy(), p2.numpy())
+
+    @is_pt_tf_cross_test
+    def test_checkpoint_loading_with_prefix_from_pt(self):
+        model = TFBertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", from_pt=True, load_weight_prefix="a/b"
+        )
+        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
+        for p1, p2 in zip(model.weights, ref_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+            self.assertTrue(p1.name.startswith("a/b/"))
 
     @is_pt_tf_cross_test
     def test_checkpoint_sharding_hub_from_pt(self):
@@ -2382,7 +2409,6 @@ class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -2441,6 +2467,7 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
+    @is_pt_tf_cross_test
     def test_push_to_hub_callback(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2463,6 +2490,12 @@ class TFModelPushToHubTester(unittest.TestCase):
                 models_equal = False
                 break
         self.assertTrue(models_equal)
+
+        tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
+        tf_push_to_hub_params.pop("base_model_card_args")
+        pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
+        pt_push_to_hub_params.pop("deprecated_kwargs")
+        self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(

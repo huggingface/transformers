@@ -125,58 +125,6 @@ class PushToHubCallback(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TFLayoutLMForMaskedLM(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMForSequenceClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMForTokenClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMMainLayer(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMPreTrainedModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 class TFPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -316,6 +264,9 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
+TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = None
+
+
 TF_MODEL_MAPPING = None
 
 
@@ -428,6 +379,13 @@ class TFAutoModelForTokenClassification(metaclass=DummyObject):
 
 
 class TFAutoModelForVision2Seq(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForZeroShotImageClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1446,6 +1404,58 @@ class TFHubertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFLayoutLMForMaskedLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMForTokenClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMMainLayer(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFLayoutLMPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1647,9 +1657,6 @@ class TFMBartPreTrainedModel(metaclass=DummyObject):
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class TFMobileBertForMaskedLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1718,6 +1725,9 @@ class TFMobileBertPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TFMobileViTForImageClassification(metaclass=DummyObject):
@@ -2463,6 +2473,13 @@ class TFTransfoXLPreTrainedModel(metaclass=DummyObject):
 
 
 class TFVisionEncoderDecoderModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFVisionTextDualEncoderModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

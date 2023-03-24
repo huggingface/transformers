@@ -474,17 +474,17 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTHybridEmbeddings):
-            nn.init.trunc_normal_(
-                module.position_embeddings,
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            )
+            ).to(module.position_embeddings.dtype)
 
-            nn.init.trunc_normal_(
-                module.cls_token,
+            module.cls_token.data = nn.init.trunc_normal_(
+                module.cls_token.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            )
+            ).to(module.cls_token.dtype)
 
     def _set_gradient_checkpointing(self, module: ViTHybridEncoder, value: bool = False) -> None:
         if isinstance(module, ViTHybridEncoder):
@@ -573,6 +573,10 @@ class ViTHybridModel(ViTHybridPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
