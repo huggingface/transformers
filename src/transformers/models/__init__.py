@@ -116,6 +116,7 @@ from . import (
     mbart,
     mbart50,
     mctct,
+    mega,
     megatron_bert,
     megatron_gpt2,
     mgp_str,

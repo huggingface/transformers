@@ -121,6 +121,22 @@ class ClippedGELUActivation(nn.Module):
         return torch.clip(gelu(x), self.min, self.max)
 
 
+class AccurateGELUActivation(nn.Module):
+    """
+    Applies GELU approximation that is faster than default and more accurate than QuickGELU. See:
+    https://github.com/hendrycks/GELUs
+
+    Implemented along with MEGA (Moving Average Equipped Gated Attention)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.precomputed_constant = math.sqrt(2 / math.pi)
+
+    def forward(self, input: Tensor) -> Tensor:
+        return 0.5 * input * (1 + torch.tanh(self.precomputed_constant * (input + 0.044715 * torch.pow(input, 3))))
+
+
 class SiLUActivation(nn.Module):
     """
     See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) where the SiLU (Sigmoid Linear
@@ -163,6 +179,30 @@ class LinearActivation(nn.Module):
         return input
 
 
+class LaplaceActivation(nn.Module):
+    """
+    Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See
+    https://arxiv.org/abs/2209.10655
+
+    Inspired by squared relu, but with bounded range and gradient for better stability
+    """
+
+    def forward(self, input, mu=0.707107, sigma=0.282095):
+        input = (input - mu).div(sigma * math.sqrt(2.0))
+        return 0.5 * (1.0 + torch.erf(input))
+
+
+class ReLUSquaredActivation(nn.Module):
+    """
+    Applies the relu^2 activation introduced in https://arxiv.org/abs/2109.08668v2
+    """
+
+    def forward(self, input):
+        relu_applied = nn.functional.relu(input)
+        squared = torch.square(relu_applied)
+        return squared
+
+
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -177,10 +217,13 @@ ACT2CLS = {
     "gelu_new": NewGELUActivation,
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
     "gelu_pytorch_tanh": PytorchGELUTanh,
+    "gelu_accurate": AccurateGELUActivation,
+    "laplace": LaplaceActivation,
     "linear": LinearActivation,
     "mish": MishActivation,
     "quick_gelu": QuickGELUActivation,
     "relu": nn.ReLU,
+    "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,

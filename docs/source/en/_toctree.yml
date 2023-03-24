@@ -337,6 +337,8 @@
         title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
       - local: model_doc/megatron-bert
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
