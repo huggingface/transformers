@@ -46,6 +46,7 @@ if is_torch_available():
     )
 
 
+@require_torch
 def prepare_nllb_moe_inputs_dict(
     config,
     input_ids,
@@ -77,6 +78,7 @@ def prepare_nllb_moe_inputs_dict(
     }
 
 
+@require_torch
 class NllbMoeModelTester:
     def __init__(
         self,
@@ -359,9 +361,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def big_model(self):
-        return NllbMoeForConditionalGeneration.from_pretrained(
-            "/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b"
-        )
+        return NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
 
     def inference_no_head(self):
         model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
@@ -394,7 +394,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
         torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    # @tooslow("This test requires at least 340GB of RAM.")
+    @unittest.skip("This requires 300GB of RAM")
     def test_large_logits(self):
         model = self.big_model
         with torch.no_grad():
@@ -414,7 +414,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    # @tooslow("This test requires at least 340GB of RAM.")
+    @unittest.skip("This requires 300GB of RAM")
     def test_seq_to_seq_generation(self):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
@@ -503,6 +503,7 @@ class NllbMoeRouterTest(unittest.TestCase):
         self.assertTrue(torch.allclose(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, 1e-4))
 
     def test_batch_prioritized_routing(self):
+        set_seed(0)
         config = NllbMoeConfig(
             num_experts=4, hidden_size=32, d_ff=16, expert_capacity=4, second_expert_policy="random"
         )
@@ -512,7 +513,8 @@ class NllbMoeRouterTest(unittest.TestCase):
         router = NllbMoeTop2Router(config)
         top_1_mask, _ = router.route_tokens(logits, padding_mask=mask)
         # check that the routing is batch first. One of the last token is routed while expert capacity is very small
-        assert top_1_mask[0, -2] == 1
+        # this means that it had a greater probability of being routed
+        assert top_1_mask[-1, 0] == 1
 
     def test_seconde_expert_policy(self):
         config = NllbMoeConfig(

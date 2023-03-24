@@ -123,28 +123,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# TODO I think this one is not used in the fairseq implenetation
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
-def router_z_loss_func(router_logits: torch.Tensor) -> float:
-    r"""
-    Compute the router z-loss implemented in PyTorch.
-
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
-    It encourages router logits to remain small in an effort to improve stability.
-
-    Args:
-        router_logits (`float`):
-            Input logits of shape [batch_size, sequence_length, num_experts]
-
-    Returns:
-        Scalar router z-loss.
-    """
-    num_groups, tokens_per_group, _ = router_logits.shape
-    log_z = torch.logsumexp(router_logits, dim=-1)
-    z_loss = log_z**2
-    return torch.sum(z_loss) / (num_groups * tokens_per_group)
-
-
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->NllbMoeModel
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
@@ -312,9 +290,8 @@ class NllbMoeTop2Router(nn.Module):
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple:
         """
-        Computes the `dispatch_mask` and the `dispatch_weights` for each experts. TODO add more dosctring
-
-
+        Computes the `dispatch_mask` and the `dispatch_weights` for each experts. The masks are adapted to
+        the expert capacity.
         """
         nb_tokens = router_logits.shape[0]
         # Apply Softmax and cast back to the original `dtype`
@@ -499,9 +476,6 @@ class NllbMoeSparseMLP(nn.Module):
             expert_output = expert(masked_hidden_states[idx, token_indices])
             if self.moe_token_dropout > 0:
                 if self.training:
-                    # Expert Output Masking EOM using 2D dropout TODO check that it is okay
-                    # Due to historical reasons, this class will perform 1D channel-wise dropout for 3D inputs (as done by nn.Dropout1d). Thus, it currently does NOT support inputs without a batch dimension of shape
-                    # (C,H,W). This behavior will change in a future release to interpret 3D inputs as no-batch-dim inputs. To maintain the old behavior, switch to nn.Dropout1d.
                     expert_output = self.token_dropout(expert_output)
                 else:
                     expert_output *= 1 - self.moe_token_dropout
@@ -1596,8 +1570,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
-        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for SwitchTransformersModel.
-        >>> # This is not needed for torch's TODO THIS IS ERONG as it does this internally using labels arg.
+        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for NllbMoeModel
         >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
