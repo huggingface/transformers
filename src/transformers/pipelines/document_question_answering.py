@@ -287,38 +287,46 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if doc_stride is None:
             doc_stride = min(max_seq_len // 2, 256)
 
-        image = None
-        image_features = {}
-        if input.get("image", None) is not None:
-            image = load_image(input["image"])
-            if self.image_processor is not None:
-                image_features.update(self.image_processor(images=image, return_tensors=self.framework))
-            elif self.feature_extractor is not None:
-                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
-            elif self.model_type == ModelType.VisionEncoderDecoder:
-                raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
+        #image = None
+        #image_features = {}
+        words_list = []
+        boxes_list = []
+       
+        for image in images:
+            image_features = dict()
+            if image is not None:
+                # If an image processor is available, extract image features
+                if self.image_processor is not None:
+                    image_features.update(self.image_processor(images=image, return_tensors=self.framework))
+                # If a feature extractor is available, extract image features
+                elif self.feature_extractor is not None:
+                    image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+            words, boxes = None, None
 
-        words, boxes = None, None
-        if not self.model_type == ModelType.VisionEncoderDecoder:
-            if "word_boxes" in input:
-                words = [x[0] for x in input["word_boxes"]]
-                boxes = [x[1] for x in input["word_boxes"]]
-            elif "words" in image_features and "boxes" in image_features:
-                words = image_features.pop("words")[0]
-                boxes = image_features.pop("boxes")[0]
-            elif image is not None:
-                if not TESSERACT_LOADED:
+            if not self.model_type == ModelType.VisionEncoderDecoder:
+                if "word_boxes" in input:
+                    words = [x[0] for x in input["word_boxes"]]
+                    boxes = [x[1] for x in input["word_boxes"]]
+                elif "words" in image_features and "boxes" in image_features:
+                    words = image_features.pop("words")[0]
+                    boxes = image_features.pop("boxes")[0]
+                elif image is not None:
+                    if not TESSERACT_LOADED:
+                        raise ValueError(
+                            "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
+                            " but pytesseract is not available"
+                        )
+                    if TESSERACT_LOADED:
+                        words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
+                else:
                     raise ValueError(
-                        "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
-                        " but pytesseract is not available"
+                        "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
+                        " run OCR to derive words and boxes"
                     )
-                if TESSERACT_LOADED:
-                    words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
-            else:
-                raise ValueError(
-                    "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
-                    " run OCR to derive words and boxes"
-                )
+            # Add words detected in the current image
+            words_list.extend(words)
+            # Add  boxes of the words detected in the current image
+            boxes_list.extend(boxes)
 
         if self.tokenizer.padding_side != "right":
             raise ValueError(
