@@ -51,7 +51,7 @@ class SentencePieceExtractor:
             for piece_r in vocab.keys():
                 merge = f"{piece_l}{piece_r}"
                 piece_score = vocab_scores.get(merge, None)
-                if piece_score:
+                if piece_score is not None:
                     merges += [(piece_l, piece_r, piece_score)]
         merges = sorted(merges, key=lambda val: val[2], reverse=True)
         merges = [(val[0], val[1]) for val in merges]
