@@ -237,8 +237,9 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path):
     write_json({}, os.path.join(tokenizer_path, "special_tokens_map.json"))
     write_json(
         {
-            "bos_token": "",
-            "eos_token": "",
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "pad_token": "</s>",
             "model_max_length": int(1e30),
             "tokenizer_class": "LlamaTokenizer",
             "unk_token": "",
