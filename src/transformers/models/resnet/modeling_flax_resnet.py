@@ -40,7 +40,7 @@ from .configuration_resnet import ResNetConfig
 RESNET_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
+    library implements for all its model (such as downloading, saving and converting weights from Flax models)
 
     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
@@ -74,7 +74,7 @@ RESNET_START_DOCSTRING = r"""
 
 RESNET_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`jax.numpy.float32` of shape `(batch_size, height, width, num_channels)`):
+        pixel_values (`jax.numpy.float32` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`AutoImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
@@ -626,10 +626,7 @@ class FlaxResNetForImageClassificationModule(nn.Module):
         self.resnet = FlaxResNetModule(config=self.config, dtype=self.dtype)
 
         if self.config.num_labels > 0:
-            self.classifier = FlaxResNetClassifierCollection(
-                self.config,
-                dtype=self.dtype,
-            )
+            self.classifier = FlaxResNetClassifierCollection(self.config, dtype=self.dtype)
         else:
             self.classifier = Identity()
 

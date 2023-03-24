@@ -39,7 +39,7 @@ class FlaxResNetModelTester(unittest.TestCase):
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=3,
         image_size=32,
         num_channels=3,
         embeddings_size=10,
@@ -101,10 +101,7 @@ class FlaxResNetModelTester(unittest.TestCase):
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-        ) = config_and_inputs
+        config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
