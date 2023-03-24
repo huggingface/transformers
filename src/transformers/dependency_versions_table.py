@@ -72,7 +72,7 @@ deps = {
     "sudachidict_core": "sudachidict_core>=20220729",
     "tensorflow-cpu": "tensorflow-cpu>=2.4,<2.12",
     "tensorflow": "tensorflow>=2.4,<2.12",
-    "tensorflow-text": "tensorflow-text",
+    "tensorflow-text": "tensorflow-text<2.12",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
