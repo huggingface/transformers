@@ -98,13 +98,6 @@ class SeaformerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use "
-                "`do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
 
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 512, "width": 512}
@@ -118,27 +111,6 @@ class SeaformerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
-
-    @property
-    def reduce_labels(self):
-        warnings.warn(
-            "The `reduce_labels` property is deprecated and will be removed in a v4.27. Please use "
-            "`do_reduce_labels` instead.",
-            FutureWarning,
-        )
-        return self.do_reduce_labels
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure `do_reduce_labels` is updated if image
-        processor is created using from_dict and kwargs e.g. `SeaformerImageProcessor.from_pretrained(checkpoint,
-        reduce_labels=True)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in kwargs:
-            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
         self,
