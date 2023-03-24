@@ -193,6 +193,26 @@ def get_modified_python_files(diff_with_last_commit=False):
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
+# (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
+# \s*from\s+(\.+\S+)\s+import\s+([^\n]+) -> Line only contains from .xxx import yyy and we catch .xxx and yyy
+# (?=\n) -> Look-ahead to a new line. We can't just put \n here or using find_all on this re will only catch every
+#           other import.
+_re_single_line_relative_imports = re.compile(r"(?:^|\n)\s*from\s+(\.+\S+)\s+import\s+([^\n]+)(?=\n)")
+# (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
+# \s*from\s+(\.+\S+)\s+import\s+\(([^\)]+)\) -> Line continues with from .xxx import (yyy) and we catch .xxx and yyy
+# yyy will take multiple lines otherwise there wouldn't be parenthesis.
+_re_multi_line_relative_imports = re.compile(r"(?:^|\n)\s*from\s+(\.+\S+)\s+import\s+\(([^\)]+)\)")
+# (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
+# \s*from\s+transformers(\S*)\s+import\s+([^\n]+) -> Line only contains from transformers.xxx import yyy and we catch 
+#           .xxx and yyy
+# (?=\n) -> Look-ahead to a new line. We can't just put \n here or using find_all on this re will only catch every
+#           other import.
+_re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+([^\n]+)(?=\n)")
+# (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.
+# \s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\) -> Line continues with from transformers.xxx import (yyy) and we
+# catch .xxx and yyy. yyy will take multiple lines otherwise there wouldn't be parenthesis.
+_re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
+
 def extract_imports(module_fname, cache=None):
     """
     Get the imports a given module makes. This takes a module filename and returns the list of module filenames
@@ -212,11 +232,11 @@ def extract_imports(module_fname, cache=None):
     imported_modules = []
 
     # Let's start with relative imports
-    relative_imports = re.findall(r"from\s+(\.+\S+)\s+import\s+([^\n]+)\n", content)
+    relative_imports = _re_single_line_relative_imports.findall(content)
     relative_imports = [
         (mod, imp) for mod, imp in relative_imports if "# tests_ignore" not in imp and imp.strip() != "("
     ]
-    multiline_relative_imports = re.findall(r"from\s+(\.+\S+)\s+import\s+\(([^\)]+)\)", content)
+    multiline_relative_imports = _re_multi_line_relative_imports.findall(content)
     relative_imports += [(mod, imp) for mod, imp in multiline_relative_imports if "# tests_ignore" not in imp]
 
     for module, imports in relative_imports:
@@ -233,9 +253,9 @@ def extract_imports(module_fname, cache=None):
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     # Let's continue with direct imports
-    direct_imports = re.findall(r"from\s+transformers(\S*)\s+import\s+([^\n]+)\n", content)
+    direct_imports = _re_single_line_direct_imports.findall(content)
     direct_imports = [(mod, imp) for mod, imp in direct_imports if "# tests_ignore" not in imp and imp.strip() != "("]
-    multiline_direct_imports = re.findall(r"from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)", content)
+    multiline_direct_imports = _re_multi_line_direct_imports.findall(content)
     direct_imports += [(mod, imp) for mod, imp in multiline_direct_imports if "# tests_ignore" not in imp]
 
     for module, imports in direct_imports:
