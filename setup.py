@@ -166,7 +166,7 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorflow-cpu>=2.4,<2.12",
     "tensorflow>=2.4,<2.12",
-    "tensorflow-text",
+    "tensorflow-text<2.12",
     "tf2onnx",
     "timeout-decorator",
     "timm",
