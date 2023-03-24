@@ -98,17 +98,18 @@ and run the example command as usual afterward.
 ## Running the Examples on Remote Hardware with Auto-Setup
 
 [run_on_remote.py](./run_on_remote.py) is a script that launches any example on remote self-hosted hardware, 
-with automatic hardware and environment setup. IT uses [Runhouse](https://github.com/run-house/runhouse) to launch 
+with automatic hardware and environment setup. It uses [Runhouse](https://github.com/run-house/runhouse) to launch 
 on self-hosted hardware (e.g. in your own cloud account or on-premise cluster) but there are other options 
-for running remotely as well. Runhouse can be installed with `pip install runhouse`, and you can refer to
+for running remotely as well. You can easily customize the example used, command line arguments, dependencies, 
+and type of compute hardware, and then run the script to automatically launch the example.
+
+You can refer to 
 [hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/main/rh_primitives/cluster.html#hardware-setup)
-for more information about hardware and dependency setup, or this
-[Colab tutorial](https://colab.research.google.com/drive/1sh_aNQzJX5BKAdNeXthTNGxKz7sM9VPc) for a more in-depth walkthrough.
+for more information about hardware and dependency setup with Runhouse, or this
+[Colab tutorial](https://colab.research.google.com/drive/1sh_aNQzJX5BKAdNeXthTNGxKz7sM9VPc) for a more in-depth 
+walkthrough.
 
-You can easily customize the example script used, command line arguments, dependencies, and type of compute hardware, 
-and then run the script to automatically launch the example.
-
-You can run it with the following command:
+You can run the script with the following commands:
 
 ```bash
 # First install runhouse:
