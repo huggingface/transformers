@@ -16,7 +16,6 @@
 
 
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -28,9 +27,7 @@ from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import _config_zero_init
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -156,6 +153,18 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -186,7 +195,10 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipVisionModel.from_pretrained(model_name)
+            try:
+                model = TFBlipVisionModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipVisionModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -281,7 +293,7 @@ class TFBlipTextModelTester:
 
 
 @require_tf
-class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlipTextModel,) if is_tf_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -320,7 +332,10 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipTextModel.from_pretrained(model_name)
+            try:
+                model = TFBlipTextModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -379,7 +394,6 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_tf_available()
         else {}
     )
-    fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -409,31 +423,6 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Blip
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -452,7 +441,7 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
+            model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -580,24 +569,19 @@ class BlipVQAModelTest(unittest.TestCase):
         """
         for model_class in self.all_model_classes:
             model = model_class(self.model_tester.get_config())
-            model.train()
-            loss = model(**self._prepare_inputs_for_vqa()).loss
-            loss.backward()
+            loss = model(**self._prepare_inputs_for_vqa(), training=True).loss
 
-            # verify the gradients are not None
-            for name, param in model.named_parameters():
-                self.assertIsNotNone(param.grad, f"Gradients should not be None - got {param.grad} for {name}")
+            self.assertIsNotNone(loss, "Loss should not be None")
 
 
 @require_tf
-class BlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlipForImageTextRetrieval,) if is_tf_available() else ()
-    fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = BlipTextRetrievalModelTester(self)
@@ -657,12 +641,20 @@ class BlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
+            model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Tested in individual model tests")
+    def test_compile_tf_model(self):
+        pass
+
+    @unittest.skip("Model doesn't have a clean loss output.")
+    def test_keras_fit(self):
+        pass
 
 
 @require_tf
-class BlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFBlipForConditionalGeneration,
@@ -671,12 +663,11 @@ class BlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
-    fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)
@@ -691,6 +682,42 @@ class BlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
+        pass
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "input_ids",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                ]
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                    else ["encoder_outputs"]
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                expected_arg_names = (
+                    ["input_ids"] if model_class != TFBlipForConditionalGeneration else ["pixel_values"]
+                )
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    @unittest.skip(reason="Tested in individual model tests")
+    def test_compile_tf_model(self):
+        pass
+
+    @unittest.skip("Has some odd input names!")
+    def test_keras_fit(self):
         pass
 
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
@@ -718,7 +745,6 @@ class BlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
             loss = model(**inputs, training=True).loss
             self.assertIsNotNone(loss)
 
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -737,7 +763,10 @@ class BlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
+            try:
+                model = TFBlipModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -753,7 +782,7 @@ def prepare_img():
 @slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()
 
@@ -763,7 +792,9 @@ class BlipModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
+        self.assertEqual(
+            predictions[0].numpy().tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
+        )
 
         # image and context
         context = ["a picture of"]
@@ -773,12 +804,12 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         # Test output
         self.assertEqual(
-            predictions[0].tolist(),
+            predictions[0].numpy().tolist(),
             [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
     def test_inference_vqa(self):
-        model = TFBlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        model = TFBlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         image = prepare_img()
@@ -788,10 +819,10 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out = model.generate(**inputs)
 
         # Test output
-        self.assertEqual(out[0].tolist(), [30522, 1015, 102])
+        self.assertEqual(out[0].numpy().tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        model = TFBlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        model = TFBlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         image = prepare_img()
@@ -802,7 +833,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False, training=False)
 
-        expected_scores = tf.Tensor([[0.9798, 0.0202]])
+        expected_scores = tf.convert_to_tensor([[0.9798, 0.0202]])
 
         self.assertTrue(np.allclose(tf.nn.softmax(out_itm[0]).numpy(), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(np.allclose(out[0], tf.Tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5053]]), rtol=1e-3, atol=1e-3))

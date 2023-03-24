@@ -15,13 +15,20 @@
 """ TensorFlow BLIP model."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, get_tf_activation, shape_list, unpack_inputs, DUMMY_INPUTS
+from ...modeling_tf_utils import (
+    DUMMY_INPUTS,
+    TFPreTrainedModel,
+    get_initializer,
+    get_tf_activation,
+    shape_list,
+    unpack_inputs,
+)
 from ...tf_utils import stable_softmax
 from ...utils import (
     ModelOutput,
@@ -258,7 +265,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
-        batch_size = pixel_values.shape[0]
+        batch_size = tf.shape(pixel_values)[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = tf.reshape(patch_embeds, (batch_size, -1, self.num_patches))
         patch_embeds = tf.transpose(patch_embeds, perm=(0, 2, 1))
@@ -412,7 +419,7 @@ class TFBlipAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPMLP with CLIP->Blip
+# Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPMLP with CLIP->Blip
 class TFBlipMLP(tf.keras.layers.Layer):
     def __init__(self, config: BlipConfig, **kwargs):
         super().__init__(**kwargs)
@@ -440,10 +447,10 @@ class TFBlipEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BlipConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.hidden_size
-        self.self_attn = TFBlipAttention(config)
-        self.layer_norm1 = LayerNormalization(epsilon=config.layer_norm_eps)
-        self.mlp = TFBlipMLP(config)
-        self.layer_norm2 = LayerNormalization(epsilon=config.layer_norm_eps)
+        self.self_attn = TFBlipAttention(config, name="self_attn")
+        self.layer_norm1 = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.mlp = TFBlipMLP(config, name="mlp")
+        self.layer_norm2 = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
 
     def call(
         self,
@@ -603,10 +610,10 @@ class TFBlipEncoder(tf.keras.layers.Layer):
             The corresponding vision configuration for the `BlipEncoder`.
     """
 
-    def __init__(self, config: BlipConfig):
-        super().__init__()
+    def __init__(self, config: BlipConfig, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
-        self.layers = [TFBlipEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        self.layers = [TFBlipEncoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -680,9 +687,9 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
         super().__init__(config, *args, **kwargs)
         self.config = config
 
-        self.embeddings = TFBlipVisionEmbeddings(config)
-        self.encoder = TFBlipEncoder(config)
-        self.post_layernorm = LayerNormalization(epsilon=config.layer_norm_eps)
+        self.embeddings = TFBlipVisionEmbeddings(config, name="embeddings")
+        self.encoder = TFBlipEncoder(config, name="encoder")
+        self.post_layernorm = LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -727,9 +734,9 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
             attentions=attns,
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=BlipVisionConfig)
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -781,12 +788,11 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
         return self.embeddings
 
 
-@add_start_docstrings(BLIP_START_DOCSTRING)
-class TFBlipModel(TFBlipPreTrainedModel):
+class TFBlipMainLayer(tf.keras.layers.Layer):
     config_class = BlipConfig
 
     def __init__(self, config: BlipConfig, *args, **kwargs):
-        super().__init__(config, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         if not isinstance(config.text_config, BlipTextConfig):
             raise ValueError(
@@ -807,8 +813,8 @@ class TFBlipModel(TFBlipPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = TFBlipTextModel(text_config)
-        self.vision_model = TFBlipVisionModel(vision_config)
+        self.text_model = TFBlipTextModel(text_config, name="text_model")
+        self.vision_model = TFBlipVisionModel(vision_config, name="vision_model")
 
         self.visual_projection = Dense(
             self.projection_dim,
@@ -823,43 +829,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
             name="text_projection",
         )
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
-            dtype=tf.float32,
-        )
-        return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
-            "pixel_values": VISION_DUMMY_INPUTS,
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBlipOutput:
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
+        self.config = config
 
     def build(self, input_shape):
         self.logit_scale = self.add_weight(
@@ -947,9 +917,135 @@ class TFBlipModel(TFBlipPreTrainedModel):
 
         return image_features
 
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        return_loss: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFBlipOutput]:
+        # Use BLIP model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
+
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
+
+        # normalized features
+        image_embeds = image_embeds / tf.norm(image_embeds, ord=2, axis=-1, keepdims=True)
+        text_embeds = text_embeds / tf.norm(text_embeds, ord=2, axis=-1, keepdims=True)
+
+        # cosine similarity as logits
+        logit_scale = tf.exp(self.logit_scale)
+        logits_per_text = tf.matmul(text_embeds, image_embeds, transpose_b=True) * logit_scale
+        logits_per_image = tf.transpose(logits_per_text)
+
+        loss = None
+        if return_loss:
+            loss = blip_loss(logits_per_text)
+            loss = tf.reshape(loss, (1,))
+
+        if not return_dict:
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return ((loss,) + output) if loss is not None else output
+
+        return TFBlipOutput(
+            loss=loss,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_output=vision_outputs,
+        )
+
+
+class TFBlipModel(TFBlipPreTrainedModel):
+    config_class = BlipConfig
+    _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    main_input_name = "input_ids"
+
+    def __init__(self, config: BlipConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.blip = TFBlipMainLayer(config, name="blip")
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+            dtype=tf.float32,
+        )
+        return {
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
+            "pixel_values": VISION_DUMMY_INPUTS,
+        }
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBlipOutput:
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output: TFBlipOutput) -> TFBlipOutput:
+        return TFBlipOutput(
+            logits_per_image=output.logits_per_image,
+            logits_per_text=output.logits_per_text,
+            text_embeds=output.text_embeds,
+            image_embeds=output.image_embeds,
+        )
+
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipOutput, config_class=BlipConfig)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[tf.Tensor] = None,
@@ -985,61 +1081,17 @@ class TFBlipModel(TFBlipPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = tf.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use BLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        text_outputs = self.text_model(
+        outputs = self.blip(
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_loss=return_loss,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
-
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
-
-        # normalized features
-        image_embeds = image_embeds / tf.norm(image_embeds, ord=2, axis=-1, keepdim=True)
-        text_embeds = text_embeds / tf.norm(text_embeds, ord=2, axis=-1, keepdim=True)
-
-        # cosine similarity as logits
-        logit_scale = tf.exp(self.logit_scale)
-        logits_per_text = tf.matmul(text_embeds, image_embeds, transpose_b=True) * logit_scale
-        logits_per_image = tf.transpose(logits_per_text)
-
-        loss = None
-        if return_loss:
-            loss = blip_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
-
-        return TFBlipOutput(
-            loss=loss,
-            logits_per_image=logits_per_image,
-            logits_per_text=logits_per_text,
-            text_embeds=text_embeds,
-            image_embeds=image_embeds,
-            text_model_output=text_outputs,
-            vision_model_output=vision_outputs,
-        )
+        return outputs
 
 
 @add_start_docstrings(
@@ -1059,9 +1111,9 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
     def __init__(self, config: BlipConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
 
-        self.vision_model = TFBlipVisionModel(config.vision_config)
+        self.vision_model = TFBlipVisionModel(config.vision_config, name="vision_model")
 
-        self.text_decoder = TFBlipTextLMHeadModel(config.text_config)
+        self.text_decoder = TFBlipTextLMHeadModel(config.text_config, name="text_decoder")
 
         self.decoder_input_ids = config.text_config.bos_token_id
         self.decoder_pad_token_id = config.text_config.pad_token_id
@@ -1069,9 +1121,51 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
+    @property
+    def dummy_inputs(self):
+        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+            dtype=tf.float32,
+        )
+        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(
+        self, output: TFBlipForConditionalGenerationModelOutput
+    ) -> TFBlipForConditionalGenerationModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBlipForConditionalGenerationModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            image_embeds=output.image_embeds,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
-    @unpack_inputs
     def call(
         self,
         pixel_values: tf.Tensor,
@@ -1126,6 +1220,9 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         if not return_dict:
             outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
+
+        if outputs.loss is not None and outputs.loss.shape.rank == 0:
+            outputs.loss = tf.reshape(outputs.loss, (1,))
 
         return TFBlipForConditionalGenerationModelOutput(
             loss=outputs.loss,
@@ -1182,16 +1279,21 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        image_attention_mask = tf.ones(shape_list(image_embeds)[:-1], dtype=tf.int64)
+        image_attention_mask = tf.ones(shape_list(image_embeds)[:-1], dtype=tf.int32)
 
         if isinstance(input_ids, list):
-            input_ids = tf.Tensor(input_ids, dtype=tf.int64)
+            input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int32)
         elif input_ids is None:
-            input_ids = tf.Tensor(
-                [[self.decoder_input_ids, self.config.text_config.eos_token_id]], dtype=tf.int64
-            ).repeat(batch_size, 1)
+            input_ids = tf.convert_to_tensor(
+                [[self.decoder_input_ids, self.config.text_config.eos_token_id]], dtype=tf.int32
+            )
 
-        input_ids[:, 0] = self.config.text_config.bos_token_id
+            input_ids = tf.tile(input_ids, (batch_size, 1))
+
+        # PyTorch: input_ids[:, 0] = self.config.text_config.bos_token_id
+        input_ids = tf.concat(
+            [tf.ones((batch_size, 1), dtype=tf.int32) * self.config.text_config.bos_token_id, input_ids[:, 1:]], axis=1
+        )
         attention_mask = attention_mask[:, :-1] if attention_mask is not None else None
 
         outputs = self.text_decoder.generate(
@@ -1234,6 +1336,46 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
+    @property
+    def dummy_inputs(self):
+        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+            dtype=tf.float32,
+        )
+        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS, "decoder_input_ids": input_ids}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output: TFBlipTextVisionModelOutput) -> TFBlipTextVisionModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBlipTextVisionModelOutput(
+            image_embeds=output.image_embeds,
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
     # Adapted from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.decoder_start_token_id
@@ -1258,9 +1400,9 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         return shifted_input_ids
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
-    @unpack_inputs
     def call(
         self,
         input_ids: tf.Tensor,
@@ -1269,6 +1411,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         decoder_attention_mask: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
+        foutput_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
@@ -1340,7 +1483,8 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             # get decoder inputs from shifting lm labels to the right - this is used in training mode
             decoder_input_ids = self._shift_right(labels)
             # replace possible -100 values in labels by `pad_token_id`
-            labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
+            # labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
+            labels = tf.where(labels == self.decoder_pad_token_id, -100, labels)
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
@@ -1352,7 +1496,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         )
 
         if labels is not None:
-            decoder_loss = answer_output.loss.mean() if return_dict else answer_output[0].mean()
+            decoder_loss = tf.reduce_mean(answer_output.loss) if return_dict else tf.reduce_mean(answer_output[0])
         else:
             decoder_loss = None
 
@@ -1416,7 +1560,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        image_attention_mask = tf.ones(shape_list(image_embeds)[:-1], dtype=tf.int64)
+        image_attention_mask = tf.ones(shape_list(image_embeds)[:-1], dtype=tf.int32)
 
         if isinstance(input_ids, list):
             input_ids = tf.Tensor(input_ids)
@@ -1431,7 +1575,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         question_embeds = question_outputs[0]
 
-        question_attention_mask = tf.ones(question_embeds.size()[:-1], dtype=tf.int64)
+        question_attention_mask = tf.ones(shape_list(question_embeds)[:-1], dtype=tf.int32)
 
         bos_ids = tf.fill(
             (tf.shape(question_embeds)[0], 1), value=tf.cast(self.decoder_start_token_id, input_ids.dtype)
@@ -1498,19 +1642,60 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFBlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    @property
+    def dummy_inputs(self):
+        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+            dtype=tf.float32,
+        )
+        return {"input_ids": input_ids, "pixel_values": VISION_DUMMY_INPUTS}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output: TFBlipImageTextMatchingModelOutput) -> TFBlipImageTextMatchingModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBlipImageTextMatchingModelOutput(
+            itm_score=output.itm_score,
+            last_hidden_state=hs,
+            hidden_states=output.hidden_states,
+            attentions=attns,
+            question_embeds=output.question_embeds,
+        )
+
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFBlipImageTextMatchingModelOutput, config_class=BlipVisionConfig)
     def call(
         self,
         input_ids: tf.Tensor,
-        pixel_values: tf.Tensor,
+        pixel_values: Optional[tf.Tensor] = None,
         use_itm_head: Optional[bool] = True,
         attention_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TFBlipTextVisionModelOutput]:
+    ) -> Union[Tuple, TFBlipImageTextMatchingModelOutput]:
         r"""
         Returns:
 
@@ -1544,29 +1729,41 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         image_embeds = vision_outputs[0]
         image_atts = tf.ones(shape_list(image_embeds)[:-1], dtype=tf.int64)
 
+        # Matt: In PyTorch, only one path (itm/non-itm) is taken. However, in TensorFlow this can result in
+        # some layers not being built! To avoid this, we always call both paths, then use an if statement to select
+        # which output to pass to the final output. The unnecessary nodes will be pruned from the final graph, but
+        # not before the layers have all been built correctly.
+        itm_question_embeds = self.text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            return_dict=return_dict,
+        )
+        itm_question_embeds = itm_question_embeds[0] if not return_dict else itm_question_embeds.last_hidden_state
+
+        itm_output = self.itm_head(itm_question_embeds[:, 0, :])
+
+        no_itm_question_embeds = self.text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=return_dict,
+        )
+        no_itm_question_embeds = (
+            no_itm_question_embeds[0] if not return_dict else no_itm_question_embeds.last_hidden_state
+        )
+
+        image_feat, _ = tf.linalg.normalize(self.vision_proj(image_embeds[:, 0, :]), ord=2, axis=-1)
+        text_feat, _ = tf.linalg.normalize(self.text_proj(no_itm_question_embeds[:, 0, :]), ord=2, axis=-1)
+
+        no_itm_output = tf.matmul(image_feat, text_feat, transpose_b=True)
+
         if use_itm_head:
-            question_embeds = self.text_encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=return_dict,
-            )
-            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
-
-            output = self.itm_head(question_embeds[:, 0, :])
+            output = itm_output
+            question_embeds = itm_question_embeds
         else:
-            question_embeds = self.text_encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=return_dict,
-            )
-            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
-
-            image_feat = tf.linalg.normalize(self.vision_proj(image_embeds[:, 0, :]), ord=2, axis=-1)
-            text_feat = tf.linalg.normalize(self.text_proj(question_embeds[:, 0, :]), ord=2, axis=-1)
-
-            output = tf.matmul(image_feat, text_feat, transpose_b=True)
+            output = no_itm_output
+            question_embeds = no_itm_question_embeds
 
         if not return_dict:
             outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)

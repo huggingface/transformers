@@ -406,6 +406,7 @@ def unpack_inputs(func):
         func (`callable`):
             The callable function of the TensorFlow model.
 
+
     Returns:
         A callable that wraps the original `func` with the behavior described above.
     """
@@ -1167,6 +1168,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Returns:
             `tf.Tensor`: The inverted attention mask.
         """
+        if not isinstance(encoder_attention_mask, tf.Tensor):
+            encoder_attention_mask = tf.convert_to_tensor(encoder_attention_mask)  # Catches stray NumPy inputs
         if encoder_attention_mask.shape.rank == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.shape.rank == 2:
@@ -1176,12 +1179,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * encoder_extended_attention_mask.dtype.min
+        encoder_extended_attention_mask = (
+            tf.cast(1, encoder_attention_mask.dtype) - encoder_extended_attention_mask
+        ) * encoder_extended_attention_mask.dtype.min
 
         return encoder_extended_attention_mask
 
-    def get_head_mask(
-        self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
+    def get_head_mask(self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
         """
         Prepare the head mask if needed.
 
