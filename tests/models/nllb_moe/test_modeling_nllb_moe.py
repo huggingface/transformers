@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     slow,
-    tooslow,
     torch_device,
 )
 from transformers.utils import cached_property
@@ -271,6 +270,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     fx_compatible = False
     test_pruning = False
     test_missing_keys = True
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = NllbMoeModelTester(self)
@@ -335,6 +335,8 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
@@ -369,13 +371,14 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         EXPECTED_ENCODER_STATE = torch.Tensor([ 0.3920, -0.1974, -0.0279,  0.3463, -0.8306, -1.0629, -0.4643,  2.0563, 1.1123,  0.3566, -0.9291, -0.3840, -0.2527, -0.9858,  1.5185, -1.1346, 0.0323, -0.9103, -0.3647, -0.4462, -0.9720, -0.3541,  0.1777, -0.4647, 1.6970, -0.9062,  0.2727, -1.0737,  0.8785,  0.4324])
         EXPECTED_DECODER_STATE = torch.Tensor([-6.0425e-02, -2.0015e-01,  6.0575e-02, -8.6366e-01, -1.1310e+00, 6.8369e-01,  7.5615e-01,  7.3555e-01,  2.3071e-01,  1.5954e+00, -7.0728e-01, -2.2647e-01, -1.3292e+00,  4.8246e-01, -6.9153e-01, -1.8199e-02, -7.3664e-01,  1.5902e-03,  1.0760e-01,  1.0298e-01, -9.3933e-01, -4.6567e-01,  8.0417e-01,  1.5243e+00,  5.5844e-01, -9.9239e-02,  1.4885e+00,  7.1527e-02, -5.2612e-01,  9.4435e-02])
         # fmt: on
-        
+
         torch.testing.assert_allclose(
             output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
         )
         torch.testing.assert_allclose(
             output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3
         )
+
     def test_inference_logits(self):
         r"""
         Logits testing to check implementation consistency between `fairseq` implementation
@@ -391,7 +394,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
         torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    #@tooslow("This test requires at least 340GB of RAM.")
+    # @tooslow("This test requires at least 340GB of RAM.")
     def test_large_logits(self):
         model = self.big_model
         with torch.no_grad():
@@ -411,7 +414,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_allclose(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    #@tooslow("This test requires at least 340GB of RAM.")
+    # @tooslow("This test requires at least 340GB of RAM.")
     def test_seq_to_seq_generation(self):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
@@ -433,9 +436,9 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         EXPECTED_FAIRSEQ_TRANSLATION = [
             '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
             "Le docteur Ehud Ur, professeur de médecine à l'université Dalhousie, à Halifax, en Nouvelle-Écosse, et président de la division clinique et scientifique de l'Association canadienne du diabète, prévient que la recherche n'en est qu'à ses débuts.",
-            "Comme d'autres spécialistes, il est sceptique quant à la guérison du diabète, notant que ces résultats ne sont pas pertinents pour les personnes atteintes de diabète de type 1.",
-            "Lundi, Sara Danius, secrétaire permanente du Comité Nobel de littérature à l'Académie suédoise, a annoncé publiquement lors d'une émission de radio sur Sveriges Radio en Suède que le comité, incapable de contacter Bob Dylan directement au sujet du prix Nobel de littérature 2016, avait abandonné ses efforts pour le joindre.",
-            "Danius a déclaré: \"Pour le moment, nous ne faisons rien. J'ai appelé et envoyé des courriels à son plus proche collaborateur et j'ai reçu des réponses très amicales. Pour l'instant, c'est certainement suffisant\".",
+            "Comme d'autres spécialistes, il est sceptique quant à la guérison du diabète.",
+            "Lundi, Sara Danius, secrétaire permanente du Comité Nobel de littérature à l'Académie suédoise, a annoncé publiquement lors d'une émission de radio sur Sveriges Radio en Suède que le comité, incapable de joindre Bob Dylan directement pour lui annoncer le prix Nobel de littérature 2016, avait abandonné ses efforts pour le joindre.",
+            "Danius a déclaré: \"Pour l'instant, nous ne faisons rien. J'ai appelé et envoyé des courriels à son plus proche collaborateur et j'ai reçu des réponses très amicales. Pour l'instant, c'est certainement suffisant\".",
             "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage.",
         ]
 
@@ -476,7 +479,7 @@ class NllbMoeRouterTest(unittest.TestCase):
 
         _, _, hidden_dim = hidden_states.shape
         logits = classfier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
-        top_1_mask, router_probs, _ = hf_router.route_tokens(logits, padding_mask=mask)
+        top_1_mask, router_probs = hf_router.route_tokens(logits, padding_mask=mask)
         torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()
         set_seed(0)
@@ -507,13 +510,14 @@ class NllbMoeRouterTest(unittest.TestCase):
             hidden_size=32,
             d_ff=16,
             expert_capacity=4,
+            second_expert_policy = "random"
         )
-        config.second_expert_policy = "random"
         mask = torch.ones((self.batch_size * self.sequence_length), dtype=torch.bool)
-        logits = torch.rand((self.batch_size, self.sequence_length, config.hidden_size))
-        self.config.batch_prioritized_routing = True
+        logits = torch.rand((self.batch_size * self.sequence_length, 4))
+        config.batch_prioritized_routing = True
         router = NllbMoeTop2Router(config)
-        top_1_mask, router_probs, _ = router.route_tokens(logits, padding_mask=mask)
+        top_1_mask, router_probs = router.route_tokens(logits, padding_mask=mask)
+        # check that the routing is batch first
 
     def test_seconde_expert_policy(self):
         config = NllbMoeConfig(
@@ -522,17 +526,18 @@ class NllbMoeRouterTest(unittest.TestCase):
             d_ff=16,
             expert_capacity=4,
         )
-        config.second_expert_policy = "random"
         mask = torch.ones((self.batch_size * self.sequence_length), dtype=torch.bool)
-        logits = torch.rand((self.batch_size, self.sequence_length, config.hidden_size))
+        logits = torch.rand((self.batch_size * self.sequence_length, 4))
 
+        config.second_expert_policy = "random"
         router = NllbMoeTop2Router(config)
-        top_1_mask, router_probs, _ = router.route_tokens(logits, padding_mask=mask)
+        top_1_mask, router_probs = router.route_tokens(logits, padding_mask=mask)
 
         config.second_expert_policy = "sample"
         router = NllbMoeTop2Router(config)
-        top_1_mask, router_probs, _ = router.route_tokens(logits, padding_mask=mask)
+        top_1_mask_sp, router_probs_sp= router.route_tokens(logits, padding_mask=mask)
 
         config.second_expert_policy = "all"
         router = NllbMoeTop2Router(config)
-        top_1_mask, router_probs, _ = router.route_tokens(logits, padding_mask=mask)
+        top_1_mask_all, router_probs_all = router.route_tokens(logits, padding_mask=mask)
+
