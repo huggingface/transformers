@@ -4,7 +4,7 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='1.13.1'
+ARG PYTORCH='2.0.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu117'
 
@@ -18,15 +18,12 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-#RUN python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
-RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu117
-
+RUN python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
-# This will uninstall torch 2.0.0
-# TODO: uncomment the following line once `torch-tensorrt` is ready for `torch 2.0.0`
-# RUN python3 -m pip install torch-tensorrt==1.3.0 --find-links https://github.com/pytorch/TensorRT/releases/expanded_assets/v1.3.0
+# Uninstall `torch-tensorrt` shipped with the base image
+RUN python3 -m pip uninstall -y torch-tensorrt
 
 # recompile apex
 RUN python3 -m pip uninstall -y apex
