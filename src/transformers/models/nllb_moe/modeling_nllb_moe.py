@@ -337,7 +337,8 @@ class NllbMoeTop2Router(nn.Module):
             )
 
         if self.second_expert_policy == "random":
-            sampled = (2 * top_2_mask) > torch.rand_like(top_2_mask)
+            top_2_max_probs = (router_probs * top_2_mask).sum(dim=1)
+            sampled = (2 * top_2_max_probs) > torch.rand_like(top_2_max_probs.float())
             top_2_mask = top_2_mask * sampled.repeat(self.num_experts, 1).transpose(1, 0)
 
         if padding_mask is not None and not self.router_ignore_padding_tokens:
@@ -351,14 +352,14 @@ class NllbMoeTop2Router(nn.Module):
         if self.batch_prioritized_routing:
             # sort tokens based on their routing probability
             # to make sure important tokens are routed, first
-            importance_scores = (-1 * top_1_max_probs).argsort(dim=0)
-            sorted_top_1_mask = top_1_mask[importance_scores]
-            sorted_cumsum1 = (torch.cumsum(sorted_top_1_mask) - 1) * sorted_top_1_mask
-            locations1 = sorted_cumsum1[importance_scores.argsort(dim=0)]
+            importance_scores = -1 * router_probs.max(dim=1)[0]
+            sorted_top_1_mask = top_1_mask[importance_scores.argsort(dim=0)]
+            sorted_cumsum1 = (torch.cumsum(sorted_top_1_mask, dim=0) - 1) * sorted_top_1_mask
+            locations1 = sorted_cumsum1[importance_scores.argsort(dim=0).argsort(dim=0)]
 
-            sorted_top_2_mask = top_2_mask[importance_scores]
-            sorted_cumsum2 = (torch.cumsum(sorted_top_2_mask) - 1) * sorted_top_2_mask
-            locations2 = sorted_cumsum2[importance_scores.argsort(dim=0)]
+            sorted_top_2_mask = top_2_mask[importance_scores.argsort(dim=0)]
+            sorted_cumsum2 = (torch.cumsum(sorted_top_2_mask, dim=0) - 1) * sorted_top_2_mask
+            locations2 = sorted_cumsum2[importance_scores.argsort(dim=0).argsort(dim=0)]
             # Update 2nd's location by accounting for locations of 1st
             locations2 += torch.sum(top_1_mask, dim=0, keepdim=True)
 
@@ -388,7 +389,7 @@ class NllbMoeTop2Router(nn.Module):
         gates2 = top_2_max_probs[:, None] * top_2_mask
         router_probs = gates1 + gates2
 
-        return top_1_mask, router_probs, router_logits
+        return top_1_mask, router_probs
 
     def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> Tuple:
         r"""
@@ -415,8 +416,8 @@ class NllbMoeTop2Router(nn.Module):
         hidden_states = hidden_states.to(self.dtype)
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
-        top_1_mask, router_probs, router_logits = self.route_tokens(router_logits, self.input_dtype, padding_mask)
-        return top_1_mask, router_probs, router_logits
+        top_1_mask, router_probs = self.route_tokens(router_logits, self.input_dtype, padding_mask)
+        return top_1_mask, router_probs
 
 
 # Adapted from transformers.models.t5.modeling_t5.T5DenseActDense
@@ -488,7 +489,7 @@ class NllbMoeSparseMLP(nn.Module):
         """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
-        top_1_mask, router_probs, router_logits = self.router(hidden_states, padding_mask)
+        top_1_mask, router_probs = self.router(hidden_states, padding_mask)
         router_mask = router_probs.bool()
         hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
@@ -508,7 +509,7 @@ class NllbMoeSparseMLP(nn.Module):
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
 
         top_1_expert_index = torch.argmax(top_1_mask, dim=-1)
-        return hidden_states, (router_logits, top_1_expert_index)
+        return hidden_states, (router_probs, top_1_expert_index)
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe,key_value_states->encoder_hidden_states
@@ -1734,7 +1735,9 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_router_logits = output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         if labels is not None:
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
@@ -1775,12 +1778,10 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
-                encoder_router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
-                encoder_aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
+                encoder_aux_loss = load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes)
 
                 decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(decoder_router_logits)
-                decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
-                decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
+                decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 

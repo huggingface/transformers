@@ -168,7 +168,7 @@ class NllbMoeConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        output_router_logits = False,
+        output_router_logits=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
