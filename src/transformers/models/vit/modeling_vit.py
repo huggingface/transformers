@@ -170,6 +170,7 @@ class ViTPatchEmbeddings(nn.Module):
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
             )
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
