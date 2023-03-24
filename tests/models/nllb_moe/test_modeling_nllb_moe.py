@@ -419,7 +419,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
 
-        # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth from the fairseq translation files
+        # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth are very similar to the fairseq translation files
         FIRST_6_FLORES_200 = [
             'We now have 4-month-old mice that are non-diabetic that used to be diabetic," he added.',
             "Dr. Ehud Ur, professor of medicine at Dalhousie University in Halifax, Nova Scotia and chair of the clinical and scientific division of the Canadian Diabetes Association cautioned that the research is still in its early days.",
@@ -429,9 +429,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage.",
         ]
         inputs = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt").to(torch_device)
-
-        # takes about 38.176 seconds
-        hypotheses_batch = model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"])
+        batch_translation = model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"])
 
         EXPECTED_FAIRSEQ_TRANSLATION = [
             '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
@@ -443,7 +441,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         ]
 
         translation = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            batch_translation.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert translation == EXPECTED_FAIRSEQ_TRANSLATION
 
@@ -506,38 +504,42 @@ class NllbMoeRouterTest(unittest.TestCase):
 
     def test_batch_prioritized_routing(self):
         config = NllbMoeConfig(
-            num_experts=4,
-            hidden_size=32,
-            d_ff=16,
-            expert_capacity=4,
-            second_expert_policy = "random"
+            num_experts=4, hidden_size=32, d_ff=16, expert_capacity=4, second_expert_policy="random"
         )
-        mask = torch.ones((self.batch_size * self.sequence_length), dtype=torch.bool)
+        mask = torch.zeros((self.batch_size * self.sequence_length), dtype=torch.bool)
         logits = torch.rand((self.batch_size * self.sequence_length, 4))
         config.batch_prioritized_routing = True
         router = NllbMoeTop2Router(config)
-        top_1_mask, router_probs = router.route_tokens(logits, padding_mask=mask)
-        # check that the routing is batch first
+        top_1_mask, _ = router.route_tokens(logits, padding_mask=mask)
+        # check that the routing is batch first. One of the last token is routed while expert capacity is very small
+        assert top_1_mask[0, -2] == 1
 
     def test_seconde_expert_policy(self):
         config = NllbMoeConfig(
             num_experts=4,
             hidden_size=32,
             d_ff=16,
-            expert_capacity=4,
+            expert_capacity=40,
         )
-        mask = torch.ones((self.batch_size * self.sequence_length), dtype=torch.bool)
+        mask = torch.zeros((self.batch_size * self.sequence_length), dtype=torch.bool)
         logits = torch.rand((self.batch_size * self.sequence_length, 4))
 
         config.second_expert_policy = "random"
         router = NllbMoeTop2Router(config)
         top_1_mask, router_probs = router.route_tokens(logits, padding_mask=mask)
 
-        config.second_expert_policy = "sample"
+        config.second_expert_policy = "sampling"
         router = NllbMoeTop2Router(config)
-        top_1_mask_sp, router_probs_sp= router.route_tokens(logits, padding_mask=mask)
+        top_1_mask_sp, router_probs_sp = router.route_tokens(logits, padding_mask=mask)
 
         config.second_expert_policy = "all"
         router = NllbMoeTop2Router(config)
         top_1_mask_all, router_probs_all = router.route_tokens(logits, padding_mask=mask)
 
+        assert (router_probs_all == router_probs).sum() < 160
+        assert (router_probs_all == router_probs_sp).sum() < 160
+        assert (router_probs == router_probs_sp).sum() < 160
+
+        assert (top_1_mask_all == top_1_mask).sum() < 160
+        assert (top_1_mask_all == top_1_mask_sp).sum() < 160
+        assert (top_1_mask == top_1_mask_sp).sum() == 160
