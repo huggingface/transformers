@@ -290,8 +290,8 @@ class NllbMoeTop2Router(nn.Module):
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple:
         """
-        Computes the `dispatch_mask` and the `dispatch_weights` for each experts. The masks are adapted to
-        the expert capacity.
+        Computes the `dispatch_mask` and the `dispatch_weights` for each experts. The masks are adapted to the expert
+        capacity.
         """
         nb_tokens = router_logits.shape[0]
         # Apply Softmax and cast back to the original `dtype`
