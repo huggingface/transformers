@@ -839,84 +839,6 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
             trainable=True,
         )
 
-    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
-    def get_text_features(
-        self,
-        input_ids: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> tf.Tensor:
-        r"""
-        Returns:
-            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
-            the projection layer to the pooled output of [`TFBlipTextModel`].
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoProcessor, TFBlipModel
-
-        >>> model = TFBlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-
-        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
-
-        return text_features
-
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    def get_image_features(
-        self,
-        pixel_values: Optional[tf.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> tf.Tensor:
-        r"""
-        Returns:
-            image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by applying
-            the projection layer to the pooled output of [`TFBlipVisionModel`].
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, BlipModel
-
-        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_image_features(**inputs)
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            return_dict=return_dict,
-        )
-
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
-
     @unpack_inputs
     def call(
         self,
@@ -1092,6 +1014,84 @@ class TFBlipModel(TFBlipPreTrainedModel):
             return_dict=return_dict,
         )
         return outputs
+
+    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
+    def get_text_features(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> tf.Tensor:
+        r"""
+        Returns:
+            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
+            the projection layer to the pooled output of [`TFBlipTextModel`].
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, TFBlipModel
+
+        >>> model = TFBlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        text_outputs = self.blip.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            return_dict=return_dict,
+        )
+
+        pooled_output = text_outputs[1]
+        text_features = self.text_projection(pooled_output)
+
+        return text_features
+
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    def get_image_features(
+        self,
+        pixel_values: Optional[tf.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> tf.Tensor:
+        r"""
+        Returns:
+            image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by applying
+            the projection layer to the pooled output of [`TFBlipVisionModel`].
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, BlipModel
+
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.blip.vision_model(
+            pixel_values=pixel_values,
+            return_dict=return_dict,
+        )
+
+        pooled_output = vision_outputs[1]  # pooled_output
+        image_features = self.visual_projection(pooled_output)
+
+        return image_features
 
 
 @add_start_docstrings(
