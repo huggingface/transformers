@@ -27,7 +27,7 @@ from PIL import Image
 
 from transformers import (
     SeaformerConfig,
-    SeaformerFeatureExtractor,
+    SeaformerImageProcessor,
     SeaformerForSemanticSegmentation,
 )
 from transformers.utils import logging
@@ -80,7 +80,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path):
+def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our Seaformer structure.
     """
@@ -141,7 +141,7 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         raise ValueError(f"Size {size} not supported")
 
     # load feature extractor (only resize + normalize)
-    feature_extractor = SeaformerFeatureExtractor(
+    feature_extractor = SeaformerImageProcessor(
         image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
     )
 
@@ -179,7 +179,6 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # verify logits
     assert logits.shape == expected_shape
-    print(logits[0, :3, :3, :3])
     assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-2)
 
     # finally, save model and feature extractor
@@ -187,6 +186,11 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print("Pushing model and feature extractor to the hub...")
+        model.push_to_hub(f"Inderpreet01/{model_name}")
+        feature_extractor.push_to_hub(f"Inderpreet01/{model_name}")
 
 
 if __name__ == "__main__":
@@ -204,5 +208,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
     args = parser.parse_args()
-    convert_seaformer_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_seaformer_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
