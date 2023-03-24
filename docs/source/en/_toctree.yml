@@ -30,8 +30,6 @@
       title: Train with a script
     - local: sagemaker
       title: Run training on Amazon SageMaker
-    - local: launch_auto_hardware
-      title: Run training or inference on remote hardware (auto setup)
     - local: converting_tensorflow_models
       title: Converting from TensorFlow checkpoints
     - local: serialization
