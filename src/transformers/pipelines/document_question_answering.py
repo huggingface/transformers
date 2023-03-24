@@ -269,6 +269,16 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         lang=None,
         tesseract_config="",
     ):
+
+        # NOTE: This code accept mulitple images instead of a single image.
+        # If a single image is an input, then convert to a list to potentially accept multiple images.
+        if isinstance(input.get("image", None), list):
+            images = input["image"]
+        elif input.get("image", None) is not None:
+            images = [input["image"]]
+        else:
+            images = None
+
         # NOTE: This code mirrors the code in question answering and will be implemented in a follow up PR
         # to support documents with enough tokens that overflow the model's window
         if max_seq_len is None:
