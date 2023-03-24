@@ -51,8 +51,8 @@ class TFGPTNeoSelfAttention(tf.keras.layers.Layer):
         bias = tf.reshape(bias, (1, 1, max_positions, max_positions))
         if attention_type == "local":
             bias = tf.math.logical_xor(bias, tf.linalg.band_part(bias, -1, -config.window_size))
-        self.register_buffer("bias", bias)
-        self.register_buffer("masked_bias", tf.constant(-1e9))
+        self.bias = bias
+        self.masked_bias = tf.constant(-1e9)
         self.attn_dropout = tf.keras.layers.Dropout(rate=config.attention_dropout)
         self.resid_dropout = tf.keras.layers.Dropout(rate=config.resid_dropout)
         self.embed_dim = config.hidden_size
