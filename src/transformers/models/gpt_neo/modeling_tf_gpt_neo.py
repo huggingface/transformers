@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
 
-GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-neo-1.3B",
     # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
 ]
