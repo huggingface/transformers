@@ -46,6 +46,7 @@ _CONFIG_FOR_DOC = "OPTConfig"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
+_EXPECTED_OUTPUT_SHAPE_BIS = [1, 8, 1024]
 
 # SequenceClassification docstring
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
