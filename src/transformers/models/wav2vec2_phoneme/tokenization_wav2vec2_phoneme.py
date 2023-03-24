@@ -438,7 +438,11 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         text = string_output["text"]
 
-        clean_up_tokenization_spaces = clean_up_tokenization_spaces if clean_up_tokenization_spaces is not None else self.clean_up_tokenization_spaces
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
