@@ -1733,7 +1733,8 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = output_router_logits if output_router_logits is not None else self.config.output_router_logits
         if labels is not None:
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
@@ -1761,9 +1762,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         lm_logits = self.lm_head(outputs[0])
 
         loss = None
-        encoder_z_loss = None
         encoder_aux_loss = None
-        decoder_z_loss = None
         decoder_aux_loss = None
 
         if labels is not None:
@@ -1776,35 +1775,30 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
-                encoder_z_loss = router_z_loss_func(encoder_router_logits)
                 encoder_router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
                 encoder_aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
 
                 decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(decoder_router_logits)
-                decoder_z_loss = router_z_loss_func(decoder_router_logits)
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
             if output_router_logits and labels is not None:
-                z_loss = self.router_z_loss_coef * (encoder_z_loss + decoder_z_loss)
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
-                loss = loss + z_loss + aux_loss
+                loss = loss + aux_loss
 
         output = (loss,) if loss is not None else ()
         if not return_dict:
             output += (lm_logits,)
             if output_router_logits:  # only return the loss if they are not None
                 output += (
-                    encoder_z_loss,
                     encoder_aux_loss,
-                    decoder_z_loss,
                     decoder_aux_loss,
-                    *outputs,
+                    *outputs[1:],
                 )
             else:
-                output += outputs
+                output += outputs[1:]
 
             return output
 
@@ -1813,12 +1807,9 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
             cross_attentions=outputs.cross_attentions,
-            encoder_z_loss=encoder_z_loss,
-            decoder_z_loss=decoder_z_loss,
             encoder_aux_loss=encoder_aux_loss,
             decoder_aux_loss=decoder_aux_loss,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            last_hiden_states=outputs.last_hiden_states,
             encoder_hidden_states=outputs.encoder_hidden_states,
             decoder_hidden_states=outputs.decoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,

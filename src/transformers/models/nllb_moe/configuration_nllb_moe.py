@@ -106,6 +106,8 @@ class NllbMoeConfig(PretrainedConfig):
         moe_token_dropout (`float`, *optional*, defualt ot 0.2):
             Masking rate for MoE expert output masking (EOM), which is implemented via a Dropout2d on the expert
             outputs.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the router logits. Only set to `True` to get the auxiliary loss when training.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -166,6 +168,7 @@ class NllbMoeConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        output_router_logits = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -204,6 +207,7 @@ class NllbMoeConfig(PretrainedConfig):
         self.normalize_router_prob_before_dropping = normalize_router_prob_before_dropping
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.moe_token_dropout = moe_token_dropout
+        self.output_router_logits = output_router_logits
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
