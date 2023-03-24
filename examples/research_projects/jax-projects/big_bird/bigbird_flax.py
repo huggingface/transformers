@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import joblib
 import optax
+import wandb
 from flax import jax_utils, struct, traverse_util
 from flax.serialization import from_bytes, to_bytes
 from flax.training import train_state
