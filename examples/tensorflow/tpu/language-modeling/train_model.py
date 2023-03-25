@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Script for preparing TFRecord shards for pre-tokenized examples."""
+"""Script for training a masked language model on TPU."""
 
 import argparse
 import logging
@@ -34,6 +34,8 @@ from transformers import (
 
 
 logger = logging.getLogger(__name__)
+
+AUTO = tf.data.AUTOTUNE
 
 
 def parse_args():
@@ -68,7 +70,7 @@ def parse_args():
         "--tpu_name",
         type=str,
         help="Name of TPU resource to initialize. Should be blank on Colab, and 'local' on TPU VMs.",
-        default="local"
+        default="local",
     )
 
     parser.add_argument(
@@ -159,8 +161,10 @@ def initialize_tpu(args):
         else:
             tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
     except ValueError:
-        raise RuntimeError("Couldn't connect to TPU! Most likely you need to specify --tpu_name, --tpu_zone, or "
-                           "--gcp_project. When running on a TPU VM, use --tpu_name local.")
+        raise RuntimeError(
+            "Couldn't connect to TPU! Most likely you need to specify --tpu_name, --tpu_zone, or "
+            "--gcp_project. When running on a TPU VM, use --tpu_name local."
+        )
 
     tf.config.experimental_connect_to_cluster(tpu)
     tf.tpu.experimental.initialize_tpu_system(tpu)
@@ -171,7 +175,7 @@ def initialize_tpu(args):
 def count_samples(file_list):
     num_samples = 0
     for file in file_list:
-        filename = file.split('/')[-1]
+        filename = file.split("/")[-1]
         sample_count = re.search(r"-\d+-(\d+)\.tfrecord", filename).group(1)
         sample_count = int(sample_count)
         num_samples += sample_count
@@ -184,7 +188,7 @@ def prepare_dataset(records, decode_fn, mask_fn, batch_size, shuffle, shuffle_bu
     dataset = tf.data.Dataset.from_tensor_slices(records)
     if shuffle:
         dataset = dataset.shuffle(len(dataset))
-    dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=tf.data.experimental.AUTOTUNE)
+    dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=AUTO)
     # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
     dataset = dataset.apply(tf.data.experimental.assert_cardinality(num_samples))
     dataset = dataset.map(decode_fn)
@@ -193,7 +197,7 @@ def prepare_dataset(records, decode_fn, mask_fn, batch_size, shuffle, shuffle_bu
         dataset = dataset.shuffle(args.shuffle_buffer_size)
     dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.map(mask_fn)
-    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = dataset.prefetch(AUTO)
     return dataset
 
 
@@ -219,7 +223,7 @@ def main(args):
         raise ValueError(f"No .tfrecord files found in {args.eval_dataset}.")
 
     num_train_samples = count_samples(training_records)
-    num_validation_samples = count_samples(eval_records)
+    count_samples(eval_records)
 
     steps_per_epoch = num_train_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
     total_train_steps = steps_per_epoch * args.num_epochs
@@ -246,7 +250,7 @@ def main(args):
     # Many of the data collators in Transformers are TF-compilable when return_tensors == "tf", so we can
     # use their methods in our data pipeline.
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm_probability=0.15, mlm=True, return_tensors="tf"
+        tokenizer=tokenizer, mlm_probability=args.mlm_probability, mlm=True, return_tensors="tf"
     )
 
     def mask_with_collator(batch):
@@ -272,7 +276,7 @@ def main(args):
         mask_fn=mask_with_collator,
         batch_size=batch_size,
         shuffle=True,
-        shuffle_buffer_size=args.shuffle_buffer_size
+        shuffle_buffer_size=args.shuffle_buffer_size,
     )
 
     eval_dataset = prepare_dataset(
