@@ -1599,20 +1599,22 @@ FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     >>> import jax.numpy as jnp
     >>> from transformers import AutoFeatureExtractor, FlaxWhisperForAudioClassification
     >>> from datasets import load_dataset
-    
+
     >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
-    >>> model = FlaxWhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True)
+    >>> model = FlaxWhisperForAudioClassification.from_pretrained(
+    ...     "sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True
+    ... )
     >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
-    
+
     >>> sample = next(iter(ds))
-    
+
     >>> inputs = feature_extractor(
     ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="np"
     ... )
     >>> input_features = inputs.input_features
-    
+
     >>> logits = model(input_features).logits
-    
+
     >>> predicted_class_ids = jnp.argmax(logits).item()
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
