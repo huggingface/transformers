@@ -1293,8 +1293,17 @@ If you want to use another optimizer which is not listed above, you will have to
 }
 ```
 
-Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that may have different
-config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that those may have different config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+
+Additionally, offload works the best when it's used with Deepspeed's CPU Adam optimizer. If you want to use a different optimizer with offload, since `deepspeed==0.8.3` you need to also add:
+
+
+```json
+{
+   "zero_force_ds_cpu_optimizer": false
+}
+```
+to the top level configuration.
 
 
 
@@ -2258,6 +2267,14 @@ rank1:
 ```
 
 This was a very basic example and you will want to adapt it to your needs.
+
+### `generate` nuances
+
+When using multiple GPUs with ZeRO Stage-3, one has to synchronize the GPUs by calling `generate(..., synced_gpus=True)`. If this is not done if one GPU finished generating before other GPUs the whole system will hang as the rest of the GPUs will not be able to received the shard of weights from the GPU that stopped generating.
+
+Starting from `transformers>=4.28`, if `synced_gpus` isn't explicitly specified, it'll be set to `True` automatically if these conditions are detected. But you can still override the value of `synced_gpus` if need to.
+
+
 
 ## Testing Deepspeed Integration
 

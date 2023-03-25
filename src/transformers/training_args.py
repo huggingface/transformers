@@ -538,7 +538,7 @@ class TrainingArguments:
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
-            distributed training
+            distributed training. Important: this will negatively impact the performance, so only use it for debugging.
         torchdynamo (`str`, *optional*):
             If set, the backend compiler for TorchDynamo. Possible choices are `"eager"`, `"aot_eager"`, `"inductor"`,
             `"nvfuser"`, `"aot_nvfuser"`, `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
@@ -1055,7 +1055,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
-                " training"
+                " training. Important: this will negatively impact the performance, so only use it for debugging."
             )
         },
     )
