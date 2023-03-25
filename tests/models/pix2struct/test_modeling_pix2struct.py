@@ -605,7 +605,10 @@ def prepare_img():
 @slow
 class Pix2StructIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
+        config = Pix2StructConfig(text_config={"tie_word_embeddings": False}, tie_word_embeddings=False)
+        model = Pix2StructForConditionalGeneration.from_pretrained(
+            "google/pix2struct-textcaps-base", config=config
+        ).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image = prepare_img()
 

@@ -1639,7 +1639,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.decoder.get_output_embeddings()
-    
+
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
 
