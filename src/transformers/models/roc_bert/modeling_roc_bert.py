@@ -626,6 +626,13 @@ class RoCBertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -635,11 +642,6 @@ class RoCBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1240,7 +1242,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
                 sim_matrix = torch.matmul(pooled_output_norm, attack_pooled_output_norm.T)  # batch_size * hidden_dim
                 sim_matrix_target = torch.matmul(labels_pooled_output_norm, attack_pooled_output_norm.T)
-                batch_labels = torch.tensor([i for i in range(batch_size)], device=device)
+                batch_labels = torch.tensor(list(range(batch_size)), device=device)
                 contrastive_loss = (
                     loss_fct(100 * sim_matrix.view(batch_size, -1), batch_labels.view(-1))
                     + loss_fct(100 * sim_matrix_target.view(batch_size, -1), batch_labels.view(-1))

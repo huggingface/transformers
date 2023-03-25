@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,10 +38,9 @@ if is_torch_available():
         BloomModel,
         BloomTokenizerFast,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_9
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
     is_torch_greater_or_equal_than_1_10 = False
-    is_torch_less_than_1_9 = True
 
 
 @require_torch
@@ -319,7 +319,7 @@ class BloomModelTester:
 
 
 @require_torch
-class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BloomModel,
@@ -333,6 +333,18 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
 
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BloomModel,
+            "question-answering": BloomForQuestionAnswering,
+            "text-classification": BloomForSequenceClassification,
+            "text-generation": BloomForCausalLM,
+            "token-classification": BloomForTokenClassification,
+            "zero-shot": BloomForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
@@ -738,9 +750,6 @@ class BloomEmbeddingTest(unittest.TestCase):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
 
     @require_torch
-    @unittest.skipIf(
-        is_torch_less_than_1_9, reason="Test failed with torch < 1.9 (`min_cuda` not implemented for `BFloat16`)"
-    )
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
         model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(

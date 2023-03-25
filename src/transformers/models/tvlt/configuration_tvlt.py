@@ -30,7 +30,7 @@ class TvltConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TvltModel`]. It is used to instantiate a TVLT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the TVLT
-    [TVLT/tvlt-base](https://huggingface.co/ZinengTang/tvlt-base) architecture.
+    [ZinengTang/tvlt-base](https://huggingface.co/ZinengTang/tvlt-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

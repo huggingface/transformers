@@ -14,11 +14,11 @@
 # limitations under the License.
 """ PyTorch Whisper model."""
 
-
 import math
 import random
 from typing import Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -31,10 +31,12 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
+    SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
+from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
 
 logger = logging.get_logger(__name__)
@@ -95,6 +97,126 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
+def _compute_mask_indices(
+    shape: Tuple[int, int],
+    mask_prob: float,
+    mask_length: int,
+    attention_mask: Optional[torch.LongTensor] = None,
+    min_masks: int = 0,
+) -> np.ndarray:
+    """
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
+
+    Args:
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
+                    independently generated mask spans of length `mask_length` is computed by
+                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
+                    actual percentage will be smaller.
+        mask_length: size of the mask
+        min_masks: minimum number of masked spans
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
+    """
+    batch_size, sequence_length = shape
+
+    if mask_length < 1:
+        raise ValueError("`mask_length` has to be bigger than 0.")
+
+    if mask_length > sequence_length:
+        raise ValueError(
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
+            f" and `sequence_length`: {sequence_length}`"
+        )
+
+    # epsilon is used for probabilistic rounding
+    epsilon = np.random.rand(1).item()
+
+    def compute_num_masked_span(input_length):
+        """Given input length, compute how many spans should be masked"""
+        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
+        num_masked_span = max(num_masked_span, min_masks)
+
+        # make sure num masked span <= sequence_length
+        if num_masked_span * mask_length > sequence_length:
+            num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
+
+        return num_masked_span
+
+    # compute number of masked spans in batch
+    input_lengths = (
+        attention_mask.sum(-1).detach().tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
+    )
+
+    # SpecAugment mask to fill
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
+    spec_aug_mask_idxs = []
+
+    max_num_masked_span = compute_num_masked_span(sequence_length)
+
+    if max_num_masked_span == 0:
+        return spec_aug_mask
+
+    for input_length in input_lengths:
+        # compute num of masked spans for this input
+        num_masked_span = compute_num_masked_span(input_length)
+
+        # get random indices to mask
+        spec_aug_mask_idx = np.random.choice(
+            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        )
+
+        # pick first sampled index that will serve as a dummy index to pad vector
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
+
+        spec_aug_mask_idx = np.concatenate(
+            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        )
+        spec_aug_mask_idxs.append(spec_aug_mask_idx)
+
+    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
+
+    # expand masked indices to masked spans
+    spec_aug_mask_idxs = np.broadcast_to(
+        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+
+    # add offset to the starting indexes so that indexes now create a span
+    offsets = np.arange(mask_length)[None, None, :]
+    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+
+    # scatter indices to mask
+    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+
+    return spec_aug_mask
 
 
 class WhisperPositionalEmbedding(nn.Embedding):
@@ -198,8 +320,8 @@ class WhisperAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -245,7 +367,7 @@ class WhisperAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -253,7 +375,7 @@ class WhisperAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -372,11 +494,11 @@ class WhisperDecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -503,6 +625,14 @@ WHISPER_INPUTS_DOCSTRING = r"""
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing *SpecAugment* data augmentation on padding token indices. Mask values selected in
+            `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -572,6 +702,33 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+WHISPER_ENCODER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
 
 class WhisperEncoder(WhisperPreTrainedModel):
     """
@@ -580,7 +737,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
     Args:
         config: WhisperConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: WhisperConfig):
@@ -610,6 +766,12 @@ class WhisperEncoder(WhisperPreTrainedModel):
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.conv1
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.conv1 = value
 
     def forward(
         self,
@@ -867,11 +1029,20 @@ class WhisperDecoder(WhisperPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        if input_ids is not None:
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        else:
+            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
+                )
+                use_cache = False
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -896,12 +1067,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
-                        " False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -999,11 +1164,55 @@ class WhisperModel(WhisperPreTrainedModel):
         """
         self.encoder._freeze_parameters()
 
+    def _mask_input_features(
+        self,
+        input_features: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return input_features
+
+        # generate indices & apply SpecAugment along time axis
+        batch_size, hidden_size, sequence_length = input_features.size()
+
+        if self.config.mask_time_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along time axis
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                mask_prob=self.config.mask_time_prob,
+                mask_length=self.config.mask_time_length,
+                attention_mask=attention_mask,
+                min_masks=self.config.mask_time_min_masks,
+            )
+            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
+            mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
+            input_features[mask_time_indices] = 0
+
+        if self.config.mask_feature_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along feature axis
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+                min_masks=self.config.mask_feature_min_masks,
+            )
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
+            input_features[mask_feature_indices] = 0
+
+        return input_features
+
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1044,6 +1253,8 @@ class WhisperModel(WhisperPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
+            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
+
             encoder_outputs = self.encoder(
                 input_features,
                 head_mask=head_mask,
@@ -1128,6 +1339,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
+
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
@@ -1139,7 +1353,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1193,6 +1408,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         outputs = self.model(
             input_features,
+            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
@@ -1211,7 +1427,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1294,8 +1510,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
             language (`bool`, *optional*):
-                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible
-                language tokens in the `model.generation_config.lang_to_id` dictionary.
+                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
+                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             kwargs:
@@ -1327,38 +1543,62 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             generation_config = self.generation_config
 
         if return_timestamps is not None:
+            if not hasattr(generation_config, "no_timestamps_token_id"):
+                raise ValueError(
+                    "You are trying to return timestamps, but the generation config is not properly set."
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
+                    "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
+                )
+
             generation_config.return_timestamps = return_timestamps
-
-        if task is not None:
-            generation_config.task = task
-
-        if is_multilingual is not None:
-            generation_config.is_multilingual = is_multilingual
+        else:
+            generation_config.return_timestamps = False
 
         if language is not None:
             generation_config.language = language
+        if task is not None:
+            generation_config.task = task
 
         forced_decoder_ids = []
-
-        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
+        if task is not None or language is not None:
             if hasattr(generation_config, "language"):
-                forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
+                if generation_config.language in generation_config.lang_to_id.keys():
+                    language_token = generation_config.language
+                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                    language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
+                else:
+                    raise ValueError(
+                        f"Unsupported language: {self.language}. Language should be one of:"
+                        f" {list(TO_LANGUAGE_CODE.keys()) if generation_config.language in TO_LANGUAGE_CODE.keys() else list(TO_LANGUAGE_CODE.values())}."
+                    )
+                forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:
-                forced_decoder_ids.append((1, None))
+                forced_decoder_ids.append((1, None))  # automatically detect the language
 
             if hasattr(generation_config, "task"):
-                forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+                if generation_config.task in TASK_IDS:
+                    forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+                else:
+                    raise ValueError(
+                        f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
+                    )
             else:
-                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
-
-        if (
-            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
-        ) or return_timestamps:
-            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
-        else:
-            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
+            if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
                 idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
                 forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        # Legacy code for backward compatibility
+        elif hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
+            forced_decoder_ids = self.config.forced_decoder_ids
+        elif (
+            hasattr(self.generation_config, "forced_decoder_ids")
+            and self.generation_config.forced_decoder_ids is not None
+        ):
+            forced_decoder_ids = self.generation_config.forced_decoder_ids
+
+        if generation_config.return_timestamps:
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
@@ -1401,3 +1641,129 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+
+@add_start_docstrings(
+    """
+    Whisper Encoder Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
+    like SUPERB Keyword Spotting.
+    """,
+    WHISPER_ENCODER_INPUTS_DOCSTRING,
+)
+class WhisperForAudioClassification(WhisperPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.encoder = WhisperEncoder(config)
+        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        if config.use_weighted_layer_sum:
+            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
+        self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
+        self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training. Only the projection layers and classification head will be updated.
+        """
+        self.encoder._freeze_parameters()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.encoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.encoder.set_input_embeddings(value)
+
+    @add_start_docstrings_to_model_forward(WHISPER_ENCODER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_features: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoFeatureExtractor, WhisperForAudioClassification
+        >>> from datasets import load_dataset
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+        >>> model = WhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+
+        >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
+        >>> sample = next(iter(ds))
+
+        >>> inputs = feature_extractor(
+        ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="pt"
+        ... )
+        >>> input_features = inputs.input_features
+
+        >>> with torch.no_grad():
+        ...     logits = model(input_features).logits
+
+        >>> predicted_class_ids = torch.argmax(logits).item()
+        >>> predicted_label = model.config.id2label[predicted_class_ids]
+        >>> predicted_label
+        'af_za'
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_features,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = torch.stack(encoder_outputs, dim=1)
+            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
+            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
+        else:
+            hidden_states = encoder_outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        pooled_output = hidden_states.mean(dim=1)
+
+        logits = self.classifier(pooled_output)
+
+        loss = None
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + encoder_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )

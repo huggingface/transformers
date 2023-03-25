@@ -1342,8 +1342,9 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
+                If set will pad the sequence to a multiple of the provided value. Requires `padding` to be activated.
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -1918,7 +1919,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 obj.pop("__type")
                 return AddedToken(**obj)
             elif isinstance(obj, (list, tuple)):
-                return list(convert_added_tokens(o) for o in obj)
+                return [convert_added_tokens(o) for o in obj]
             elif isinstance(obj, dict):
                 return {k: convert_added_tokens(v) for k, v in obj.items()}
             return obj
@@ -1992,7 +1993,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 added_tok_encoder = json.load(added_tokens_handle)
 
             # Sort added tokens by index
-            added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
+            added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
 
             # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
             # individual tokens would repeatedly rebuild a trie, which can be slow.
@@ -2129,7 +2130,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     out["__type"] = "AddedToken"
                 return out
             elif isinstance(obj, (list, tuple)):
-                return list(convert_added_tokens(o, add_type_field=add_type_field) for o in obj)
+                return [convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
             elif isinstance(obj, dict):
                 return {k: convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
             return obj
@@ -2502,23 +2503,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
         # To avoid duplicating
-        all_kwargs = dict(
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            is_split_into_words=is_split_into_words,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors=return_tensors,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-        )
+        all_kwargs = {
+            "add_special_tokens": add_special_tokens,
+            "padding": padding,
+            "truncation": truncation,
+            "max_length": max_length,
+            "stride": stride,
+            "is_split_into_words": is_split_into_words,
+            "pad_to_multiple_of": pad_to_multiple_of,
+            "return_tensors": return_tensors,
+            "return_token_type_ids": return_token_type_ids,
+            "return_attention_mask": return_attention_mask,
+            "return_overflowing_tokens": return_overflowing_tokens,
+            "return_special_tokens_mask": return_special_tokens_mask,
+            "return_offsets_mapping": return_offsets_mapping,
+            "return_length": return_length,
+            "verbose": verbose,
+        }
         all_kwargs.update(kwargs)
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
@@ -3010,7 +3011,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}
             outputs = self._pad(
                 inputs,
                 max_length=max_length,

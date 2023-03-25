@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
@@ -276,6 +276,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     transformers.utils.logging.set_verbosity(log_level)
@@ -430,7 +434,7 @@ def main():
             pixel_values.append(image)
             labels.append(target)
 
-        encoding = dict()
+        encoding = {}
         encoding["pixel_values"] = torch.stack(pixel_values)
         encoding["labels"] = torch.stack(labels)
 
@@ -444,7 +448,7 @@ def main():
             pixel_values.append(image)
             labels.append(target)
 
-        encoding = dict()
+        encoding = {}
         encoding["pixel_values"] = torch.stack(pixel_values)
         encoding["labels"] = torch.stack(labels)
 

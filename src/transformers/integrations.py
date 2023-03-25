@@ -346,7 +346,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         **kwargs,
     )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
-    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
+    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
@@ -365,7 +365,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 name="huggingface-tune",
                 type="offline",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 budget=n_trials,
             )
@@ -402,7 +402,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             experiment = conn.experiments().create(
                 name="huggingface-tune",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 observation_budget=n_trials,
                 project="huggingface",
@@ -425,7 +425,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     metrics = trainer.evaluate()
                     trainer.objective = trainer.compute_objective(metrics)
 
-                values = [dict(name="objective", value=trainer.objective)]
+                values = [{"name": "objective", "value": trainer.objective}]
                 obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
                 logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
                 experiment = conn.experiments(experiment.id).fetch()

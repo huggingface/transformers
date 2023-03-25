@@ -33,6 +33,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -322,10 +323,11 @@ class TvltModelTester:
 
 @require_torch
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
-class TvltModelTest(ModelTesterMixin, unittest.TestCase):
+class TvltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TvltModel, TvltForPreTraining, TvltForAudioVisualClassification) if is_torch_available() else ()
     )
+    pipeline_model_mapping = {"feature-extraction": TvltModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False
@@ -581,7 +583,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
         audio = prepare_audio()
         video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
         audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
-        inputs = dict()
+        inputs = {}
         inputs.update(video_inputs)
         inputs.update(audio_inputs)
 
@@ -590,7 +592,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_last_hidden_state_slice = torch.tensor([[-0.0186, -0.0691], [0.0242, -0.0398]])
+        expected_last_hidden_state_slice = torch.tensor([[-0.0186, -0.0691], [0.0242, -0.0398]], device=torch_device)
         self.assertTrue(
             torch.allclose(outputs.last_hidden_state[:, :2, :2], expected_last_hidden_state_slice, atol=1e-4)
         )
@@ -606,7 +608,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
         video_mixed_inputs = image_processor(video_mixed, is_mixed=True, return_tensors="pt").to(torch_device)
         audio_inputs = audio_feature_extractor(audio, return_tensors="pt", mask_audio=True).to(torch_device)
         labels = torch.tensor([[0.0]], device=torch_device)
-        inputs = dict()
+        inputs = {}
         inputs.update(video_inputs)
         inputs.update(video_mixed_inputs)
         inputs.update(audio_inputs)

@@ -213,8 +213,8 @@ class BlenderbotSmallAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -260,7 +260,7 @@ class BlenderbotSmallAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -268,7 +268,7 @@ class BlenderbotSmallAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -986,6 +986,13 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1011,11 +1018,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

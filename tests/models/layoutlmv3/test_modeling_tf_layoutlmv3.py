@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -263,7 +264,7 @@ class TFLayoutLMv3ModelTester:
 
 
 @require_tf
-class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLayoutLMv3Model,
@@ -274,10 +275,27 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFLayoutLMv3Model,
+            "question-answering": TFLayoutLMv3ForQuestionAnswering,
+            "text-classification": TFLayoutLMv3ForSequenceClassification,
+            "token-classification": TFLayoutLMv3ForTokenClassification,
+            "zero-shot": TFLayoutLMv3ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -320,7 +338,7 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[
-                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 

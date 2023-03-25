@@ -25,15 +25,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "jvamvas/xmod-base": "https://huggingface.co/jvamvas/xmod-base/resolve/main/config.json",
-    "jvamvas/xmod-large-prenorm": "https://huggingface.co/jvamvas/xmod-large-prenorm/resolve/main/config.json",
-    "jvamvas/xmod-base-13-125k": "https://huggingface.co/jvamvas/xmod-base-13-125k/resolve/main/config.json",
-    "jvamvas/xmod-base-30-125k": "https://huggingface.co/jvamvas/xmod-base-30-125k/resolve/main/config.json",
-    "jvamvas/xmod-base-30-195k": "https://huggingface.co/jvamvas/xmod-base-30-195k/resolve/main/config.json",
-    "jvamvas/xmod-base-60-125k": "https://huggingface.co/jvamvas/xmod-base-60-125k/resolve/main/config.json",
-    "jvamvas/xmod-base-60-265k": "https://huggingface.co/jvamvas/xmod-base-60-265k/resolve/main/config.json",
-    "jvamvas/xmod-base-75-125k": "https://huggingface.co/jvamvas/xmod-base-75-125k/resolve/main/config.json",
-    "jvamvas/xmod-base-75-269k": "https://huggingface.co/jvamvas/xmod-base-75-269k/resolve/main/config.json",
+    "facebook/xmod-base": "https://huggingface.co/facebook/xmod-base/resolve/main/config.json",
+    "facebook/xmod-large-prenorm": "https://huggingface.co/facebook/xmod-large-prenorm/resolve/main/config.json",
+    "facebook/xmod-base-13-125k": "https://huggingface.co/facebook/xmod-base-13-125k/resolve/main/config.json",
+    "facebook/xmod-base-30-125k": "https://huggingface.co/facebook/xmod-base-30-125k/resolve/main/config.json",
+    "facebook/xmod-base-30-195k": "https://huggingface.co/facebook/xmod-base-30-195k/resolve/main/config.json",
+    "facebook/xmod-base-60-125k": "https://huggingface.co/facebook/xmod-base-60-125k/resolve/main/config.json",
+    "facebook/xmod-base-60-265k": "https://huggingface.co/facebook/xmod-base-60-265k/resolve/main/config.json",
+    "facebook/xmod-base-75-125k": "https://huggingface.co/facebook/xmod-base-75-125k/resolve/main/config.json",
+    "facebook/xmod-base-75-269k": "https://huggingface.co/facebook/xmod-base-75-269k/resolve/main/config.json",
 }
 
 
@@ -41,8 +41,8 @@ class XmodConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [xmod-base](https://huggingface.co/jvamvas/xmod-base)
-    architecture.
+    defaults will yield a similar configuration to that of the
+    [facebook/xmod-base](https://huggingface.co/facebook/xmod-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -110,10 +110,10 @@ class XmodConfig(PretrainedConfig):
     ```python
     >>> from transformers import XmodConfig, XmodModel
 
-    >>> # Initializing an X-MOD jvamvas/xmod-base style configuration
+    >>> # Initializing an X-MOD facebook/xmod-base style configuration
     >>> configuration = XmodConfig()
 
-    >>> # Initializing a model (with random weights) from the jvamvas/xmod-base style configuration
+    >>> # Initializing a model (with random weights) from the facebook/xmod-base style configuration
     >>> model = XmodModel(configuration)
 
     >>> # Accessing the model configuration

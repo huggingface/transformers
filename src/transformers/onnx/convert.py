@@ -26,7 +26,6 @@ from ..utils import (
     TensorType,
     is_tf_available,
     is_torch_available,
-    is_torch_onnx_dict_inputs_support_available,
     logging,
 )
 from .config import OnnxConfig
@@ -145,7 +144,7 @@ def export_pytorch(
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
-                model_inputs_device = dict()
+                model_inputs_device = {}
                 for k, v in model_inputs.items():
                     if isinstance(v, Tuple):
                         model_inputs_device[k] = tuple(
@@ -180,9 +179,7 @@ def export_pytorch(
                         f=output.as_posix(),
                         input_names=list(config.inputs.keys()),
                         output_names=onnx_outputs,
-                        dynamic_axes={
-                            name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())
-                        },
+                        dynamic_axes=dict(chain(config.inputs.items(), config.outputs.items())),
                         do_constant_folding=True,
                         use_external_data_format=config.use_external_data_format(model.num_parameters()),
                         enable_onnx_checker=True,
@@ -209,7 +206,7 @@ def export_pytorch(
                     f=output.as_posix(),
                     input_names=list(config.inputs.keys()),
                     output_names=onnx_outputs,
-                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                    dynamic_axes=dict(chain(config.inputs.items(), config.outputs.items())),
                     do_constant_folding=True,
                     opset_version=opset,
                 )
@@ -338,9 +335,6 @@ def export(
 
     if is_torch_available():
         from ..utils import torch_version
-
-        if not is_torch_onnx_dict_inputs_support_available():
-            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
             logger.warning(

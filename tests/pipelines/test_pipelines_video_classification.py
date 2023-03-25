@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_decord,
     require_tf,
@@ -27,13 +28,14 @@ from transformers.testing_utils import (
     require_vision,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
+@is_pipeline_test
 @require_torch_or_tf
 @require_vision
 @require_decord
-class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
@@ -63,7 +65,7 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
         small_feature_extractor = VideoMAEFeatureExtractor(
-            size=dict(shortest_edge=10), crop_size=dict(height=10, width=10)
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
         )
         video_classifier = pipeline(
             "video-classification", model=small_model, feature_extractor=small_feature_extractor, frame_sampling_rate=4
