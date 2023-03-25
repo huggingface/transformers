@@ -1474,7 +1474,6 @@ append_replace_return_docstrings(
 class FlaxWhisperForAudioClassificationModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
-    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         self.encoder = FlaxWhisperEncoder(config=self.config, dtype=self.dtype)
@@ -1482,7 +1481,7 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
         num_layers = self.config.num_hidden_layers + 1
         if self.config.use_weighted_layer_sum:
             self.layer_weights = jnp.repeat(1 / num_layers, num_layers)
-        self.projector = nn.Dense(self.config.classifier_proj_size)
+        self.projector = nn.Dense(self.config.classifier_proj_size, dtype=self.dtype)
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
@@ -1508,7 +1507,7 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
             )
 
         if self.config.use_weighted_layer_sum:
-            hidden_states = jnp.stack(encoder_outputs, dim=1)
+            hidden_states = jnp.stack(encoder_outputs, axis=1)
             norm_weights = jax.nn.softmax(self.layer_weights, axis=-1)
             hidden_states = jnp.sum(hidden_states * jnp.reshape(norm_weights, [-1, 1, 1]), axis=1)
         else:
@@ -1538,12 +1537,6 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         # init input tensors
         input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
-
-        decoder_input_ids = jnp.zeros((input_shape[0], 1), dtype="i4")
-        jnp.ones_like(decoder_input_ids)
-
-        batch_size, sequence_length = decoder_input_ids.shape
-        jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
@@ -1576,22 +1569,6 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         dropout_rng: PRNGKey = None,
         **kwargs,
     ):
-        r"""
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
-        >>> from datasets import load_dataset
-
-        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
-        >>> input_features = inputs.input_features
-        >>> encoder_outputs = model.encode(input_features=input_features)
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1603,10 +1580,6 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        def _encoder_forward(module, input_features, **kwargs):
-            encode_module = module._get_encoder_module()
-            return encode_module(input_features, **kwargs)
-
         return self.module.apply(
             {"params": params or self.params},
             input_features=jnp.array(input_features, dtype="f4"),
@@ -1614,7 +1587,6 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             rngs=rngs,
-            # method=_encoder_forward,
         )
 
 
@@ -1624,16 +1596,27 @@ FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     Transcription example:
 
     ```python
-    >>> from transformers import WhisperProcessor, FlaxWhisperForAudioClassification
+    >>> import jax.numpy as jnp
+    >>> from transformers import AutoFeatureExtractor, FlaxWhisperForAudioClassification
     >>> from datasets import load_dataset
-
-    >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-    >>> model = FlaxWhisperForAudioClassification.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+    
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+    >>> model = FlaxWhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True)
+    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
+    
+    >>> sample = next(iter(ds))
+    
+    >>> inputs = feature_extractor(
+    ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="np"
+    ... )
     >>> input_features = inputs.input_features
-    >>> outputs = model(input_features=input_features)
-    >>> logits = outputs.logit
+    
+    >>> logits = model(input_features).logits
+    
+    >>> predicted_class_ids = jnp.argmax(logits).item()
+    >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> predicted_label
+    'af_za'
     ```
 """
 

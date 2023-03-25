@@ -705,15 +705,6 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
 
-def prepare_whisper_encoder_inputs_dict(
-    config,
-    input_features,
-):
-    return {
-        "input_features": input_features,
-    }
-
-
 class FlaxWhisperEncoderModelTester:
     def __init__(
         self,
@@ -820,19 +811,6 @@ class FlaxWhisperEncoderModelTester:
     def encoder_seq_length(self):
         return self.get_subsampled_output_lengths(self.seq_length)
 
-    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
-        model = FlaxWhisperForAudioClassification(config=config)
-
-        if freeze_encoder:
-            model.freeze_encoder()
-
-        input_features = inputs_dict["input_features"]
-
-        # first forward pass
-        last_hidden_state = model(input_features).logits
-
-        self.parent.assertTrue(last_hidden_state.shape, (13, 2))
-
 
 @require_flax
 class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
@@ -843,11 +821,6 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
 
     input_name = "input_features"
-
-    # def setUp(self):
-    #     self.model_tester = FlaxWhisperEncoderModelTester(self)
-    #     self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-    #     self.maxDiff = 3000
 
     def setUp(self):
         self.model_tester = FlaxWhisperEncoderModelTester(self)
