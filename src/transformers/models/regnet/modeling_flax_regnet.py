@@ -90,11 +90,12 @@ REGNET_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.Identity
 class Identity(nn.Module):
     """Identity function."""
 
     @nn.compact
-    def __call__(self, x, deterministic=None):
+    def __call__(self, x, **kwargs):
         return x
 
 
@@ -150,6 +151,7 @@ class FlaxRegNetEmbeddings(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetShortCut with ResNet->RegNet
 class FlaxRegNetShortCut(nn.Module):
     """
     RegNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
@@ -171,8 +173,8 @@ class FlaxRegNetShortCut(nn.Module):
         )
         self.normalization = nn.BatchNorm(momentum=0.9, epsilon=1e-05, dtype=self.dtype)
 
-    def __call__(self, input: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
-        hidden_state = self.convolution(input)
+    def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
+        hidden_state = self.convolution(x)
         hidden_state = self.normalization(hidden_state, use_running_average=deterministic)
         return hidden_state
 
@@ -199,8 +201,6 @@ class FlaxRegNetSELayerCollection(nn.Module):
         )  # 2 is the name used in corresponding pytorch implementation
 
     def __call__(self, hidden_state: jnp.ndarray) -> jnp.ndarray:
-        # b h w c -> b 1 1 c
-
         hidden_state = self.conv_1(hidden_state)
         hidden_state = nn.relu(hidden_state)
         hidden_state = self.conv_2(hidden_state)
@@ -223,7 +223,6 @@ class FlaxRegNetSELayer(nn.Module):
         self.attention = FlaxRegNetSELayerCollection(self.in_channels, self.reduced_channels, dtype=self.dtype)
 
     def __call__(self, hidden_state: jnp.ndarray) -> jnp.ndarray:
-        # b h w c -> b 1 1 c
         pooled = self.pooler(
             hidden_state,
             window_shape=(hidden_state.shape[1], hidden_state.shape[2]),
@@ -355,7 +354,7 @@ class FlaxRegNetYLayerCollection(nn.Module):
             ),
         ]
 
-    def __call__(self, hidden_state: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
+    def __call__(self, hidden_state: jnp.ndarray) -> jnp.ndarray:
         for layer in self.layer:
             hidden_state = layer(hidden_state)
         return hidden_state
@@ -417,7 +416,7 @@ class FlaxRegNetStageLayersCollection(nn.Module):
     def setup(self):
         layer = FlaxRegNetXLayer if self.config.layer_type == "x" else FlaxRegNetYLayer
 
-        self.layers = [
+        layers = [
             # downsampling is done in the first layer with stride of 2
             layer(
                 self.config,
@@ -426,8 +425,11 @@ class FlaxRegNetStageLayersCollection(nn.Module):
                 stride=self.stride,
                 dtype=self.dtype,
                 name="0",
-            ),
-            *[
+            )
+        ]
+
+        for i in range(self.depth - 1):
+            layers.append(
                 layer(
                     self.config,
                     self.out_channels,
@@ -435,9 +437,9 @@ class FlaxRegNetStageLayersCollection(nn.Module):
                     dtype=self.dtype,
                     name=str(i + 1),
                 )
-                for i in range(self.depth - 1)
-            ],
-        ]
+            )
+
+        self.layers = layers
 
     def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         hidden_state = x
@@ -446,6 +448,7 @@ class FlaxRegNetStageLayersCollection(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetStage with ResNet->RegNet
 class FlaxRegNetStage(nn.Module):
     """
     A RegNet stage composed by stacked layers.
@@ -468,18 +471,18 @@ class FlaxRegNetStage(nn.Module):
             dtype=self.dtype,
         )
 
-    def __call__(self, hidden_state: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
-        hidden_state = self.layers(hidden_state, deterministic=deterministic)
-        return hidden_state
+    def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
+        return self.layers(x, deterministic=deterministic)
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetStageCollection with ResNet->RegNet
 class FlaxRegNetStageCollection(nn.Module):
     config: RegNetConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         in_out_channels = zip(self.config.hidden_sizes, self.config.hidden_sizes[1:])
-        self.stages = [
+        stages = [
             FlaxRegNetStage(
                 self.config,
                 self.config.embedding_size,
@@ -488,19 +491,15 @@ class FlaxRegNetStageCollection(nn.Module):
                 depth=self.config.depths[0],
                 dtype=self.dtype,
                 name="0",
-            ),
-            *[
-                FlaxRegNetStage(
-                    self.config,
-                    in_channels,
-                    out_channels,
-                    depth=depth,
-                    dtype=self.dtype,
-                    name=str(i + 1),
-                )
-                for i, ((in_channels, out_channels), depth) in enumerate(zip(in_out_channels, self.config.depths[1:]))
-            ],
+            )
         ]
+
+        for i, ((in_channels, out_channels), depth) in enumerate(zip(in_out_channels, self.config.depths[1:])):
+            stages.append(
+                FlaxRegNetStage(self.config, in_channels, out_channels, depth=depth, dtype=self.dtype, name=str(i + 1))
+            )
+
+        self.stages = stages
 
     def __call__(
         self,
@@ -519,6 +518,7 @@ class FlaxRegNetStageCollection(nn.Module):
         return hidden_state, hidden_states
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetEncoder with ResNet->RegNet
 class FlaxRegNetEncoder(nn.Module):
     config: RegNetConfig
     dtype: jnp.dtype = jnp.float32
@@ -532,9 +532,7 @@ class FlaxRegNetEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-    ) -> FlaxBaseModelOutputWithPooling:
-        hidden_states = () if output_hidden_states else None
-
+    ) -> FlaxBaseModelOutputWithNoAttention:
         hidden_state, hidden_states = self.stages(
             hidden_state, output_hidden_states=output_hidden_states, deterministic=deterministic
         )
@@ -545,9 +543,13 @@ class FlaxRegNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return FlaxBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+        return FlaxBaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state,
+            hidden_states=hidden_states,
+        )
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetPreTrainedModel with ResNet->RegNet,resnet->regnet,RESNET->REGNET
 class FlaxRegNetPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -569,14 +571,9 @@ class FlaxRegNetPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(
-            config,
-            module,
-            input_shape=input_shape,
-            seed=seed,
-            dtype=dtype,
-            _do_init=_do_init,
-        )
+        if input_shape is None:
+            input_shape = (1, config.image_size, config.image_size, config.num_channels)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -625,10 +622,11 @@ class FlaxRegNetPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states,
             return_dict,
             rngs=rngs,
-            mutable=["batch_stats"] if train else False,
+            mutable=["batch_stats"] if train else False,  # Returing tuple with batch_stats only when train is True
         )
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetModule with ResNet->RegNet
 class FlaxRegNetModule(nn.Module):
     config: RegNetConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -636,15 +634,19 @@ class FlaxRegNetModule(nn.Module):
     def setup(self):
         self.embedder = FlaxRegNetEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxRegNetEncoder(self.config, dtype=self.dtype)
-        self.pooler = partial(nn.avg_pool, padding=((0, 0), (0, 0)))
 
-    @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
+        # Adaptive average pooling used in resnet
+        self.pooler = partial(
+            nn.avg_pool,
+            padding=((0, 0), (0, 0)),
+        )
+
     def __call__(
         self,
-        pixel_values: jnp.ndarray,
+        pixel_values,
         deterministic: bool = True,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> FlaxBaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -718,6 +720,7 @@ append_replace_return_docstrings(
 )
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetClassifierCollection with ResNet->RegNet
 class FlaxRegNetClassifierCollection(nn.Module):
     config: RegNetConfig
     dtype: jnp.dtype = jnp.float32
@@ -729,6 +732,7 @@ class FlaxRegNetClassifierCollection(nn.Module):
         return self.classifier(x)
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetForImageClassificationModule with ResNet->RegNet,resnet->regnet,RESNET->REGNET
 class FlaxRegNetForImageClassificationModule(nn.Module):
     config: RegNetConfig
     dtype: jnp.dtype = jnp.float32
@@ -737,14 +741,10 @@ class FlaxRegNetForImageClassificationModule(nn.Module):
         self.regnet = FlaxRegNetModule(config=self.config, dtype=self.dtype)
 
         if self.config.num_labels > 0:
-            self.classifier = FlaxRegNetClassifierCollection(
-                self.config,
-                dtype=self.dtype,
-            )
+            self.classifier = FlaxRegNetClassifierCollection(self.config, dtype=self.dtype)
         else:
             self.classifier = Identity()
 
-    @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
     def __call__(
         self,
         pixel_values=None,
