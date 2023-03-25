@@ -33,6 +33,7 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
+    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -53,12 +54,12 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
+@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
-    model_mapping = {
-        k: v
-        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+    model_mapping = dict(
+        (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
-    }
+    )
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
@@ -536,7 +537,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.94),
+                        "timestamp": (5.5, 11.95),
                     },
                     {
                         "text": (
@@ -544,15 +545,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.94, 19.6),
+                        "timestamp": (11.95, 19.61),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 26.66),
+                        "timestamp": (19.61, 25.0),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (26.66, 31.06),
+                        "timestamp": (25.0, 29.4),
                     },
                 ],
                 "text": (

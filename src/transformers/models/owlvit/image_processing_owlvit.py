@@ -19,8 +19,8 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     center_crop,
     center_to_corners_format,
     normalize,
@@ -29,7 +29,7 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
@@ -38,7 +38,7 @@ from transformers.image_utils import (
     make_list_of_images,
     valid_images,
 )
-from transformers.utils import TensorType, is_torch_available, logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 if is_torch_available():

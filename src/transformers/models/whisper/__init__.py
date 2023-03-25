@@ -49,6 +49,7 @@ else:
         "WhisperForConditionalGeneration",
         "WhisperModel",
         "WhisperPreTrainedModel",
+        "WhisperForAudioClassification",
     ]
 
 try:
@@ -99,6 +100,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForAudioClassification,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,

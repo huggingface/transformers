@@ -103,6 +103,7 @@ if is_tf_available():
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelForVision2Seq,
+        TFAutoModelForZeroShotImageClassification,
     )
 
 if is_torch_available():
@@ -135,6 +136,7 @@ if is_torch_available():
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
@@ -290,8 +292,8 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
-        "pt": (AutoModel,) if is_torch_available() else (),
+        "tf": (TFAutoModelForZeroShotImageClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
@@ -302,11 +304,11 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-audio-classification": {
         "impl": ZeroShotAudioClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "tf": (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("laion/clap-htsat-fused", "f39917b"),
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",

@@ -21,7 +21,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
+    is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_tensorflow_probability,
@@ -77,6 +78,7 @@ class ANY:
         return f"ANY({', '.join(_type.__name__ for _type in self._types)})"
 
 
+@is_pipeline_test
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):
@@ -194,6 +196,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
 
+@is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):
     @require_torch
     def test_pipeline_predict_pt(self):
@@ -244,6 +247,7 @@ class PipelineScikitCompatTest(unittest.TestCase):
         self.assertEqual(expected_output, actual_output)
 
 
+@is_pipeline_test
 class PipelinePadTest(unittest.TestCase):
     @require_torch
     def test_pipeline_padding(self):
@@ -325,6 +329,7 @@ class PipelinePadTest(unittest.TestCase):
         )
 
 
+@is_pipeline_test
 class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     def test_pipeline_dataset(self):
@@ -479,6 +484,14 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
 
+    def test_pipeline_negative_device(self):
+        # To avoid regressing, pipeline used to accept device=-1
+        classifier = pipeline("text-generation", "hf-internal-testing/tiny-random-bert", device=-1)
+
+        expected_output = [{"generated_text": ANY(str)}]
+        actual_output = classifier("Test input.")
+        self.assertEqual(expected_output, actual_output)
+
     @slow
     @require_torch
     def test_load_default_pipelines_pt(self):
@@ -620,6 +633,7 @@ class CustomPipeline(Pipeline):
         return model_outputs["logits"].softmax(-1).numpy()
 
 
+@is_pipeline_test
 class CustomPipelineTest(unittest.TestCase):
     def test_warning_logs(self):
         transformers_logging.set_verbosity_debug()
@@ -753,7 +767,6 @@ class DynamicPipelineTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

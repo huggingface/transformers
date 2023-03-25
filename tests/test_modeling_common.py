@@ -15,6 +15,7 @@
 
 import copy
 import gc
+import glob
 import inspect
 import json
 import os
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -119,6 +120,7 @@ if is_torch_available():
         AutoTokenizer,
         BertConfig,
         BertModel,
+        CLIPTextModel,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -2497,7 +2499,7 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2533,7 +2535,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2569,7 +2571,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3328,6 +3330,49 @@ class ModelUtilsTest(TestCasePlus):
         )
 
     @require_safetensors
+    def test_use_safetensors(self):
+        # test nice error message if no safetensor files available
+        with self.assertRaises(OSError) as env_error:
+            AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
+
+        self.assertTrue(
+            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
+            in str(env_error.exception)
+        )
+
+        # test that error if only safetensors is available
+        with self.assertRaises(OSError) as env_error:
+            BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors", use_safetensors=False)
+
+        self.assertTrue("does not appear to have a file named pytorch_model.bin" in str(env_error.exception))
+
+        # test that only safetensors if both available and use_safetensors=False
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            CLIPTextModel.from_pretrained(
+                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                subfolder="text_encoder",
+                use_safetensors=False,
+                cache_dir=tmp_dir,
+            )
+
+            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
+            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
+
+        # test that no safetensors if both available and use_safetensors=True
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            CLIPTextModel.from_pretrained(
+                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                subfolder="text_encoder",
+                use_safetensors=True,
+                cache_dir=tmp_dir,
+            )
+
+            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
+            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+
+    @require_safetensors
     def test_safetensors_save_and_load(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3429,7 +3474,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

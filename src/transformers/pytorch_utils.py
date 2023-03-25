@@ -27,20 +27,8 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
-is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
-is_torch_less_than_1_9 = parsed_torch_version_base < version.parse("1.9.0")
 is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
-
-
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -105,10 +93,9 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
+        self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
+        nn.init.normal_(self.weight, std=0.02)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)

@@ -225,8 +225,8 @@ class MBartAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -272,7 +272,7 @@ class MBartAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -280,7 +280,7 @@ class MBartAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -502,6 +502,7 @@ class MBartPreTrainedModel(PreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MBartDecoderLayer", "MBartAttention"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -702,10 +703,10 @@ class MBartEncoder(MBartPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -793,7 +794,7 @@ class MBartEncoder(MBartPreTrainedModel):
 
         embed_pos = self.embed_positions(input)
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds + embed_pos.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -876,10 +877,10 @@ class MBartDecoder(MBartPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -1038,10 +1039,17 @@ class MBartDecoder(MBartPreTrainedModel):
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1068,11 +1076,6 @@ class MBartDecoder(MBartPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

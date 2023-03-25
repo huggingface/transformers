@@ -36,9 +36,6 @@ if is_torch_available():
     from transformers.models.trajectory_transformer.modeling_trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
 
 
 class TrajectoryTransformerModelTester:
@@ -199,7 +196,6 @@ class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pi
         ).loss
         loss.backward()
 
-    @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for TrajectoryTransformerModel when torch < 1.9")
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
             return
