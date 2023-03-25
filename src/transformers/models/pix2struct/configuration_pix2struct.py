@@ -118,6 +118,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         use_cache=False,
         pad_token_id=0,
         eos_token_id=1,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +144,7 @@ class Pix2StructTextConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
