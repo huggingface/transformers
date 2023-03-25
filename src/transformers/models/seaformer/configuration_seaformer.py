@@ -53,7 +53,7 @@ class SeaformerConfig(PretrainedConfig):
             Number of classes in output
         channels (`List[int]`, *optional*, defaults to `[32, 64, 128, 192, 256, 320]`):
             Number of input channels in each StackedMV2Block
-        cfgs (`List[List[List[int]]]`, *optional*, defaults to `[
+        mv2_blocks_cfgs (`List[List[List[int]]]`, *optional*, defaults to `[
                 [   [3, 3, 32, 1],  
                     [3, 4, 64, 2], 
                     [3, 4, 64, 1]],  
@@ -99,6 +99,9 @@ class SeaformerConfig(PretrainedConfig):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
+        hidden_act (`str` or `function`, *optional*, defaults to 'relu'):
+            The non-linear activation function in the encoder
+
 
     Example:
 
@@ -123,7 +126,7 @@ class SeaformerConfig(PretrainedConfig):
         depths=[3, 3, 3],
         num_labels = 150,
         channels = [32, 64, 128, 192, 256, 320],
-        cfgs = [
+        mv2_blocks_cfgs = [
                 [   [3, 3, 32, 1],  
                     [3, 4, 64, 2], 
                     [3, 4, 64, 1]],  
@@ -144,7 +147,6 @@ class SeaformerConfig(PretrainedConfig):
         num_attention_heads=8,
         mlp_ratios=[2,4,6],
         attn_ratios = 2,
-        act_layer = None,
         in_channels = [128, 192, 256, 320],
         in_index = [0, 1, 2, 3],
         decoder_channels = 192,
@@ -153,6 +155,7 @@ class SeaformerConfig(PretrainedConfig):
         align_corners = False,
         semantic_loss_ignore_index=255,
         hidden_sizes = [128],
+        hidden_act = 'relu',
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -168,14 +171,13 @@ class SeaformerConfig(PretrainedConfig):
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
         self.channels = channels
-        self.cfgs = cfgs
+        self.mv2_blocks_cfgs = mv2_blocks_cfgs
         self.drop_path_rate = drop_path_rate
         self.emb_dims = emb_dims
         self.key_dims = key_dims
         self.num_attention_heads = num_attention_heads
         self.mlp_ratios = mlp_ratios
         self.attn_ratios = attn_ratios
-        self.act_layer = act_layer
         self.in_channels = in_channels
         self.in_index = in_index
         self.embed_dims = embed_dims
@@ -186,3 +188,4 @@ class SeaformerConfig(PretrainedConfig):
         self.hidden_sizes = hidden_sizes
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
+        self.hidden_act = hidden_act

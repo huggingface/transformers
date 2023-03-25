@@ -50,6 +50,10 @@ def rename_keys(state_dict, encoder_only=False):
             key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
+        if '.c.' in key:
+            key = key.replace(".c.", ".convolution.")
+        if '.bn.' in key:
+            key = key.replace(".bn.", ".batchnorm.")
         if "seaformer.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
             idx = key[key.find("seaformer.encoder.layer_norm") + len("seaformer.encoder.layer_norm")]
@@ -58,6 +62,10 @@ def rename_keys(state_dict, encoder_only=False):
             key = key.replace("layer_norm1", "layer_norm_1")
         if "layer_norm2" in key:
             key = key.replace("layer_norm2", "layer_norm_2")
+        if "fc1" in key:
+            key = key.replace("fc1", "dense1")
+        if "fc2" in key:
+            key = key.replace("fc2", "dense2")
         if "linear_pred" in key:
             key = key.replace("linear_pred", "classifier")
         if "linear_c" in key:
@@ -112,7 +120,7 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         config.num_encoder_blocks = 3
         config.depths = [3, 3, 3]
         config.channels = [32, 64, 128, 192, 256, 320]
-        config.cfgs = [
+        config.mv2_blocks_cfgs = [
                 [   [3, 3, 32, 1],  
                     [3, 4, 64, 2], 
                     [3, 4, 64, 1]],  
@@ -171,9 +179,9 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     if model_name == "SeaFormer_L_bs32_43.8_ade":
         expected_slice = torch.tensor(
             [   
-                [[ -2.2633,  -4.8691,  -6.1536], [ -3.3708,  -7.4803,  -8.9196], [ -2.9856,  -8.2059, -10.0520]],
-                [[ -5.5072,  -7.3183,  -8.4885], [ -6.2318,  -8.9810, -10.4004], [ -6.0988,  -9.3973, -11.3405]],
-                [[ -9.4179, -11.6332, -13.3330], [-10.4780, -14.1904, -16.1810], [-10.4400, -14.9166, -17.2796]],
+                [[ -2.0818,  -4.6320,  -5.9963], [ -3.2360,  -7.2340,  -8.7455], [ -2.9308,  -8.1080, -9.9713]],
+                [[ -5.4941,  -7.2591,  -8.4649], [ -6.2536,  -8.9669, -10.4255], [ -6.1386,  -9.4373, -11.4133]],
+                [[ -9.2548, -11.4705, -13.2432], [-10.3784, -13.9842, -16.0520], [-10.4125, -14.8483, -17.2390]],
             ]
         )
 
@@ -189,8 +197,8 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     if push_to_hub:
         print("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(f"Inderpreet01/{model_name}")
-        feature_extractor.push_to_hub(f"Inderpreet01/{model_name}")
+        model.push_to_hub(f"Inderpreet01/seaformer-semantic-segmentation-large")
+        feature_extractor.push_to_hub(f"Inderpreet01/seaformer-semantic-segmentation-large")
 
 
 if __name__ == "__main__":

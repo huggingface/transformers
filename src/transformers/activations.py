@@ -152,6 +152,15 @@ class MishActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
+    
+
+class h_sigmoid(nn.Module):
+    def __init__(self, inplace=True):
+        super(h_sigmoid, self).__init__()
+        self.relu = nn.ReLU6(inplace=inplace)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.relu(hidden_states + 3) / 6
 
 
 class LinearActivation(nn.Module):
@@ -186,6 +195,7 @@ ACT2CLS = {
     "silu": SiLUActivation,
     "swish": SiLUActivation,
     "tanh": nn.Tanh,
+    "h_sigmoid": h_sigmoid,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 

@@ -109,49 +109,49 @@ class SeaformerDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class SeaformerConv2d_BN(nn.Module):
-    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1,
+class SeaformerConv2d(nn.Module):
+    def __init__(self, inp_channel, out_channel, ks=1, stride=1, pad=0, dilation=1,
                  groups=1, bn_weight_init=1, bias=False):
         super().__init__()
-        self.inp_channel = a
-        self.out_channel = b
+        self.inp_channel = inp_channel
+        self.out_channel = out_channel
         self.ks = ks
         self.pad = pad
         self.stride = stride
         self.dilation = dilation
         self.groups = groups
-        self.add_module('c', nn.Conv2d(
-            a, b, ks, stride, pad, dilation, groups, bias=bias))
+        self.add_module('convolution', nn.Conv2d(
+            self.inp_channel, self.out_channel, ks, stride, pad, dilation, groups, bias=bias))
         
-        bn = nn.BatchNorm2d(b)
-        nn.init.constant_(bn.weight, bn_weight_init)
-        nn.init.constant_(bn.bias, 0)
-        self.add_module('bn', bn)
+        bn = nn.BatchNorm2d(self.out_channel)
+        # nn.init.constant_(bn.weight, bn_weight_init)
+        # nn.init.constant_(bn.bias, 0)
+        self.add_module('batchnorm', bn)
         
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.bn(self.c(hidden_states))
+        return self.batchnorm(self.convolution(hidden_states))
 
 
 class SeaformerMLP(nn.Module):
     """
     Linear Embedding.
     """
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.ReLU, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, hidden_act=nn.ReLU, drop=0.):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = SeaformerConv2d_BN(in_features, hidden_features)
+        self.dense1 = SeaformerConv2d(in_features, hidden_features)
         self.dwconv = nn.Conv2d(hidden_features, hidden_features, 3, 1, 1, bias=True, groups=hidden_features)
-        self.act = act_layer()
-        self.fc2 = SeaformerConv2d_BN(hidden_features, out_features)
+        self.act = hidden_act
+        self.dense2 = SeaformerConv2d(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(hidden_states)
+        x = self.dense1(hidden_states)
         x = self.dwconv(x)
         x = self.act(x)
         x = self.drop(x)
-        x = self.fc2(x)
+        x = self.dense2(x)
         x = self.drop(x)
         return x
 
@@ -164,15 +164,12 @@ class SeaformerInvertedResidual(nn.Module):
             ks: int,
             stride: int,
             expand_ratio: int,
-            activations=None
+            hidden_act=None
     ) -> None:
         super(SeaformerInvertedResidual, self).__init__()
         self.stride = stride
         self.expand_ratio = expand_ratio
-        assert stride in [1, 2]
-
-        if activations is None:
-            activations = nn.ReLU
+        # assert stride in [1, 2]
 
         hidden_dim = int(round(inp * expand_ratio))
         self.use_res_connect = self.stride == 1 and inp == oup
@@ -180,14 +177,14 @@ class SeaformerInvertedResidual(nn.Module):
         layers = []
         if expand_ratio != 1:
             # pw
-            layers.append(SeaformerConv2d_BN(inp, hidden_dim, ks=1))
-            layers.append(activations())
+            layers.append(SeaformerConv2d(inp, hidden_dim, ks=1))
+            layers.append(hidden_act)
         layers.extend([
             # dw
-            SeaformerConv2d_BN(hidden_dim, hidden_dim, ks=ks, stride=stride, pad=ks // 2, groups=hidden_dim),
-            activations(),
+            SeaformerConv2d(hidden_dim, hidden_dim, ks=ks, stride=stride, pad=ks // 2, groups=hidden_dim),
+            hidden_act,
             # pw-linear
-            SeaformerConv2d_BN(hidden_dim, oup, ks=1)
+            SeaformerConv2d(hidden_dim, oup, ks=1)
         ])
         self.conv = nn.Sequential(*layers)
         self.out_channels = oup
@@ -203,10 +200,10 @@ class SeaformerInvertedResidual(nn.Module):
 class SeaformerStackedMV2Block(nn.Module):
     def __init__(
             self,
-            cfgs,
+            mv2_blocks_cfgs,
             stem,
             inp_channel=16,
-            activation=nn.ReLU,
+            hidden_act=nn.ReLU,
             width_mult=1.):
         
         super().__init__()
@@ -214,19 +211,19 @@ class SeaformerStackedMV2Block(nn.Module):
         self.stem = stem
         if stem:
             self.stem_block = nn.Sequential(
-                SeaformerConv2d_BN(3, inp_channel, 3, 2, 1),
-                activation()
+                SeaformerConv2d(3, inp_channel, 3, 2, 1),
+                hidden_act
             )
             
-        self.cfgs = cfgs
+        self.mv2_blocks_cfgs = mv2_blocks_cfgs
         self.layers = []
         
-        for i, (k, t, c, s) in enumerate(cfgs):
-            output_channel = _make_divisible(c * width_mult, 8)
-            exp_size = t * inp_channel
+        for i, (kernel_size, expand_ratio, out_channels, stride) in enumerate(mv2_blocks_cfgs):
+            output_channel = _make_divisible(out_channels * width_mult, 8)
+            exp_size = expand_ratio * inp_channel
             exp_size = _make_divisible(exp_size * width_mult, 8)
             layer_name = 'layer{}'.format(i + 1)
-            layer = SeaformerInvertedResidual(inp_channel, output_channel, ks=k, stride=s, expand_ratio=t, activations=activation)
+            layer = SeaformerInvertedResidual(inp_channel, output_channel, ks=kernel_size, stride=stride, expand_ratio=expand_ratio, hidden_act=hidden_act)
             self.add_module(layer_name, layer)
             inp_channel = output_channel
             self.layers.append(layer_name)
@@ -247,24 +244,24 @@ class SeaformerSqueezeAxialPositionalEmbedding(nn.Module):
         self.pos_embed = nn.Parameter(torch.randn([1, dim, shape]))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        B, C, N = hidden_states.shape
-        hidden_states = hidden_states + F.interpolate(self.pos_embed, size=(N), mode='linear', align_corners=False)
+        batch_size, num_channels, dim = hidden_states.shape
+        hidden_states = hidden_states + F.interpolate(self.pos_embed, size=(dim), mode='linear', align_corners=False)
         
         return hidden_states
     
-class h_sigmoid(nn.Module):
-    def __init__(self, inplace=True):
-        super(h_sigmoid, self).__init__()
-        self.relu = nn.ReLU6(inplace=inplace)
+# class h_sigmoid(nn.Module):
+#     def __init__(self, inplace=True):
+#         super(h_sigmoid, self).__init__()
+#         self.relu = nn.ReLU6(inplace=inplace)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.relu(hidden_states + 3) / 6
+#     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+#         return self.relu(hidden_states + 3) / 6
     
 
 class SeaformerAttention(nn.Module):
     def __init__(self, dim=3, key_dim=64, num_attention_heads=8,
                  attn_ratio=2,
-                 activation=None):
+                 hidden_act=None):
         
         super().__init__()
         self.num_attention_heads = num_attention_heads
@@ -275,34 +272,35 @@ class SeaformerAttention(nn.Module):
         self.dh = int(attn_ratio * key_dim) * num_attention_heads
         self.attn_ratio = attn_ratio
 
-        self.to_q = SeaformerConv2d_BN(dim, nh_kd, 1)
-        self.to_k = SeaformerConv2d_BN(dim, nh_kd, 1)
-        self.to_v = SeaformerConv2d_BN(dim, self.dh, 1)
+        self.to_q = SeaformerConv2d(dim, nh_kd, 1)
+        self.to_k = SeaformerConv2d(dim, nh_kd, 1)
+        self.to_v = SeaformerConv2d(dim, self.dh, 1)
         
-        if activation==None:
-            activation = nn.ReLU
+        # if activation==None:
+        #     activation = nn.ReLU
         
-        self.proj = torch.nn.Sequential(activation(), SeaformerConv2d_BN(
+        self.proj = torch.nn.Sequential(hidden_act, SeaformerConv2d(
             self.dh, dim, bn_weight_init=0))
         
         
-        self.proj_encode_row = torch.nn.Sequential(activation(), SeaformerConv2d_BN(
+        self.proj_encode_row = torch.nn.Sequential(hidden_act, SeaformerConv2d(
             self.dh, self.dh, bn_weight_init=0))
         self.pos_emb_rowq = SeaformerSqueezeAxialPositionalEmbedding(nh_kd, 16)
         self.pos_emb_rowk = SeaformerSqueezeAxialPositionalEmbedding(nh_kd, 16)
 
         
-        self.proj_encode_column = torch.nn.Sequential(activation(), SeaformerConv2d_BN(
+        self.proj_encode_column = torch.nn.Sequential(hidden_act, SeaformerConv2d(
             self.dh, self.dh, bn_weight_init=0))
         self.pos_emb_columnq = SeaformerSqueezeAxialPositionalEmbedding(nh_kd, 16)
         self.pos_emb_columnk = SeaformerSqueezeAxialPositionalEmbedding(nh_kd, 16)
         
         
-        self.dwconv = SeaformerConv2d_BN(self.dh + 2 * self.nh_kd, 2 * self.nh_kd + self.dh, ks=3, stride=1, pad=1, dilation=1,
+        self.dwconv = SeaformerConv2d(self.dh + 2 * self.nh_kd, 2 * self.nh_kd + self.dh, ks=3, stride=1, pad=1, dilation=1,
                                 groups=2 * self.nh_kd + self.dh)
-        self.act = activation()
-        self.pwconv = SeaformerConv2d_BN(2 * self.nh_kd + self.dh, dim, ks=1)
-        self.sigmoid = h_sigmoid()
+        self.act = hidden_act
+        self.pwconv = SeaformerConv2d(2 * self.nh_kd + self.dh, dim, ks=1)
+        # self.sigmoid = h_sigmoid()
+        self.sigmoid = ACT2FN['h_sigmoid']
 
         
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:  
@@ -347,18 +345,18 @@ class SeaformerAttention(nn.Module):
 class SeaformerBlock(nn.Module):
 
     def __init__(self, dim=3, key_dim=64, num_attention_heads=8, mlp_ratio=4., attn_ratio=2., drop=0.,
-                 drop_path=0., act_layer=nn.ReLU):
+                 drop_path=0., hidden_act=nn.ReLU):
         super().__init__()
         self.dim = dim
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
        
         self.attn = SeaformerAttention(dim, key_dim=key_dim, num_attention_heads=num_attention_heads, attn_ratio=attn_ratio,
-                                      activation=act_layer)
+                                      hidden_act=hidden_act)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = SeaformerDropPath(drop_path) if drop_path > 0. else nn.Identity()
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = SeaformerMLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        self.mlp = SeaformerMLP(in_features=dim, hidden_features=mlp_hidden_dim, hidden_act=hidden_act, drop=drop)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states + self.drop_path(self.attn(hidden_states))
@@ -369,7 +367,7 @@ class SeaformerBlock(nn.Module):
 class SeaformerBasicLayer(nn.Module):
     def __init__(self, block_num=4, embedding_dim=3, key_dim=64, num_attention_heads=8,
                  mlp_ratio=4., attn_ratio=2., drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.ReLU):
+                 hidden_act=nn.ReLU):
         super().__init__()
         self.block_num = block_num
 
@@ -379,7 +377,7 @@ class SeaformerBasicLayer(nn.Module):
                 embedding_dim, key_dim=key_dim, num_attention_heads=num_attention_heads,
                 mlp_ratio=mlp_ratio, attn_ratio=attn_ratio,
                 drop=drop, drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                act_layer=act_layer))
+                hidden_act=hidden_act))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # token * N
@@ -400,18 +398,19 @@ class SeaformerFusionBlock(nn.Module):
         self.local_embedding = nn.Sequential()
         self.local_embedding.add_module('conv', nn.Conv2d(in_channels=inp, out_channels=embed_dim, kernel_size=1, bias=False))
         bn = nn.BatchNorm2d(embed_dim)
-        nn.init.constant_(bn.weight, 1)
-        nn.init.constant_(bn.bias, 0)
-        self.local_embedding.add_module('bn', bn)
+        # nn.init.constant_(bn.weight, 1)
+        # nn.init.constant_(bn.bias, 0)
+        self.local_embedding.add_module('batchnorm', bn)
 
         self.global_act = nn.Sequential()
         self.global_act.add_module('conv', nn.Conv2d(in_channels=oup, out_channels=embed_dim, kernel_size=1, bias=False))
         bn = nn.BatchNorm2d(embed_dim)
-        nn.init.constant_(bn.weight, 1)
-        nn.init.constant_(bn.bias, 0)
-        self.global_act.add_module('bn', bn)
+        # nn.init.constant_(bn.weight, 1)
+        # nn.init.constant_(bn.bias, 0)
+        self.global_act.add_module('batchnorm', bn)
 
-        self.act = h_sigmoid()
+        # self.act = h_sigmoid()
+        self.act = ACT2FN['h_sigmoid']
 
     def forward(self, x_local: torch.Tensor, x_global: torch.Tensor) -> torch.Tensor:
         '''
@@ -434,13 +433,17 @@ class SeaformerEncoder(nn.Module):
         self.config = config
         self.channels = config.channels
         self.depths = config.depths
-        self.cfgs = config.cfgs
+        self.mv2_blocks_cfgs = config.mv2_blocks_cfgs
+        if isinstance(config.hidden_act, str):
+            self.hidden_act = ACT2FN[config.hidden_act]
+        else:
+            self.hidden_act = config.hidden_act
         # self.init_cfg = config.init_cfg
         # if self.init_cfg is not None:
         #     self.pretrained = self.init_cfg['checkpoint']
         
-        for i in range(len(config.cfgs)):
-            smb = SeaformerStackedMV2Block(cfgs=config.cfgs[i], stem=True if i == 0 else False, inp_channel=self.channels[i])
+        for i in range(len(config.mv2_blocks_cfgs)):
+            smb = SeaformerStackedMV2Block(mv2_blocks_cfgs=config.mv2_blocks_cfgs[i], stem=True if i == 0 else False, inp_channel=self.channels[i], hidden_act=self.hidden_act)
             setattr(self, f"smb{i + 1}", smb)
 
         for i in range(len(config.depths)):
@@ -454,7 +457,7 @@ class SeaformerEncoder(nn.Module):
                 attn_ratio=config.attn_ratios,
                 drop=0, attn_drop=0,
                 drop_path=dpr,
-                act_layer=config.act_layer if config.act_layer is not None else nn.ReLU6)
+                hidden_act=self.hidden_act)
             setattr(self, f"trans{i + 1}", trans)
 
     def forward(
@@ -472,7 +475,7 @@ class SeaformerEncoder(nn.Module):
         hidden_states = pixel_values
 
         outputs = []
-        num_smb_stage = len(self.cfgs)
+        num_smb_stage = len(self.mv2_blocks_cfgs)
         num_trans_stage = len(self.depths)
         x = pixel_values
         for i in range(num_smb_stage):
@@ -641,9 +644,9 @@ class SeaformerDecodeHead(SeaformerPreTrainedModel):
         self.linear_fuse.add_module('conv', nn.Conv2d(in_channels=head_channels, out_channels=head_channels, kernel_size=1, 
                                                      stride=1, groups=head_channels if config.is_depthwise else 1, bias=False))
         bn = nn.BatchNorm2d(head_channels)
-        nn.init.constant_(bn.weight, 1)
-        nn.init.constant_(bn.bias, 0)
-        self.linear_fuse.add_module('bn', bn)
+        # nn.init.constant_(bn.weight, 1)
+        # nn.init.constant_(bn.bias, 0)
+        self.linear_fuse.add_module('batchnorm', bn)
         
         self.linear_fuse.add_module('activate', nn.ReLU(inplace=True))
 
