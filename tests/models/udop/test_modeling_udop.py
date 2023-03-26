@@ -89,18 +89,18 @@ class UdopModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        seg_data = ids_tensor([self.batch_size, self.encoder_seq_length, 4], self.range_bbox).float()
-        # Ensure that seg_data is legal
-        for i in range(seg_data.shape[0]):
-            for j in range(seg_data.shape[1]):
-                if seg_data[i, j, 3] < seg_data[i, j, 1]:
-                    t = seg_data[i, j, 3]
-                    seg_data[i, j, 3] = seg_data[i, j, 1]
-                    seg_data[i, j, 1] = t
-                if seg_data[i, j, 2] < seg_data[i, j, 0]:
-                    t = seg_data[i, j, 2]
-                    seg_data[i, j, 2] = seg_data[i, j, 0]
-                    seg_data[i, j, 0] = t
+        bbox = ids_tensor([self.batch_size, self.encoder_seq_length, 4], self.range_bbox).float()
+        # Ensure that bbox is legal
+        for i in range(bbox.shape[0]):
+            for j in range(bbox.shape[1]):
+                if bbox[i, j, 3] < bbox[i, j, 1]:
+                    t = bbox[i, j, 3]
+                    bbox[i, j, 3] = bbox[i, j, 1]
+                    bbox[i, j, 1] = t
+                if bbox[i, j, 2] < bbox[i, j, 0]:
+                    t = bbox[i, j, 2]
+                    bbox[i, j, 2] = bbox[i, j, 0]
+                    bbox[i, j, 0] = t
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
         attention_mask = None
@@ -118,7 +118,7 @@ class UdopModelTester:
         return (
             config,
             input_ids,
-            seg_data,
+            bbox,
             decoder_input_ids,
             attention_mask,
             decoder_attention_mask,
@@ -146,7 +146,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
-        seg_data,
+        bbox,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -157,12 +157,12 @@ class UdopModelTester:
         model.eval()
         result = model(
             input_ids=input_ids,
-            seg_data=seg_data,
+            bbox=bbox,
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
         )
-        result = model(input_ids=input_ids, seg_data=seg_data, decoder_input_ids=decoder_input_ids)
+        result = model(input_ids=input_ids, bbox=bbox, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
@@ -178,7 +178,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
-        seg_data,
+        bbox,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -187,7 +187,7 @@ class UdopModelTester:
         model = UdopForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
-            seg_data=seg_data,
+            bbox=bbox,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
@@ -200,7 +200,7 @@ class UdopModelTester:
         self,
         config,
         input_ids,
-        seg_data,
+        bbox,
         decoder_input_ids,
         attention_mask,
         decoder_attention_mask,
@@ -209,11 +209,11 @@ class UdopModelTester:
         model = UdopForConditionalGeneration(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
-            input_ids[:1], seg_data=seg_data[:1, :, :], num_beams=2, max_length=5, do_sample=True, use_cache=False
+            input_ids[:1], bbox=bbox[:1, :, :], num_beams=2, max_length=5, do_sample=True, use_cache=False
         )
         torch.manual_seed(0)
         output_with_past_cache = model.generate(
-            input_ids[:1], seg_data=seg_data[:1, :, :], num_beams=2, max_length=5, do_sample=True
+            input_ids[:1], bbox=bbox[:1, :, :], num_beams=2, max_length=5, do_sample=True
         )
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
@@ -222,7 +222,7 @@ class UdopModelTester:
         (
             config,
             input_ids,
-            seg_data,
+            bbox,
             decoder_input_ids,
             attention_mask,
             decoder_attention_mask,
@@ -232,7 +232,7 @@ class UdopModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "seg_data": seg_data,
+            "bbox": bbox,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
             "use_cache": False,
@@ -297,8 +297,9 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             expected_arg_names = [
                 "attention_mask",
+                "bbox",
+                "char_bbox",
                 "char_ids",
-                "char_seg_data",
                 "cross_attn_head_mask",
                 "decoder_attention_mask",
                 "decoder_head_mask",
@@ -312,7 +313,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 "input_ids",
                 "inputs_embeds",
                 "kwargs",
-                "mask_ratio",
             ]
             if model_class in self.all_generative_model_classes:
                 expected_arg_names.append(

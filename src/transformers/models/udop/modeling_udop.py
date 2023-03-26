@@ -135,7 +135,7 @@ def pad_sequence(seq, target_len, pad_value=0):
 def collate_vlembed(
     inputs_patches,
     inputs_embeds,
-    seg_data,
+    bbox,
     visual_segdata,
     vis_special_token=None,
     attention_mask=None,
@@ -145,13 +145,13 @@ def collate_vlembed(
 ):
     print("Shape of inputs_patches:", inputs_patches.shape)
     print("Shape of inputs_embeds:", inputs_embeds.shape)
-    print("Shape of seg_data:", seg_data.shape)
+    print("Shape of bbox:", bbox.shape)
 
     L = num_patches
-    ocr_points_x = torch.clip(torch.floor((seg_data[:, :, 0] + seg_data[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
-    ocr_points_y = torch.clip(torch.floor((seg_data[:, :, 1] + seg_data[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
+    ocr_points_x = torch.clip(torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
+    ocr_points_y = torch.clip(torch.floor((bbox[:, :, 1] + bbox[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
     ocr_points = ocr_points_x + ocr_points_y
-    target_seg = (seg_data.mean(-1) == 0.0) | (seg_data.mean(-1) == 1.0)
+    target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
         inputs_patches, 1, ocr_points.unsqueeze(-1).repeat(1, 1, inputs_patches.size(-1))
     )
@@ -187,7 +187,7 @@ def collate_vlembed(
         [pad_sequence(item, max_len, torch.zeros_like(inputs_patches[0, 0])) for item in input_vision_patches]
     )
     visual_segdata = torch.stack(
-        [pad_sequence(item, max_len, torch.zeros_like(seg_data[0, 0])) for item in visual_segdata]
+        [pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_segdata]
     )
     if attention_mask is not None:
         visual_attention_mask = torch.stack(
@@ -198,10 +198,10 @@ def collate_vlembed(
         inputs_vision_patches += vis_special_token
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
-    seg_data = torch.cat([seg_data, visual_segdata], 1)
+    bbox = torch.cat([bbox, visual_segdata], 1)
     if attention_mask is not None:
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
-    return inputs_embeds, seg_data, attention_mask
+    return inputs_embeds, bbox, attention_mask
 
 
 class UdopPatchEmbeddings(nn.Module):
@@ -949,12 +949,12 @@ class RelativePositionBiasBase(nn.Module, ABC):
     def prepare_input(
         self,
         attention_mask: Optional[Tensor] = None,
-        seg_data: Optional[Dict[str, Any]] = None,
+        bbox: Optional[Dict[str, Any]] = None,
     ) -> Tensor:
         pass
 
-    def get_bucket(self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
-        relative_position = self.prepare_input(attention_mask, seg_data)
+    def get_bucket(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+        relative_position = self.prepare_input(attention_mask, bbox)
         rp_bucket: Tensor = get_relative_position_bucket(
             relative_position,
             bidirectional=self.bidirectional,
@@ -973,7 +973,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
 
         return relative_position.to(torch.long)
 
-    def forward(self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
+    def forward(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
         # re-using pretrained model with subsequent addition of prefix_bucket
         if self.expand and self.prefix_bucket:
             new_bias = nn.Embedding(self.relative_attention_num_buckets + 2, self.num_heads)
@@ -982,13 +982,13 @@ class RelativePositionBiasBase(nn.Module, ABC):
             self.relative_attention_bias = new_bias
             self.expand = False
 
-        rp_bucket = self.get_bucket(attention_mask, seg_data)
+        rp_bucket = self.get_bucket(attention_mask, bbox)
 
         if self.prefix_bucket:
             if rp_bucket.size(0) == 1 and attention_mask.size(0) > 1:
                 rp_bucket = rp_bucket.repeat(attention_mask.size(0), 1, 1)
             # based on assumption that prefix bboxes are negative
-            is_prefix = seg_data[:, :, 1] < 0
+            is_prefix = bbox[:, :, 1] < 0
             num_prefix = is_prefix.sum(-1)
             for idx, num_prefix_row in enumerate(num_prefix.cpu().numpy()):
                 rp_bucket[idx, :num_prefix_row, num_prefix_row:] = self.relative_attention_num_buckets
@@ -1009,9 +1009,7 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(
-        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
-    ) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
         assert self.scaling_factor == 1, "No need to scale 1d features"
         relative_position = self.get_relative_position(
             torch.arange(attention_mask.size(1), dtype=torch.long, device=attention_mask.device)[None, :]
@@ -1049,13 +1047,11 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(
-        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
-    ) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
         assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
         # get x positions of left point of bbox
-        assert seg_data is not None
-        horizontal_position: Tensor = seg_data[:, :, [0, 2]].mean(dim=-1)
+        assert bbox is not None
+        horizontal_position: Tensor = bbox[:, :, [0, 2]].mean(dim=-1)
 
         return self.get_relative_position(horizontal_position)
 
@@ -1068,13 +1064,11 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(
-        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
-    ) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
         assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
         # get y positions of middle of bbox
-        assert seg_data is not None
-        vertical_position: Tensor = seg_data[:, :, [1, 3]].mean(dim=-1)
+        assert bbox is not None
+        vertical_position: Tensor = bbox[:, :, [1, 3]].mean(dim=-1)
 
         return self.get_relative_position(vertical_position)
 
@@ -1092,11 +1086,11 @@ class RelativePositionBiasAggregated(nn.Module):
         self.biases = nn.ModuleList(modules)
 
     def forward(
-        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
+        self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None
     ) -> Union[float, Tensor]:
         x = 0.0
         for bias in self.biases:  # type: ignore
-            x = bias(attention_mask, seg_data) + x
+            x = bias(attention_mask, bbox) + x
 
         return x
 
@@ -1200,8 +1194,8 @@ class UdopStack(UdopPreTrainedModel):
         cross_attn_head_mask=None,
         position_bias=None,  # modified line,
         inputs_patches=None,  # modified line,
-        seg_data=None,  # modified line,
-        visual_seg_data=None,  # modified line,
+        bbox=None,  # modified line,
+        visual_bbox=None,  # modified line,
         num_patches=None,  # modified line,
         special_vis_token=None,
     ):
@@ -1226,7 +1220,7 @@ class UdopStack(UdopPreTrainedModel):
         elif inputs_embeds is None and input_ids is not None and torch.numel(input_ids) == 0:
             input_ids = torch.full((4, 1024), self.config.pad_token_id, device=input_ids.device, dtype=input_ids.dtype)
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
-            seg_data = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
+            bbox = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
             input_shape = input_ids.size()
             position_bias = torch.zeros_like(
                 self.get_extended_attention_mask(attention_mask, input_shape, attention_mask.device)
@@ -1266,11 +1260,11 @@ class UdopStack(UdopPreTrainedModel):
             # combine OCR text and visual embed
             if num_patches is None:
                 num_patches = self.config.image_size // self.config.patch_size
-            inputs_embeds, seg_data, attention_mask = collate_vlembed(
+            inputs_embeds, bbox, attention_mask = collate_vlembed(
                 inputs_patches,
                 inputs_embeds,
-                seg_data,
-                visual_seg_data,
+                bbox,
+                visual_bbox,
                 special_vis_token,
                 attention_mask,
                 num_patches,
@@ -1279,8 +1273,8 @@ class UdopStack(UdopPreTrainedModel):
             )
             input_shape = inputs_embeds.size()[:-1]
 
-        if not self.is_decoder and seg_data is not None:
-            inputs_embeds += self.cell2dembedding(seg_data)
+        if not self.is_decoder and bbox is not None:
+            inputs_embeds += self.cell2dembedding(bbox)
 
         batch_size, seq_length = input_shape
 
@@ -1325,7 +1319,7 @@ class UdopStack(UdopPreTrainedModel):
         if self.is_decoder:  # modified lines
             position_bias = None
         else:
-            position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
+            position_bias = self.relative_bias(attention_mask=attention_mask, bbox=bbox)
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
 
@@ -1476,12 +1470,12 @@ class UdopModel(UdopPreTrainedModel):
         ids_restore: Optional[Tensor] = None,
         image_mask_label: Optional[Tensor] = None,
         mask_ratio: Optional[Tensor] = None,
-        seg_data: Dict[str, Any] = None,
-        visual_seg_data: Dict[str, Any] = None,
+        bbox: Dict[str, Any] = None,
+        visual_bbox: Dict[str, Any] = None,
         masked_lm_labels: Optional[Tensor] = None,
         head_mask: Optional[Tensor] = None,
         char_ids: Optional[Tensor] = None,
-        char_seg_data: Optional[Tensor] = None,
+        char_bbox: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1499,8 +1493,8 @@ class UdopModel(UdopPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
-                seg_data=seg_data,
-                visual_seg_data=visual_seg_data,
+                bbox=bbox,
+                visual_bbox=visual_bbox,
                 pixel_values=pixel_values,
                 special_vis_token=None,  # TODO check this
                 ids_keep=ids_keep,
@@ -1609,13 +1603,13 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         ids_restore: Optional[Tensor] = None,
         image_mask_label: Optional[Tensor] = None,
         mask_ratio: Optional[Tensor] = None,
-        seg_data: Dict[str, Any] = None,
-        visual_seg_data: Dict[str, Any] = None,
+        bbox: Dict[str, Any] = None,
+        visual_bbox: Dict[str, Any] = None,
         masked_lm_labels: Optional[Tensor] = None,
         labels: Optional[Tensor] = None,
         head_mask: Optional[Tensor] = None,
         char_ids: Optional[Tensor] = None,
-        char_seg_data: Optional[Tensor] = None,
+        char_bbox: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1647,13 +1641,13 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             ids_restore=ids_restore,
             image_mask_label=image_mask_label,
             mask_ratio=mask_ratio,
-            seg_data=seg_data,
-            visual_seg_data=visual_seg_data,
+            bbox=bbox,
+            visual_bbox=visual_bbox,
             masked_lm_labels=masked_lm_labels,
             labels=labels,
             head_mask=head_mask,
             char_ids=char_ids,
-            char_seg_data=char_seg_data,
+            char_bbox=char_bbox,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             decoder_head_mask=decoder_head_mask,
@@ -1719,9 +1713,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
-            "seg_data": kwargs.get("seg_data", None),
+            "bbox": kwargs.get("bbox", None),
             "pixel_values": kwargs.get("pixel_values", None),
-            "visual_seg_data": kwargs.get("visual_seg_data", None),
+            "visual_bbox": kwargs.get("visual_bbox", None),
         }
 
     def _reorder_cache(self, past_key_values, beam_idx):
