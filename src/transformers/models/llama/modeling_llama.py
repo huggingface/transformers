@@ -22,7 +22,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.fx
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -68,19 +67,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
-# Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
-    return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
-
-@torch.fx.wrap
-# Copied from transformers.models.gptj.modeling_gptj.get_embed_positions
-def get_embed_positions(embed_positions, position_ids):
-    return embed_positions.to(position_ids.device).repeat(position_ids.shape[0], 1, 1)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -643,7 +629,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.llama = LlamaModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -651,10 +637,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.llama.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.llama.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -663,10 +649,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.llama = decoder
 
     def get_decoder(self):
-        return self.model
+        return self.llama
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -716,7 +702,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs = self.llama(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -815,17 +801,17 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.llama = LlamaModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.llama.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.llama.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
@@ -849,7 +835,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.model(
+        transformer_outputs = self.llama(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
