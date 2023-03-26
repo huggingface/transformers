@@ -48,10 +48,11 @@ UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
+class BaseModelOutputWithAttentionMask(BaseModelOutput):
     """
-    Args:
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
             the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
@@ -81,13 +82,11 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
+    attention_mask: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_embeds: torch.FloatTensor = None
-    attention_mask: torch.FloatTensor = None
-    seg_data: torch.FloatTensor = None
 
 
 def get_visual_bbox(image_size=224):
@@ -1384,6 +1383,7 @@ class UdopStack(UdopPreTrainedModel):
                 v
                 for v in [
                     hidden_states,
+                    attention_mask,
                     present_key_value_states,
                     all_hidden_states,
                     all_attentions,
@@ -1391,14 +1391,13 @@ class UdopStack(UdopPreTrainedModel):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithVisionEmbeds(
+        return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
+            attention_mask=attention_mask,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
-            attention_mask=attention_mask,
-            seg_data=seg_data,
         )
 
 
@@ -1512,14 +1511,9 @@ class UdopModel(UdopPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
 
         hidden_states = encoder_outputs[0]
+        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1528,7 +1522,7 @@ class UdopModel(UdopPreTrainedModel):
             inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
-            encoder_attention_mask=encoder_outputs.attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
@@ -1538,6 +1532,11 @@ class UdopModel(UdopPreTrainedModel):
         )
 
         if not return_dict:
+            print("Number of encoder outputs:", len(encoder_outputs))
+            # we filter out the attention mask
+            decoder_outputs = tuple(value for idx, value in enumerate(decoder_outputs) if idx != 1)
+            encoder_outputs = tuple(value for idx, value in enumerate(encoder_outputs) if idx != 1)
+            print("Number of filtered encoder outputs:", len(encoder_outputs))
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(

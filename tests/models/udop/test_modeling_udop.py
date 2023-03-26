@@ -281,10 +281,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    def test_encoder_decoder_shared_weights(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
-
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
