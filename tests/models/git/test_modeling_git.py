@@ -17,19 +17,22 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_PRETRAINING_MAPPING, GitForCausalLM, GitModel, GitVisionModel
+    from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -252,13 +255,9 @@ class GitModelTester:
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        token_labels = None
-        if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
-
         config = self.get_config()
 
-        return config, input_ids, input_mask, pixel_values, token_labels
+        return config, input_ids, input_mask, pixel_values
 
     def get_config(self):
         """
@@ -285,7 +284,7 @@ class GitModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, pixel_values, token_labels):
+    def create_and_check_model(self, config, input_ids, input_mask, pixel_values):
         model = GitModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -303,7 +302,7 @@ class GitModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
         )
 
-    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values, token_labels):
+    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -317,10 +316,48 @@ class GitModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.vocab_size))
 
-        # TODO training
-        # result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
-        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        # training
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertTrue(result.loss.item() > 0)
+
+    def _test_beam_search_generate(self, config, input_ids, input_mask, pixel_values):
+        model = GitForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # generate
+        generated_ids = model.generate(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            do_sample=False,
+            max_length=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+
+        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
+
+    def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
+        model = GitForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # generate
+        generated_ids = model.generate(
+            input_ids=None,  # captioning -> no input_ids
+            attention_mask=None,
+            pixel_values=pixel_values,
+            do_sample=False,
+            max_length=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+
+        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -330,7 +367,6 @@ class GitModelTester:
             input_ids,
             input_mask,
             pixel_values,
-            token_labels,
         ) = config_and_inputs
 
         inputs_dict = {
@@ -343,24 +379,25 @@ class GitModelTester:
 
 
 @require_torch
-class GitModelTest(ModelTesterMixin, unittest.TestCase):
-
+class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GitModel, "text-generation": GitForCausalLM} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_torchscript = False
 
-    # special case for ForPreTraining model
+    # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+            if model_class in get_values(MODEL_FOR_CAUSAL_LM_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-                inputs_dict["next_sentence_label"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
         return inputs_dict
 
@@ -375,21 +412,45 @@ class GitModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_beam_search_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester._test_beam_search_generate(*config_and_inputs)
+
+    def test_batched_generate_captioning(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester._test_batched_generate_captioning(*config_and_inputs)
+
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GitModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GIT has pixel values as additional input")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
 
 
 @require_torch
@@ -460,3 +521,21 @@ class GitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 15))
         self.assertEqual(generated_ids.shape, expected_shape)
         self.assertEquals(generated_caption, "what does the front of the bus say at the top? special")
+
+    def test_batched_generation(self):
+        processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
+        model = GitForCausalLM.from_pretrained("microsoft/git-base-coco")
+        model.to(torch_device)
+
+        # create batch of size 2
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=[image, image], return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # we have to prepare `input_ids` with the same batch size as `pixel_values`
+        start_token_id = model.config.bos_token_id
+        input_ids = torch.tensor([[start_token_id], [start_token_id]], device=torch_device)
+        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
+        generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        self.assertEquals(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)

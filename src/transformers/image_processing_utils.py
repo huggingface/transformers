@@ -128,6 +128,9 @@ class ImageProcessingMixin(PushToHubMixin):
                 functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
                 consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
                 `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
@@ -185,7 +188,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -201,7 +204,11 @@ class ImageProcessingMixin(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
         return [output_image_processor_file]
@@ -217,6 +224,9 @@ class ImageProcessingMixin(PushToHubMixin):
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
 
         Returns:
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
@@ -228,6 +238,7 @@ class ImageProcessingMixin(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -265,6 +276,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     use_auth_token=use_auth_token,
                     user_agent=user_agent,
                     revision=revision,
+                    subfolder=subfolder,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to

@@ -32,20 +32,20 @@ from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import nltk
-import numpy as np
-from datasets import load_dataset
-from tqdm import tqdm
-
 import flax
 import jax
 import jax.numpy as jnp
+import nltk
+import numpy as np
 import optax
+from datasets import load_dataset
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
+from tqdm import tqdm
+
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -319,15 +319,13 @@ class FlaxDataCollatorForBartDenoisingLM:
         sentence_ends = np.argwhere(end_sentence_mask)
         sentence_ends[:, 1] += 1
         example_has_multiple_sentences, num_sentences = np.unique(sentence_ends[:, 0], return_counts=True)
-        num_sentences_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_sentences)}
+        num_sentences_map = dict(zip(example_has_multiple_sentences, num_sentences))
 
         num_to_permute = np.ceil(num_sentences * self.permute_sentence_ratio).astype(int)
-        num_to_permute_map = {
-            sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_to_permute)
-        }
+        num_to_permute_map = dict(zip(example_has_multiple_sentences, num_to_permute))
 
         sentence_ends = np.split(sentence_ends[:, 1], np.unique(sentence_ends[:, 0], return_index=True)[1][1:])
-        sentence_ends_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, sentence_ends)}
+        sentence_ends_map = dict(zip(example_has_multiple_sentences, sentence_ends))
 
         for i in range(input_ids.shape[0]):
             if i not in example_has_multiple_sentences:
@@ -502,7 +500,8 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
+        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -755,14 +754,12 @@ def main():
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
-                for layer_norm_name in layer_norm_candidates
-                for layer in flat_params.keys()
-                if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 

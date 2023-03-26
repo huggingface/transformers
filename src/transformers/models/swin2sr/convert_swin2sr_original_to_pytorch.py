@@ -16,11 +16,11 @@
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
-import requests
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
 
 

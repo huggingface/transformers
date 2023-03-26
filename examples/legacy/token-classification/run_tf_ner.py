@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 from transformers import (
     AutoConfig,
@@ -35,7 +36,6 @@ from transformers import (
     TFTrainingArguments,
 )
 from transformers.utils import logging as hf_logging
-from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 
 hf_logging.set_verbosity_info()
@@ -144,7 +144,7 @@ def main():
 
     # Prepare Token Classification task
     labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
+    label_map: Dict[int, str] = dict(enumerate(labels))
     num_labels = len(labels)
 
     # Load pretrained model and tokenizer

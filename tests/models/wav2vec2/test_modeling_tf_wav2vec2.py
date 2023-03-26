@@ -19,15 +19,14 @@ import glob
 import inspect
 import math
 import multiprocessing
-import os
 import traceback
 import unittest
 
 import numpy as np
 import pytest
 from datasets import load_dataset
-
 from huggingface_hub import snapshot_download
+
 from transformers import Wav2Vec2Config, is_tf_available
 from transformers.testing_utils import (
     CaptureLogger,
@@ -42,6 +41,7 @@ from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -53,6 +53,7 @@ if is_tf_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -62,7 +63,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -282,9 +282,9 @@ class TFWav2Vec2ModelTester:
 
 
 @require_tf
-class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFWav2Vec2Model} if is_tf_available() else {}
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
@@ -370,18 +370,15 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
 
-    # Wav2Vec2 has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Wav2Vec2 cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2 has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2 has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -390,12 +387,14 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
 
@@ -498,18 +497,15 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
 
-    # Wav2Vec2 has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Wav2Vec2 cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2 has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2 has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -518,12 +514,14 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
 
@@ -677,7 +675,4 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm_invalid_pool(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)

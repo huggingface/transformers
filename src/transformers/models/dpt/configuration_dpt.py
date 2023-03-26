@@ -152,7 +152,7 @@ class DPTConfig(PretrainedConfig):
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
         backbone_config=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

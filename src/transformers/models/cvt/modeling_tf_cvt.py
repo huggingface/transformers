@@ -93,7 +93,7 @@ class TFCvtDropPath(tf.keras.layers.Layer):
             return x
         keep_prob = 1 - self.drop_prob
         shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
-        random_tensor = keep_prob + tf.random.uniform(shape, 0, 1)
+        random_tensor = keep_prob + tf.random.uniform(shape, 0, 1, dtype=self.compute_dtype)
         random_tensor = tf.floor(random_tensor)
         return (x / keep_prob) * random_tensor
 
@@ -109,7 +109,7 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
         stride: int,
         padding: int,
         dropout_rate: float,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.convolution_embeddings = TFCvtConvEmbeddings(
@@ -211,7 +211,7 @@ class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
         stride: int,
         padding: int,
         projection_method: str = "dw_bn",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if projection_method == "dw_bn":
@@ -246,7 +246,7 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
         qkv_bias: bool,
         attention_drop_rate: float,
         with_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.scale = embed_dim**-0.5
@@ -470,7 +470,7 @@ class TFCvtLayer(tf.keras.layers.Layer):
         mlp_ratio: float,
         drop_path_rate: float,
         with_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.attention = TFCvtAttention(
@@ -766,8 +766,8 @@ TFCVT_START_DOCSTRING = r"""
 TFCVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`CvtImageProcessor.__call__`]
+            for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for

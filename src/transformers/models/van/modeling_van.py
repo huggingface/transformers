@@ -38,7 +38,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "VanConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Visual-Attention-Network/van-base"
@@ -375,7 +374,7 @@ class VanPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
@@ -408,7 +407,7 @@ VAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for
@@ -435,7 +434,6 @@ class VanModel(VanPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -493,7 +491,6 @@ class VanForImageClassification(VanPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

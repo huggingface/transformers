@@ -106,13 +106,13 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples:
 
     ```python
-    >>> from transformers import MarianTokenizer
+    >>> from transformers import MarianForCausalLM, MarianTokenizer
 
+    >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
     >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
-    # keys  [input_ids, attention_mask, labels].
 
     >>> outputs = model(**inputs)  # should work
     ```"""
@@ -138,7 +138,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         model_max_length=512,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         separate_vocabs=False,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

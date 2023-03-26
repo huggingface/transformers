@@ -20,12 +20,13 @@ from transformers import (
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class TextClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
@@ -129,7 +130,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
         return text_classifier, ["HuggingFace is in", "This is another test"]
 

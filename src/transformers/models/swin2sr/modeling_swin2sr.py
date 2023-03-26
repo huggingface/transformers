@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swin2SRConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
@@ -521,9 +520,8 @@ class Swin2SRLayer(nn.Module):
             if isinstance(self.shift_size, collections.abc.Iterable)
             else (self.shift_size, self.shift_size)
         )
-        self.window_size = (
-            input_resolution[0] if input_resolution[0] <= target_window_size[0] else target_window_size[0]
-        )
+        window_dim = input_resolution[0].item() if torch.is_tensor(input_resolution[0]) else input_resolution[0]
+        self.window_size = window_dim if window_dim <= target_window_size[0] else target_window_size[0]
         self.shift_size = (
             0
             if input_resolution
@@ -576,8 +574,12 @@ class Swin2SRLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.set_shift_and_window_size(input_dimensions)
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        else:
+            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -819,8 +821,8 @@ SWIN2SR_START_DOCSTRING = r"""
 SWIN2SR_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`Swin2SRImageProcessor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -893,7 +895,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,

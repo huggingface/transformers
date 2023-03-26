@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
+from typing import List, Union
+
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
@@ -28,6 +30,9 @@ if is_torch_available():
 
     from transformers.generation import (
         EncoderNoRepeatNGramLogitsProcessor,
+        EncoderRepetitionPenaltyLogitsProcessor,
+        EpsilonLogitsWarper,
+        EtaLogitsWarper,
         ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
@@ -73,10 +78,10 @@ class LogitsProcessorTest(unittest.TestCase):
         scores_before_min_length = min_dist_processor(input_ids, scores)
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
-    def test_new_min_length_dist_processor(self):
+    @parameterized.expand([(0,), ([0, 18],)])
+    def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
         vocab_size = 20
         batch_size = 4
-        eos_token_id = 0
 
         # check that first input is skipped (min new length applying)
         input_ids = ids_tensor((batch_size, 5), vocab_size=20)
@@ -84,9 +89,15 @@ class LogitsProcessorTest(unittest.TestCase):
             prompt_length_to_skip=input_ids.shape[-1], min_new_tokens=3, eos_token_id=eos_token_id
         )
 
+        expected_eos_scores_before_min_length = batch_size * [-float("inf")]
+        if isinstance(eos_token_id, list):
+            expected_eos_scores_before_min_length *= len(eos_token_id)
+
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
-        self.assertListEqual(scores_before_min_length[:, eos_token_id].tolist(), batch_size * [-float("inf")])
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
 
         # check that, for skipping, now prompt length is 5, after that we expect first 5 tokens will be skipped
         self.assertTrue(new_min_dist_processor.prompt_length_to_skip == 5)
@@ -95,19 +106,25 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, 2), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
-        self.assertListEqual(scores_before_min_length[:, eos_token_id].tolist(), batch_size * [-float("inf")])
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
 
         # check that min new length is applied at length 6 (because it has only 1 new token)
         input_ids = ids_tensor((batch_size, 6), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
-        self.assertListEqual(scores_before_min_length[:, eos_token_id].tolist(), batch_size * [-float("inf")])
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
 
         # check that min new length is applied at length 7 (because it has only 2 new tokens)
         input_ids = ids_tensor((batch_size, 7), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
-        self.assertListEqual(scores_before_min_length[:, eos_token_id].tolist(), batch_size * [-float("inf")])
+        self.assertListEqual(
+            scores_before_min_length[:, eos_token_id].flatten().tolist(), expected_eos_scores_before_min_length
+        )
 
         # check that min new length is not applied anymore at length 8
         input_ids = ids_tensor((batch_size, 8), vocab_size=20)
@@ -172,6 +189,31 @@ class LogitsProcessorTest(unittest.TestCase):
 
         self.assertAlmostEqual(scores[1, 0].item(), (1 / vocab_size) / 2)
         self.assertAlmostEqual(scores[1, 5].item(), (4 / vocab_size) / 2)
+
+    def test_encoder_repetition_penalty_dist_process(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=input_ids)
+
+        scores = rep_penalty_proc(input_ids, scores.clone())
+
+        # check that values were correctly changed
+        self.assertAlmostEqual(scores[0, 0].item(), -(1 / vocab_size) / 2)
+        self.assertAlmostEqual(scores[0, 1].item(), (1 / vocab_size) * 2)
+
+        self.assertAlmostEqual(scores[1, 0].item(), (1 / vocab_size) * 2)
+        self.assertAlmostEqual(scores[1, 5].item(), (4 / vocab_size) * 2)
+
+        # check that values not in the encoder ids were NOT changed
+        self.assertAlmostEqual(scores[0, 2].item(), (1 / vocab_size))
+        self.assertAlmostEqual(scores[1, 2].item(), (1 / vocab_size))
 
     def test_top_k_dist_warper(self):
         input_ids = None
@@ -286,6 +328,80 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_dist = typical_warp(input_ids, ramp_logits)
 
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
+        self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
+
+    def test_epsilon_dist_warper(self):
+        input_ids = None
+        vocab_size = 10
+        batch_size = 2
+
+        # create distribution and take log (inverse to Softmax as taken in TopPLogitsWarper)
+        dist = torch.log(
+            torch.tensor(
+                [[0.87, 0.099, 0.001, 0.03], [0.4, 0.299, 0.101, 0.2]], device=torch_device, dtype=torch.float
+            )
+        )
+
+        epsilon_warp = EpsilonLogitsWarper(0.1)
+        filtered_dist = torch.exp(epsilon_warp(input_ids, dist))
+
+        # dist should be filtered to only keep values with proba >= 0.1
+        # exp (-inf) => 0
+        EXPECTED_FILTERED_DIST = torch.tensor(
+            [[0.87, 0, 0, 0], [0.4, 0.299, 0.101, 0.2]], device=torch_device, dtype=torch.float
+        )
+        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+
+        # check edge cases with negative and extreme logits
+        ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float).unsqueeze(0).repeat(
+            batch_size, 1
+        ) - (vocab_size // 2)
+
+        # make ramp_logits more extreme
+        ramp_logits[1] = ramp_logits[1] * 100.0
+
+        # make sure at least 2 tokens are kept
+        epsilon_warp = EpsilonLogitsWarper(5e-2, min_tokens_to_keep=2, filter_value=0.0)
+        filtered_dist = epsilon_warp(input_ids, ramp_logits)
+
+        # first batch should keep 3 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
+        self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [3, 2])
+
+    def test_eta_dist_warper(self):
+        input_ids = None
+        vocab_size = 10
+        batch_size = 2
+
+        # create distribution and take log (inverse to Softmax as taken in TopPLogitsWarper)
+        dist = torch.log(
+            torch.tensor([[0.0, 0.1, 0.8, 0.1], [0.01, 0.04, 0.9, 0.05]], device=torch_device, dtype=torch.float)
+        )
+
+        eta_warp = EtaLogitsWarper(0.0625)
+        filtered_dist = torch.exp(eta_warp(input_ids, dist))
+
+        # dist should be filtered to only keep values with proba >= min(0.0625, sqrt(0.0625) * e^-H(p))
+        # min(0.0625, 0.1320) is the cutoff for the first row and min(0.0625, 0.1644) is for the second
+        # where H is the entropy function and p is the probability vector.
+        # exp (-inf) => 0
+        EXPECTED_FILTERED_DIST = torch.tensor(
+            [[0.0, 0.1, 0.8, 0.1], [0.0, 0.0, 0.9, 0.0]], device=torch_device, dtype=torch.float
+        )
+        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+
+        # check edge cases with negative and extreme logits
+        ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float).unsqueeze(0).repeat(
+            batch_size, 1
+        ) - (vocab_size // 2)
+
+        # make ramp_logits more extreme
+        ramp_logits[1] = ramp_logits[1] * 100.0
+
+        # make sure at least 2 tokens are kept
+        eta_warp = EtaLogitsWarper(0.1, min_tokens_to_keep=2, filter_value=0.0)
+        filtered_dist = eta_warp(input_ids, ramp_logits)
+
+        # first batch should keep 2 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
 
     def test_no_repeat_ngram_dist_processor(self):

@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
-_TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
 BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/bigbird-roberta-base",
@@ -535,7 +534,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
-
         # BigBird block-sparse attention as suggested in paper
 
         # ITC:
@@ -973,11 +971,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
 
-        indices_shift = (
-            torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-            // num_indices_to_gather
-            * num_indices_to_pick_from
-        )
+        shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
+        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
@@ -1597,6 +1592,13 @@ class BigBirdEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
 
         for i, layer_module in enumerate(self.layer):
@@ -1607,12 +1609,6 @@ class BigBirdEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1633,7 +1629,6 @@ class BigBirdEncoder(nn.Module):
                     blocked_encoder_mask,
                 )
             else:
-
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -1803,7 +1798,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BigBirdTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1980,7 +1975,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -2180,7 +2174,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
@@ -2315,10 +2308,10 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BigBirdTokenizer, BigBirdForPreTraining
+        >>> from transformers import AutoTokenizer, BigBirdForPreTraining
         >>> import torch
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2420,10 +2413,10 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForMaskedLM
+        >>> from transformers import AutoTokenizer, BigBirdForMaskedLM
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
@@ -2539,7 +2532,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -2626,7 +2618,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -2634,14 +2626,14 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
@@ -2717,10 +2709,10 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForSequenceClassification
+        >>> from transformers import AutoTokenizer, BigBirdForSequenceClassification
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
+        >>> tokenizer = AutoTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
@@ -2822,7 +2814,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2918,15 +2909,9 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/token-classification-bigbird-roberta-base-random",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
-            "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']"
-        ),
-        expected_loss=0.54,
     )
     def forward(
         self,
@@ -3053,11 +3038,11 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForQuestionAnswering
+        >>> from transformers import AutoTokenizer, BigBirdForQuestionAnswering
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
-        >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> model = BigBirdForQuestionAnswering.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> # select random article and question
@@ -3076,17 +3061,14 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
-        '80 °C (176 °F) or more'
+        >>> predict_answer_token_ids = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> predict_answer_token = tokenizer.decode(predict_answer_token_ids)
         ```
 
         ```python
         >>> target_start_index, target_end_index = torch.tensor([130]), torch.tensor([132])
         >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
         >>> loss = outputs.loss
-        >>> round(outputs.loss.item(), 2)
-        7.63
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

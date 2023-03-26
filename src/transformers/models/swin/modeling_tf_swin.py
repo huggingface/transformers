@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SwinConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/swin-tiny-patch4-window7-224"
@@ -789,7 +788,7 @@ class TFSwinStage(tf.keras.layers.Layer):
         num_heads: int,
         drop_path: List[float],
         downsample: Optional[Callable],
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.config = config
@@ -985,8 +984,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
         head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1192,7 +1191,6 @@ class TFSwinModel(TFSwinPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSwinModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1210,6 +1208,10 @@ class TFSwinModel(TFSwinPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFSwinModelOutput, Tuple[tf.Tensor, ...]]:
+        r"""
+        bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1429,7 +1431,6 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -27,7 +27,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFImageClassifierOutput,
-    TFMaskedLMOutput,
+    TFMaskedImageModelingOutput,
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DeiTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
@@ -614,7 +613,7 @@ DEIT_START_DOCSTRING = r"""
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`DeiTImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`DeiTImageProcessor.__call__`] for details.
 
         head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -651,7 +650,6 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -667,7 +665,7 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
+    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         outputs = self.deit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -767,7 +765,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -777,7 +775,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[tuple, TFMaskedLMOutput]:
+    ) -> Union[tuple, TFMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`tf.Tensor` of type bool and shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -786,7 +784,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DeiTImageProcessor, TFDeiTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, TFDeiTForMaskedImageModeling
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -794,7 +792,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = TFDeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
@@ -803,7 +801,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> bool_masked_pos = tf.cast(tf.random.uniform((1, num_patches), minval=0, maxval=2, dtype=tf.int32), tf.bool)
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 224, 224]
         ```"""
@@ -858,18 +856,20 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return TFMaskedLMOutput(
+        return TFMaskedImageModelingOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+    def serving_output(self, output: TFMaskedImageModelingOutput) -> TFMaskedImageModelingOutput:
         hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+        return TFMaskedImageModelingOutput(
+            reconstruction=output.reconstruction, hidden_states=hidden_states, attentions=attentions
+        )
 
 
 @add_start_docstrings(
@@ -917,7 +917,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         Examples:
 
         ```python
-        >>> from transformers import DeiTImageProcessor, TFDeiTForImageClassification
+        >>> from transformers import AutoImageProcessor, TFDeiTForImageClassification
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -928,7 +928,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
 
         >>> # note: we are loading a TFDeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = TFDeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> inputs = image_processor(images=image, return_tensors="tf")
@@ -1009,7 +1009,6 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFDeiTForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,

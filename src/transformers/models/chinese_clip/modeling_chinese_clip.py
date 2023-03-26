@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "OFA-Sys/chinese-clip-vit-base-patch16",
@@ -627,9 +626,9 @@ class ChineseCLIPVisionLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = ChineseCLIPVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = ChineseCLIPVisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -762,7 +761,7 @@ CHINESE_CLIP_TEXT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -810,7 +809,7 @@ CHINESE_CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`ChineseCLIPFeatureExtractor`]. See [`ChineseCLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`ChineseCLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -827,7 +826,7 @@ CHINESE_CLIP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -853,7 +852,7 @@ CHINESE_CLIP_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`ChineseCLIPFeatureExtractor`]. See [`ChineseCLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`ChineseCLIPImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -892,6 +891,13 @@ class ChineseCLIPTextEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -901,12 +907,6 @@ class ChineseCLIPTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1055,9 +1055,9 @@ class ChineseCLIPVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = ChineseCLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = ChineseCLIPVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ChineseCLIPVisionConfig)
@@ -1152,7 +1152,6 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1400,10 +1399,10 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BertTokenizer, ChineseCLIPModel
+        >>> from transformers import AutoTokenizer, ChineseCLIPModel
 
         >>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
-        >>> tokenizer = BertTokenizer.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
         >>> inputs = tokenizer(["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1449,10 +1448,10 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+        >>> from transformers import AutoProcessor, ChineseCLIPModel
 
         >>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
-        >>> processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
         >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1503,10 +1502,10 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+        >>> from transformers import AutoProcessor, ChineseCLIPModel
 
         >>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
-        >>> processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
         >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

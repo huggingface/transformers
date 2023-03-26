@@ -26,7 +26,6 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -38,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ..auto import AutoBackbone
 from .configuration_detr import DetrConfig
 
 
@@ -320,45 +320,56 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrTimmConvEncoder(nn.Module):
+class DetrConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
     """
 
-    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
+    def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(1, 2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        backbone = create_model(
-            name,
-            pretrained=use_pretrained_backbone,
-            features_only=True,
-            out_indices=(1, 2, 3, 4),
-            in_chans=num_channels,
-            **kwargs,
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in name:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -430,7 +441,7 @@ class DetrSinePositionEmbedding(nn.Module):
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * torch_int_div(dim_t, 2) / self.embedding_dim)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -856,7 +867,7 @@ DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`DetrImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1191,9 +1202,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(
-            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
-        )
+        backbone = DetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
@@ -1242,14 +1251,14 @@ class DetrModel(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrImageProcessor, DetrModel
+        >>> from transformers import AutoImageProcessor, DetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
 
         >>> # prepare image for the model
@@ -1409,7 +1418,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrImageProcessor, DetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DetrForObjectDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -1417,7 +1426,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1587,13 +1596,13 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> import torch
         >>> import numpy
 
-        >>> from transformers import DetrImageProcessor, DetrForSegmentation
+        >>> from transformers import AutoImageProcessor, DetrForSegmentation
         >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         >>> # prepare image for the model
@@ -1602,7 +1611,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # Use the `post_process_panoptic_segmentation` method of `DetrImageProcessor` to retrieve post-processed panoptic segmentation maps
+        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
         >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
 

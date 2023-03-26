@@ -22,6 +22,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 if is_flax_available():
     import jax
+
     from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForCausalLM,
         FlaxBigBirdForMaskedLM,
@@ -136,7 +137,6 @@ class FlaxBigBirdModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaxBigBirdForCausalLM,
@@ -211,7 +211,6 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # overwrite from common in order to skip the check on `attentions`

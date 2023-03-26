@@ -25,12 +25,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data, torch_int_div
+from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -42,7 +41,6 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "SEWDConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k-ft-ls100h"
@@ -53,7 +51,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTIL OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 0.21
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 3.16
@@ -568,7 +565,7 @@ class XSoftmax(torch.autograd.Function):
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
         )
         output = softmax(g, output, dim)
-        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
@@ -1134,7 +1131,6 @@ class SEWDTransformerEncoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -1309,7 +1305,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1355,10 +1351,10 @@ SEWD_START_DOCSTRING = r"""
 SEWD_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1453,7 +1449,6 @@ class SEWDModel(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1557,7 +1552,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1598,7 +1592,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1692,7 +1685,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

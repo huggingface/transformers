@@ -88,7 +88,7 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
     ```python
     >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
-    ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    ['$', '5', '@,@', '000', '1', '@.@', '73', 'm']
     ```"""
     tokenized = []
     for i in range(len(text_array)):
@@ -113,7 +113,7 @@ def detokenize_numbers(text: str) -> str:
 
     ```python
     >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
-    "$ 5,000 1.73 m"
+    '$ 5,000 1.73 m'
     ```"""
     for reg, sub in DETOKENIZE_NUMBERS:
         text = re.sub(reg, sub, text)
@@ -179,7 +179,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
         language="en",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             special=special,
@@ -643,7 +643,6 @@ class LMShuffledIterator(object):
 
 class LMMultiFileIterator(LMShuffledIterator):
     def __init__(self, paths, vocab, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
-
         self.paths = paths
         self.vocab = vocab
 

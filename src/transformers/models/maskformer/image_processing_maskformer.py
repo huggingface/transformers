@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tupl
 
 import numpy as np
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     normalize,
@@ -31,16 +31,16 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,
@@ -123,7 +123,7 @@ def binary_mask_to_rle(mask):
     pixels = np.concatenate([[0], pixels, [0]])
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     runs[1::2] -= runs[::2]
-    return [x for x in runs]
+    return list(runs)
 
 
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
@@ -373,7 +373,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
-        reduce_labels (`bool`, *optional*, defaults to `False`):
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
@@ -394,8 +394,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
-        **kwargs
+        do_reduce_labels: bool = False,
+        **kwargs,
     ):
         if "size_divisibility" in kwargs:
             warnings.warn(
@@ -415,6 +415,13 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             self._max_size = kwargs.pop("max_size")
         else:
             self._max_size = 1333
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
+                "`do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            do_reduce_labels = kwargs.pop("reduce_labels")
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
@@ -430,7 +437,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -463,6 +470,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         )
         return self.size["longest_edge"]
 
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
     def resize(
         self,
         image: np.ndarray,
@@ -470,7 +486,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         size_divisor: int = 0,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
@@ -532,6 +548,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
+        **kwargs,
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
@@ -645,16 +662,26 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: Optional[bool] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
                 FutureWarning,
             )
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use"
+                " `do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            if do_reduce_labels is not None:
+                raise ValueError(
+                    "Cannot use both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels` instead."
+                )
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -667,7 +694,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         if do_resize is not None and size is None or size_divisor is None:
             raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
@@ -690,9 +717,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
@@ -720,7 +747,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
+            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, do_reduce_labels, return_tensors
         )
         return encoded_inputs
 
@@ -793,7 +820,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -842,13 +869,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
-        ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
-
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
             )
+        ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
@@ -990,6 +1016,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
+        return_binary_maps: Optional[bool] = False,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
@@ -1008,9 +1035,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             target_sizes (`List[Tuple]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
-            return_coco_annotation (`bool`, *optional*):
-                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
-                format.
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
+                If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE) format.
+            return_binary_maps (`bool`, *optional*, defaults to `False`):
+                If set to `True`, segmentation maps are returned as a concatenated tensor of binary segmentation maps
+                (one per detected instance).
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
@@ -1021,47 +1050,73 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        if return_coco_annotation and return_binary_maps:
+            raise ValueError("return_coco_annotation and return_binary_maps can not be both set to True.")
 
-        batch_size = class_queries_logits.shape[0]
-        num_labels = class_queries_logits.shape[-1] - 1
+        # [batch_size, num_queries, num_classes+1]
+        class_queries_logits = outputs.class_queries_logits
+        # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
-
-        # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        device = masks_queries_logits.device
+        num_classes = class_queries_logits.shape[-1] - 1
+        num_queries = class_queries_logits.shape[-2]
 
         # Loop over items in batch size
         results: List[Dict[str, TensorType]] = []
 
-        for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+        for i in range(class_queries_logits.shape[0]):
+            mask_pred = masks_queries_logits[i]
+            mask_cls = class_queries_logits[i]
+
+            scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
+            labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
+
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
+            labels_per_image = labels[topk_indices]
+
+            topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
+            mask_pred = mask_pred[topk_indices]
+            pred_masks = (mask_pred > 0).float()
+
+            # Calculate average mask prob
+            mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+                pred_masks.flatten(1).sum(1) + 1e-6
             )
+            pred_scores = scores_per_image * mask_scores_per_image
+            pred_classes = labels_per_image
 
-            # No mask found
-            if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
-                segmentation = torch.zeros((height, width)) - 1
-                results.append({"segmentation": segmentation, "segments_info": []})
-                continue
+            segmentation = torch.zeros(masks_queries_logits.shape[2:]) - 1
+            if target_sizes is not None:
+                segmentation = torch.zeros(target_sizes[i]) - 1
+                pred_masks = torch.nn.functional.interpolate(
+                    pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
+                )[0]
 
-            # Get segmentation map and segment information of batch item
-            target_size = target_sizes[i] if target_sizes is not None else None
-            segmentation, segments = compute_segments(
-                mask_probs=mask_probs_item,
-                pred_scores=pred_scores_item,
-                pred_labels=pred_labels_item,
-                mask_threshold=mask_threshold,
-                overlap_mask_area_threshold=overlap_mask_area_threshold,
-                label_ids_to_fuse=[],
-                target_size=target_size,
-            )
+            instance_maps, segments = [], []
+            current_segment_id = 0
+            for j in range(num_queries):
+                score = pred_scores[j].item()
 
-            # Return segmentation map in run-length encoding (RLE) format
-            if return_coco_annotation:
-                segmentation = convert_segmentation_to_rle(segmentation)
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                    segmentation[pred_masks[j] == 1] = current_segment_id
+                    segments.append(
+                        {
+                            "id": current_segment_id,
+                            "label_id": pred_classes[j].item(),
+                            "was_fused": False,
+                            "score": round(score, 6),
+                        }
+                    )
+                    current_segment_id += 1
+                    instance_maps.append(pred_masks[j])
+                    # Return segmentation map in run-length encoding (RLE) format
+                    if return_coco_annotation:
+                        segmentation = convert_segmentation_to_rle(segmentation)
+
+            # Return a concatenated tensor of binary instance maps
+            if return_binary_maps and len(instance_maps) != 0:
+                segmentation = torch.stack(instance_maps, dim=0)
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results

@@ -20,10 +20,10 @@ A subclass of `Trainer` specific to Question-Answering tasks
 import logging
 import os
 
+import quant_trainer
 import torch
 from torch.utils.data import DataLoader
 
-import quant_trainer
 from transformers import Trainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 

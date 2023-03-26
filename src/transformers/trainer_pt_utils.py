@@ -35,6 +35,7 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
+from .deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
@@ -189,6 +190,8 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
+        if isinstance(tensor, Mapping):
+            return type(tensor)({k: distributed_concat(t, num_total_examples) for k, t in tensor.items()})
         tensor = atleast_1d(tensor).contiguous()
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensor)
@@ -532,7 +535,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     indices = torch.randperm(len(lengths), generator=generator)
     megabatch_size = mega_batch_mult * batch_size
     megabatches = [indices[i : i + megabatch_size].tolist() for i in range(0, len(lengths), megabatch_size)]
-    megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
+    megabatches = [sorted(megabatch, key=lambda i: lengths[i], reverse=True) for megabatch in megabatches]
 
     # The rest is to get the biggest batch first.
     # Since each megabatch is sorted by descending length, the longest element is the first
@@ -595,6 +598,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     Distributed Sampler that samples indices in a way that groups together features of the dataset of roughly the same
     length while keeping a bit of randomness.
     """
+
     # Copied and adapted from PyTorch DistributedSampler.
     def __init__(
         self,
@@ -1027,6 +1031,23 @@ def save_state(self):
 
     path = os.path.join(self.args.output_dir, "trainer_state.json")
     self.state.save_to_json(path)
+
+
+def get_model_param_count(model, trainable_only=False):
+    """
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads
+    """
+    if is_deepspeed_zero3_enabled():
+
+        def numel(p):
+            return p.ds_numel
+
+    else:
+
+        def numel(p):
+            return p.numel()
+
+    return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
 def get_parameter_names(model, forbidden_layer_types):

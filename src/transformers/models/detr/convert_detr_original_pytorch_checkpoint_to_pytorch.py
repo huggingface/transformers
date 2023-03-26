@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DETR checkpoints."""
+"""Convert DETR checkpoints with timm backbone."""
 
 
 import argparse
@@ -20,11 +20,11 @@ import json
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForSegmentation
 from transformers.utils import logging
 

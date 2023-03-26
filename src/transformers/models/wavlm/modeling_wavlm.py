@@ -36,7 +36,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_wavlm import WavLMConfig
 
@@ -48,7 +47,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "WavLMConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
@@ -57,12 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
 _CTC_EXPECTED_LOSS = 12.51
-
-# Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-wavlm"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'no'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
-_SEQ_CLASS_EXPECTED_LOSS = 0.7  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 # Frame class docstring
 _FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"
@@ -969,7 +961,6 @@ class WavLMAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->WavLM, wav2vec2->wavlm
 class WavLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1027,7 +1018,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1085,10 +1076,10 @@ WAVLM_START_DOCSTRING = r"""
 WAVLM_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`WavLMProcessor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`WavLMProcessor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1212,7 +1203,6 @@ class WavLMModel(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1320,7 +1310,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1361,7 +1350,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1407,7 +1395,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
     """,
     WAVLM_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
 class WavLMForSequenceClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1426,6 +1413,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
@@ -1438,6 +1426,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_encoder with wav2vec2->wavlm
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1445,6 +1434,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         """
         self.wavlm.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->wavlm
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1455,14 +1445,12 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->WavLM, wav2vec2->wavlm
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1578,7 +1566,6 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1761,7 +1748,6 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
