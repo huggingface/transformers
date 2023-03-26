@@ -308,7 +308,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 "head_mask",
                 "ids_keep",
                 "ids_restore",
-                "image",
                 "image_mask_label",
                 "input_ids",
                 "inputs_embeds",

@@ -125,13 +125,15 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     input_ids = encoding.input_ids
     seg_data = encoding.bbox.float()
-    image = encoding.image
+    pixel_values = encoding.pixel_values
 
     # single forward pass
     print("Testing single forward pass..")
     with torch.no_grad():
         decoder_input_ids = torch.tensor([[101]])
-        outputs = model(input_ids=input_ids, seg_data=seg_data, image=image, decoder_input_ids=decoder_input_ids)
+        outputs = model(
+            input_ids=input_ids, seg_data=seg_data, pixel_values=pixel_values, decoder_input_ids=decoder_input_ids
+        )
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
     assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-20.0254, 0.8438, -17.1796]]), atol=1e-4)
@@ -139,7 +141,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     # autoregressive decoding
     print("Testing generation...")
-    model_kwargs = {"seg_data": seg_data, "image": image}
+    model_kwargs = {"seg_data": seg_data, "pixel_values": pixel_values}
     outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
 
     print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))

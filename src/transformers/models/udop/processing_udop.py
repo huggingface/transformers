@@ -132,10 +132,10 @@ class UdopProcessor(ProcessorMixin):
         )
 
         # add pixel values
-        images = features.pop("pixel_values")
+        pixel_values = features.pop("pixel_values")
         if return_overflowing_tokens is True:
-            images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
-        encoded_inputs["image"] = images
+            pixel_values = self.get_overflowing_images(pixel_values, encoded_inputs["overflow_to_sample_mapping"])
+        encoded_inputs["pixel_values"] = pixel_values
 
         return encoded_inputs
 

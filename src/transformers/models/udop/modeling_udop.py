@@ -1189,7 +1189,7 @@ class UdopStack(UdopPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        image=None,
+        pixel_values=None,
         head_mask=None,
         past_key_values=None,
         ids_keep=None,
@@ -1243,8 +1243,8 @@ class UdopStack(UdopPreTrainedModel):
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if image is not None:
-            inputs_patches = self.embed_patches(image)
+        if pixel_values is not None:
+            inputs_patches = self.embed_patches(pixel_values)
             # image_embeds = None
             # if encoder_outputs is None:
             #     print("hello world")
@@ -1471,7 +1471,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_attention_mask: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
-        image: Optional[Tensor] = None,
+        pixel_values: Optional[Tensor] = None,
         ids_keep: Optional[Tensor] = None,
         ids_restore: Optional[Tensor] = None,
         image_mask_label: Optional[Tensor] = None,
@@ -1501,7 +1501,7 @@ class UdopModel(UdopPreTrainedModel):
                 input_ids=input_ids,
                 seg_data=seg_data,
                 visual_seg_data=visual_seg_data,
-                image=image,
+                pixel_values=pixel_values,
                 special_vis_token=None,  # TODO check this
                 ids_keep=ids_keep,
                 attention_mask=attention_mask,
@@ -1604,7 +1604,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         decoder_attention_mask: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
-        image: Optional[Tensor] = None,
+        pixel_values: Optional[Tensor] = None,
         ids_keep: Optional[Tensor] = None,
         ids_restore: Optional[Tensor] = None,
         image_mask_label: Optional[Tensor] = None,
@@ -1642,7 +1642,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            image=image,
+            pixel_values=pixel_values,
             ids_keep=ids_keep,
             ids_restore=ids_restore,
             image_mask_label=image_mask_label,
@@ -1720,7 +1720,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
             "seg_data": kwargs.get("seg_data", None),
-            "image": kwargs.get("image", None),
+            "pixel_values": kwargs.get("pixel_values", None),
             "visual_seg_data": kwargs.get("visual_seg_data", None),
         }
 
