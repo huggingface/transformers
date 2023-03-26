@@ -92,6 +92,10 @@ class LlamaConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
+        hidden_dropout_prob=0,
+        attention_dropout_prob=0,
+        use_stable_embedding=False,
+        shared_input_output_embedding=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -103,6 +107,10 @@ class LlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_dropout_prob = attention_dropout_prob
+        self.use_stable_embedding = use_stable_embedding
+        self.shared_input_output_embedding = shared_input_output_embedding
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
