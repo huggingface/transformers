@@ -128,8 +128,8 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos = cos[:, offset : q.shape[-2] + offset, ...]
-    sin = sin[:, offset : q.shape[-2] + offset, ...]
+    cos = cos[:, offset : q.shape[1] + offset, ...]
+    sin = sin[:, offset : q.shape[1] + offset, ...]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -198,7 +198,7 @@ class LlamaAttention(nn.Module):
         self.causal_mask = xops.LowerTriangularMask()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).contiguous()
 
     def forward(
         self,
@@ -216,10 +216,10 @@ class LlamaAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim)
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim)
 
-        kv_seq_len = key_states.shape[-1]
+        kv_seq_len = key_states.shape[1]
         offset = 0
         if past_key_value is not None:
-            offset = past_key_value[0].shape[-1]
+            offset = past_key_value[0].shape[1]
             kv_seq_len += offset
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, offset=offset)
@@ -238,7 +238,7 @@ class LlamaAttention(nn.Module):
                                                           attn_bias=self.causal_mask, p=self.dropout_prob)
         else:
             # [bsz, t, nh, hd]
-            attn_weights = torch.einsum('bxnh,bynh->bnxy', query_states, key_states) / math.sqrt(self.head_dim)
+            attn_weights = torch.einsum('bqnh,bknh->bnqk', query_states, key_states) / math.sqrt(self.head_dim)
 
             if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
                 raise ValueError(
@@ -256,17 +256,17 @@ class LlamaAttention(nn.Module):
 
             # upcast attention to fp32
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_output = torch.matmul(attn_weights, value_states)
+            attn_output = torch.einsum('bnqk,bknh->bqnh', attn_weights, value_states)
 
-            if attn_output.size() != (bsz, q_len, self.num_heads, self.head_dim):
-                raise ValueError(
-                    f"`attn_output` should be of size {(bsz, q_len, self.num_heads, self.head_dim)}, but is"
-                    f" {attn_output.size()}"
-                )
+        if attn_output.size() != (bsz, q_len, self.num_heads, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, q_len, self.num_heads, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
 
-            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
-            attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -802,7 +802,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.shared_input_output_embedding:
-            logits = torch.enisum('blh,vh->blv', hidden_states, self.model.embed_tokens.weight)
+            logits = torch.einsum('blh,vh->blv', hidden_states, self.model.embed_tokens.weight)
         else:
             logits = self.lm_head(hidden_states)
 
