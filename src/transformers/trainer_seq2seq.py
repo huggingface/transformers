@@ -111,6 +111,11 @@ class Seq2SeqTrainer(Trainer):
         """
 
         self._gen_kwargs = gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -156,6 +161,11 @@ class Seq2SeqTrainer(Trainer):
         """
 
         self._gen_kwargs = gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def prediction_step(
