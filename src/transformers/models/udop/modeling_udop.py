@@ -132,8 +132,8 @@ def pad_sequence(seq, target_len, pad_value=0):
     return seq[:target_len]
 
 
-def collate_vlembed(
-    inputs_patches,
+def combine_image_text_embeddings(
+    image_embeddings,
     inputs_embeds,
     bbox,
     visual_segdata,
@@ -143,7 +143,7 @@ def collate_vlembed(
     max_len=0,
     image_size=224,
 ):
-    print("Shape of inputs_patches:", inputs_patches.shape)
+    print("Shape of image_embeddings:", image_embeddings.shape)
     print("Shape of inputs_embeds:", inputs_embeds.shape)
     print("Shape of bbox:", bbox.shape)
 
@@ -153,12 +153,12 @@ def collate_vlembed(
     ocr_points = ocr_points_x + ocr_points_y
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
-        inputs_patches, 1, ocr_points.unsqueeze(-1).repeat(1, 1, inputs_patches.size(-1))
+        image_embeddings, 1, ocr_points.unsqueeze(-1).repeat(1, 1, image_embeddings.size(-1))
     )
     repeated_vision_embeds[target_seg] = 0.0
     inputs_embeds += repeated_vision_embeds
 
-    patch_inds = torch.full_like(inputs_patches[:, :, 0], True).bool()
+    patch_inds = torch.full_like(image_embeddings[:, :, 0], True).bool()
     ind = torch.cat(
         [
             torch.arange(len(ocr_points))[:, None].repeat(1, ocr_points.size(-1))[:, :, None].to(ocr_points),
@@ -169,22 +169,22 @@ def collate_vlembed(
     rows, cols = zip(*ind)
     patch_inds[rows, cols] = False
 
-    input_vision_patches = [inputs_patches[i][patch_inds[i]] for i in range(len(patch_inds))]
+    input_vision_patches = [image_embeddings[i][patch_inds[i]] for i in range(len(patch_inds))]
 
     if visual_segdata is None:
-        visual_segdata = get_visual_bbox(image_size=image_size).unsqueeze(0).repeat(inputs_patches.size(0), 1, 1)
-        visual_segdata = visual_segdata.to(inputs_patches.device)
+        visual_segdata = get_visual_bbox(image_size=image_size).unsqueeze(0).repeat(image_embeddings.size(0), 1, 1)
+        visual_segdata = visual_segdata.to(image_embeddings.device)
 
     visual_segdata = [visual_segdata[i][patch_inds[i]] for i in range(len(patch_inds))]
     if attention_mask is not None:
         visual_attention_mask = [torch.tensor([1] * len(item)).to(attention_mask) for item in visual_segdata]
 
     if max_len == 0:
-        max_len = inputs_patches.size(1)
+        max_len = image_embeddings.size(1)
     else:
         max_len = max_len - inputs_embeds.size(1)
     inputs_vision_patches = torch.stack(
-        [pad_sequence(item, max_len, torch.zeros_like(inputs_patches[0, 0])) for item in input_vision_patches]
+        [pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches]
     )
     visual_segdata = torch.stack(
         [pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_segdata]
@@ -1193,7 +1193,7 @@ class UdopStack(UdopPreTrainedModel):
         return_dict=None,
         cross_attn_head_mask=None,
         position_bias=None,  # modified line,
-        inputs_patches=None,  # modified line,
+        image_embeddings=None,  # modified line,
         bbox=None,  # modified line,
         visual_bbox=None,  # modified line,
         num_patches=None,  # modified line,
@@ -1238,8 +1238,8 @@ class UdopStack(UdopPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            inputs_patches = self.embed_patches(pixel_values)
-            # image_embeds = None
+            image_embeddings = self.embed_patches(pixel_values)
+            # image_embeddings = None
             # if encoder_outputs is None:
             #     print("hello world")
             #     if image is not None:
@@ -1251,17 +1251,17 @@ class UdopStack(UdopPreTrainedModel):
             #             x_padded = torch.gather(
             #                 x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2])
             #             )
-            #             image_embeds = x_padded
+            #             image_embeddings = x_padded
             #         else:
-            #             image_embeds = x
+            #             image_embeddings = x
 
-        if inputs_patches is not None:
+        if image_embeddings is not None:
             # ===========================
             # combine OCR text and visual embed
             if num_patches is None:
                 num_patches = self.config.image_size // self.config.patch_size
-            inputs_embeds, bbox, attention_mask = collate_vlembed(
-                inputs_patches,
+            inputs_embeds, bbox, attention_mask = combine_image_text_embeddings(
+                image_embeddings,
                 inputs_embeds,
                 bbox,
                 visual_bbox,
@@ -1565,6 +1565,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         self.udop = UdopModel(config)
 
+        # The weights of the language modeling head are actually shared with those of the encoder and decoder of UdopModel
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
