@@ -245,7 +245,7 @@ class Seq2SeqTrainer(Trainer):
             labels = inputs["labels"]
             if labels.shape[-1] < gen_config.max_length:
                 labels = self._pad_tensors_to_max_len(labels, gen_config.max_length)
-            elif labels.shape[-1] < gen_config.max_new_tokens + 1:
+            elif gen_config.max_new_tokens is not None and labels.shape[-1] < gen_config.max_new_tokens + 1:
                 labels = self._pad_tensors_to_max_len(labels, gen_config.max_new_tokens + 1)
         else:
             labels = None
