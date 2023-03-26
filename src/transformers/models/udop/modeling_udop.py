@@ -1403,6 +1403,14 @@ class UdopStack(UdopPreTrainedModel):
 
 
 class UdopModel(UdopPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_patches.proj.weight",
+        "encoder.embed_patches.proj.bias",
+        "decoder.embed_tokens.weight",
+    ]
     """ """
 
     def __init__(self, config):
@@ -1548,6 +1556,16 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     """
     Copied from original T5ForConditionalGeneration class with signature extended with 2D data.
     """
+
+    _keys_to_ignore_on_load_missing = [
+        r"lm_head.weight",
+        "udop.decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "udop.encoder.embed_tokens.weight",
+        "udop.encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "udop.encoder.embed_patches.proj.weight",
+        "udop.encoder.embed_patches.proj.bias",
+        "udop.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config):
         super(UdopForConditionalGeneration, self).__init__(config)
