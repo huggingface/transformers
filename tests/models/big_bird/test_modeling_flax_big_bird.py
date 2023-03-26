@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import BigBirdConfig, is_flax_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
