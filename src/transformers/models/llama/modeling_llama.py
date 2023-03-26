@@ -31,7 +31,11 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
-from xformers import ops as xops
+try:
+    from xformers import ops as xops
+except:
+    xops = None
+    print('xformers is not installed correctly.')
 
 
 logger = logging.get_logger(__name__)
@@ -195,7 +199,8 @@ class LlamaAttention(nn.Module):
             bias=False,
         )
         self.rotary_emb = LlamaRotaryEmbedding(self.head_dim)
-        self.causal_mask = xops.LowerTriangularMask()
+        if xops is not None:
+            self.causal_mask = xops.LowerTriangularMask()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).contiguous()
@@ -232,7 +237,7 @@ class LlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if self.training:
+        if xops is not None and self.training:
             attn_weights = None
             attn_output = xops.memory_efficient_attention(query_states, key_states, value_states, 
                                                           attn_bias=self.causal_mask, p=self.dropout_prob)
@@ -589,7 +594,7 @@ class LlamaModel(LlamaPreTrainedModel):
             if self.embed_layer_norm:
                 inputs_embeds = self.embed_layer_norm(inputs_embeds)
         # embed positions
-        if self.training:
+        if xops is not None and self.training:
             attention_mask = None
         else:
             if attention_mask is None:
