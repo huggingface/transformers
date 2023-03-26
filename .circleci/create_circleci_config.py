@@ -182,7 +182,7 @@ torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
         "git lfs install",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
