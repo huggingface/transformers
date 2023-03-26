@@ -474,7 +474,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if past_key_values is None:
             past_length = 0
@@ -483,6 +482,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
         else:
