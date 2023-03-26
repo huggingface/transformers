@@ -37,6 +37,7 @@ from transformers.modeling_outputs import (
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,100 @@ UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+_CONFIG_FOR_DOC = "UdopConfig"
+
+
+UDOP_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+    
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Args:
+        config ([`UdopConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+UDOP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
+            you should be able to pad the inputs on both the right and the left. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+            [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
+            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
+            `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
+            1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+                `[0, 1]`:
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
+            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix. If
+            `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value of
+            `inputs_embeds`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 @dataclass
 class BaseModelOutputWithAttentionMask(BaseModelOutput):
     """
-    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Class for the model's outputs that may also contain a past key/values (to speed up sequential decoding). Includes
+    an additional attention mask.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -144,8 +235,13 @@ def combine_image_text_embeddings(
     patch_size=16,
 ):
     sequence_length = num_patches
-    ocr_points_x = torch.clip(torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * sequence_length).long(), 0, sequence_length - 1)
-    ocr_points_y = torch.clip(torch.floor((bbox[:, :, 1] + bbox[:, :, 3]) / 2.0 * sequence_length).long(), 0, sequence_length - 1) * sequence_length
+    ocr_points_x = torch.clip(
+        torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * sequence_length).long(), 0, sequence_length - 1
+    )
+    ocr_points_y = (
+        torch.clip(torch.floor((bbox[:, :, 1] + bbox[:, :, 3]) / 2.0 * sequence_length).long(), 0, sequence_length - 1)
+        * sequence_length
+    )
     ocr_points = ocr_points_x + ocr_points_y
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
@@ -183,9 +279,7 @@ def combine_image_text_embeddings(
     inputs_vision_patches = torch.stack(
         [pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches]
     )
-    visual_bbox = torch.stack(
-        [pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_bbox]
-    )
+    visual_bbox = torch.stack([pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_bbox])
     if attention_mask is not None:
         visual_attention_mask = torch.stack(
             [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
@@ -231,11 +325,10 @@ class UdopPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Based on T5PreTrainedModel
 class UdopPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+    models. Based on `T5PreTrainedModel`.
     """
 
     config_class = UdopConfig
@@ -1015,27 +1108,6 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         return relative_position
 
 
-def expand_feature(token_map, feature, special_tokens_value=0):
-    token_map = token_map.clone()
-    # add values for special tokens
-    feature_all = torch.cat([feature, torch.full_like(feature[:, 0:1], fill_value=special_tokens_value)], dim=1)
-    if feature.dim() == 3:
-        bs, seg_len, features_dim = feature.shape
-        token_map[token_map == -1] = seg_len
-        expand_index = token_map[:, :, None].expand(-1, -1, features_dim).to(torch.long)
-
-    elif feature.dim() == 2:
-        bs, seg_len = feature.shape
-        token_map[token_map == -1] = seg_len
-        expand_index = token_map.to(torch.long)
-    else:
-        raise AttributeError("Wrong dimension of input feature tensor")
-
-    expanded_feature = torch.gather(feature_all, 1, expand_index)
-
-    return expanded_feature
-
-
 class RelativePositionBiasHorizontal(RelativePositionBiasBase):
     def __init__(self, scaling_factor=100, max_distance=100, **kwargs):
         """
@@ -1125,9 +1197,8 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
 
 class UdopStack(UdopPreTrainedModel):
     """
-    This class is based on `T5Stack` with the following modifications:
-    - support image embeddings
-    - passing `position_bias` in the forward method
+    This class is based on `T5Stack`, but modified to take into account the image modality as well as 2D position
+    embeddings.
     """
 
     def __init__(self, config, embed_tokens=None, embed_patches=None):
@@ -1392,6 +1463,10 @@ class UdopStack(UdopPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The bare UDOP encoder-decoder Transformer outputting raw hidden-states without any specific head on top.",
+    UDOP_START_DOCSTRING,
+)
 class UdopModel(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
@@ -1425,21 +1500,6 @@ class UdopModel(UdopPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        # --------------------------------------------------------------------------
-        # MAE encoder specifics
-
-        # mae_model_tmp = mae_model(
-        #     config.mae_version,
-        #     config.mae_checkpoint,
-        #     config.image_size,
-        #     config.vocab_size,
-        #     config.max_2d_position_embeddings,
-        # )
-
-        # self.embed_dim = mae_model_tmp.embed_dim
-        # self.pos_embed = mae_model_tmp.pos_embed
-        # self.special_vis_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-
     def get_input_embeddings(self):
         return self.shared
 
@@ -1454,6 +1514,8 @@ class UdopModel(UdopPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @add_start_docstrings_to_model_forward(UDOP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Tensor = None,
@@ -1483,6 +1545,35 @@ class UdopModel(UdopPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, UdopModel
+        >>> from huggingface_hub import hf_hub_download
+        >>> from PIL import Image
+        >>> import torch
+
+        >>> tokenizer = AutoProcessor.from_pretrained("microsoft/udop-large")
+        >>> model = UdopModel.from_pretrained("microsoft/udop-large")
+
+        >>> # load document image
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
+
+        >>> # prepare for the model
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]])
+
+        >>> # forward pass
+        >>> outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1539,11 +1630,14 @@ class UdopModel(UdopPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """The UDOP encoder-decoder Transformer with a language modeling head on top, enabling to generate text given document
+    images and an optional prompt.
+    
+    This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
+    UDOP_START_DOCSTRING,
+)
 class UdopForConditionalGeneration(UdopPreTrainedModel):
-    """
-    Copied from original T5ForConditionalGeneration class with signature extended with 2D data.
-    """
-
     _keys_to_ignore_on_load_missing = [
         r"lm_head.weight",
         "udop.decoder.relative_bias.biases.0.relative_attention_bias.weight",
@@ -1559,7 +1653,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         self.udop = UdopModel(config)
 
-        # The weights of the language modeling head are actually shared with those of the encoder and decoder of UdopModel
+        # The weights of the language modeling head are shared with those of the encoder and decoder of UdopModel
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1585,6 +1679,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     def get_decoder(self):
         return self.udop.decoder
 
+    @add_start_docstrings_to_model_forward(UDOP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Tensor = None,
@@ -1615,6 +1711,38 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
+            1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, UdopForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large")
+        >>> model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large")
+
+        >>> # training
+        >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
+        >>> labels = processor("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
+        >>> outputs = model(input_ids=input_ids, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+
+        >>> # inference
+        >>> input_ids = tokenizer(
+        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
+        ... ).input_ids  # Batch size 1
+        >>> outputs = model.generate(input_ids)
+        >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
+        >>> # studies have shown that owning a dog is good for you.
+        ```"""
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
