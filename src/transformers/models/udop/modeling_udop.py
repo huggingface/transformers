@@ -89,8 +89,8 @@ class BaseModelOutputWithAttentionMask(BaseModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def get_visual_bbox(image_size=224):
-    image_feature_pool_shape = [image_size // 16, image_size // 16]
+def get_visual_bbox(image_size=224, patch_size=16):
+    image_feature_pool_shape = [image_size // patch_size, image_size // patch_size]
     visual_bbox_x = (
         torch.arange(
             0,
@@ -136,19 +136,16 @@ def combine_image_text_embeddings(
     image_embeddings,
     inputs_embeds,
     bbox,
-    visual_segdata,
+    visual_bbox,
     attention_mask=None,
     num_patches=14,
     max_len=0,
     image_size=224,
+    patch_size=16,
 ):
-    print("Shape of image_embeddings:", image_embeddings.shape)
-    print("Shape of inputs_embeds:", inputs_embeds.shape)
-    print("Shape of bbox:", bbox.shape)
-
-    L = num_patches
-    ocr_points_x = torch.clip(torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
-    ocr_points_y = torch.clip(torch.floor((bbox[:, :, 1] + bbox[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
+    sequence_length = num_patches
+    ocr_points_x = torch.clip(torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * sequence_length).long(), 0, sequence_length - 1)
+    ocr_points_y = torch.clip(torch.floor((bbox[:, :, 1] + bbox[:, :, 3]) / 2.0 * sequence_length).long(), 0, sequence_length - 1) * sequence_length
     ocr_points = ocr_points_x + ocr_points_y
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
@@ -170,13 +167,14 @@ def combine_image_text_embeddings(
 
     input_vision_patches = [image_embeddings[i][patch_inds[i]] for i in range(len(patch_inds))]
 
-    if visual_segdata is None:
-        visual_segdata = get_visual_bbox(image_size=image_size).unsqueeze(0).repeat(image_embeddings.size(0), 1, 1)
-        visual_segdata = visual_segdata.to(image_embeddings.device)
+    if visual_bbox is None:
+        visual_bbox = get_visual_bbox(image_size=image_size, patch_size=patch_size)
+        visual_bbox = visual_bbox.unsqueeze(0).repeat(image_embeddings.size(0), 1, 1)
+        visual_bbox = visual_bbox.to(image_embeddings.device)
 
-    visual_segdata = [visual_segdata[i][patch_inds[i]] for i in range(len(patch_inds))]
+    visual_bbox = [visual_bbox[i][patch_inds[i]] for i in range(len(patch_inds))]
     if attention_mask is not None:
-        visual_attention_mask = [torch.tensor([1] * len(item)).to(attention_mask) for item in visual_segdata]
+        visual_attention_mask = [torch.tensor([1] * len(item)).to(attention_mask) for item in visual_bbox]
 
     if max_len == 0:
         max_len = image_embeddings.size(1)
@@ -185,8 +183,8 @@ def combine_image_text_embeddings(
     inputs_vision_patches = torch.stack(
         [pad_sequence(item, max_len, torch.zeros_like(image_embeddings[0, 0])) for item in input_vision_patches]
     )
-    visual_segdata = torch.stack(
-        [pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_segdata]
+    visual_bbox = torch.stack(
+        [pad_sequence(item, max_len, torch.zeros_like(bbox[0, 0])) for item in visual_bbox]
     )
     if attention_mask is not None:
         visual_attention_mask = torch.stack(
@@ -197,7 +195,7 @@ def combine_image_text_embeddings(
     #     inputs_vision_patches += vis_special_token
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
-    bbox = torch.cat([bbox, visual_segdata], 1)
+    bbox = torch.cat([bbox, visual_bbox], 1)
     if attention_mask is not None:
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
     return inputs_embeds, bbox, attention_mask
@@ -1268,6 +1266,7 @@ class UdopStack(UdopPreTrainedModel):
                 num_patches,
                 0,
                 self.config.image_size,
+                self.config.patch_size,
             )
             input_shape = inputs_embeds.size()[:-1]
 
@@ -1523,11 +1522,9 @@ class UdopModel(UdopPreTrainedModel):
         )
 
         if not return_dict:
-            print("Number of encoder outputs:", len(encoder_outputs))
             # we filter out the attention mask
             decoder_outputs = tuple(value for idx, value in enumerate(decoder_outputs) if idx != 1)
             encoder_outputs = tuple(value for idx, value in enumerate(encoder_outputs) if idx != 1)
-            print("Number of filtered encoder outputs:", len(encoder_outputs))
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
