@@ -238,6 +238,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->BigBird
 class FlaxBigBirdSelfAttention(nn.Module):
     config: BigBirdConfig
     causal: bool = False
@@ -971,7 +972,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
-            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations
+            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
             if positive then num_rand_blocks blocks chosen only up to last_idx.
 
@@ -997,31 +998,31 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             start = i - 2
             end = i
             if i == 1:
-                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[2:last])[:r])
+                seq_values = jax.random.permutation(indices_prng_key, middle_seq[2:last])[:r]
+                rand_attn = rand_attn.at[i - 1].set(seq_values)
             elif i == 2:
-                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[3:last])[:r])
+                seq_values = jax.random.permutation(indices_prng_key, middle_seq[3:last])[:r]
+                rand_attn = rand_attn.at[i - 1].set(seq_values)
             elif i == from_seq_length // from_block_size - 3:
-                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[:last])[:r])
+                seq_values = jax.random.permutation(indices_prng_key, middle_seq[:last])[:r]
+                rand_attn = rand_attn.at[i - 1].set(seq_values)
             # Missing -3: should have been sliced till last-3
             elif i == from_seq_length // from_block_size - 2:
-                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[:last])[:r])
+                seq_values = jax.random.permutation(indices_prng_key, middle_seq[:last])[:r]
+                rand_attn = rand_attn.at[i - 1].set(seq_values)
             # Missing -4: should have been sliced till last-4
             else:
                 if start > last:
                     start = last
-                    rand_attn = rand_attn.at[i - 1].set(
-                        jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
-                    )
+                    seq_values = jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
+                    rand_attn = rand_attn.at[i - 1].set(seq_values)
                 elif (end + 1) == last:
-                    rand_attn = rand_attn.at[i - 1].set(
-                        jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
-                    )
+                    seq_values = jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
+                    rand_attn = rand_attn.at[i - 1].set(seq_values)
                 else:
-                    rand_attn = rand_attn.at[i - 1].set(
-                        jax.random.permutation(
-                            indices_prng_key, jnp.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
-                        )[:r]
-                    )
+                    concat_values = jnp.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    seq_values = jax.random.permutation(indices_prng_key, concat_values)[:r]
+                    rand_attn = rand_attn.at[i - 1].set(seq_values)
         return rand_attn
 
     def _bigbird_block_rand_mask_with_head(
@@ -1052,7 +1053,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             num_heads: int. total number of heads.
             plan_from_length: list. plan from length where num_random_blocks are choosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
-            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations
+            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
             global_block_top: int. number of blocks at the top.
@@ -1087,7 +1088,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
         # deterministic
         if indices_prng_key is None:
-
             for nh in range(num_heads):
                 rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
             return rand_attn
@@ -1369,6 +1369,7 @@ class FlaxBigBirdLayer(nn.Module):
         if self.config.add_cross_attention:
             self.crossattention = FlaxBigBirdAttention(self.config, causal=False, dtype=self.dtype)
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
@@ -1845,9 +1846,6 @@ class FlaxBigBirdModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        import pdb
-
-        pdb.set_trace()
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
