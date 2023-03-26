@@ -137,7 +137,6 @@ def combine_image_text_embeddings(
     inputs_embeds,
     bbox,
     visual_segdata,
-    vis_special_token=None,
     attention_mask=None,
     num_patches=14,
     max_len=0,
@@ -194,8 +193,8 @@ def combine_image_text_embeddings(
             [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
         )
 
-    if vis_special_token is not None:
-        inputs_vision_patches += vis_special_token
+    # if vis_special_token is not None:
+    #     inputs_vision_patches += vis_special_token
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
     bbox = torch.cat([bbox, visual_segdata], 1)
@@ -1265,7 +1264,6 @@ class UdopStack(UdopPreTrainedModel):
                 inputs_embeds,
                 bbox,
                 visual_bbox,
-                special_vis_token,
                 attention_mask,
                 num_patches,
                 0,
@@ -1496,7 +1494,6 @@ class UdopModel(UdopPreTrainedModel):
                 bbox=bbox,
                 visual_bbox=visual_bbox,
                 pixel_values=pixel_values,
-                special_vis_token=None,  # TODO check this
                 ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
