@@ -220,7 +220,7 @@ class FlaxRegNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = FlaxRegNetForImageClassification.from_pretrained("Shubhamai/regnet-y-040")
+        model = FlaxRegNetForImageClassification.from_pretrained("facebook/regnet-y-040")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
