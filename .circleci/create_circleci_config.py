@@ -319,6 +319,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -r examples/tensorflow/_tests_requirements.txt",
@@ -356,6 +357,7 @@ hub_job = CircleCIJob(
 onnx_job = CircleCIJob(
     "onnx",
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
