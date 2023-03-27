@@ -60,14 +60,10 @@ _has_neptune = (
 if TYPE_CHECKING and _has_neptune:
     try:
         _neptune_version = importlib_metadata.version("neptune")
-        from neptune import Run
-
         logger.info(f"Neptune version {_neptune_version} available.")
     except importlib_metadata.PackageNotFoundError:
         try:
             _neptune_version = importlib_metadata.version("neptune-client")
-            from neptune.new import Run
-
             logger.info(f"Neptune-client version {_neptune_version} available.")
         except importlib_metadata.PackageNotFoundError:
             _has_neptune = False
@@ -1170,7 +1166,7 @@ class NeptuneCallback(TrainerCallback):
         project: Optional[str] = None,
         name: Optional[str] = None,
         base_namespace: str = "finetuning",
-        run: Optional["Run"] = None,
+        run: Optional = None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
         **neptune_run_kwargs,
@@ -1183,18 +1179,10 @@ class NeptuneCallback(TrainerCallback):
 
         try:
             from neptune import Run
-
-            try:
-                from neptune.integrations.utils import verify_type
-            except ImportError:
-                from neptune.internal.utils import verify_type
+            from neptune.internal.utils import verify_type
         except ImportError:
             from neptune.new.metadata_containers.run import Run
-
-            try:
-                from neptune.new.integrations.utils import verify_type
-            except ImportError:
-                from neptune.new.internal.utils import verify_type
+            from neptune.new.internal.utils import verify_type
 
         verify_type("api_token", api_token, (str, type(None)))
         verify_type("project", project, (str, type(None)))
