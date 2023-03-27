@@ -237,6 +237,7 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path):
     tokenizer = LlamaTokenizer(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
