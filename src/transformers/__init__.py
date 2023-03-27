@@ -387,6 +387,7 @@ _import_structure = {
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
+    "models.nllb_moe": ["NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "NllbMoeConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -2057,6 +2058,16 @@ else:
             "NezhaForTokenClassification",
             "NezhaModel",
             "NezhaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nllb_moe"].extend(
+        [
+            "NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NllbMoeForConditionalGeneration",
+            "NllbMoeModel",
+            "NllbMoePreTrainedModel",
+            "NllbMoeSparseMLP",
+            "NllbMoeTop2Router",
         ]
     )
     _import_structure["models.nystromformer"].extend(
@@ -4049,6 +4060,7 @@ if TYPE_CHECKING:
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
+    from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
@@ -5447,6 +5459,14 @@ if TYPE_CHECKING:
             NezhaForTokenClassification,
             NezhaModel,
             NezhaPreTrainedModel,
+        )
+        from .models.nllb_moe import (
+            NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NllbMoeForConditionalGeneration,
+            NllbMoeModel,
+            NllbMoePreTrainedModel,
+            NllbMoeSparseMLP,
+            NllbMoeTop2Router,
         )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
