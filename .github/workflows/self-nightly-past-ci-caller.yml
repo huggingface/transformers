@@ -1,4 +1,4 @@
-name: Self-hosted runner (past-ci-caller)
+name: Self-hosted runner (nightly-past-ci-caller)
 
 on:
   push:

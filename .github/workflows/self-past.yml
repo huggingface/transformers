@@ -1,4 +1,4 @@
-name: Self-hosted runner (past)
+name: Self-hosted runner (past-ci)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
