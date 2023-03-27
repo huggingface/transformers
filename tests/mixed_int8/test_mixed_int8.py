@@ -251,6 +251,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname)
 
+            # check that the file `quantization_config.json` is present
+            self.assertTrue(os.path.exists(os.path.join(tmpdirname, "quantization_config.json")))
+
             model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
@@ -272,6 +275,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname, max_shard_size="200MB")
+
+            # check that the file `quantization_config.json` is present
+            self.assertTrue(os.path.exists(os.path.join(tmpdirname, "quantization_config.json")))
 
             model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
