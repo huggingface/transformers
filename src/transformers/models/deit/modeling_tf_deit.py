@@ -665,11 +665,7 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
-        r"""
-        bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
+    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         outputs = self.deit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,

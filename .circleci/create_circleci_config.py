@@ -224,7 +224,7 @@ torch_job = CircleCIJob(
 tf_job = CircleCIJob(
     "tf",
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
@@ -263,6 +263,7 @@ pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install tensorflow_probability",
