@@ -96,6 +96,7 @@ class NllbMoeModelTester:
         self.num_experts = num_experts
 
     def prepare_nllb_moe_inputs_dict(
+        self,
         config,
         input_ids,
         decoder_input_ids,
@@ -110,14 +111,12 @@ class NllbMoeModelTester:
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         if head_mask is None:
-            head_mask = ids_tensor([config.encoder_layers, config.encoder_attention_heads]).to(device=torch_device)
+            head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
         if decoder_head_mask is None:
-            decoder_head_mask = ids_tensor([config.decoder_layers, config.decoder_attention_heads]).to(
-                device=torch_device
-            )
+            decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
         if cross_attn_head_mask is None:
-            cross_attn_head_mask = ids_tensor([config.decoder_layers, config.decoder_attention_heads]).to(
-                device=torch_device
+            cross_attn_head_mask = torch.ones(
+                config.decoder_layers, config.decoder_attention_heads, device=torch_device
             )
         return {
             "input_ids": input_ids,
@@ -335,16 +334,21 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_tokenizers
 @slow
 class NllbMoeModelIntegrationTests(unittest.TestCase):
-    model_inputs = {
-        "input_ids": torch.LongTensor(
-            [
-                [28768, 248, 6399, 9, 65972, 452, 1925, 629, 123543, 248075, 2, 256047],
-                [117, 7027, 7195, 202, 44778, 248075, 2, 256047, 1, 1, 1, 1],
-            ]
-        ),
-        "attention_mask": torch.Tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]),
-        "decoder_input_ids": torch.LongTensor([[2, 256057], [2, 256057]]),
-    }
+    @require_torch
+    @cached_property
+    def model_inputs(self):
+        return {
+            "input_ids": torch.LongTensor(
+                [
+                    [28768, 248, 6399, 9, 65972, 452, 1925, 629, 123543, 248075, 2, 256047],
+                    [117, 7027, 7195, 202, 44778, 248075, 2, 256047, 1, 1, 1, 1],
+                ]
+            ),
+            "attention_mask": torch.Tensor(
+                [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]
+            ),
+            "decoder_input_ids": torch.LongTensor([[2, 256057], [2, 256057]]),
+        }
 
     @cached_property
     def tokenizer(self):
