@@ -1447,7 +1447,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         if labels is None and decoder_input_ids is None:
             raise ValueError(
                 "Either `decoder_input_ids` or `labels` should be passed when calling `forward` with"
-                " `BlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
+                " `TFBlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
                 " are using the model for inference make sure that `decoder_input_ids` is passed or call `generate`"
             )
 
