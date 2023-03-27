@@ -627,6 +627,10 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip(reason="Pix2Struct doesn't use tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
