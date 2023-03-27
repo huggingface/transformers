@@ -1644,7 +1644,12 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         self.decoder.set_output_embeddings(new_embeddings)
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
-        return self.decoder.resize_token_embeddings(new_num_tokens)
+        model_embeds = self.decoder.resize_token_embeddings(new_num_tokens)
+
+        # update vocab size
+        self.config.text_config.vocab_size = new_num_tokens
+
+        return model_embeds
 
     def get_decoder(self):
         return self.decoder

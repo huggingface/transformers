@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Pix2Struct model. """
 
-
+import copy
 import inspect
 import os
 import tempfile
@@ -525,6 +525,56 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.text_config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
