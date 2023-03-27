@@ -113,7 +113,7 @@ class TFBlipVisionModelTester:
 
     def create_and_check_model(self, config, pixel_values):
         model = TFBlipVisionModel(config=config)
-        result = model(pixel_values, training=False)
+        result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
