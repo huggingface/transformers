@@ -47,6 +47,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "NllbMoeConfig"
 _CHECKPOINT_FOR_DOC = "hf-internal-testing/dummy-nllb-moe-2-experts"
+_REAL_CHECKPOINT_FOR_DOC = "facebook/nllb-moe-54b"
+
 
 ####################################################
 # This dict contains ids and associated url
@@ -1529,6 +1531,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @add_start_docstrings_to_model_forward(NLLB_MOE_INPUTS_DOCSTRING)
     @add_start_docstrings_to_model_forward(NLLB_MOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqMoEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
