@@ -1030,7 +1030,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         Overrides *generate* function to be able to use the model as a conditional generator
 
         Parameters:
-            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, num_channels, image_height, image_width)*:
                 Input image to be processed
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 The sequence used as a prompt for the generation.
@@ -1257,7 +1257,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         Parameters:
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*):
                 The sequence used as a prompt for the generation.
-            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, num_channels, image_height, image_width)*:
                 Input image to be processed
             attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`. `1` for
