@@ -48,6 +48,7 @@ from .pytorch_utils import (  # noqa: F401
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
+    QUANTIZATION_CONFIG_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -433,6 +434,37 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
                 f"at '{checkpoint_file}'. "
                 "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
             )
+
+
+def load_bnb_config(pretrained_model_name_or_path: str, **cache_kwargs):
+    r"""
+    Tried to load the `BitsAndBytesConfig` from a pretrained model.
+
+    Args:
+        pretrained_model_name_or_path (`str`):
+            The path to the pretrained model or the name of the pretrained model.
+    """
+    bnb_config = None
+
+    if pretrained_model_name_or_path is not None:
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.exists(os.path.join(pretrained_model_name_or_path, QUANTIZATION_CONFIG_NAME))
+
+        if is_local:
+            config_file = os.path.join(pretrained_model_name_or_path, QUANTIZATION_CONFIG_NAME)
+        else:
+            config_file = cached_file(
+                pretrained_model_name_or_path,
+                QUANTIZATION_CONFIG_NAME,
+                **cache_kwargs,
+            )
+
+    if config_file is not None:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            bnb_config = BitsAndBytesConfig(**config)
+
+    return bnb_config
 
 
 def set_initialized_submodules(model, state_dict_keys):
@@ -1712,6 +1744,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
 
+            if self.is_loaded_in_8bit:
+                model_to_save.quantization_config.save_pretrained(save_directory)
+
         # Save the model
         if state_dict is None:
             state_dict = model_to_save.state_dict()
@@ -2092,6 +2127,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+
+        if is_bitsandbytes_available():
+            # TODO: uncomment this after the next release of bitsandbytes
+            # can_serialize_bnb = version.parse(
+            #     importlib_metadata.version("bitsandbytes")
+            # ) >= version.parse("0.37.2")
+            can_serialize_bnb = True
+
+            bnb_cached_file_kwargs = {
+                "cache_dir": cache_dir,
+                "force_download": force_download,
+                "proxies": proxies,
+                "resume_download": resume_download,
+                "local_files_only": local_files_only,
+                "use_auth_token": use_auth_token,
+                "revision": revision,
+                "subfolder": subfolder,
+                "_raise_exceptions_for_missing_entries": False,
+                "_commit_hash": commit_hash,
+            }
+
+            if quantization_config is None:
+                quantization_config = load_bnb_config(pretrained_model_name_or_path, **bnb_cached_file_kwargs)
+
+                if quantization_config is not None:
+                    if device_map is None:
+                        device_map = "auto"
+
+            if quantization_config is not None and not can_serialize_bnb:
+                logger.warning(
+                    "You are trying to load a quantized model but your version of bitsandbytes is too old. Please "
+                    "upgrade to bitsandbytes>=0.37.2 to load quantized models from the Hub."
+                )
 
         if trust_remote_code is True:
             logger.warning(
@@ -2548,6 +2616,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._is_int8_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
+
+            model.quantization_config = quantization_config
 
         if isinstance(device_map, str):
             special_dtypes = {}

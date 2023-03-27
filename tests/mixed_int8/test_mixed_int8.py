@@ -286,6 +286,25 @@ class MixedInt8Test(BaseMixedInt8Test):
                 self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
             )
 
+    def test_int8_from_pretrained(self):
+        r"""
+        Test whether loading a 8bit model from the Hub works as expected
+        """
+        from bitsandbytes.nn import Int8Params
+
+        model_id = "ybelkada/bloom-560m-8bit"
+
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+
+        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+
+        # generate
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
 
 @require_bitsandbytes
 @require_accelerate
