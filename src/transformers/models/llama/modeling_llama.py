@@ -358,7 +358,7 @@ LLAMA_START_DOCSTRING = r"""
 )
 class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
-    base_model_prefix = "llama"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
@@ -629,7 +629,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.llama = LlamaModel(config)
+        self.model = LlamaModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -637,10 +637,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.llama.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.llama.embed_tokens = value
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -649,10 +649,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.llama = decoder
+        self.model = decoder
 
     def get_decoder(self):
-        return self.llama
+        return self.model
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -702,7 +702,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.llama(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -801,17 +801,17 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.llama = LlamaModel(config)
+        self.model = LlamaModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.llama.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.llama.embed_tokens = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
@@ -835,7 +835,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.llama(
+        transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
