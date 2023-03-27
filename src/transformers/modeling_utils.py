@@ -2542,11 +2542,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ) >= version.parse("0.37.0")
 
         if isinstance(device_map, str):
-            special_dtypes = {
-                name: torch.float32
-                for name, _ in model.named_parameters()
-                if any(m in name for m in keep_in_fp32_modules)
-            }
+            special_dtypes = {}
+            if load_in_8bit:
+                special_dtypes.update(
+                    {
+                        name: torch_dtype
+                        for name, _ in model.named_parameters()
+                        if any(m in name for m in modules_to_not_convert)
+                    }
+                )
+
+            special_dtypes.update(
+                {
+                    name: torch.float32
+                    for name, _ in model.named_parameters()
+                    if any(m in name for m in keep_in_fp32_modules)
+                }
+            )
+
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
             no_split_modules = model._no_split_modules
@@ -2569,7 +2582,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
-                    dtype=torch_dtype,
+                    dtype=torch_dtype if not load_in_8bit else torch.int8,
                     low_zero=(device_map == "balanced_low_0"),
                     max_memory=max_memory,
                     **kwargs,
