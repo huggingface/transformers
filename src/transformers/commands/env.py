@@ -43,6 +43,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             import safetensors
 
             safetensors_version = f"{safetensors.__version__} but is ignored because of PyTorch version too old."
+
         pt_version = "not installed"
         pt_cuda_available = "NA"
         if is_torch_available():
