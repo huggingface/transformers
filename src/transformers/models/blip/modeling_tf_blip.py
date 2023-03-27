@@ -1517,15 +1517,15 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         Overrides *generate* function to be able to use the model as a conditional generator
 
         Parameters:
-            input_ids (*tf.Tensor* of shape *(batch_size, sequence_length)*):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            pixel_values (*tf.Tensor* of shape *(batch_size, image_width, image_height)*:
+            pixel_values (`tf.Tensor` of shape `(batch_size, image_width, image_height)`:
                 Input image to be processed
-            attention_mask (*tf.Tensor* of shape *(batch_size, sequence_length)*, *optional*):
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`. `1` for
                 tokens that are NOT MASKED, `0` for MASKED tokens.
-            **generate_kwargs:
-                Additional arguments passed to the *generate* function of the decoder
+            generate_kwargs (dict, *optional*):
+                Additional arguments passed to the `generate` function of the decoder
 
 
         Examples:
