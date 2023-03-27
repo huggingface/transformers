@@ -27,8 +27,8 @@ from PIL import Image
 
 from transformers import (
     SeaformerConfig,
-    SeaformerImageProcessor,
     SeaformerForSemanticSegmentation,
+    SeaformerImageProcessor,
 )
 from transformers.utils import logging
 
@@ -50,9 +50,9 @@ def rename_keys(state_dict, encoder_only=False):
             key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
-        if '.c.' in key:
+        if ".c." in key:
             key = key.replace(".c.", ".convolution.")
-        if '.bn.' in key:
+        if ".bn." in key:
             key = key.replace(".bn.", ".batchnorm.")
         if "seaformer.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
@@ -117,24 +117,16 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     if size == "L":
-        config.num_encoder_blocks = 3
+        # config.num_encoder_blocks = 3
         config.depths = [3, 3, 3]
         config.channels = [32, 64, 128, 192, 256, 320]
         config.mv2_blocks_cfgs = [
-                [   [3, 3, 32, 1],  
-                    [3, 4, 64, 2], 
-                    [3, 4, 64, 1]],  
-                [
-                    [5, 4, 128, 2],  
-                    [5, 4, 128, 1]],  
-                [
-                    [3, 4, 192, 2],  
-                    [3, 4, 192, 1]],
-                [
-                    [5, 4, 256, 2]],  
-                [
-                    [3, 6, 320, 2]]
-            ]
+            [[3, 3, 32, 1], [3, 4, 64, 2], [3, 4, 64, 1]],
+            [[5, 4, 128, 2], [5, 4, 128, 1]],
+            [[3, 4, 192, 2], [3, 4, 192, 1]],
+            [[5, 4, 256, 2]],
+            [[3, 6, 320, 2]],
+        ]
         config.emb_dims = [192, 256, 320]
         config.key_dims = [16, 20, 24]
         config.num_attention_heads = 8
@@ -178,10 +170,10 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     # ADE20k checkpoints
     if model_name == "SeaFormer_L_bs32_43.8_ade":
         expected_slice = torch.tensor(
-            [   
-                [[ -2.0818,  -4.6320,  -5.9963], [ -3.2360,  -7.2340,  -8.7455], [ -2.9308,  -8.1080, -9.9713]],
-                [[ -5.4941,  -7.2591,  -8.4649], [ -6.2536,  -8.9669, -10.4255], [ -6.1386,  -9.4373, -11.4133]],
-                [[ -9.2548, -11.4705, -13.2432], [-10.3784, -13.9842, -16.0520], [-10.4125, -14.8483, -17.2390]],
+            [
+                [[-2.0818, -4.6320, -5.9963], [-3.2360, -7.2340, -8.7455], [-2.9308, -8.1080, -9.9713]],
+                [[-5.4941, -7.2591, -8.4649], [-6.2536, -8.9669, -10.4255], [-6.1386, -9.4373, -11.4133]],
+                [[-9.2548, -11.4705, -13.2432], [-10.3784, -13.9842, -16.0520], [-10.4125, -14.8483, -17.2390]],
             ]
         )
 
@@ -197,8 +189,8 @@ def convert_seaformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     if push_to_hub:
         print("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(f"Inderpreet01/seaformer-semantic-segmentation-large")
-        feature_extractor.push_to_hub(f"Inderpreet01/seaformer-semantic-segmentation-large")
+        model.push_to_hub("Inderpreet01/seaformer-semantic-segmentation-large")
+        feature_extractor.push_to_hub("Inderpreet01/seaformer-semantic-segmentation-large")
 
 
 if __name__ == "__main__":
@@ -220,4 +212,6 @@ if __name__ == "__main__":
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     args = parser.parse_args()
-    convert_seaformer_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_seaformer_checkpoint(
+        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+    )

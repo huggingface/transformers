@@ -15,10 +15,6 @@
 """ Seaformer model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -54,23 +50,19 @@ class SeaformerConfig(PretrainedConfig):
         channels (`List[int]`, *optional*, defaults to `[32, 64, 128, 192, 256, 320]`):
             Number of input channels in each StackedMV2Block
         mv2_blocks_cfgs (`List[List[List[int]]]`, *optional*, defaults to `[
-                [   [3, 3, 32, 1],  
-                    [3, 4, 64, 2], 
-                    [3, 4, 64, 1]],  
+                [ [3, 3, 32, 1],
+                    [3, 4, 64, 2], [3, 4, 64, 1]],
                 [
-                    [5, 4, 128, 2],  
-                    [5, 4, 128, 1]],  
+                    [5, 4, 128, 2], [5, 4, 128, 1]],
                 [
-                    [3, 4, 192, 2],  
-                    [3, 4, 192, 1]],
+                    [3, 4, 192, 2], [3, 4, 192, 1]],
                 [
-                    [5, 4, 256, 2]],  
+                    [5, 4, 256, 2]],
                 [
                     [3, 6, 320, 2]]
-            ]`):
-            Input parameters [kernel_size, expand_ratio, out_channels, stride]
-            for all Inverted Residual blocks within each StackedMV2Block
-        emb_dims (`List[int]`, *optional*, defaults to `[192, 256, 320]`): 
+            ]`): Input parameters [kernel_size, expand_ratio, out_channels, stride] for all Inverted Residual blocks
+            within each StackedMV2Block
+        emb_dims (`List[int]`, *optional*, defaults to `[192, 256, 320]`):
             Dimension of Seaformer Attention block
         key_dims (`List[int]`, *optional*, defaults to `[16, 20, 24]`):
             Dimension into which key and query will be projected
@@ -79,7 +71,7 @@ class SeaformerConfig(PretrainedConfig):
         in_channels (`List[int]`, *optional*, defaults to `[128, 192, 256, 320]`):
             Input channels in fusion block
         in_index (`List[int]`, *optional*, defaults to `[0, 1, 2, 3]`):
-            Indexes required by decoder head from hidden_states 
+            Indexes required by decoder head from hidden_states
         decoder_channels (`int`, *optional*, defaults to 192):
             Dimension of last fusion block output which will be fed to decoder head
         embed_dims (`List[int]`, *optional*, defaults to `[128, 160, 192]`):
@@ -121,42 +113,33 @@ class SeaformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
-        num_encoder_blocks=3,
+        # num_channels=3,
+        # num_encoder_blocks=3,
         depths=[3, 3, 3],
-        num_labels = 150,
-        channels = [32, 64, 128, 192, 256, 320],
-        mv2_blocks_cfgs = [
-                [   [3, 3, 32, 1],  
-                    [3, 4, 64, 2], 
-                    [3, 4, 64, 1]],  
-                [
-                    [5, 4, 128, 2],  
-                    [5, 4, 128, 1]],  
-                [
-                    [3, 4, 192, 2],  
-                    [3, 4, 192, 1]],
-                [
-                    [5, 4, 256, 2]],  
-                [
-                    [3, 6, 320, 2]]
-            ],
-        drop_path_rate = 0.1,
-        emb_dims = [192, 256, 320],
-        key_dims = [16, 20, 24],
+        num_labels=150,
+        channels=[32, 64, 128, 192, 256, 320],
+        mv2_blocks_cfgs=[
+            [[3, 3, 32, 1], [3, 4, 64, 2], [3, 4, 64, 1]],
+            [[5, 4, 128, 2], [5, 4, 128, 1]],
+            [[3, 4, 192, 2], [3, 4, 192, 1]],
+            [[5, 4, 256, 2]],
+            [[3, 6, 320, 2]],
+        ],
+        drop_path_rate=0.1,
+        emb_dims=[192, 256, 320],
+        key_dims=[16, 20, 24],
         num_attention_heads=8,
-        mlp_ratios=[2,4,6],
-        attn_ratios = 2,
-        in_channels = [128, 192, 256, 320],
-        in_index = [0, 1, 2, 3],
-        decoder_channels = 192,
-        embed_dims = [128, 160, 192],
-        is_depthwise = True,
-        align_corners = False,
+        mlp_ratios=[2, 4, 6],
+        attn_ratios=2,
+        in_channels=[128, 192, 256, 320],
+        in_index=[0, 1, 2, 3],
+        decoder_channels=192,
+        embed_dims=[128, 160, 192],
+        is_depthwise=True,
         semantic_loss_ignore_index=255,
-        hidden_sizes = [128],
-        hidden_act = 'relu',
-        **kwargs
+        # hidden_sizes=[128],
+        hidden_act="relu",
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -167,8 +150,8 @@ class SeaformerConfig(PretrainedConfig):
                 FutureWarning,
             )
 
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
+        # self.num_channels = num_channels
+        # self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
         self.channels = channels
         self.mv2_blocks_cfgs = mv2_blocks_cfgs
@@ -183,9 +166,8 @@ class SeaformerConfig(PretrainedConfig):
         self.embed_dims = embed_dims
         self.decoder_channels = decoder_channels
         self.is_depthwise = is_depthwise
-        self.align_corners = align_corners
         self.num_labels = num_labels
-        self.hidden_sizes = hidden_sizes
+        # self.hidden_sizes = hidden_sizes
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self.hidden_act = hidden_act

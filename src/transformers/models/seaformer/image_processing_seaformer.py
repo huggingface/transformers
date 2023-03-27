@@ -14,8 +14,7 @@
 # limitations under the License.
 """Image processor class for Seaformer."""
 
-import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -98,7 +97,6 @@ class SeaformerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 512, "width": 512}
         size = get_size_dict(size)

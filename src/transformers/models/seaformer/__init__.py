@@ -21,9 +21,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaformerConfig"]
-}
+_import_structure = {"configuration_seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaformerConfig"]}
 
 try:
     if not is_vision_available():
@@ -41,8 +39,10 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_seaformer"] = [
         "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "SeaformerDecodeHead",
         "SeaformerForImageClassification",
         "SeaformerForSemanticSegmentation",
+        "SeaformerLayer",
         "SeaformerModel",
         "SeaformerPreTrainedModel",
     ]

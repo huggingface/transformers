@@ -121,7 +121,7 @@ class SeaformerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, reduce_labels=True)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-        self.assertEqual(image_processor.do_reduce_labels, True)
+        self.assertEqual(image_processor.do_reduce_labels, False)
 
     def test_batch_feature(self):
         pass

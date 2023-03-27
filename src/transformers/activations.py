@@ -152,7 +152,7 @@ class MishActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
-    
+
 
 class h_sigmoid(nn.Module):
     def __init__(self, inplace=True):
