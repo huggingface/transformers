@@ -61,7 +61,7 @@ class TFBlipTextEmbeddings(Layer):
             name="position_embeddings",
         )
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # self.LayerNorm is not snake-cased to stick with PyTorch model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = Dropout(config.hidden_dropout_prob, name="dropout")
