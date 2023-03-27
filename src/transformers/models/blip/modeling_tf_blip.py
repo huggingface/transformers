@@ -1418,7 +1418,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, BlipForQuestionAnswering
+        >>> from transformers import AutoProcessor, TFBlipForQuestionAnswering
 
         >>> model = TFBlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
