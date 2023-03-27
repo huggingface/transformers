@@ -44,6 +44,13 @@ else:
         "Mask2FormerPreTrainedModel",
     ]
 
+    _import_structure["modeling_video_mask2former"] = [
+        "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "VideoMask2FormerForSegmentation",
+        "VideoMask2FormerModel",
+        "VideoMask2FormerPreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
 
@@ -66,6 +73,13 @@ if TYPE_CHECKING:
             Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
+        )
+
+        from .modeling_video_mask2former import (
+            VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VideoMask2FormerForSegmentation,
+            VideoMask2FormerModel,
+            VideoMask2FormerPreTrainedModel,
         )
 
 

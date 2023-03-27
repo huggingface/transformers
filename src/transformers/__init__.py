@@ -1885,6 +1885,10 @@ else:
             "Mask2FormerForUniversalSegmentation",
             "Mask2FormerModel",
             "Mask2FormerPreTrainedModel",
+            "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VideoMask2FormerModel",
+            "VideoMask2FormerForSegmentation",
+            "VideoMask2FormerPreTrainedModel",
         ]
     )
     _import_structure["models.maskformer"].extend(
@@ -5298,6 +5302,10 @@ if TYPE_CHECKING:
             Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
+            VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VideoMask2FormerModel,
+            VideoMask2FormerForSegmentation,
+            VideoMask2FormerPreTrainedModel,
         )
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
