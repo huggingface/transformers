@@ -981,7 +981,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, BlipModel
+        >>> from transformers import AutoProcessor, TFBlipModel
 
         >>> model = TFBlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
