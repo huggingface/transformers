@@ -154,7 +154,12 @@ def get_keys_to_not_convert(model):
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
 
-    tied_keys = list(find_tied_parameters(tied_model).values())
+    tied_params = find_tied_parameters(tied_model)
+    # For compatibility with Accelerate < 0.18
+    if isinstance(tied_params, dict):
+        tied_keys = list(tied_params.values())
+    else:
+        tied_keys = sum([x[1:] for x in tied_params], [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
