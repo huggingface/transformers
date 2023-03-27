@@ -31,11 +31,12 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
+
 try:
     from xformers import ops as xops
-except:
+except ImportError as error:
     xops = None
-    print('xformers is not installed correctly.')
+    print("xformers is not installed correctly.")
 
 
 logger = logging.get_logger(__name__)
@@ -239,11 +240,12 @@ class LlamaAttention(nn.Module):
 
         if xops is not None and self.training:
             attn_weights = None
-            attn_output = xops.memory_efficient_attention(query_states, key_states, value_states, 
-                                                          attn_bias=self.causal_mask, p=self.dropout_prob)
+            attn_output = xops.memory_efficient_attention(
+                query_states, key_states, value_states, attn_bias=self.causal_mask, p=self.dropout_prob
+            )
         else:
             # [bsz, t, nh, hd]
-            attn_weights = torch.einsum('bqnh,bknh->bnqk', query_states, key_states) / math.sqrt(self.head_dim)
+            attn_weights = torch.einsum("bqnh,bknh->bnqk", query_states, key_states) / math.sqrt(self.head_dim)
 
             if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
                 raise ValueError(
@@ -261,7 +263,7 @@ class LlamaAttention(nn.Module):
 
             # upcast attention to fp32
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_output = torch.einsum('bnqk,bknh->bqnh', attn_weights, value_states)
+            attn_output = torch.einsum("bnqk,bknh->bqnh", attn_weights, value_states)
 
         if attn_output.size() != (bsz, q_len, self.num_heads, self.head_dim):
             raise ValueError(
@@ -286,13 +288,13 @@ class LlamaDecoderLayer(nn.Module):
         self.self_attn = LlamaAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
-            dropout_prob=config.attention_dropout_prob
+            dropout_prob=config.attention_dropout_prob,
         )
         self.mlp = LlamaMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
-            dropout_prob=config.hidden_dropout_prob
+            dropout_prob=config.hidden_dropout_prob,
         )
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -473,7 +475,7 @@ class LlamaModel(LlamaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         if config.use_stable_embedding:
             self.embed_layer_norm = nn.LayerNorm(config.hidden_size)
@@ -807,7 +809,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.shared_input_output_embedding:
-            logits = torch.einsum('blh,vh->blv', hidden_states, self.model.embed_tokens.weight)
+            logits = torch.einsum("blh,vh->blv", hidden_states, self.model.embed_tokens.weight)
         else:
             logits = self.lm_head(hidden_states)
 
