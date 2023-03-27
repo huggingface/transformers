@@ -213,9 +213,16 @@ class LlamaAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        offset = 0
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+            offset += past_key_value[0].shape[-2]
+            kv_seq_len += offset
+
+        if position_ids is None:  # retrocompatibility with the inner layers' interface pre left-padding support
+            position_ids = torch.arange(offset, kv_seq_len, dtype=torch.long, device=query_states.device)
+            position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
+
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         # [bsz, nh, t, hd]
