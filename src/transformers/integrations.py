@@ -27,11 +27,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional
 
-import importlib_metadata
 import numpy as np
 
 from . import __version__ as version
 from .utils import flatten_dict, is_datasets_available, is_torch_available, logging
+from .utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -1166,7 +1166,7 @@ class NeptuneCallback(TrainerCallback):
         project: Optional[str] = None,
         name: Optional[str] = None,
         base_namespace: str = "finetuning",
-        run: Optional = None,
+        run=None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
         **neptune_run_kwargs,
