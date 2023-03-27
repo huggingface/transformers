@@ -42,7 +42,6 @@ if is_torch_available():
     from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder, NllbMoeEncoder, NllbMoeTop2Router
 
 
-@require_torch
 class NllbMoeModelTester:
     def __init__(
         self,
@@ -178,6 +177,7 @@ class NllbMoeModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
+    @require_torch
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = NllbMoeModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
