@@ -1369,6 +1369,12 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     @add_start_docstrings_to_model_forward(PIX2STRUCT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1626,11 +1632,24 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.decoder.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.decoder.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.decoder.set_output_embeddings(new_embeddings)
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+        model_embeds = self.decoder.resize_token_embeddings(new_num_tokens)
+
+        # update vocab size
+        self.config.text_config.vocab_size = new_num_tokens
+
+        return model_embeds
 
     def get_decoder(self):
         return self.decoder
