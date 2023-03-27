@@ -14,22 +14,25 @@
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from .data.data_collator import DataCollator
 from .deepspeed import is_deepspeed_zero3_enabled
 from .generation.configuration_utils import GenerationConfig
-from .modeling_utils import PreTrainedModel
-from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer import Trainer
-from .trainer_callback import TrainerCallback
 from .trainer_utils import EvalPrediction, PredictionOutput
-from .training_args import TrainingArguments
 from .utils import logging
+
+
+if TYPE_CHECKING:
+    from .data.data_collator import DataCollator
+    from .modeling_utils import PreTrainedModel
+    from .tokenization_utils_base import PreTrainedTokenizerBase
+    from .trainer_callback import TrainerCallback
+    from .training_args import TrainingArguments
 
 
 logger = logging.get_logger(__name__)
