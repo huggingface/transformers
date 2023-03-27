@@ -111,12 +111,14 @@ class NllbMoeModelTester:
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         if head_mask is None:
-            head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+            head_mask = ids_tensor([config.encoder_layers, config.encoder_attention_heads]).to(device=torch_device)
         if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+            decoder_head_mask = ids_tensor([config.decoder_layers, config.decoder_attention_heads]).to(
+                device=torch_device
+            )
         if cross_attn_head_mask is None:
-            cross_attn_head_mask = torch.ones(
-                config.decoder_layers, config.decoder_attention_heads, device=torch_device
+            cross_attn_head_mask = ids_tensor([config.decoder_layers, config.decoder_attention_heads]).to(
+                device=torch_device
             )
         return {
             "input_ids": input_ids,
@@ -245,14 +247,7 @@ class NllbMoeModelTester:
 
 @require_torch
 class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            NllbMoeModel,
-            NllbMoeForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (NllbMoeForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
