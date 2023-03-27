@@ -231,11 +231,6 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        #
-        # self.patch_embedding = nn.Conv2d(
-        #     in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
-        # )
-        # TF Version:
         self.patch_embedding = tf.keras.layers.Conv2D(
             filters=self.embed_dim,
             kernel_size=self.patch_size,
