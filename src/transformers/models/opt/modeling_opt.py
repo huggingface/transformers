@@ -64,9 +64,8 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
