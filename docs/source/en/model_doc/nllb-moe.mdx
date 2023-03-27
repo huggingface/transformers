@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -10,12 +10,10 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# NLLB
+# NLLB-MOE
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=bug&template=bug-report.yml) and assign
-@LysandreJik
 
-## Overview of NLLB
+## Overview
 
 The NLLB model was presented in [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by Marta R. Costa-jussà, James Cross, Onur Çelebi,
 Maha Elbayad, Kenneth Heafield, Kevin Heffernan, Elahe Kalbassi, Janice Lam, Daniel Licht, Jean Maillard, Anna Sun, Skyler Wang, Guillaume Wenzek, Al Youngblood, Bapi Akula,
@@ -35,13 +33,22 @@ improvements to counteract overfitting while training on thousands of tasks. Cri
 a human-translated benchmark, Flores-200, and combined human evaluation with a novel toxicity benchmark covering all languages in Flores-200 to assess translation safety.
 Our model achieves an improvement of 44% BLEU relative to the previous state-of-the-art, laying important groundwork towards realizing a universal translation system.*
 
-This implementation contains the dense models available on release.
+Tips:
 
-**The sparse model NLLB-MoE (Mixture of Expert) is now available! More details [here](nllb-moe)**
+- M2M100ForConditionalGeneration is the base model for both NLLB and NLLB MoE
+- The NLLB-MoE is very similar to the NLLB model, but it's feed forward layer is based on the implementation of SwitchTransformers.
+- The tokenizer is the same as the NLLB models.
 
-This model was contributed by [Lysandre](https://huggingface.co/lysandre). The authors' code can be found [here](https://github.com/facebookresearch/fairseq/tree/nllb).
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArtZucker).
+The original code can be found [here](https://github.com/facebookresearch/fairseq).
 
-## Generating with NLLB
+## Implementation differences with SwitchTransformers
+The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that blah blah blah blah. 
+In SwitchTransformers, once the masks are computed for each experts, we just index the current hidden_states with the routing mask, and feed the 
+correct tokens to the expert. However here, the implementation varies a lot as the fairseq repository used a different approach.
+
+## Generating with NLLB-MoE
+The avalable checkpoints requires around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.
 
 While generating the target text set the `forced_bos_token_id` to the target language id. The following
 example shows how to translate English to French using the *facebook/nllb-200-distilled-600M* model.
@@ -52,17 +59,17 @@ for the list of all BCP-47 in the Flores 200 dataset.
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "UN Chief says there is no military solution in Syria"
+>>> article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
+"Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage."
 ```
 
 ### Generating from any other language than English
@@ -72,13 +79,11 @@ you should specify the BCP-47 code in the `src_lang` keyword argument of the tok
 
 See example below for a translation from romanian to german:
 
-```py
+```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained(
-...     "facebook/nllb-200-distilled-600M", use_auth_token=True, src_lang="ron_Latn"
-... )
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", use_auth_token=True)
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
 >>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
 >>> inputs = tokenizer(article, return_tensors="pt")
@@ -87,19 +92,36 @@ See example below for a translation from romanian to german:
 ...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-UN-Chef sagt, es gibt keine militärische Lösung in Syrien
 ```
 
 ## Documentation resources
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- [Translation task guide](./tasks/translation)
+- [Summarization task guide](./tasks/summarization)
 
-## NllbTokenizer
 
-[[autodoc]] NllbTokenizer
-    - build_inputs_with_special_tokens
+## NllbMoeConfig
 
-## NllbTokenizerFast
+[[autodoc]] NllbMoeConfig
 
-[[autodoc]] NllbTokenizerFast
+## NllbMoeTop2Router
+
+[[autodoc]] NllbMoeTop2Router
+    - route_tokens
+    - forward
+
+## NllbMoeSparseMLP
+
+[[autodoc]] NllbMoeSparseMLP
+    - forward
+
+## NllbMoeModel
+
+[[autodoc]] NllbMoeModel
+    - forward
+
+## NllbMoeForConditionalGeneration
+
+[[autodoc]] NllbMoeForConditionalGeneration
+    - forward
+
