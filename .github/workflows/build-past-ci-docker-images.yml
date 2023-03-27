@@ -1,7 +1,6 @@
 name: Build docker images (Past CI)
 
 on:
-  workflow_call:
   push:
     branches:
       - build_past_ci_docker_image*
