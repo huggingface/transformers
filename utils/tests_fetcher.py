@@ -535,11 +535,11 @@ def infer_tests_to_run(
                 names = test_file.split(os.path.sep)
                 if names[1] == "models":
                     # take the part like `models/bert` for modeling tests
-                    key = os.path.se.join(names[1:3])
+                    key = os.path.sep.join(names[1:3])
                 elif len(names) > 2 or not test_file.endswith(".py"):
                     # test folders under `tests` or python files under them
                     # take the part like tokenization, `pipeline`, etc. for other test categories
-                    key = os.path.se.join(names[1:2])
+                    key = os.path.sep.join(names[1:2])
                 else:
                     # common test files directly under `tests/`
                     key = "common"
