@@ -363,10 +363,6 @@ class TFBlipAttention(tf.keras.layers.Layer):
             self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="projection"
         )
 
-    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        tensor = tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim))
-        return tf.transpose(tensor, perm=(0, 2, 1, 3))
-
     def call(
         self,
         hidden_states: tf.Tensor,
