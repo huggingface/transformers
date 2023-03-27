@@ -103,10 +103,10 @@ class Seq2SeqTrainer(Trainer):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is `"eval"` (default)
             max_length (`int`, *optional*):
-                 The maximum target length to use when predicting with the generate method.
+                The maximum target length to use when predicting with the generate method.
             num_beams (`int`, *optional*):
-                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
-                 beam search.
+                Number of beams for beam search that will be used when predicting with the generate method. 1 means no
+                beam search.
             gen_kwargs:
                 Additional `generate` specific kwargs.
 
@@ -149,10 +149,10 @@ class Seq2SeqTrainer(Trainer):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is `"eval"` (default)
             max_length (`int`, *optional*):
-                 The maximum target length to use when predicting with the generate method.
+                The maximum target length to use when predicting with the generate method.
             num_beams (`int`, *optional*):
-                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
-                 beam search.
+                Number of beams for beam search that will be used when predicting with the generate method. 1 means no
+                beam search.
             gen_kwargs:
                 Additional `generate` specific kwargs.
 
