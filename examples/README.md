@@ -94,3 +94,41 @@ Alternatively, you can switch your cloned 🤗 Transformers to a specific versio
 git checkout tags/v3.5.1
 ```
 and run the example command as usual afterward.
+
+## Running the Examples on Remote Hardware with Auto-Setup
+
+[run_on_remote.py](./run_on_remote.py) is a script that launches any example on remote self-hosted hardware, 
+with automatic hardware and environment setup. It uses [Runhouse](https://github.com/run-house/runhouse) to launch 
+on self-hosted hardware (e.g. in your own cloud account or on-premise cluster) but there are other options 
+for running remotely as well. You can easily customize the example used, command line arguments, dependencies, 
+and type of compute hardware, and then run the script to automatically launch the example.
+
+You can refer to 
+[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/main/rh_primitives/cluster.html#hardware-setup)
+for more information about hardware and dependency setup with Runhouse, or this
+[Colab tutorial](https://colab.research.google.com/drive/1sh_aNQzJX5BKAdNeXthTNGxKz7sM9VPc) for a more in-depth 
+walkthrough.
+
+You can run the script with the following commands:
+
+```bash
+# First install runhouse:
+pip install runhouse
+
+# For an on-demand V100 with whichever cloud provider you have configured:
+python run_on_remote.py \
+    --example pytorch/text-generation/run_generation.py \
+    --model_type=gpt2 \
+    --model_name_or_path=gpt2 \
+    --prompt "I am a language model and"
+
+# For byo (bring your own) cluster:
+python run_on_remote.py --host <cluster_ip> --user <ssh_user> --key_path <ssh_key_path> \
+  --example <example> <args>
+
+# For on-demand instances
+python run_on_remote.py --instance <instance> --provider <provider> \
+  --example <example> <args>
+```
+
+You can also adapt the script to your own needs.
