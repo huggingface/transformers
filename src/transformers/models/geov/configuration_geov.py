@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Better Planet Investments and Labml team. ALl rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ class GeoVConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GeoVModel`]. It is used to instantiate an
     GeoV model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GeoV
-    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
+    [GeoV/GeoV-9b](https://huggingface.co/GeoV/GeoV-9b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -49,26 +49,18 @@ class GeoVConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 24576):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        rotary_pct (`float`, *optional*, defaults to 0.25):
-            percentage of hidden dimensions to allocate to rotary embeddings
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 1e-5):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-4):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        use_parallel_residual (`bool`, *optional*, defaults to `True`):
-            Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
-            speedup at large scales (e.g. 20B).
+        use_extra_biases_ffn (`bool`, *optional*, defaults to `False`):
+            Whether or not to have extra bias parameters in the final layer of FFN modules.
         Example:
 
     ```python
@@ -86,37 +78,33 @@ class GeoVConfig(PretrainedConfig):
     model_type = "geov"
 
     def __init__(
-        self,
-        vocab_size=50432,
-        hidden_size=6144,
-        num_hidden_layers=44,
-        num_attention_heads=64,
-        intermediate_size=24576,
-        hidden_act="gelu",
-        rotary_pct=0.25,
-        rotary_emb_base=10000,
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=0,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        use_parallel_residual=True,
-        **kwargs,
+            self,
+            vocab_size=65536,
+            hidden_size=1024 * 5,
+            num_hidden_layers=32,
+            num_attention_heads=40,
+            intermediate_size=1024 * 5 * 4,
+            layer_norm_eps=1e-4,
+            rotary_emb_base=10000,
+            max_position_embeddings=2049,
+            use_extra_biases_ffn=False,
+            use_cache=True,
+            bos_token_id=0,
+            eos_token_id=2,
+            tie_word_embeddings=False,
+            **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id,
+                         eos_token_id=eos_token_id,
+                         tie_word_embeddings=tie_word_embeddings,
+                         **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
-        self.use_parallel_residual = use_parallel_residual
+        self.layer_norm_eps = layer_norm_eps
+        self.use_extra_biases_ffn = use_extra_biases_ffn

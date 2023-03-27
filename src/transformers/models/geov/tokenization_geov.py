@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Modifications Copyright 2023 Better Planet Investments and Labml team. ALl rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,86 +14,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GeoV."""
-import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from pathlib import Path
+from typing import List, Optional, Tuple
 
-from tokenizers import pre_tokenizers
+import sentencepiece as spm
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
-
+from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import SPIECE_UNDERLINE, logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "tokenizer_file": {
-        "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/tokenizer.json",
-    },
+    "vocab_file": {
+        "GeoV/GeoV-9b": "https://huggingface.co/GeoV/GeoV-9b/resolve/main/spiece.model",
+    }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt-neox-20b": 2048,
+    "GeoV-9b": 2049,
 }
 
 
-class GeoVTokenizer(PreTrainedTokenizerFast):
+class GeoVTokenizer(PreTrainedTokenizer):
     """
-    Construct a "fast" GPT-NeoX-20B tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
-    Byte-Pair-Encoding.
+    Construct an GeoV tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
-    ```python
-    >>> from transformers import GeoVTokenizer
-
-    >>> tokenizer = GeoVTokenizer.from_pretrained("gpt2")
-    >>> tokenizer("Hello world")["input_ids"]
-    [15496, 995]
-
-    >>> tokenizer(" Hello world")["input_ids"]
-    [18435, 995]
-    ```
-
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
-    the model was not pretrained this way, it might yield a decrease in performance.
-
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
-
-    </Tip>
-
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining.
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
-            The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
-            The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (GeoV tokenizer detect beginning of words by the preceding space).
-        trim_offsets (`bool`, *optional*, defaults to `True`):
-            Whether or not the post-processing step should trim offsets to avoid including whitespaces.
+
+        new_line_token_id (`int`, *optional*, defaults to `65_499`):
+            The token id of new line character.
+
+    Attributes:
+        sp_model (`SentencePieceProcessor`):
+            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
+
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -100,45 +73,108 @@ class GeoVTokenizer(PreTrainedTokenizerFast):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        add_prefix_space=False,
-        **kwargs,
-    ):
+            self,
+            vocab_file,
+            bos_token="<s>",
+            eos_token="</s>",
+            unk_token="<unk>",
+            new_line_token_id=65_499,
+            **kwargs,
+    ) -> None:
         super().__init__(
             vocab_file,
-            merges_file,
-            tokenizer_file=tokenizer_file,
-            unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            add_prefix_space=add_prefix_space,
+            unk_token=unk_token,
+            new_line_token_id=new_line_token_id,
             **kwargs,
         )
+        self.vocab_file = vocab_file
+        self.new_line_token_id = new_line_token_id
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
 
-        self.add_prefix_space = add_prefix_space
+    @property
+    def vocab_size(self):
+        return len(self.sp_model)
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Tokenize a string."""
+        ret = []
+        split_text = text.splitlines()
+        for l in split_text:
+            rl = self.sp_model.encode(l, out_type=str)
+            ret.extend(rl)
+            ret.append('\n')
+        ret = ret[:-1]
+        return ret
+
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        if token == '\n':
+            return self.new_line_token_id
+        return self.sp_model.PieceToId(token)
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index == self.new_line_token_id:
+            return '\n'
+        return self.sp_model.IdToPiece(index)
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        return out_string
+
+    def _decode(
+            self,
+            token_ids: List[int],
+            skip_special_tokens: bool = False,
+            clean_up_tokenization_spaces: bool = True,
+            spaces_between_special_tokens: bool = True,
+            **kwargs,
+    ) -> str:
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+
+        if skip_special_tokens:
+            filtered_tokens = [t for t in filtered_tokens if t not in self.all_special_ids]
+
+        text = self.convert_tokens_to_string(filtered_tokens)
+
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
+        save_directory = Path(save_directory)
+        if not save_directory.is_dir():
+            raise ValueError(f"Vocabulary path ({save_directory}) should be a directory")
+        vocab_fn = VOCAB_FILES_NAMES['vocab_file']
+        filename_prefix = f'{filename_prefix}-' if filename_prefix else ''
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
+        vocab_file = save_directory / f'{filename_prefix}{vocab_fn}'
 
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+        with open(str(vocab_file), "wb") as fi:
+            content_spiece_model = self.sp_model.serialized_model_proto()
+            fi.write(content_spiece_model)
+
+        return (str(vocab_file),)
