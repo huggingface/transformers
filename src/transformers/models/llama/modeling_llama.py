@@ -32,9 +32,10 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
 
+
 try:
     from xformers import ops as xops
-except ImportError as error:
+except ImportError:
     xops = None
     print("xformers is not installed correctly.")
 
