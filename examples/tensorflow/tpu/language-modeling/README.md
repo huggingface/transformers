@@ -11,6 +11,12 @@ We've tried to ensure that all the practices we show you here are scalable, thou
 Google's gargantuan [PaLM model](https://arxiv.org/abs/2204.02311), with
 over 500B parameters, is a good example of how far you can go with pure TPU training, though gathering the dataset and the budget to train at that scale is not an easy task!
 
+## Setting up a TPU-VM
+
+Since this example focuses on using TPUs, the first step is to set up access to TPU hardware. For this example, we chose to use a TPU v3-8 VM. Follow [this guide](https://cloud.google.com/tpu/docs/run-calculation-tensorflow) to quickly create a TPU VM with TensorFlow pre-installed. 
+
+> 💡 **Note**: You don't need a TPU-enabled hardware for tokenizer training and TFRecord shard preparation.
+
 ## Training a tokenizer
 
 To train a language model from scratch, the first step is to tokenize text. In most Hugging Face examples, we begin from a pre-trained model and use its tokenizer. However, in this example, we're going to train a tokenizer from scratch as well. The script for this is `train_unigram.py`. An example command is:
@@ -47,7 +53,7 @@ python prepare_tfrecord_shards.py \
 Once that's done, the model is ready for training. By default, training takes place on TPU, but you can use the `--no_tpu` flag to train on CPU for testing purposes. An example command is:
 
 ```bash
-python train_model.py \
+python3 train_model.py \
        --train_dataset gs://tf-tpu-training-resources/train/ \
        --eval_dataset gs://tf-tpu-training-resources/validation/ \
        --tokenizer tf-tpu/unigram-tokenizer-wikitext \
@@ -58,3 +64,34 @@ If you had specified a `hub_model_id` while launching training, then your model 
 [tf-tpu/roberta-base-epochs-100](https://huggingface.co/tf-tpu/roberta-base-epochs-100).
 
 ## Inference
+
+Once the model is trained, you can use 🤗 Pipelines to perform inference:
+
+```python
+from transformers import pipeline
+
+model_id = "tf-tpu/roberta-base-epochs-100"
+unmasker = pipeline("fill-mask", model="tf-tpu/roberta-base-epochs-100", framework="tf")
+unmasker("Goal of my life is to [MASK].")
+
+[{'score': 0.3213661313056946,
+  'token': 52,
+  'token_str': 'be',
+  'sequence': 'Goal of my life is to be.'},
+ {'score': 0.09109099209308624,
+  'token': 36,
+  'token_str': 'o',
+  'sequence': 'Goal of my life is too.'},
+ {'score': 0.0677114799618721,
+  'token': 63,
+  'token_str': 'r',
+  'sequence': 'Goal of my life is tor.'},
+ {'score': 0.033341776579618454,
+  'token': 5,
+  'token_str': '',
+  'sequence': 'Goal of my life is to .'},
+ {'score': 0.022657133638858795,
+  'token': 105,
+  'token_str': 'him',
+  'sequence': 'Goal of my life is to him.'}]
+```
