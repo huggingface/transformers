@@ -191,12 +191,12 @@ def prepare_dataset(records, decode_fn, mask_fn, batch_size, shuffle, shuffle_bu
     dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=AUTO)
     # TF can't infer the total sample count because it doesn't read all the records yet, so we assert it here
     dataset = dataset.apply(tf.data.experimental.assert_cardinality(num_samples))
-    dataset = dataset.map(decode_fn)
+    dataset = dataset.map(decode_fn, num_parallel_calls=AUTO)
     if shuffle:
         assert shuffle_buffer_size is not None
         dataset = dataset.shuffle(args.shuffle_buffer_size)
     dataset = dataset.batch(batch_size, drop_remainder=True)
-    dataset = dataset.map(mask_fn)
+    dataset = dataset.map(mask_fn, num_parallel_calls=AUTO)
     dataset = dataset.prefetch(AUTO)
     return dataset
 
@@ -223,7 +223,6 @@ def main(args):
         raise ValueError(f"No .tfrecord files found in {args.eval_dataset}.")
 
     num_train_samples = count_samples(training_records)
-    count_samples(eval_records)
 
     steps_per_epoch = num_train_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
     total_train_steps = steps_per_epoch * args.num_epochs
