@@ -237,7 +237,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 class GPTNeoXLanguageGenerationTest(unittest.TestCase):
     @slow
-    def test_lm_generate_codegen(self):
+    def test_lm_generate_gptneox(self):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
         for checkpointing in [True, False]:
             model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
