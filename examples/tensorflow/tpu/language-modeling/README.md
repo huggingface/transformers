@@ -11,6 +11,14 @@ We've tried to ensure that all the practices we show you here are scalable, thou
 Google's gargantuan [PaLM model](https://arxiv.org/abs/2204.02311), with
 over 500B parameters, is a good example of how far you can go with pure TPU training, though gathering the dataset and the budget to train at that scale is not an easy task!
 
+### Table of contents 
+
+- [Setting up a TPU-VM](#setting-up-a-tpu-vm)
+- [Training a tokenizer](#training-a-tokenizer)
+- [Preparing the dataset](#preparing-the-dataset)
+- [Training the model](#training-the-model)
+- [Inference](#inference)
+
 ## Setting up a TPU-VM
 
 Since this example focuses on using TPUs, the first step is to set up access to TPU hardware. For this example, we chose to use a TPU v3-8 VM. Follow [this guide](https://cloud.google.com/tpu/docs/run-calculation-tensorflow) to quickly create a TPU VM with TensorFlow pre-installed. 
