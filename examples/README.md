@@ -120,7 +120,7 @@ python run_on_remote.py \
     --example pytorch/text-generation/run_generation.py \
     --model_type=gpt2 \
     --model_name_or_path=gpt2 \
-    --prompt "This is a test"
+    --prompt "I am a language model and"
 
 # For byo (bring your own) cluster:
 python run_on_remote.py --host <cluster_ip> --user <ssh_user> --key_path <ssh_key_path> \
