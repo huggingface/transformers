@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import (
@@ -355,11 +354,13 @@ class TFBlipAttention(tf.keras.layers.Layer):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = Dropout(config.attention_dropout, name="dropout")
+        self.dropout = tf.keras.layers.Dropout(config.attention_dropout, name="dropout")
 
-        self.qkv = Dense(3 * self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="qkv")
+        self.qkv = tf.keras.layers.Dense(
+            3 * self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="qkv"
+        )
 
-        self.projection = Dense(
+        self.projection = tf.keras.layers.Dense(
             self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="projection"
         )
 
@@ -436,9 +437,9 @@ class TFBlipEncoderLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.embed_dim = config.hidden_size
         self.self_attn = TFBlipAttention(config, name="self_attn")
-        self.layer_norm1 = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.mlp = TFBlipMLP(config, name="mlp")
-        self.layer_norm2 = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
 
     def call(
         self,
@@ -677,7 +678,7 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
 
         self.embeddings = TFBlipVisionEmbeddings(config, name="embeddings")
         self.encoder = TFBlipEncoder(config, name="encoder")
-        self.post_layernorm = LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -804,13 +805,13 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
         self.text_model = TFBlipTextModel(text_config, name="text_model")
         self.vision_model = TFBlipVisionModel(vision_config, name="vision_model")
 
-        self.visual_projection = Dense(
+        self.visual_projection = tf.keras.layers.Dense(
             self.projection_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="visual_projection",
         )
-        self.text_projection = Dense(
+        self.text_projection = tf.keras.layers.Dense(
             self.projection_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -1600,21 +1601,23 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         self.text_encoder = TFBlipTextModel(config.text_config, name="text_encoder", add_pooling_layer=False)
 
         # vision projection layer
-        self.vision_proj = Dense(
+        self.vision_proj = tf.keras.layers.Dense(
             config.image_text_hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="vision_proj",
         )
 
         # text projection layer
-        self.text_proj = Dense(
+        self.text_proj = tf.keras.layers.Dense(
             config.image_text_hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="text_proj",
         )
 
         # image text matching head
-        self.itm_head = Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="itm_head")
+        self.itm_head = tf.keras.layers.Dense(
+            2, kernel_initializer=get_initializer(config.initializer_range), name="itm_head"
+        )
 
         self.decoder_pad_token_id = (
             config.text_config.pad_token_id

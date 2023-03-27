@@ -20,7 +20,6 @@ import math
 from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
 
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -43,18 +42,18 @@ logger = logging.get_logger(__name__)
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L52
-class TFBlipTextEmbeddings(Layer):
+class TFBlipTextEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word and position embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.word_embeddings = Embedding(
+        self.word_embeddings = tf.keras.layers.Embedding(
             config.vocab_size,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="word_embeddings",
         )
-        self.position_embeddings = Embedding(
+        self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
@@ -63,8 +62,8 @@ class TFBlipTextEmbeddings(Layer):
 
         # self.LayerNorm is not snake-cased to stick with PyTorch model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = Dropout(config.hidden_dropout_prob, name="dropout")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
         self.position_ids = tf.expand_dims(tf.range(config.max_position_embeddings), 0)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -106,7 +105,7 @@ class TFBlipTextEmbeddings(Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L97
-class TFBlipTextSelfAttention(Layer):
+class TFBlipTextSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, is_cross_attention, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -120,19 +119,23 @@ class TFBlipTextSelfAttention(Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Dense(
+        self.query = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
-        self.value = Dense(
+        self.key = tf.keras.layers.Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+        )
+        self.value = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
 
-        self.dropout = Dropout(config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = tf.keras.layers.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
 
     def transpose_for_scores(self, x):
         new_x_shape = tf.concat(
@@ -224,7 +227,7 @@ class TFBlipTextSelfAttention(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BlipText,BertConfig->BlipTextConfig
-class TFBlipTextSelfOutput(Layer):
+class TFBlipTextSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -243,7 +246,7 @@ class TFBlipTextSelfOutput(Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#242
-class TFBlipTextAttention(Layer):
+class TFBlipTextAttention(tf.keras.layers.Layer):
     def __init__(self, config, is_cross_attention=False, **kwargs):
         super().__init__(**kwargs)
         self.self = TFBlipTextSelfAttention(config, is_cross_attention, name="self")
@@ -276,7 +279,7 @@ class TFBlipTextAttention(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->BlipText
-class TFBlipTextIntermediate(Layer):
+class TFBlipTextIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -297,7 +300,7 @@ class TFBlipTextIntermediate(Layer):
 
 
 # Adapted from transformers.models.bert.modeling_tf_bert.TFBertOutput
-class TFBlipTextOutput(Layer):
+class TFBlipTextOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -315,7 +318,7 @@ class TFBlipTextOutput(Layer):
         return hidden_states
 
 
-class TFBlipTextLayer(Layer):
+class TFBlipTextLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -373,7 +376,7 @@ class TFBlipTextLayer(Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
-class TFBlipTextEncoder(Layer):
+class TFBlipTextEncoder(tf.keras.layers.Layer):
     def __init__(self, config, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.config = config
@@ -447,7 +450,7 @@ class TFBlipTextEncoder(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->BlipText
-class TFBlipTextPooler(Layer):
+class TFBlipTextPooler(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -468,7 +471,7 @@ class TFBlipTextPooler(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->BlipText
-class TFBlipTextPredictionHeadTransform(Layer):
+class TFBlipTextPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -493,14 +496,14 @@ class TFBlipTextPredictionHeadTransform(Layer):
         return hidden_states
 
 
-class TFBlipTextLMPredictionHead(Layer):
+class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFBlipTextPredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = Dense(
+        self.decoder = tf.keras.layers.Dense(
             config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="decoder"
         )
         # TODO Make sure we can copy weights from torch despite them doing this weird shit
@@ -515,7 +518,7 @@ class TFBlipTextLMPredictionHead(Layer):
         return hidden_states
 
 
-class TFBlipTextOnlyMLMHead(Layer):
+class TFBlipTextOnlyMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFBlipTextLMPredictionHead(config, name="predictions")
