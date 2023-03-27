@@ -178,12 +178,6 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
-
     @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -310,12 +304,6 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
 
     @unittest.skip(reason="Blip does not use inputs_embeds")
     def test_inputs_embeds(self):
