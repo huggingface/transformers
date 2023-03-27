@@ -990,7 +990,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True
         ... )
 
         >>> outputs = model(**inputs)
