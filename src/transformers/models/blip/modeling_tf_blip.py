@@ -251,7 +251,6 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
             name="class_embedding",
         )
 
-        # TF Version:
         self.position_embedding = self.add_weight(
             shape=(1, self.num_positions, self.embed_dim),
             initializer=get_initializer(self.config.initializer_range),
