@@ -236,7 +236,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
             kernel_size=self.patch_size,
             strides=self.patch_size,
             kernel_initializer=get_initializer(self.config.initializer_range),
-            data_format="channels_first",
+            data_format="channels_last",
             name="patch_embedding",
         )
 
@@ -259,10 +259,12 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
+        # Input is channels-first, we transpose. PyTorch transposes after the conv because PyTorch
+        # likes channels-first convs.
         batch_size = tf.shape(pixel_values)[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = tf.reshape(patch_embeds, (batch_size, -1, self.num_patches))
-        patch_embeds = tf.transpose(patch_embeds, perm=(0, 2, 1))
+        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
+        patch_embeds = self.patch_embedding(pixel_values)
+        patch_embeds = tf.reshape(patch_embeds, (batch_size, self.num_patches, -1))
 
         class_embeds = tf.broadcast_to(self.class_embedding, (batch_size, 1, self.embed_dim))
         embeddings = tf.concat([class_embeds, patch_embeds], axis=1)
