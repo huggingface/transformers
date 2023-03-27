@@ -377,11 +377,7 @@ class TFBlipAttention(tf.keras.layers.Layer):
         mixed_qkv = tf.reshape(mixed_qkv, (bsz, tgt_len, 3, self.num_heads, self.head_dim))
         mixed_qkv = tf.transpose(mixed_qkv, perm=(2, 0, 3, 1, 4))
 
-        query_states, key_states, value_states = (
-            mixed_qkv[0],
-            mixed_qkv[1],
-            mixed_qkv[2],
-        )
+        query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = query_states @ tf.transpose(key_states, (0, 1, 3, 2))
