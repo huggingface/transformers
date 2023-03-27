@@ -133,6 +133,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, curre
                         has_fp16_weights=False,
                         threshold=threshold,
                     )
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model
