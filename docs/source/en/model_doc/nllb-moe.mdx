@@ -59,17 +59,17 @@ for the list of all BCP-47 in the Flores 200 dataset.
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-128")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-128")
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "UN Chief says there is no military solution in Syria"
+>>> article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
+"Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage."
 ```
 
 ### Generating from any other language than English
@@ -79,11 +79,11 @@ you should specify the BCP-47 code in the `src_lang` keyword argument of the tok
 
 See example below for a translation from romanian to german:
 
-```py
+```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-128", use_auth_token=True, src_lang="ron_Latn")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-128", use_auth_token=True)
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
 >>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
 >>> inputs = tokenizer(article, return_tensors="pt")
@@ -92,7 +92,6 @@ See example below for a translation from romanian to german:
 ...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-UN-Chef sagt, es gibt keine militärische Lösung in Syrien
 ```
 
 ## Documentation resources
