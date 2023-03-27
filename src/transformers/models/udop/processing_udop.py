@@ -169,4 +169,4 @@ class UdopProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+        return ["input_ids", "bbox", "attention_mask", "pixel_values"]

@@ -23,9 +23,18 @@ import numpy as np
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.udop import UdopTokenizer, UdopTokenizerFast
-from transformers.models.udop.tokenization_udop import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.testing_utils import (
+    require_pytesseract,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 if is_pytesseract_available():
@@ -35,30 +44,14 @@ if is_pytesseract_available():
 
 
 @require_pytesseract
+@require_sentencepiece
 @require_tokenizers
 class UdopProcessorTest(unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
+    maxDiff = None
 
     def setUp(self):
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-
         image_processor_map = {
             "do_resize": True,
             "size": 224,
@@ -66,18 +59,18 @@ class UdopProcessorTest(unittest.TestCase):
         }
 
         self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.image_processing_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processing_file, "w", encoding="utf-8") as fp:
+        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
+        # TODO update name
+        self.tokenizer_pretrained_name = "nielsr/udop-large"
+
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
@@ -123,7 +116,12 @@ class UdopProcessorTest(unittest.TestCase):
         image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = UdopProcessor.from_pretrained(
-            self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+            self.tmpdirname,
+            use_fast=False,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
@@ -137,7 +135,7 @@ class UdopProcessorTest(unittest.TestCase):
         image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = UdopProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+            self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
@@ -168,7 +166,7 @@ class UdopProcessorTest(unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd")
-        processor = UdopProcessor.from_pretrained("microsoft/udop-large", revision="no_ocr")
+        processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
 
         def preprocess_data(examples):
             images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
@@ -180,6 +178,7 @@ class UdopProcessorTest(unittest.TestCase):
                 words,
                 boxes=boxes,
                 word_labels=word_labels,
+                max_length=512,
                 padding="max_length",
                 truncation=True,
                 return_overflowing_tokens=True,
@@ -195,6 +194,7 @@ class UdopProcessorTest(unittest.TestCase):
 
 
 # different use cases tests
+@require_sentencepiece
 @require_torch
 @require_pytesseract
 class UdopProcessorIntegrationTests(unittest.TestCase):
@@ -212,8 +212,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
     @cached_property
     def get_tokenizers(self):
-        slow_tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
-        fast_tokenizer = UdopTokenizerFast.from_pretrained("microsoft/udop-large")
+        # TODO update organization
+        slow_tokenizer = UdopTokenizer.from_pretrained("nielsr/udop-large")
+        fast_tokenizer = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
@@ -228,41 +229,45 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
-            input_image_proc = image_processor(images[0], return_tensors="pt")
+            input_feat_extract = image_processor(images[0], return_tensors="pt")
             input_processor = processor(images[0], return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
-            # verify image
-            self.assertAlmostEqual(input_image_proc["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
+            # verify pixel_values
+            self.assertTrue(
+                torch.allclose(input_feat_extract["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+            )
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            expected_decoding = "[CLS] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
+            expected_decoding = "<s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
-            input_image_proc = image_processor(images, return_tensors="pt")
+            input_feat_extract = image_processor(images, return_tensors="pt")
             input_processor = processor(images, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
-            # verify images
-            self.assertAlmostEqual(input_image_proc["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
+            # verify pixel_values
+            self.assertTrue(
+                torch.allclose(input_feat_extract["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+            )
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            expected_decoding = "[CLS] 7 itc limited report and accounts 2013 itc ’ s brands : an asset for the nation the consumer needs and aspirations they fulfil, the benefit they generate for millions across itc ’ s value chains, the future - ready capabilities that support them, and the value that they create for the country, have made itc ’ s brands national assets, adding to india ’ s competitiveness. it is itc ’ s aspiration to be the no 1 fmcg player in the country, driven by its new fmcg businesses. a recent nielsen report has highlighted that itc's new fmcg businesses are the fastest growing among the top consumer goods companies operating in india. itc takes justifiable pride that, along with generating economic value, these celebrated indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. di wills * ; love delightfully soft skin? aia ans source : https : / / www. industrydocuments. ucsf. edu / docs / snbx0223 [SEP] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD]"  # noqa: E231
+            expected_decoding = "<s> 7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
             # fmt: on
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
@@ -284,13 +289,13 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], words, boxes=boxes, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
+            expected_keys = ["input_ids", "bbox", "attention_mask", "image"]
             actual_keys = list(input_processor.keys())
             for key in expected_keys:
                 self.assertIn(key, actual_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] hello world [SEP]"
+            expected_decoding = "<s> hello world</s>"
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -300,12 +305,12 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images, words, boxes=boxes, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] hello world [SEP] [PAD] [PAD] [PAD]"
+            expected_decoding = "<s> hello world</s><pad><pad>"
             decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -339,12 +344,12 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] weirdly world [SEP]"
+            expected_decoding = "<s> weirdly world</s>"
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -361,12 +366,12 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] my name is niels [SEP]"
+            expected_decoding = "<s> my name is niels</s>"
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -402,14 +407,14 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], question, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
+            expected_decoding = "<s> What's his name?</s></s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
@@ -421,19 +426,19 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            expected_decoding = "[CLS] what's the time [SEP] 7 itc limited report and accounts 2013 itc ’ s [SEP]"
+            expected_decoding = "<s> what's the time</s></s> 7 ITC Limited REPORT AND ACCOUNTS 2013</s>"
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
             # fmt: off
-            expected_bbox = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [0, 45, 67, 80], [72, 56, 109, 67], [72, 56, 109, 67], [116, 56, 189, 67], [198, 59, 253, 66], [257, 59, 285, 66], [289, 59, 365, 66], [372, 59, 407, 66], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [1000, 1000, 1000, 1000]]  # noqa: E231
+            expected_bbox = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [0, 45, 67, 80], [72, 56, 109, 67], [72, 56, 109, 67], [116, 56, 189, 67], [198, 59, 253, 66], [257, 59, 285, 66], [289, 59, 365, 66], [289, 59, 365, 66], [289, 59, 365, 66], [289, 59, 365, 66], [372, 59, 407, 66], [1000, 1000, 1000, 1000]]  # noqa: E231
             # fmt: on
             self.assertListEqual(input_processor.bbox[1].tolist(), expected_bbox)
 
@@ -455,12 +460,12 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
+            expected_decoding = "<s> What's his name?</s></s> hello world</s>"
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -471,16 +476,16 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] how old is he? [SEP] hello world [SEP] [PAD] [PAD] [PAD]"
+            expected_decoding = "<s> How old is he?</s></s> hello world</s><pad><pad>"
             decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
-            expected_decoding = "[CLS] what's the time [SEP] my name is niels [SEP]"
+            expected_decoding = "<s> what's the time</s></s> my name is niels</s>"
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
