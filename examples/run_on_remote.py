@@ -27,31 +27,31 @@ if __name__ == "__main__":
     # Throw an error if user passes both BYO and on-demand cluster args
     # Otherwise, use default values
     parser = argparse.ArgumentParser()
-    parser.add_argument('--user', type=str, default='ubuntu')
-    parser.add_argument('--host', type=str, default='localhost')
-    parser.add_argument('--key_path', type=str, default=None)
-    parser.add_argument('--instance', type=str, default='V100:1')
-    parser.add_argument('--provider', type=str, default='cheapest')
-    parser.add_argument('--use_spot', type=bool, default=False)
-    parser.add_argument('--example', type=str, default='pytorch/text-generation/run_generation.py')
+    parser.add_argument("--user", type=str, default="ubuntu")
+    parser.add_argument("--host", type=str, default="localhost")
+    parser.add_argument("--key_path", type=str, default=None)
+    parser.add_argument("--instance", type=str, default="V100:1")
+    parser.add_argument("--provider", type=str, default="cheapest")
+    parser.add_argument("--use_spot", type=bool, default=False)
+    parser.add_argument("--example", type=str, default="pytorch/text-generation/run_generation.py")
     args, unknown = parser.parse_known_args()
-    if args.host != 'localhost':
-        if args.instance != 'V100:1' or args.provider != 'cheapest':
-            raise ValueError('Cannot specify both BYO and on-demand cluster args')
-        cluster = rh.cluster(name='rh-cluster', ips=[args.host],
-                             ssh_creds={"ssh_user": args.user, "ssh_private_key": args.key_path})
+    if args.host != "localhost":
+        if args.instance != "V100:1" or args.provider != "cheapest":
+            raise ValueError("Cannot specify both BYO and on-demand cluster args")
+        cluster = rh.cluster(
+            name="rh-cluster", ips=[args.host], ssh_creds={"ssh_user": args.user, "ssh_private_key": args.key_path}
+        )
     else:
-        cluster = rh.cluster(name='rh-cluster',
-                             instance_type=args.instance,
-                             provider=args.provider,
-                             use_spot=args.use_spot)
-    example_dir = args.example.rsplit('/', 1)[0]
+        cluster = rh.cluster(
+            name="rh-cluster", instance_type=args.instance, provider=args.provider, use_spot=args.use_spot
+        )
+    example_dir = args.example.rsplit("/", 1)[0]
 
     # Set up remote environment
-    cluster.install_packages(['pip:./'])  # Installs transformers from local source
+    cluster.install_packages(["pip:./"])  # Installs transformers from local source
     # Note transformers is copied into the home directory on the remote machine, so we can install from there
-    cluster.run([f'pip install -r transformers/examples/{example_dir}/requirements.txt'])
-    cluster.run(['pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117'])
+    cluster.run([f"pip install -r transformers/examples/{example_dir}/requirements.txt"])
+    cluster.run(["pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117"])
 
     # Run example. You can bypass the CLI wrapper and paste your own code here.
     cluster.run([f'python transformers/examples/{args.example} {" ".join(shlex.quote(arg) for arg in unknown)}'])
