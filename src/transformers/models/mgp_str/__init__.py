@@ -41,7 +41,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig
-    from .processing_mgp_str.py import MgpstrProcessor
+    from .processing_mgp_str import MgpstrProcessor
     from .tokenization_mgp_str import MgpstrTokenizer
 
     try:
