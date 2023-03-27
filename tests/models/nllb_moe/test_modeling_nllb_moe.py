@@ -511,7 +511,7 @@ class NllbMoeRouterTest(unittest.TestCase):
         # this means that it had a greater probability of being routed
         assert top_1_mask[-1, 0] == 1
 
-    def test_seconde_expert_policy(self):
+    def test_second_expert_policy(self):
         config = NllbMoeConfig(
             num_experts=4,
             hidden_size=32,
