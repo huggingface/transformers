@@ -321,7 +321,6 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.seq_len_dim = 1
         self.attention = TFBlipTextAttention(config, name="attention")
         if self.config.is_decoder:
             self.crossattention = TFBlipTextAttention(
