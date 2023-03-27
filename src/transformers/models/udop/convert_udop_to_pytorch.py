@@ -99,7 +99,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         state_dict[key] = val
 
     # create HF model
-    config = UdopConfig()
+    config = UdopConfig(decoder_start_token_id=0)
     model = UdopForConditionalGeneration(config)
     model.eval()
 

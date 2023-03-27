@@ -29,9 +29,9 @@ class UdopProcessor(ProcessorMixin):
 
     [`UdopProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`UdopImageProcessor`] to resize document images to a fixed size, and optionally applies OCR to get
-    words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`], which
-    turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
+    It first uses [`UdopImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
+    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`],
+    which turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).
 
@@ -80,9 +80,10 @@ class UdopProcessor(ProcessorMixin):
         This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
         [`UdopImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
         bounding boxes along with the additional arguments to [`~UdopTokenizer.__call__`] and returns the output,
-        together with resized `images`. In case [`UdopImageProcessor`] was initialized with `apply_ocr` set to `False`,
-        it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional arguments
-        to [`~UdopTokenizer.__call__`] and returns the output, together with resized `images``.
+        together with the prepared `pixel_values`. In case [`UdopImageProcessor`] was initialized with `apply_ocr` set
+        to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the
+        additional arguments to [`~UdopTokenizer.__call__`] and returns the output, together with the prepared
+        `pixel_values`.
 
         Please refer to the docstring of the above two methods for more information.
         """
