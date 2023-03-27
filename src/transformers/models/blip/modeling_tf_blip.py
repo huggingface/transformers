@@ -1178,7 +1178,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, BlipForConditionalGeneration
+        >>> from transformers import AutoProcessor, TFBlipForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
