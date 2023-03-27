@@ -1238,11 +1238,11 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         Overrides *generate* function to be able to use the model as a conditional generator
 
         Parameters:
-            pixel_values (*tf.Tensor* of shape *(batch_size, image_width, image_height)*:
+            pixel_values (`tf.Tensor` of shape `(batch_size, image_width, image_height)`:
                 Input image to be processed
-            input_ids (*tf.Tensor* of shape *(batch_size, sequence_length)*, *optional*):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation.
-            attention_mask (*tf.Tensor* of shape *(batch_size, sequence_length)*, *optional*):
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
 
