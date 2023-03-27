@@ -1181,8 +1181,8 @@ class NeptuneCallback(TrainerCallback):
             from neptune import Run
             from neptune.internal.utils import verify_type
         except ImportError:
-            from neptune.new.metadata_containers.run import Run
             from neptune.new.internal.utils import verify_type
+            from neptune.new.metadata_containers.run import Run
 
         verify_type("api_token", api_token, (str, type(None)))
         verify_type("project", project, (str, type(None)))
