@@ -23,7 +23,6 @@ from torch.utils.data import Dataset
 from .deepspeed import is_deepspeed_zero3_enabled
 from .generation.configuration_utils import GenerationConfig
 from .trainer import Trainer
-from .trainer_utils import EvalPrediction, PredictionOutput
 from .utils import logging
 
 
@@ -32,6 +31,7 @@ if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
     from .tokenization_utils_base import PreTrainedTokenizerBase
     from .trainer_callback import TrainerCallback
+    from .trainer_utils import EvalPrediction, PredictionOutput
     from .training_args import TrainingArguments
 
 
@@ -41,15 +41,15 @@ logger = logging.get_logger(__name__)
 class Seq2SeqTrainer(Trainer):
     def __init__(
         self,
-        model: Union[PreTrainedModel, nn.Module] = None,
-        args: TrainingArguments = None,
-        data_collator: Optional[DataCollator] = None,
+        model: Union["PreTrainedModel", nn.Module] = None,
+        args: "TrainingArguments" = None,
+        data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        model_init: Optional[Callable[[], PreTrainedModel]] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        callbacks: Optional[List[TrainerCallback]] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
+        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
+        callbacks: Optional[List["TrainerCallback"]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
@@ -164,7 +164,7 @@ class Seq2SeqTrainer(Trainer):
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
         **gen_kwargs,
-    ) -> PredictionOutput:
+    ) -> "PredictionOutput":
         """
         Run prediction and returns predictions and potential metrics.
 
