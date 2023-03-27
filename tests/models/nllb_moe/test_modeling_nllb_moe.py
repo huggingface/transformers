@@ -39,11 +39,7 @@ if is_torch_available():
     import torch
 
     from transformers import NllbMoeForConditionalGeneration, NllbMoeModel, NllbTokenizer
-    from transformers.models.nllb_moe.modeling_nllb_moe import (
-        NllbMoeDecoder,
-        NllbMoeEncoder,
-        NllbMoeTop2Router,
-    )
+    from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder,NllbMoeEncoder,NllbMoeTop2Router
 
 
 @require_torch

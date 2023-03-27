@@ -397,7 +397,6 @@ class NllbMoeTop2Router(nn.Module):
         return top_1_mask, router_probs
 
 
-# Adapted from transformers.models.t5.modeling_t5.T5DenseActDense
 class NllbMoeDenseActDense(nn.Module):
     def __init__(self, config: NllbMoeConfig, ffn_dim: int):
         super().__init__()
@@ -420,7 +419,6 @@ class NllbMoeDenseActDense(nn.Module):
         return hidden_states
 
 
-# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP
 class NllbMoeSparseMLP(nn.Module):
     r"""
     Implementation of the NLLB-MoE sparse MLP module.
@@ -641,7 +639,6 @@ class NllbMoeAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Adapted from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->NllbMoe
 class NllbMoeEncoderLayer(nn.Module):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
@@ -721,7 +718,6 @@ class NllbMoeEncoderLayer(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->NllbMoe
 class NllbMoeDecoderLayer(nn.Module):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
