@@ -1072,10 +1072,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.blip.vision_model(
-            pixel_values=pixel_values,
-            return_dict=return_dict,
-        )
+        vision_outputs = self.blip.vision_model(pixel_values=pixel_values, return_dict=return_dict)
 
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
@@ -1262,9 +1259,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         """
 
         batch_size = pixel_values.shape[0]
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-        )
+        vision_outputs = self.vision_model(pixel_values=pixel_values)
 
         image_embeds = vision_outputs[0]
 
@@ -1543,9 +1538,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         2
         ```
         """
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-        )
+        vision_outputs = self.vision_model(pixel_values=pixel_values)
 
         image_embeds = vision_outputs[0]
 
