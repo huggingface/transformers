@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Pix2Struct model. """
 
-
+import copy
 import inspect
 import os
 import tempfile
@@ -396,7 +396,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -525,6 +525,105 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
+    def test_resize_tokens_embeddings(self):
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.text_config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Decoder input ids should be clamped to the maximum size of the vocabulary
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+    # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
+    def test_resize_embeddings_untied(self):
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Decoder input ids should be clamped to the maximum size of the vocabulary
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @unittest.skip(reason="Pix2Struct doesn't use tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
