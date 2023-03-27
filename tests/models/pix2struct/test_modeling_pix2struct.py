@@ -528,10 +528,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -578,10 +575,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
