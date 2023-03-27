@@ -234,7 +234,7 @@ class FillMaskPipeline(Pipeline):
             - **sequence** (`str`) -- The corresponding input with the mask token prediction.
             - **score** (`float`) -- The corresponding probability.
             - **token** (`int`) -- The predicted token id (to replace the masked one).
-            - **token** (`str`) -- The predicted token (to replace the masked one).
+            - **token_str** (`str`) -- The predicted token (to replace the masked one).
         """
         outputs = super().__call__(inputs, **kwargs)
         if isinstance(inputs, list) and len(inputs) == 1:
