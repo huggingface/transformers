@@ -47,7 +47,7 @@ jobs:
         with:
           context: ./docker/transformers-past-gpu
           build-args: |
-            REF=enable_backward_forward_ci
+            REF=main
             BASE_DOCKER_IMAGE=${{ steps.get-base-image.outputs.base_image }}
             FRAMEWORK=pytorch
             VERSION=${{ matrix.version }}
@@ -91,7 +91,7 @@ jobs:
         with:
           context: ./docker/transformers-past-gpu
           build-args: |
-            REF=enable_backward_forward_ci
+            REF=main
             BASE_DOCKER_IMAGE=${{ steps.get-base-image.outputs.base_image }}
             FRAMEWORK=tensorflow
             VERSION=${{ matrix.version }}
