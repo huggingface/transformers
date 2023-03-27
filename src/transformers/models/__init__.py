@@ -84,6 +84,7 @@ from . import (
     gpt2,
     gpt_neo,
     gpt_neox,
+    geov,
     gpt_neox_japanese,
     gpt_sw3,
     gptj,

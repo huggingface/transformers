@@ -300,6 +300,7 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
+    "models.geov": ["GEOV_PRETRAINED_CONFIG_ARCHIVE_MAP", "GeoVConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -732,6 +733,7 @@ else:
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
+    _import_structure["models.geov"].append("GeoVTokenizer")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
@@ -1655,6 +1657,15 @@ else:
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
+        ]
+    )
+    _import_structure["models.geov"].extend(
+        [
+            "GEOV_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GeoVForCausalLM",
+            "GeoVLayer",
+            "GeoVModel",
+            "GeoVPreTrainedModel",
         ]
     )
     _import_structure["models.gpt_neox_japanese"].extend(
@@ -3956,6 +3967,7 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
+    from .models.geov import GEOV_PRETRAINED_CONFIG_ARCHIVE_MAP, GeoVConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
@@ -4353,6 +4365,7 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
+        from .models.geov import GeoVTokenizer
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -5116,6 +5129,13 @@ if TYPE_CHECKING:
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
+        )
+        from .models.geov import (
+            GEOV_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GeoVForCausalLM,
+            GeoVLayer,
+            GeoVModel,
+            GeoVPreTrainedModel,
         )
         from .models.gpt_neox_japanese import (
             GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
