@@ -252,7 +252,6 @@ class TFBlipTextAttention(tf.keras.layers.Layer):
         self.self = TFBlipTextSelfAttention(config, is_cross_attention, name="self")
         # "output" is a protected attribute on TF models
         self.self_output = TFBlipTextSelfOutput(config, name="output")
-        self.pruned_heads = set()
 
     def call(
         self,
