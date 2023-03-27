@@ -655,14 +655,7 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            TFBlipForConditionalGeneration,
-            TFBlipForQuestionAnswering,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = (TFBlipForConditionalGeneration, TFBlipForQuestionAnswering) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
