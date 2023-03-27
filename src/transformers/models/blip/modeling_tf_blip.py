@@ -1063,15 +1063,15 @@ class TFBlipModel(TFBlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, BlipModel
+        >>> from transformers import AutoProcessor, TFBlipModel
 
-        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = TFBlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="tf")
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
