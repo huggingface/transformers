@@ -1525,7 +1525,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
-        
+
         self.deprecation_warnings = (
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
