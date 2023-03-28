@@ -160,7 +160,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
         outputs = pipe([image, image], [text, text])
         self.assertEqual(
             outputs,
-            [{"generated_text": "a photography of a volcano"}, {"generated_text": "a photography of a volcano"}],
+            [[{"generated_text": "a photography of a volcano"}], [{"generated_text": "a photography of a volcano"}]],
         )
 
     @slow
@@ -178,7 +178,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
         outputs = pipe([image, image], [text, text])
         self.assertEqual(
             outputs,
-            [{"generated_text": "ash cloud"}, {"generated_text": "ash cloud"}],
+            [[{"generated_text": "ash cloud"}], [{"generated_text": "ash cloud"}]],
         )
 
     @slow
