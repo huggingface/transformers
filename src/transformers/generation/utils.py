@@ -1429,6 +1429,8 @@ class GenerationMixin:
                 )
             if batch_size > 1:
                 raise ValueError("Assisted generation is only supported for batch_size = 1")
+            if not model_kwargs["use_cache"]:
+                raise ValueError("Assisted generation requires `use_cache=True`")
 
             # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
             if assistant_model.config.is_encoder_decoder:
@@ -1480,6 +1482,8 @@ class GenerationMixin:
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " contrastive search."
                 )
+            if not model_kwargs["use_cache"]:
+                raise ValueError("Contrastive search requires `use_cache=True`")
 
             return self.contrastive_search(
                 input_ids,
@@ -4191,20 +4195,31 @@ class GenerationMixin:
                         decoder_attention_mask=og_model_attn,
                         past_key_values=model_kwargs["past_key_values"],
                         encoder_outputs=model_kwargs["encoder_outputs"],
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
                     )
                 else:
                     outputs = self(
                         og_model_input_ids,
                         attention_mask=og_model_attn,
                         past_key_values=model_kwargs["past_key_values"],
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
                     )
             else:
                 if self.config.is_encoder_decoder:
                     outputs = self(
-                        decoder_input_ids=candidate_input_ids, encoder_outputs=model_kwargs["encoder_outputs"]
+                        decoder_input_ids=candidate_input_ids,
+                        encoder_outputs=model_kwargs["encoder_outputs"],
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
                     )
                 else:
-                    outputs = self(candidate_input_ids)
+                    outputs = self(
+                        candidate_input_ids,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                    )
 
             # 3. Obtain the argmax from the original model logits.
             if len(logits_processor) > 0:
@@ -4231,12 +4246,9 @@ class GenerationMixin:
 
             # 6. Update variables according to the number of matching assistant tokens.
             n_matches = min(n_matches, max_len - cur_len)
+            if (last_assistant_token_is_eos and n_matches == candidate_length):  # don't go beyond an EOS token
+                n_matches -= 1
             input_ids = candidate_input_ids[:, 0 : cur_len + n_matches]
-
-            # check stopping criteria here
-            if (last_assistant_token_is_eos and n_matches == candidate_length) or stopping_criteria(input_ids, None):
-                break
-
             new_cur_len = input_ids.shape[-1]
 
             # 6.1. Discard past key values relative to unused assistant tokens
@@ -4267,33 +4279,33 @@ class GenerationMixin:
             # Assistant: modified to append one tuple element per token, as in the other generation methods.
             if return_dict_in_generate:
                 if output_scores:
-                    scores += tuple(outputs.logits[:, i, :] for i in range(last_valid_output_idx))
+                    scores += tuple(outputs.logits[:, i, :] for i in range(last_valid_output_idx + 1))
                 if output_attentions:
                     if self.config.is_encoder_decoder:
                         cross_attentions += tuple(
-                            layer[..., i, i]
+                            layer[..., i:i + 1, :]
                             for layer in outputs.cross_attentions
-                            for i in range(last_valid_output_idx)
+                            for i in range(last_valid_output_idx + 1)
                         )
                         decoder_attentions += tuple(
-                            layer[..., i, i]
+                            layer[..., i:i + 1, -(last_valid_output_idx - i):]
                             for layer in outputs.decoder_attentions
-                            for i in range(last_valid_output_idx)
+                            for i in range(last_valid_output_idx + 1)
                         )
                     else:
                         decoder_attentions += tuple(
-                            layer[..., i, i] for layer in outputs.attentions for i in range(last_valid_output_idx)
+                            layer[..., i:i + 1, -(last_valid_output_idx - i):] for layer in outputs.attentions for i in range(last_valid_output_idx + 1)
                         )
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states += tuple(
-                            layer[:, i, :]
+                            layer[:, i:i + 1, :]
                             for layer in outputs.decoder_hidden_states
-                            for i in range(last_valid_output_idx)
+                            for i in range(last_valid_output_idx + 1)
                         )
                     else:
                         decoder_hidden_states += tuple(
-                            layer[:, i, :] for layer in outputs.hidden_states for i in range(last_valid_output_idx)
+                            layer[:, i:i + 1, :] for layer in outputs.hidden_states for i in range(last_valid_output_idx + 1)
                         )
 
             # finished sentences should have their next token be a padding token
@@ -4315,7 +4327,7 @@ class GenerationMixin:
                 )
 
             # stop when each sentence is finished, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, None):
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
                 if not synced_gpus:
                     break
                 else:
