@@ -220,6 +220,30 @@ class RoFormerModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_for_generate_causal_lm(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        torch.manual_seed(0)
+        config.is_decoder = True
+        config.bos_token_id = 0
+        config.eos_token_id = 1
+        config.pad_token_id = 2
+        model = RoFormerForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            input_ids = model.generate(do_sample=False, max_length=10)
+            output = model(input_ids=input_ids)
+        argmax_ids = output.logits.argmax(dim=-1)
+        self.parent.assertListEqual(argmax_ids[:-1].cpu().tolist(), input_ids[1:].cpu().tolist())
+
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -404,6 +428,10 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_generate_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_generate_causal_lm(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -262,6 +262,15 @@ class RoFormerSelfAttention(nn.Module):
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
+            if sinusoidal_pos is not None:
+                if self.rotary_value:
+                    query_layer, key_layer, value_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer, value_layer
+                    )
+                else:
+                    query_layer, key_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer
+                    )
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
@@ -566,8 +575,12 @@ class RoFormerEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        )
+
         # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
-        sinusoidal_pos = self.embed_positions(hidden_states.shape[:-1])[None, None, :, :]
+        sinusoidal_pos = self.embed_positions(hidden_states.shape[:-1], past_key_values_length)[None, None, :, :]
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
