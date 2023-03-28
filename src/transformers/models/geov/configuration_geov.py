@@ -25,7 +25,6 @@ GEOV_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class GeoVConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GeoVModel`]. It is used to instantiate an
@@ -78,26 +77,25 @@ class GeoVConfig(PretrainedConfig):
     model_type = "geov"
 
     def __init__(
-            self,
-            vocab_size=65536,
-            hidden_size=1024 * 5,
-            num_hidden_layers=32,
-            num_attention_heads=40,
-            intermediate_size=1024 * 5 * 4,
-            layer_norm_eps=1e-4,
-            rotary_emb_base=10000,
-            max_position_embeddings=2049,
-            use_extra_biases_ffn=False,
-            use_cache=True,
-            bos_token_id=0,
-            eos_token_id=2,
-            tie_word_embeddings=False,
-            **kwargs,
+        self,
+        vocab_size=65536,
+        hidden_size=1024 * 5,
+        num_hidden_layers=32,
+        num_attention_heads=40,
+        intermediate_size=1024 * 5 * 4,
+        layer_norm_eps=1e-4,
+        rotary_emb_base=10000,
+        max_position_embeddings=2049,
+        use_extra_biases_ffn=False,
+        use_cache=True,
+        bos_token_id=0,
+        eos_token_id=2,
+        tie_word_embeddings=False,
+        **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id,
-                         eos_token_id=eos_token_id,
-                         tie_word_embeddings=tie_word_embeddings,
-                         **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

@@ -31,20 +31,20 @@ if is_torch_available():
 
 class GeoVModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=3,
-            num_attention_heads=4,
-            intermediate_size=32 * 4,
-            max_position_embeddings=512,
-            num_labels=3,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=3,
+        num_attention_heads=4,
+        intermediate_size=32 * 4,
+        max_position_embeddings=512,
+        num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -225,9 +225,7 @@ class GeoVLanguageGenerationTest(unittest.TestCase):
             model.to(torch_device)
 
             inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
-            expected_output = (
-                "My favorite food is pizza. I love pizza. I love pizza. I"
-            )
+            expected_output = "My favorite food is pizza. I love pizza. I love pizza. I"
 
             output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
             output_str = tokenizer.batch_decode(output_ids)[0]

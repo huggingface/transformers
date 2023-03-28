@@ -65,20 +65,19 @@ class GeoVTokenizer(PreTrainedTokenizer):
             The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
-
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-            self,
-            vocab_file,
-            bos_token="<s>",
-            eos_token="</s>",
-            unk_token="<unk>",
-            new_line_token_id=65_499,
-            **kwargs,
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        new_line_token_id=65_499,
+        **kwargs,
     ) -> None:
         super().__init__(
             bos_token=bos_token,
@@ -120,20 +119,20 @@ class GeoVTokenizer(PreTrainedTokenizer):
         for l in split_text:
             rl = self.sp_model.encode(l, out_type=str)
             ret.extend(rl)
-            ret.append('\n')
+            ret.append("\n")
         ret = ret[:-1]
         return ret
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token == '\n':
+        if token == "\n":
             return self.new_line_token_id
         return self.sp_model.PieceToId(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index == self.new_line_token_id:
-            return '\n'
+            return "\n"
         return self.sp_model.IdToPiece(index)
 
     def convert_tokens_to_string(self, tokens):
@@ -142,12 +141,12 @@ class GeoVTokenizer(PreTrainedTokenizer):
         return out_string
 
     def _decode(
-            self,
-            token_ids: List[int],
-            skip_special_tokens: bool = False,
-            clean_up_tokenization_spaces: bool = True,
-            spaces_between_special_tokens: bool = True,
-            **kwargs,
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
     ) -> str:
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -166,10 +165,10 @@ class GeoVTokenizer(PreTrainedTokenizer):
         save_directory = Path(save_directory)
         if not save_directory.is_dir():
             raise ValueError(f"Vocabulary path ({save_directory}) should be a directory")
-        vocab_fn = VOCAB_FILES_NAMES['vocab_file']
-        filename_prefix = f'{filename_prefix}-' if filename_prefix else ''
+        vocab_fn = VOCAB_FILES_NAMES["vocab_file"]
+        filename_prefix = f"{filename_prefix}-" if filename_prefix else ""
 
-        vocab_file = save_directory / f'{filename_prefix}{vocab_fn}'
+        vocab_file = save_directory / f"{filename_prefix}{vocab_fn}"
 
         with open(str(vocab_file), "wb") as fi:
             content_spiece_model = self.sp_model.serialized_model_proto()

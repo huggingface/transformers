@@ -84,24 +84,19 @@ class GeoVAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
         max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "causal_mask",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
-        )
-        self.rotary_emb = RotaryEmbedding(
-            self.head_size, base=config.rotary_emb_base
-        )
+        self.register_buffer("causal_mask", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)))
+        self.rotary_emb = RotaryEmbedding(self.head_size, base=config.rotary_emb_base)
         self.qkv = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: torch.FloatTensor,
-            head_mask: Optional[torch.FloatTensor] = None,
-            layer_past: Optional[Tuple[torch.Tensor]] = None,
-            use_cache: Optional[bool] = False,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
     ):
         has_layer_past = layer_past is not None
 
@@ -182,9 +177,9 @@ class GeoVAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.shape
         key_length = key.shape[-2]
 
-        causal_mask = self.causal_mask[None, None, key_length - query_length: key_length, :key_length]
+        causal_mask = self.causal_mask[None, None, key_length - query_length : key_length, :key_length]
 
-        attn_scores = torch.einsum('bhid,bhjd->bhij', query, key) / math.sqrt(attn_head_size)
+        attn_scores = torch.einsum("bhid,bhjd->bhij", query, key) / math.sqrt(attn_head_size)
 
         attn_scores.masked_fill_(causal_mask == 0, torch.finfo(attn_scores.dtype).min)
 
@@ -227,33 +222,35 @@ class RotaryEmbedding(torch.nn.Module):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
     """Apply positional embeddings"""
-    cos = cos[..., offset: q.shape[-2] + offset, :]
-    sin = sin[..., offset: q.shape[-2] + offset, :]
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     return q_embed
 
 
 def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
     """Apply positional embeddings in reverse"""
-    cos = cos[..., offset: q.shape[-2] + offset, :]
-    sin = sin[..., offset: q.shape[-2] + offset, :]
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
     q_embed = (q * cos) - (rotate_half(q) * sin)
     return q_embed
 
 
 class GeoVMLP(nn.Module):
     """Position wise Feed-forward network"""
-    def __init__(self, config: 'GeoVConfig'):
+
+    def __init__(self, config: "GeoVConfig"):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense_2h_to_h = nn.Linear(config.intermediate_size // 2, config.hidden_size,
-                                       bias=config.use_extra_biases_ffn)
+        self.dense_2h_to_h = nn.Linear(
+            config.intermediate_size // 2, config.hidden_size, bias=config.use_extra_biases_ffn
+        )
         self.act = nn.GELU()
 
     def forward(self, hidden_states):
@@ -269,7 +266,8 @@ class GeoVMLP(nn.Module):
 
 class GeoVLayer(nn.Module):
     """GeoV transformer layer"""
-    def __init__(self, config: 'GeoVConfig'):
+
+    def __init__(self, config: "GeoVConfig"):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -277,13 +275,13 @@ class GeoVLayer(nn.Module):
         self.mlp = GeoVMLP(config)
 
     def forward(
-            self,
-            hidden_states: Optional[torch.FloatTensor],
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            use_cache: Optional[bool] = False,
-            layer_past: Optional[Tuple[torch.Tensor]] = None,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: Optional[torch.FloatTensor],
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
     ):
         attention_layer_outputs = self.attention(
             self.input_layernorm(hidden_states),
@@ -368,7 +366,7 @@ GEOV_INPUTS_DOCSTRING = r"""
     GEOV_START_DOCSTRING,
 )
 class GeoVModel(GeoVPreTrainedModel):
-    def __init__(self, config: 'GeoVConfig'):
+    def __init__(self, config: "GeoVConfig"):
         super().__init__(config)
         self.config = config
 
@@ -398,16 +396,16 @@ class GeoVModel(GeoVPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -527,7 +525,7 @@ class GeoVModel(GeoVPreTrainedModel):
 class GeoVForCausalLM(GeoVPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"causal_mask", r"inv_freq"]
 
-    def __init__(self, config: 'GeoVConfig'):
+    def __init__(self, config: "GeoVConfig"):
         super().__init__(config)
 
         self.geov = GeoVModel(config)
@@ -545,17 +543,17 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
     @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
