@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Mask2Former model."""
+""" PyTorch Video Mask2Former model."""
 
 import math
 import random
@@ -322,7 +322,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     loss = loss.sum() / num_masks
     return loss
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
     Args:
@@ -364,7 +364,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     loss = 1 - (numerator + 1) / (denominator + 1)
     return loss
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -393,7 +393,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/matcher.py
+# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former_video/modeling/matcher.py
 class VideoMask2FormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -501,7 +501,7 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
         return matched_indices
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/criterion.py
+# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former_video/modeling/criterion.py
 class VideoMask2FormerLoss(nn.Module):
     def __init__(self, config: Mask2FormerConfig, weight_dict: Dict[str, float]):
         """
@@ -901,7 +901,7 @@ class VideoMask2Former3DSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->Mask2Former
+# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->VideoMask2Former
 class VideoMask2FormerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -1038,7 +1038,7 @@ class VideoMask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module
 
         return output, attention_weights
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderEncoderLayer with Mask2Former->VideoMask2Former
 class VideoMask2FormerPixelDecoderEncoderLayer(nn.Module):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__()
@@ -1436,7 +1436,7 @@ class VideoMask2FormerPixelDecoder(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelLevelModule with Mask2Former->VideoMask2Former
 class VideoMask2FormerPixelLevelModule(nn.Module):
     def __init__(self, config: Mask2FormerConfig):
         """
@@ -1468,7 +1468,7 @@ class VideoMask2FormerPixelLevelModule(nn.Module):
         )
 
 
-# Modified from transformers.models.detr.modeling_detr.DetrAttention with Detr->Mask2Former
+# Modified from transformers.models.detr.modeling_detr.DetrAttention with Detr->VideoMask2Former
 class VideoMask2FormerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Here, we add position embeddings to the queries and
@@ -1604,7 +1604,7 @@ class VideoMask2FormerAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerMaskedAttentionDecoderLayer with Mask2Former->VideoMask2Former
 class VideoMask2FormerMaskedAttentionDecoderLayer(nn.Module):
     """
     The VideoMask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as FFN
@@ -1818,7 +1818,7 @@ class VideoMask2FormerMaskedAttentionDecoderLayer(nn.Module):
 
         return outputs
 
-
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerMaskedAttentionDecoder with Mask2Former->VideoMask2Former
 class VideoMask2FormerMaskedAttentionDecoder(nn.Module):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
@@ -1996,7 +1996,7 @@ class VideoMask2FormerMaskedAttentionDecoder(nn.Module):
         )
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock with MaskFormer->Mask2Former
+# Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock with MaskFormer->VideoMask2Former
 class VideoMask2FormerPredictionBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
         super().__init__()
@@ -2011,7 +2011,7 @@ class VideoMask2FormerPredictionBlock(nn.Module):
             hidden_state = layer(hidden_state)
         return hidden_state
 
-
+# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerMLPPredictionHead with MaskFormer->VideoMask2Former
 class VideoMask2FormerMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """
@@ -2281,7 +2281,7 @@ class VideoMask2FormerPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Mask2Former Model outputting raw hidden-states without any specific head on top.",
+    "The bare Video Mask2Former Model outputting raw hidden-states without any specific head on top.",
     VIDEO_MASK2FORMER_START_DOCSTRING,
 )
 class VideoMask2FormerModel(VideoMask2FormerPreTrainedModel):
