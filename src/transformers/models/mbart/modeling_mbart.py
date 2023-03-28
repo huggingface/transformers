@@ -561,7 +561,7 @@ MBART_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
 
     >>> # Translate
-    >>> generated_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> generated_ids = model.generate(**inputs, num_beams=4, max_length=5)
     >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     '42 este răspuns'
     ```
@@ -1266,7 +1266,8 @@ class MBartModel(MBartPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The MBART Model with a language modeling head. Can be used for summarization.", MBART_START_DOCSTRING
+    "The MBART Model with a language modeling head. Can be used for summarization, after fine-tuning the pretrained models.",
+    MBART_START_DOCSTRING,
 )
 class MBartForConditionalGeneration(MBartPreTrainedModel):
     base_model_prefix = "model"

@@ -120,6 +120,7 @@ src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
 src/transformers/models/mbart/modeling_mbart.py
+src/transformers/models/mbart/modeling_tf_mbart.py
 src/transformers/models/mctct/configuration_mctct.py
 src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
