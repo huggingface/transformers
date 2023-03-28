@@ -424,6 +424,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens_to_add.append(token)
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
+            elif (
+                token == self.unk_token 
+                and self.convert_tokens_to_ids(self.unk_token) is None
+            ):
+                tokens_to_add.append(token)
+                if self.verbose:
+                    logger.info(f"Adding {token} to the vocabulary")
 
         added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
