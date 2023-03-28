@@ -138,6 +138,8 @@ class GeoVAttention(nn.Module):
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
+        attn_output = apply_rotary_pos_emb_reverse(attn_output, cos, sin, offset=offset)
+
         # Reshape outputs
         attn_output = einops.rearrange(attn_output, 'b h l q -> b l (h q)')
         attn_output = self.dense(attn_output)
