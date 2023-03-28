@@ -318,7 +318,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         split_tokens = []
         words = re.findall(r"\S+\n?", text)
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def normalizeTweet(self, tweet):
@@ -640,9 +640,17 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
-        >>> from nltk.tokenize.casual import _replace_html_entities >>> _replace_html_entities(b'Price: &pound;100')
-        'Price: \\xa3100' >>> print(_replace_html_entities(b'Price: &pound;100')) Price: £100 >>>
-    """
+    Examples:
+
+    ```python
+    >>> from nltk.tokenize.casual import _replace_html_entities
+
+    >>> _replace_html_entities(b"Price: &pound;100")
+    'Price: \\xa3100'
+
+    >>> print(_replace_html_entities(b"Price: &pound;100"))
+    Price: £100
+    ```"""
 
     def _convert_entity(match):
         entity_body = match.group(3)
@@ -726,7 +734,7 @@ class TweetTokenizer:
         words = WORD_RE.findall(safe_text)
         # Possibly alter the case, but avoid changing emoticons like :D into :d:
         if not self.preserve_case:
-            words = list(map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words))
+            words = [x if EMOTICON_RE.search(x) else x.lower() for x in words]
         return words
 
 

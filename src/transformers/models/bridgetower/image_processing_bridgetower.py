@@ -19,12 +19,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import PaddingMode, center_crop, normalize, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -34,7 +33,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -186,8 +185,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
-        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
 

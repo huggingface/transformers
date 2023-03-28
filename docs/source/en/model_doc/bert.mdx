@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # BERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/bert-base-uncased">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The BERT model was proposed in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a
@@ -38,6 +47,15 @@ Tips:
   the left.
 - BERT was trained with the masked language modeling (MLM) and next sentence prediction (NSP) objectives. It is
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation.
+- Corrupts the inputs by using random masking, more precisely, during pretraining, a given percentage of tokens (usually 15%) is masked by:
+
+    * a special mask token with probability 0.8
+    * a random token different from the one masked with probability 0.1
+    * the same token with probability 0.1
+    
+- The model must predict the original sentence, but has a second objective: inputs are two sentences A and B (with a separation token in between). With probability 50%, the sentences are consecutive in the corpus, in the remaining 50% they are not related. The model has to predict if the sentences are consecutive or not.
+
+
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/bert).
 
@@ -54,6 +72,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`BertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
 - [`TFBertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
 - [`FlaxBertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
+- [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
@@ -63,6 +82,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 - [`FlaxBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Token classification task guide](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
@@ -70,6 +90,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFBertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
 - [`FlaxBertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Masked language modeling task guide](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
@@ -77,10 +98,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFBertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
 - [`FlaxBertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Question answering task guide](../tasks/question_answering)
 
 **Multiple choice**
 - [`BertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 - [`TFBertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
+- [Multiple choice task guide](../tasks/multiple_choice)
 
 ⚡️ **Inference**
 - A blog post on how to [Accelerate BERT inference with Hugging Face Transformers and AWS Inferentia](https://huggingface.co/blog/bert-inferentia-sagemaker).

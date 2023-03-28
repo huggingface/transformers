@@ -17,11 +17,13 @@
 
 import unittest
 
-from transformers import GPTNeoXConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoTokenizer, GPTNeoXConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -185,9 +187,12 @@ class GPTNeoXModelTester:
 
 
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
+class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GPTNeoXModel, "text-generation": GPTNeoXForCausalLM} if is_torch_available() else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
@@ -227,3 +232,28 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+
+@require_torch
+class GPTNeoXLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_gptneox(self):
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
+        for checkpointing in [True, False]:
+            model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
+
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
+            model.to(torch_device)
+
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            expected_output = (
+                "My favorite food is the chicken and rice.\n\nI love to cook and bake. I love to cook and bake"
+            )
+
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            output_str = tokenizer.batch_decode(output_ids)[0]
+
+            self.assertEqual(output_str, expected_output)

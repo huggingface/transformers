@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
@@ -179,7 +180,7 @@ class ConditionalDetrModelTester:
 
 
 @require_timm
-class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConditionalDetrModel,
@@ -188,6 +189,11 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False
@@ -240,6 +246,11 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     def test_conditional_detr_no_timm_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
+
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

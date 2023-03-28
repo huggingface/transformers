@@ -387,7 +387,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_get_sentinel_token_ids(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
-        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))
+        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
 
     def test_get_sentinel_tokens_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
@@ -398,4 +398,4 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_get_sentinel_token_ids_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
-        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))
+        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))

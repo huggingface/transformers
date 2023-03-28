@@ -33,8 +33,6 @@ import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
 from packaging.version import parse
 
-from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
@@ -63,6 +61,7 @@ from .utils import (
     requires_backends,
     working_or_temp_dir,
 )
+from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
 if parse(tf.__version__) >= parse("2.11.0"):
@@ -584,7 +583,7 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    cast_output = dict()
+    cast_output = {}
     for key, val in output.items():
         if isinstance(val, tf.Tensor) and val.dtype == tf.int64:
             cast_output[key] = tf.cast(val, tf.int32)
@@ -707,7 +706,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
     return shards, index
 
 
-def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
+def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=False, _prefix=None):
     """
     This is the same as `load_tf_weights` but for a sharded checkpoint. Detect missing and unexpected layers and load
     the TF weights from the shard file accordingly to their names and shapes.
@@ -729,32 +728,35 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     """
 
     # Load the index
-    missing_keys = []
     unexpected_keys = set()
     saved_keys = set()
-    missmatched_keys = set()
+    mismatched_keys = set()
 
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
     model_keys = set()
-    model_layer_map = dict()
+    model_layer_map = {}
     for i, k in enumerate(model.weights):
-        if "model." in k.name or len(k.name.split("/")) == 1:
-            layer_name = k.name
-        else:
-            layer_name = "/".join(k.name.split("/")[1:])
+        layer_name = k.name
+        if _prefix is not None and layer_name.startswith(_prefix):
+            layer_name = layer_name[len(_prefix) :]
+            layer_name = layer_name.lstrip("/")
+        if not ("model." in layer_name or len(layer_name.split("/")) == 1):
+            layer_name = "/".join(layer_name.split("/")[1:])
         model_keys.add(layer_name)
         model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
-        state_dict = tf.io.read_file(shard_file)
-        saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
-            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes
+        saved_weight_names_set, unexpected_keys_set, mismatched_keys_set = load_tf_shard(
+            model,
+            model_layer_map,
+            shard_file,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            _prefix=_prefix,
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
-        missmatched_keys.update(missmatched_keys_set)
-        del state_dict
+        mismatched_keys.update(mismatched_keys_set)
         gc.collect()
 
     missing_keys = model_keys - saved_keys
@@ -768,10 +770,10 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    return missing_keys, unexpected_keys, missmatched_keys
+    return missing_keys, unexpected_keys, mismatched_keys
 
 
-def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
+def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
     Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
 
@@ -783,11 +785,11 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
     Returns:
         `tf.keras.models.Model`: Three lists, one for the layers that were found and succesfully restored (from the
-        shard file), one for the missmatched layers, and another one for the unexpected layers.
+        shard file), one for the mismatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
     saved_weights = {}
-    missmatched_keys = set()
+    mismatched_keys = set()
     unexpected_keys = set()
     # Read the H5 file
     try:
@@ -822,7 +824,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
                             except ValueError as e:
                                 if ignore_mismatched_sizes:
-                                    missmatched_keys.add(
+                                    mismatched_keys.add(
                                         (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
                                     )
                                     continue
@@ -836,7 +838,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
         K.batch_set_value(weight_value_tuples)
 
-        return saved_weight_names_set, unexpected_keys, missmatched_keys
+        return saved_weight_names_set, unexpected_keys, mismatched_keys
 
     except Exception as e:
         try:
@@ -889,8 +891,6 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
 
 
 def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
-    missing_layers = []
-    unexpected_layers = []
     mismatched_layers = []
 
     # Read the H5 file
@@ -901,10 +901,10 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
         )
 
         # Find the missing layers from the high level list of layers
-        missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
+        missing_layers = list({layer.name for layer in model.layers} - saved_h5_model_layers_name)
 
         # Find the unexpected layers from the high level list of layers
-        unexpected_layers = list(saved_h5_model_layers_name - set([layer.name for layer in model.layers]))
+        unexpected_layers = list(saved_h5_model_layers_name - {layer.name for layer in model.layers})
         saved_weight_names_set = set()
         symbolic_weights_names = set()
         weight_value_tuples = []
@@ -1349,7 +1349,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             else:
                 collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
         if collate_fn_args is None:
-            collate_fn_args = dict()
+            collate_fn_args = {}
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
@@ -1471,7 +1471,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         elif "mc_labels" in arg_names:
             return {"labels": "logits", "mc_labels": "mc_logits"}
         else:
-            return dict()
+            return {}
 
     def train_step(self, data):
         """
@@ -2458,6 +2458,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            tf_to_pt_weight_rename (`Callable`, *optional*):
+                A function that is called to transform the names of weights during the PyTorch to TensorFlow
+                crossloading process. This is not necessary for most models, but is useful to allow composite models to
+                be crossloaded correctly.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -2506,6 +2510,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_auto_class = kwargs.pop("_from_auto", False)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+        tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2613,19 +2618,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 try:
                     # Load from URL or cache if already cached
-                    cached_file_kwargs = dict(
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
+                    cached_file_kwargs = {
+                        "cache_dir": cache_dir,
+                        "force_download": force_download,
+                        "proxies": proxies,
+                        "resume_download": resume_download,
+                        "local_files_only": local_files_only,
+                        "use_auth_token": use_auth_token,
+                        "user_agent": user_agent,
+                        "revision": revision,
+                        "subfolder": subfolder,
+                        "_raise_exceptions_for_missing_entries": False,
+                        "_commit_hash": commit_hash,
+                    }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
@@ -2745,7 +2750,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(
-                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
+                model,
+                resolved_archive_file,
+                allow_missing_keys=True,
+                output_loading_info=output_loading_info,
+                _prefix=load_weight_prefix,
+                tf_to_pt_weight_rename=tf_to_pt_weight_rename,
             )
 
         # we might need to extend the variable scope for composite models
@@ -2761,7 +2771,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             state_dict = safe_load_file(resolved_archive_file)
             # Load from a PyTorch checkpoint
             return load_pytorch_state_dict_in_tf2_model(
-                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
+                model,
+                state_dict,
+                allow_missing_keys=True,
+                output_loading_info=output_loading_info,
+                _prefix=load_weight_prefix,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -2775,6 +2789,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     model,
                     resolved_archive_file,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _prefix=load_weight_prefix,
                 )
             else:
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
@@ -2890,9 +2905,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         use_temp_dir: Optional[bool] = None,
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
-        **model_card_kwargs,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        create_pr: bool = False,
+        **base_model_card_args,
     ) -> str:
         """
         Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
@@ -2916,8 +2932,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
                 by a unit (like `"5MB"`).
-            model_card_kwargs:
-                Additional keyword arguments passed along to the [`~TFPreTrainedModel.create_model_card`] method.
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
         Examples:
 
@@ -2933,15 +2949,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         model.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        if "repo_path_or_name" in model_card_kwargs:
+        if "repo_path_or_name" in base_model_card_args:
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
                 "`repo_id` instead."
             )
-            repo_id = model_card_kwargs.pop("repo_path_or_name")
+            repo_id = base_model_card_args.pop("repo_path_or_name")
         # Deprecation warning will be sent after for repo_url and organization
-        repo_url = model_card_kwargs.pop("repo_url", None)
-        organization = model_card_kwargs.pop("organization", None)
+        repo_url = base_model_card_args.pop("repo_url", None)
+        organization = base_model_card_args.pop("organization", None)
 
         if os.path.isdir(repo_id):
             working_dir = repo_id
@@ -2967,11 +2983,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "output_dir": work_dir,
                     "model_name": Path(repo_id).name,
                 }
-                base_model_card_args.update(model_card_kwargs)
+                base_model_card_args.update(base_model_card_args)
                 self.create_model_card(**base_model_card_args)
 
             self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token
+                work_dir,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=use_auth_token,
+                create_pr=create_pr,
             )
 
     @classmethod

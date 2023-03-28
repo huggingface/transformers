@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, require_torch_multi_gpu, s
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -207,7 +208,7 @@ class SplinterModelTester:
 
 
 @require_torch
-class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
+class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SplinterModel,
@@ -217,6 +218,20 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests":
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

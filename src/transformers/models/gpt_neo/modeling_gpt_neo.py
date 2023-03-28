@@ -133,7 +133,7 @@ class GPTNeoSelfAttention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
-        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
             1, 1, max_positions, max_positions
         )
 
@@ -187,7 +187,7 @@ class GPTNeoSelfAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -587,6 +587,13 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -595,11 +602,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

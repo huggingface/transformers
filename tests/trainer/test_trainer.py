@@ -29,7 +29,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -1098,11 +1098,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         logger = logging.get_logger()
         log_info_string = "Running training"
 
-        # test with the default log_level - should be info and thus log on the main process
+        # test with the default log_level - should be the same as before and thus we test depending on is_info
+        is_info = logging.get_verbosity() <= 20
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer()
             trainer.train()
-        self.assertIn(log_info_string, cl.out)
+        if is_info:
+            self.assertIn(log_info_string, cl.out)
+        else:
+            self.assertNotIn(log_info_string, cl.out)
 
         # test with low log_level - lower than info
         with CaptureLogger(logger) as cl:
@@ -1148,7 +1152,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # won't be the same since the training dataloader is shuffled).
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, logging_steps=5)
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 5,
+            }
             trainer = get_regression_trainer(**kwargs)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
@@ -1181,7 +1191,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
-            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False)
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "pretrained": False,
+            }
 
             trainer = get_regression_trainer(**kwargs)
             trainer.train()
@@ -1839,6 +1855,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
+    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -1989,7 +2006,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

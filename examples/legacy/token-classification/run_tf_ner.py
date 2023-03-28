@@ -144,7 +144,7 @@ def main():
 
     # Prepare Token Classification task
     labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
+    label_map: Dict[int, str] = dict(enumerate(labels))
     num_labels = len(labels)
 
     # Load pretrained model and tokenizer

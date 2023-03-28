@@ -58,6 +58,13 @@ class DebertaV2Tokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class ErnieMTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class FNetTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -73,6 +80,13 @@ class GPTSw3Tokenizer(metaclass=DummyObject):
 
 
 class LayoutXLMTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class LlamaTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

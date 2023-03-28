@@ -291,6 +291,7 @@ jobs:
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_PAST_FUTURE }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: nightly-build
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
           RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}

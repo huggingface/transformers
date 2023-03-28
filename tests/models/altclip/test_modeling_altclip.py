@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -392,13 +393,23 @@ def prepare_img():
 
 
 @require_torch
-class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
     fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = AltCLIPModelTester(self)

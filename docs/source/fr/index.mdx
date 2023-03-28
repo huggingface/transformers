@@ -37,7 +37,7 @@ La documentation est organisée en 5 parties:
 
 - **DEMARRER** propose une visite rapide de la bibliothèque et des instructions d'installation pour être opérationnel.
 - **TUTORIELS** excellent point de départ pour les débutants. Cette section vous aidera à acquérir les compétences de base dont vous avez besoin pour commencer à utiliser la bibliothèque.
-- **GUIDES D'UTILISATION** pour différentes tâches comme par example le finetuning d'un modèle pré-entraîné pour la classification de texte ou comment créer et partger votre propre modèle.
+- **GUIDES D'UTILISATION** pour différentes tâches comme par exemple le finetuning d'un modèle pré-entraîné pour la classification de texte ou comment créer et partager votre propre modèle.
 - **GUIDES CONCEPTUELS** pour plus de discussions et d'explications sur les concepts et les idées sous-jacentes aux modèles, aux tâches et à la philosophie de conception de 🤗 Transformers.
 - **API** décrit toutes les classes et fonctions :
 
@@ -45,11 +45,12 @@ La documentation est organisée en 5 parties:
   - **MODELES** détaille les classes et les fonctions propres à chaque modèle de la bibliothèque.
   - **UTILITAIRES INTERNES** détaille les classes et fonctions utilitaires utilisées en interne.
 
-### Modèles supportées
+### Modèles supportés
 
 <!--This list is updated automatically from the README with _make fix-copies_. Do not update manually! -->
 
 1. **[ALBERT](model_doc/albert)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
+1. **[ALIGN](model_doc/align)** (from Google Research) released with the paper [Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision](https://arxiv.org/abs/2102.05918) by Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yunhsuan Sung, Zhen Li, Tom Duerig.
 1. **[AltCLIP](model_doc/altclip)** (from BAAI) released with the paper [AltCLIP: Altering the Language Encoder in CLIP for Extended Language Capabilities](https://arxiv.org/abs/2211.06679) by Chen, Zhongzhi and Liu, Guang and Zhang, Bo-Wen and Ye, Fulong and Yang, Qinghong and Wu, Ledell.
 1. **[Audio Spectrogram Transformer](model_doc/audio-spectrogram-transformer)** (from MIT) released with the paper [AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
 1. **[BART](model_doc/bart)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/abs/1910.13461) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
@@ -79,6 +80,7 @@ La documentation est organisée en 5 parties:
 1. **[Conditional DETR](model_doc/conditional_detr)** (from Microsoft Research Asia) released with the paper [Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang.
 1. **[ConvBERT](model_doc/convbert)** (from YituTech) released with the paper [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://arxiv.org/abs/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
 1. **[ConvNeXT](model_doc/convnext)** (from Facebook AI) released with the paper [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545) by Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, Saining Xie.
+1. **[ConvNeXTV2](model_doc/convnextv2)** (from Facebook AI) released with the paper [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) by Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, Saining Xie.
 1. **[CPM](model_doc/cpm)** (from Tsinghua University) released with the paper [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://arxiv.org/abs/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin, Yusheng Su, Haozhe Ji, Jian Guan, Fanchao Qi, Xiaozhi Wang, Yanan Zheng, Guoyang Zeng, Huanqi Cao, Shengqi Chen, Daixuan Li, Zhenbo Sun, Zhiyuan Liu, Minlie Huang, Wentao Han, Jie Tang, Juanzi Li, Xiaoyan Zhu, Maosong Sun.
 1. **[CTRL](model_doc/ctrl)** (from Salesforce) released with the paper [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
 1. **[CvT](model_doc/cvt)** (from Microsoft) released with the paper [CvT: Introducing Convolutions to Vision Transformers](https://arxiv.org/abs/2103.15808) by Haiping Wu, Bin Xiao, Noel Codella, Mengchen Liu, Xiyang Dai, Lu Yuan, Lei Zhang.
@@ -230,9 +232,7 @@ La documentation est organisée en 5 parties:
 
 ### Frameworks compatibles
 
-Le tableau ci-dessous représente la prise en charge actuelle dans la bibliothèque pour chacun de ces modèles, qu'ils aient un tokenizer Python
-(appelé "slow"). Un tokenizer "fast" soutenu par la bibliothèque 🤗 Tokenizers, qu'ils aient un support en Jax (via.
-Flax), PyTorch, et/ou TensorFlow.
+Le tableau ci-dessous représente la prise en charge actuelle dans la bibliothèque pour chacun de ces modèles, qu'ils aient ou non un tokenizer Python (appelé "slow"). Un tokenizer rapide ("fast") soutenu par la bibliothèque 🤗 Tokenizers, qu'ils aient un support en Jax (via Flax), PyTorch, et/ou TensorFlow.
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
 

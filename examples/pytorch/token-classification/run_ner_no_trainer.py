@@ -55,7 +55,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
@@ -425,7 +425,7 @@ def main():
 
     # Model has labels -> use them.
     if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
-        if list(sorted(model.config.label2id.keys())) == list(sorted(label_list)):
+        if sorted(model.config.label2id.keys()) == sorted(label_list):
             # Reorganize `label_list` to match the ordering of the model.
             if labels_are_int:
                 label_to_id = {i: int(model.config.label2id[l]) for i, l in enumerate(label_list)}
@@ -436,13 +436,13 @@ def main():
         else:
             logger.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                f"model labels: {list(sorted(model.config.label2id.keys()))}, dataset labels:"
-                f" {list(sorted(label_list))}.\nIgnoring the model labels as a result.",
+                f"model labels: {sorted(model.config.label2id.keys())}, dataset labels:"
+                f" {sorted(label_list)}.\nIgnoring the model labels as a result.",
             )
 
     # Set the correspondences label/ID inside the model config
     model.config.label2id = {l: i for i, l in enumerate(label_list)}
-    model.config.id2label = {i: l for i, l in enumerate(label_list)}
+    model.config.id2label = dict(enumerate(label_list))
 
     # Map that sends B-Xxx label to its I-Xxx counterpart
     b_to_i_label = []

@@ -32,6 +32,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -518,9 +519,19 @@ class T5ModelTester:
 
 
 @require_torch
-class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": T5ForConditionalGeneration,
+            "feature-extraction": T5Model,
+            "summarization": T5ForConditionalGeneration,
+            "text2text-generation": T5ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
@@ -879,6 +890,19 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return T5Tokenizer.from_pretrained("t5-base")
+
+    @slow
+    def test_torch_quant(self):
+        r"""
+        Test that a simple `torch.quantization.quantize_dynamic` call works on a T5 model.
+        """
+        model_name = "google/flan-t5-small"
+        tokenizer = T5Tokenizer.from_pretrained(model_name)
+        model = T5ForConditionalGeneration.from_pretrained(model_name)
+        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        input_text = "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single tweet?"
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+        _ = model.generate(input_ids)
 
     @slow
     def test_small_generation(self):

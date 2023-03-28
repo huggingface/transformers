@@ -971,11 +971,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
 
-        indices_shift = (
-            torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-            // num_indices_to_gather
-            * num_indices_to_pick_from
-        )
+        shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
+        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
@@ -1595,6 +1592,13 @@ class BigBirdEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
 
         for i, layer_module in enumerate(self.layer):
@@ -1605,11 +1609,6 @@ class BigBirdEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -3042,8 +3041,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> from transformers import AutoTokenizer, BigBirdForQuestionAnswering
         >>> from datasets import load_dataset
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
-        >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> model = BigBirdForQuestionAnswering.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> # select random article and question
@@ -3062,17 +3061,14 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
-        '80 °C (176 °F) or more'
+        >>> predict_answer_token_ids = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> predict_answer_token = tokenizer.decode(predict_answer_token_ids)
         ```
 
         ```python
         >>> target_start_index, target_end_index = torch.tensor([130]), torch.tensor([132])
         >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
         >>> loss = outputs.loss
-        >>> round(outputs.loss.item(), 2)
-        7.63
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -35,7 +35,9 @@ improvements to counteract overfitting while training on thousands of tasks. Cri
 a human-translated benchmark, Flores-200, and combined human evaluation with a novel toxicity benchmark covering all languages in Flores-200 to assess translation safety.
 Our model achieves an improvement of 44% BLEU relative to the previous state-of-the-art, laying important groundwork towards realizing a universal translation system.*
 
-This implementation contains the dense models available on release. Let us know via a GitHub issue if you would like to see the MoE models as well.
+This implementation contains the dense models available on release.
+
+**The sparse model NLLB-MoE (Mixture of Expert) is now available! More details [here](nllb-moe)**
 
 This model was contributed by [Lysandre](https://huggingface.co/lysandre). The authors' code can be found [here](https://github.com/facebookresearch/fairseq/tree/nllb).
 
@@ -87,6 +89,11 @@ See example below for a translation from romanian to german:
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 UN-Chef sagt, es gibt keine militärische Lösung in Syrien
 ```
+
+## Documentation resources
+
+- [Translation task guide](../tasks/translation)
+- [Summarization task guide](../tasks/summarization)
 
 ## NllbTokenizer
 

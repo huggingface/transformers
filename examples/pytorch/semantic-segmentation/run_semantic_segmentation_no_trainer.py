@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -441,7 +441,7 @@ def main():
             pixel_values.append(image)
             labels.append(target)
 
-        encoding = dict()
+        encoding = {}
         encoding["pixel_values"] = torch.stack(pixel_values)
         encoding["labels"] = torch.stack(labels)
 
@@ -455,7 +455,7 @@ def main():
             pixel_values.append(image)
             labels.append(target)
 
-        encoding = dict()
+        encoding = {}
         encoding["pixel_values"] = torch.stack(pixel_values)
         encoding["labels"] = torch.stack(labels)
 

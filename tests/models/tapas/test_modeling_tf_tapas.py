@@ -39,6 +39,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -418,7 +419,7 @@ class TFTapasModelTester:
 
 @require_tensorflow_probability
 @require_tf
-class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFTapasModel,
@@ -429,8 +430,24 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFTapasModel,
+            "fill-mask": TFTapasForMaskedLM,
+            "text-classification": TFTapasForSequenceClassification,
+            "zero-shot": TFTapasForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
