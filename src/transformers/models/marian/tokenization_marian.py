@@ -226,7 +226,8 @@ class MarianTokenizer(PreTrainedTokenizer):
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces.
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
@@ -251,7 +252,8 @@ class MarianTokenizer(PreTrainedTokenizer):
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces.
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
