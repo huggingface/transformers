@@ -4126,7 +4126,7 @@ class GenerationMixin:
             max_len = stopping_criteria[0].max_length
 
             #  1. Forecast next N tokens using the assistant model. This `for` block can be replaced with a
-            # `.generate()` call if we decide to add `past_key_values` as a possible output of the method, as we
+            # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
             for _ in range(int(assistant_model.max_assistant_tokens)):
@@ -4247,13 +4247,13 @@ class GenerationMixin:
 
             # 6.2. Extract the logits for the next token
             if outputs.logits.shape[1] > candidate_length + 1:
-                logits_idx = new_cur_len - 1
+                last_valid_output_idx = new_cur_len - 1
             else:
-                logits_idx = n_matches
-            next_token_scores = outputs.logits[:, logits_idx, :]
+                last_valid_output_idx = n_matches
+            next_token_scores = outputs.logits[:, last_valid_output_idx, :]
 
             # 7. Use the set of logits after the last matching assistant token to obtain the next token. Note that,
-            # because of this step, assisted greedy search degenerates to a normal greedy search if there is no match.
+            # because of this step, assisted greedy search reduces to a normal greedy search if there is no match.
             next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # Assistant: main logic end; Compared to greedy search, the following (redundant) blocks were removed
@@ -4264,22 +4264,37 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             # Store scores, attentions and hidden_states when required
+            # Assistant: modified to append one tuple element per token, as in the other generation methods.
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores,)
+                    scores += tuple(outputs.logits[:, i, :] for i in range(last_valid_output_idx))
                 if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
                     if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
+                        cross_attentions += tuple(
+                            layer[..., i, i]
+                            for layer in outputs.cross_attentions
+                            for i in range(last_valid_output_idx)
+                        )
+                        decoder_attentions += tuple(
+                            layer[..., i, i]
+                            for layer in outputs.decoder_attentions
+                            for i in range(last_valid_output_idx)
+                        )
+                    else:
+                        decoder_attentions += tuple(
+                            layer[..., i, i] for layer in outputs.attentions for i in range(last_valid_output_idx)
+                        )
                 if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
+                    if self.config.is_encoder_decoder:
+                        decoder_hidden_states += tuple(
+                            layer[:, i, :]
+                            for layer in outputs.decoder_hidden_states
+                            for i in range(last_valid_output_idx)
+                        )
+                    else:
+                        decoder_hidden_states += tuple(
+                            layer[:, i, :] for layer in outputs.hidden_states for i in range(last_valid_output_idx)
+                        )
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
