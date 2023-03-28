@@ -56,9 +56,7 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(
-        self, max_new_tokens=None, generate_kwargs=None, text=None, padding=False, truncation=False
-    ):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, padding=False, truncation=False):
         forward_kwargs = {}
         preprocess_kwargs = {}
         if generate_kwargs is not None:
@@ -104,9 +102,9 @@ class ImageToTextPipeline(Pipeline):
                 The amount of maximum tokens to generate. By default it will use `generate` default.
 
             kwargs (`Dict`, *optional*):
-                The kwargs will contain the preprocessing kwargs (including potential text input) as well as the
-                generate kwargs that will send all of these arguments directly to `generate` allowing full control of
-                this function.
+                The kwargs will contain the preprocessing kwargs (including kwargs related to text input) as well as
+                the generate kwargs that will send all of these arguments directly to `generate` allowing full control
+                of this function.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
