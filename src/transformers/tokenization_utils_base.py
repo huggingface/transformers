@@ -1470,6 +1470,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             A tuple or a list of additional special tokens. Add them here to ensure they won't be split by the
             tokenization process. Will be associated to `self.additional_special_tokens` and
             `self.additional_special_tokens_ids`.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should cleanup the spaces that were added when splitting the input text during the tokenization process.
 """
 
 
@@ -1523,6 +1525,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
+        
         self.deprecation_warnings = (
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
@@ -1578,7 +1581,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map_extended})"
+            f" special_tokens={self.special_tokens_map_extended}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces})"
         )
 
     def __len__(self) -> int:
@@ -2114,7 +2117,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
         # target_keys = self.init_kwargs.keys()
-        target_keys = ["model_max_length"]
+        target_keys = ["model_max_length", "clean_up_tokenization_spaces"]
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)

@@ -42,6 +42,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     GPT2TokenizerFast,
+    LlamaTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -3894,6 +3895,42 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
+                    
+    def test_clean_up_tokenization_spaces(self):
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        assert tokenizer.clean_up_tokenization_spaces == True
+        
+        tokens = tokenizer.encode("This shouldn't be! He'll go.")
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+        
+        tokenizer.clean_up_tokenization_spaces = False
+        decoded = tokenizer.decode(tokens)
+        assert decoded ==  tokenizer.decode(tokens, clean_up_tokenization_spaces=False) == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+        
+        with tempfile.TemporaryDirectory() as tmp_dir_2:
+            tokenizer.save_pretrained(tmp_dir_2)
+            tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
+            del tokenizer
+    
+        decoded = tokenizer_fast.decode(tokens)
+        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+        
+        tokenizer_fast.clean_up_tokenization_spaces = True
+        decoded = tokenizer_fast.decode(tokens)
+        assert decoded == "This shouldn't be! He'll go."
+        
+        with tempfile.TemporaryDirectory() as tmp_dir_2:
+            tokenizer_fast.save_pretrained(tmp_dir_2)
+            tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
+        
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+        
+        tokenizer.clean_up_tokenization_spaces = True
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "This shouldn't be! He'll go."
+        
 
 
 class TokenizerUtilTester(unittest.TestCase):
