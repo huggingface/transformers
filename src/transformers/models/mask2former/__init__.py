@@ -19,6 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_mask2former": [
         "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VIDEO_MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Mask2FormerConfig",
     ],
 }
@@ -52,7 +53,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
+    from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, VIDEO_MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
 
     try:
         if not is_vision_available():

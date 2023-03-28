@@ -28,6 +28,13 @@ MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
 }
 
+VIDEO_MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance": (
+        "https://huggingface.co/facebook/video-mask2former-swin-tiny-youtubevis-2021-instance/blob/main/config.json"
+    )
+    # See all Video Mask2Former models at https://huggingface.co/models?filter=video-mask2former
+}
+
 logger = logging.get_logger(__name__)
 
 
@@ -161,8 +168,6 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
         output_auxiliary_logits: bool = None,
-        is_video: bool = False,
-        num_frames: int = 2,
         **kwargs,
     ):
         if backbone_config is None:
@@ -213,8 +218,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
         self.num_hidden_layers = decoder_layers
-        self.is_video = is_video
-        self.num_frames = num_frames
 
         super().__init__(**kwargs)
 
