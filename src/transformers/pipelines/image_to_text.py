@@ -56,8 +56,11 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None):
+    def _sanitize_parameters(
+        self, max_new_tokens=None, generate_kwargs=None, text=None, padding=False, truncation=False
+    ):
         forward_kwargs = {}
+        preprocess_kwargs = {}
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
@@ -69,9 +72,18 @@ class ImageToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        return {}, forward_kwargs, {}
+        if padding is not None:
+            preprocess_kwargs["padding"] = padding
+        if truncation is not None:
+            preprocess_kwargs["truncation"] = truncation
+        return preprocess_kwargs, forward_kwargs, {}
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(
+        self,
+        images: Union[str, List[str], "Image.Image", List["Image.Image"]],
+        texts: Union[str, List[str]] = None,
+        **kwargs,
+    ):
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -84,23 +96,54 @@ class ImageToTextPipeline(Pipeline):
                 - An image loaded in PIL directly
 
                 The pipeline accepts either a single image or a batch of images.
+            texts (`str`, `List[str]`, *optional*):
+                The pipeline handles conditional generation. If `texts` is provided, the model will generate the image
+                caption conditioned on the text.
 
             max_new_tokens (`int`, *optional*):
                 The amount of maximum tokens to generate. By default it will use `generate` default.
 
-            generate_kwargs (`Dict`, *optional*):
-                Pass it to send all of these arguments directly to `generate` allowing full control of this function.
+            kwargs (`Dict`, *optional*):
+                The kwargs will contain the preprocessing kwargs (including potential text input) as well as the
+                generate kwargs that will send all of these arguments directly to `generate` allowing full control of
+                this function.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
 
             - **generated_text** (`str`) -- The generated text.
         """
-        return super().__call__(images, **kwargs)
+        model_inputs = {"images": images}
+        if texts is not None:
+            model_inputs["texts"] = texts
 
-    def preprocess(self, image):
-        image = load_image(image)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+        return super().__call__(model_inputs, **kwargs)
+
+    def preprocess(self, model_input, padding=None, truncation=None):
+        images = model_input["images"]
+        if isinstance(images, list):
+            images = [load_image(image) for image in images]
+        else:
+            images = load_image(images)
+
+        if "texts" in model_input:
+            texts = model_input["texts"]
+        else:
+            texts = None
+
+        # check if "header_text" is not on the image_processor __call__ signature - for Pix2Struct models
+        if texts is not None and "header_text" in self.image_processor.preprocess.__code__.co_varnames:
+            model_inputs = self.image_processor(images=images, header_text=texts, return_tensors=self.framework)
+        elif texts is not None:
+            model_inputs = self.image_processor(images=images, return_tensors=self.framework)
+            text_inputs = self.tokenizer(texts, padding=padding, truncation=truncation, return_tensors=self.framework)
+
+            if "token_type_ids" in text_inputs:
+                text_inputs.pop("token_type_ids", None)
+
+            model_inputs.update(text_inputs)
+        else:
+            model_inputs = self.image_processor(images=images, return_tensors=self.framework)
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):

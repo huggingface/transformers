@@ -14,6 +14,8 @@
 
 import unittest
 
+import requests
+
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
@@ -141,6 +143,42 @@ class ImageToTextPipelineTests(unittest.TestCase):
                 [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
                 [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
             ],
+        )
+
+    @slow
+    @require_torch
+    def test_conditional_generation_pt(self):
+        pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        text = "a photography of"
+
+        outputs = pipe(image, text)
+        self.assertEqual(outputs, [{"generated_text": "a photography of a volcano"}])
+
+        outputs = pipe([image, image], [text, text])
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "a photography of a volcano"}, {"generated_text": "a photography of a volcano"}],
+        )
+
+    @slow
+    @require_torch
+    def test_conditional_generation_pt_pix2struct(self):
+        pipe = pipeline("image-to-text", model="google/pix2struct-ai2d-base")
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        text = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
+
+        outputs = pipe(image, text)
+        self.assertEqual(outputs, [{"generated_text": "ash cloud"}])
+
+        outputs = pipe([image, image], [text, text])
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "ash cloud"}, {"generated_text": "ash cloud"}],
         )
 
     @slow
