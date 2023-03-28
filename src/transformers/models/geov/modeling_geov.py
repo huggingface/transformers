@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch GeoV model."""
-
+import math
 from typing import Optional, Tuple, Union, TYPE_CHECKING
 
 import einops
@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from .configuration_geov import GeoVConfig
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -32,7 +33,6 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_geov import GeoVConfig
 
 if TYPE_CHECKING:
     from .configuration_geov import GeorgesXConfig
@@ -47,7 +47,6 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "GeoV/GeoV-9b",
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
-
 
 
 class GeoVPreTrainedModel(PreTrainedModel):
@@ -520,17 +519,17 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
     @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):

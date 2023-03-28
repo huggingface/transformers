@@ -82,7 +82,6 @@ class GeoVTokenizer(PreTrainedTokenizer):
             **kwargs,
     ) -> None:
         super().__init__(
-            vocab_file,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
