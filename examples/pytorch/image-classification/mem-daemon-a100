@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+
+query_process_info() {
+    local csv_info=$(nvidia-smi --query-compute-apps=timestamp,pid,used_memory --format=csv,noheader,nounits)
+    [[ -z $csv_info ]] && return
+
+    local timestamp=$(echo $csv_info | awk -F',' '{print $1}')
+    local pid=$(echo $csv_info | awk -F',' '{print $2}')
+    local mem=$(echo $csv_info | awk -F',' '{print $3}')
+    local full_cmd=$(ps -p $pid -o command=)
+
+    printf "%s|%d|%s" "$timestamp" "$mem" "$full_cmd"
+}
+
+
+while true; do
+    info=$(query_process_info)
+    if [[ -z $info ]]; then
+        continue
+    else
+        echo $info
+    fi
+    sleep 1m
+done
