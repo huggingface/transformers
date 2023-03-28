@@ -1118,12 +1118,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-<<<<<<< HEAD
-        synced_gpus: Optional[bool] = None,
-=======
         synced_gpus: Optional[bool] = False,
         assistant_model: Optional["PreTrainedModel"] = None,
->>>>>>> ca8162da4 (working mvp)
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
