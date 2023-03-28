@@ -111,9 +111,24 @@ class ImageToTextPipeline(Pipeline):
 
             - **generated_text** (`str`) -- The generated text.
         """
-        model_inputs = {"images": images}
-        if texts is not None:
-            model_inputs["texts"] = texts
+        model_inputs = None
+        if isinstance(images, list) and texts is not None and isinstance(texts, list):
+            model_inputs = [{"images": image, "texts": texts} for image, texts in zip(images, texts)]
+        elif isinstance(images, list) and texts is not None:
+            # same text on all images
+            model_inputs = [{"images": image, "texts": texts} for image in images]
+        elif isinstance(images, list) and texts is None:
+            # no text
+            model_inputs = [{"images": image} for image in images]
+        elif not isinstance(images, list) and texts is None:
+            # classic input with only images
+            model_inputs = {"images": images}
+        elif not isinstance(images, list) and texts is not None:
+            # classic input with images and text
+            model_inputs = {"images": images, "texts": texts}
+
+        if model_inputs is None:
+            raise ValueError("Input is not valid - got {} and {} for image and text".format(images, texts))
 
         return super().__call__(model_inputs, **kwargs)
 
