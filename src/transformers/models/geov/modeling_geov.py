@@ -1,6 +1,6 @@
 # coding=utf-8
 # Copyright 2022 EleutherAI The HuggingFace Inc. team. All rights reserved.
-# Modifications Copyright 2023 Better Planet Investments and Labml team. ALl rights reserved.
+# Modifications Copyright 2023 Better Planet Investments and labml.ai team. ALl rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,8 @@
 # limitations under the License.
 """ PyTorch GeoV model."""
 import math
-from typing import Optional, Tuple, Union, TYPE_CHECKING
+from typing import Optional, Tuple, Union
 
-import einops
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -33,9 +32,6 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-
-if TYPE_CHECKING:
-    from .configuration_geov import GeorgesXConfig
 
 logger = logging.get_logger(__name__)
 
@@ -78,6 +74,10 @@ class GeoVPreTrainedModel(PreTrainedModel):
 
 
 class GeoVAttention(nn.Module):
+    """
+    Attention module
+    """
+
     def __init__(self, config):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
@@ -111,9 +111,10 @@ class GeoVAttention(nn.Module):
         qkv = self.qkv(hidden_states)
         query, key, value = torch.tensor_split(qkv, 3, dim=-1)
 
-        query = einops.rearrange(query, 'b l (h q) -> b h l q', h=self.num_attention_heads)
-        key = einops.rearrange(key, 'b l (h q) -> b h l q', h=self.num_attention_heads)
-        value = einops.rearrange(value, 'b l (h q) -> b h l q', h=self.num_attention_heads)
+        # 'b l (h q) -> b h l q'
+        query = self._split_heads(query, self.num_attention_heads)
+        key = self._split_heads(key, self.num_attention_heads)
+        value = self._split_heads(value, self.num_attention_heads)
 
         # Compute token offset for rotary embeddings (when decoding)
         seq_len = key.shape[-2]
@@ -141,7 +142,7 @@ class GeoVAttention(nn.Module):
         attn_output = apply_rotary_pos_emb_reverse(attn_output, cos, sin, offset=offset)
 
         # Reshape outputs
-        attn_output = einops.rearrange(attn_output, 'b h l q -> b l (h q)')
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
 
         outputs = (attn_output, present)
@@ -149,6 +150,31 @@ class GeoVAttention(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
+
+    @classmethod
+    def _split_heads(cls, tensor, num_attention_heads):
+        """
+        Splits hidden dim into attn_head_size and num_attention_heads
+        """
+        # tensor: [bs, seq_len, hidden_size]
+        new_shape = tensor.shape[:-1] + (num_attention_heads, tensor.shape[-1] // num_attention_heads)
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(new_shape)
+        # -> [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3)
+        return tensor
+
+    @classmethod
+    def _merge_heads(cls, tensor):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        """
+        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(*tensor.shape[:2], tensor.shape[2] * tensor.shape[3])
+        # -> [bs, seq_len, hidden_size]
+        return tensor
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -220,7 +246,7 @@ def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
 
 
 class GeoVMLP(nn.Module):
-    def __init__(self, config: 'GeorgesXConfig'):
+    def __init__(self, config: 'GeoVConfig'):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
         self.dense_2h_to_h = nn.Linear(config.intermediate_size // 2, config.hidden_size,
@@ -237,7 +263,7 @@ class GeoVMLP(nn.Module):
 
 
 class GeoVLayer(nn.Module):
-    def __init__(self, config: 'GeorgesXConfig'):
+    def __init__(self, config: 'GeoVConfig'):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -334,7 +360,7 @@ GEOV_INPUTS_DOCSTRING = r"""
     GEOV_START_DOCSTRING,
 )
 class GeoVModel(GeoVPreTrainedModel):
-    def __init__(self, config: 'GeorgesXConfig'):
+    def __init__(self, config: 'GeoVConfig'):
         super().__init__(config)
         self.config = config
 
