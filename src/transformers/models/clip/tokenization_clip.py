@@ -126,10 +126,21 @@ class BasicTokenizer(object):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
+        remove_control_chars (`bool`, *optional*, defaults to `True`):
+            Whether to allow or remove control characers, as some vocabs includes them.
     """
 
     def __init__(
-        self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None, pattern=None
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=False,
+        remove_control_chars=True,
     ):
         if never_split is None:
             never_split = []
@@ -137,12 +148,12 @@ class BasicTokenizer(object):
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
-        self.pattern = pattern
+        self.do_split_on_punc = do_split_on_punc
+        self.remove_control_chars = remove_control_chars
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -161,7 +172,9 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -171,9 +184,8 @@ class BasicTokenizer(object):
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
-            split_tokens.extend(self._split_on_punc_or_pattern(token, never_split))
+            split_tokens.extend(self._run_split_on_punc(token, never_split))
 
-        print("split_tokens", split_tokens)
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
 
@@ -188,13 +200,10 @@ class BasicTokenizer(object):
             output.append(char)
         return "".join(output)
 
-    def _split_on_punc_or_pattern(self, text, never_split=None):
-        """Splits a piece of text by self.pattern or punctuation."""
-        if never_split is not None and text in never_split:
+    def _run_split_on_punc(self, text, never_split=None):
+        """Splits punctuation on a piece of text."""
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
-        if self.pattern:
-            return re.findall(self.pattern, text, flags=re.UNICODE)
-
         chars = list(text)
         i = 0
         start_new_word = True
@@ -255,7 +264,7 @@ class BasicTokenizer(object):
         output = []
         for char in text:
             cp = ord(char)
-            if cp == 0 or cp == 0xFFFD or _is_control(char):
+            if cp == 0 or cp == 0xFFFD or (self.remove_control_chars and _is_control(char)):
                 continue
             if _is_whitespace(char):
                 output.append(" ")
@@ -327,7 +336,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
-            self.nlp = BasicTokenizer(do_lower_case=True, pattern=self.pat.pattern)
+            self.nlp = BasicTokenizer(strip_accents=False, do_split_on_punc=False, remove_control_chars=False)
             self.fix_text = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -474,14 +483,19 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_tokens = []
         if self.fix_text is None:
             text = " ".join(self.nlp.tokenize(text))
+
         else:
             text = whitespace_clean(self.fix_text(text)).lower()
 
         for token in re.findall(self.pat, text):
+            # final = [('text', text)]
+            # final.append(('token', token))
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+            # final.append(('bpe_tokens', *[bpe_token for bpe_token in self.bpe(token).split(" ")]))
+            # print('FINAL ', final)
         return bpe_tokens
 
     def _convert_token_to_id(self, token):

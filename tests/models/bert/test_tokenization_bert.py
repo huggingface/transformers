@@ -182,19 +182,23 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
 
-    def test_basic_tokenizer_split_on_punc_or_pattern(self):
-        # # Split on punc
+    def test_basic_tokenizer_splits_on_punctuation(self):
         tokenizer = BasicTokenizer()
         text = "a\n'll !!to?'d of, can't."
         expected = ["a", "'", "ll", "!", "!", "to", "?", "'", "d", "of", ",", "can", "'", "t", "."]
         self.assertListEqual(tokenizer.tokenize(text), expected)
 
-        # Split on patterns
-        pattern = r"(<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+)"
-        tokenizer = BasicTokenizer(pattern=pattern)
-        text = "a\n'll !!to?'d''d of, can't."
-        expected = ["a", "'ll", "!!", "to", "?'", "d", "''", "d", "of", ",", "can", "'t", "."]
-        self.assertListEqual(tokenizer.tokenize(text), expected)
+    def test_basic_tokenizer_remove_control_chars_true(self):
+        tokenizer = BasicTokenizer(remove_control_chars=True)
+        # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
+        text = "\u200E\u200F"
+        self.assertListEqual(tokenizer.tokenize(text), [])
+
+    def test_basic_tokenizer_remove_control_chars_false(self):
+        tokenizer = BasicTokenizer(remove_control_chars=False)
+        # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
+        text = "\u200E\u200F"
+        self.assertListEqual(tokenizer.tokenize(text), ["\u200E\u200F"])
 
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]

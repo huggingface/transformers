@@ -74,14 +74,13 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    @require_ftfy
     def test_check_encoding_slow_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                text = "A\n'll 11p223RF☆ho!!to?'d'd''d of a cat"
+                text = "A\n'll 11p223RF☆ho!!to?'d'd''d of a cat to-$''d."
                 text_tokenized_s = tokenizer_s.tokenize(text)
                 text_tokenized_r = tokenizer_r.tokenize(text)
 
@@ -107,7 +106,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 for unicode_seq in spaces_unicodes:
                     text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
                     text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
-
                     self.assertListEqual(text_tokenized_s, text_tokenized_r)
 
                 # Test that the tokenization is identical on unicode of line break type
@@ -119,10 +117,10 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     "\u000D",  # (carriage return, '\r')
                     "\u2028",  # (line separator)
                     "\u2029",  # (paragraph separator)
-                    # "\u0085", # (next line)
+                    # "\u0085",  # (next line)
                 ]
 
-                # The tokenization is not identical for the character "\u0085" (next line). The slow version transforms
+                # The tokenization is not identical for the character "\u0085" (next line). The slow version using ftfy transforms
                 # it into the Horizontal Ellipsis character "…" ("\u2026") while the fast version transforms it into a
                 # space (and thus into an empty list).
 
