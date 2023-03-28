@@ -1289,6 +1289,7 @@ class GenerationMixin:
                 device=inputs_tensor.device,
             )
 
+            # conditional generation for multi-modal models.
             if "input_ids" in model_kwargs and model_input_name == "pixel_values":
                 input_ids = torch.cat([input_ids, model_kwargs.pop("input_ids")], dim=-1)
         else:
