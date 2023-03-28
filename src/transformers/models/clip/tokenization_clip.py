@@ -326,10 +326,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.pat = re.compile(
-            r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
-            re.IGNORECASE,
-        )
         try:
             import ftfy
 
@@ -350,6 +346,11 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {"<|startoftext|>": "<|startoftext|>", "<|endoftext|>": "<|endoftext|>"}
+
+        self.pat = re.compile(
+            r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
+            re.IGNORECASE,
+        )
 
     @property
     def vocab_size(self):
@@ -483,19 +484,14 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_tokens = []
         if self.fix_text is None:
             text = " ".join(self.nlp.tokenize(text))
-
         else:
             text = whitespace_clean(self.fix_text(text)).lower()
 
         for token in re.findall(self.pat, text):
-            # final = [('text', text)]
-            # final.append(('token', token))
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
-            # final.append(('bpe_tokens', *[bpe_token for bpe_token in self.bpe(token).split(" ")]))
-            # print('FINAL ', final)
         return bpe_tokens
 
     def _convert_token_to_id(self, token):

@@ -189,15 +189,13 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize(text), expected)
 
     def test_basic_tokenizer_remove_control_chars_true(self):
-        tokenizer = BasicTokenizer(remove_control_chars=True)
-        # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
-        text = "\u200E\u200F"
+        tokenizer = BasicTokenizer()
+        text = "\u200E\u200F"  # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
         self.assertListEqual(tokenizer.tokenize(text), [])
 
     def test_basic_tokenizer_remove_control_chars_false(self):
         tokenizer = BasicTokenizer(remove_control_chars=False)
-        # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
-        text = "\u200E\u200F"
+        text = "\u200E\u200F"  # \u200E: (left-to-right mark):w, \u200F: (right-to-left mark)
         self.assertListEqual(tokenizer.tokenize(text), ["\u200E\u200F"])
 
     def test_wordpiece_tokenizer(self):

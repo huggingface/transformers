@@ -106,6 +106,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 for unicode_seq in spaces_unicodes:
                     text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
                     text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
+
                     self.assertListEqual(text_tokenized_s, text_tokenized_r)
 
                 # Test that the tokenization is identical on unicode of line break type
@@ -117,7 +118,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     "\u000D",  # (carriage return, '\r')
                     "\u2028",  # (line separator)
                     "\u2029",  # (paragraph separator)
-                    # "\u0085",  # (next line)
+                    # "\u0085", # (next line)
                 ]
 
                 # The tokenization is not identical for the character "\u0085" (next line). The slow version using ftfy transforms
