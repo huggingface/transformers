@@ -154,7 +154,7 @@ class GeoVAttention(nn.Module):
     @classmethod
     def _split_heads(cls, tensor, num_attention_heads):
         """
-        Splits hidden dim into attn_head_size and num_attention_heads
+        Splits hidden dim into num_attention_heads
         """
         # tensor: [bs, seq_len, hidden_size]
         new_shape = tensor.shape[:-1] + (num_attention_heads, tensor.shape[-1] // num_attention_heads)
@@ -167,7 +167,7 @@ class GeoVAttention(nn.Module):
     @classmethod
     def _merge_heads(cls, tensor):
         """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        Merges heads
         """
         # tensor [bs, num_attention_heads, seq_len, attn_head_size]
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
@@ -232,6 +232,7 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
+    """Apply positional embeddings"""
     cos = cos[..., offset: q.shape[-2] + offset, :]
     sin = sin[..., offset: q.shape[-2] + offset, :]
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -239,6 +240,7 @@ def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
 
 
 def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
+    """Apply positional embeddings in reverse"""
     cos = cos[..., offset: q.shape[-2] + offset, :]
     sin = sin[..., offset: q.shape[-2] + offset, :]
     q_embed = (q * cos) - (rotate_half(q) * sin)
@@ -246,6 +248,7 @@ def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
 
 
 class GeoVMLP(nn.Module):
+    """Position wise Feed-forward network"""
     def __init__(self, config: 'GeoVConfig'):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -255,14 +258,17 @@ class GeoVMLP(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense_h_to_4h(hidden_states)
+        # Gated GELU
         h1, h2 = torch.tensor_split(hidden_states, 2, dim=-1)
         h1 = self.act(h1)
         hidden_states = h1 * h2
+
         hidden_states = self.dense_2h_to_h(hidden_states)
         return hidden_states
 
 
 class GeoVLayer(nn.Module):
+    """GeoV transformer layer"""
     def __init__(self, config: 'GeoVConfig'):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -315,32 +321,34 @@ GEOV_START_DOCSTRING = r"""
 
 GEOV_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        past_key_values (`Tuple[Tuple[torch.FloatTensor]]` of length `n_layers`, with each tuple having 2 tensors of shape `(batch_size, n_heads, seq_len - 1, head_size)`, *optional*):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+            
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -382,7 +390,7 @@ class GeoVModel(GeoVPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
-    @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
@@ -401,16 +409,6 @@ class GeoVModel(GeoVPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        r"""
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -544,7 +542,7 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
             self,
@@ -560,25 +558,10 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
             return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are
-            only required when the model is used as a decoder in a Sequence to Sequence model.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
 
         Returns:
 
@@ -588,10 +571,8 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
         >>> from transformers import AutoTokenizer, GeoVForCausalLM, GeoVConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-        >>> config = GeoVConfig.from_pretrained("EleutherAI/gpt-neox-20b")
-        >>> config.is_decoder = True
-        >>> model = GeoVForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
+        >>> tokenizer = AutoTokenizer.from_pretrained("GeoV/GeoV-9b")
+        >>> model = GeoVForCausalLM.from_pretrained("GeoV/GeoV-9b")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
