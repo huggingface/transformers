@@ -370,6 +370,7 @@ _import_structure = {
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
+    "models.mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
@@ -385,6 +386,7 @@ _import_structure = {
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
+    "models.nllb_moe": ["NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "NllbMoeConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -1913,6 +1915,19 @@ else:
             "MCTCTPreTrainedModel",
         ]
     )
+    _import_structure["models.mega"].extend(
+        [
+            "MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegaForCausalLM",
+            "MegaForMaskedLM",
+            "MegaForMultipleChoice",
+            "MegaForQuestionAnswering",
+            "MegaForSequenceClassification",
+            "MegaForTokenClassification",
+            "MegaModel",
+            "MegaPreTrainedModel",
+        ]
+    )
     _import_structure["models.megatron_bert"].extend(
         [
             "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2029,6 +2044,16 @@ else:
             "NezhaForTokenClassification",
             "NezhaModel",
             "NezhaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nllb_moe"].extend(
+        [
+            "NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NllbMoeForConditionalGeneration",
+            "NllbMoeModel",
+            "NllbMoePreTrainedModel",
+            "NllbMoeSparseMLP",
+            "NllbMoeTop2Router",
         ]
     )
     _import_structure["models.nystromformer"].extend(
@@ -3623,6 +3648,9 @@ else:
             "FlaxPegasusPreTrainedModel",
         ]
     )
+    _import_structure["models.resnet"].extend(
+        ["FlaxResNetForImageClassification", "FlaxResNetModel", "FlaxResNetPreTrainedModel"]
+    )
     _import_structure["models.roberta"].extend(
         [
             "FlaxRobertaForCausalLM",
@@ -4004,6 +4032,7 @@ if TYPE_CHECKING:
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
+    from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
     from .models.mmbt import MMBTConfig
@@ -4016,6 +4045,7 @@ if TYPE_CHECKING:
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
+    from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
@@ -5297,6 +5327,17 @@ if TYPE_CHECKING:
             MBartPreTrainedModel,
         )
         from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
+        from .models.mega import (
+            MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegaForCausalLM,
+            MegaForMaskedLM,
+            MegaForMultipleChoice,
+            MegaForQuestionAnswering,
+            MegaForSequenceClassification,
+            MegaForTokenClassification,
+            MegaModel,
+            MegaPreTrainedModel,
+        )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,
@@ -5392,6 +5433,14 @@ if TYPE_CHECKING:
             NezhaForTokenClassification,
             NezhaModel,
             NezhaPreTrainedModel,
+        )
+        from .models.nllb_moe import (
+            NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NllbMoeForConditionalGeneration,
+            NllbMoeModel,
+            NllbMoePreTrainedModel,
+            NllbMoeSparseMLP,
+            NllbMoeTop2Router,
         )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6666,6 +6715,7 @@ if TYPE_CHECKING:
         from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
+        from .models.resnet import FlaxResNetForImageClassification, FlaxResNetModel, FlaxResNetPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,

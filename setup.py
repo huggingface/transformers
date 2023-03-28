@@ -164,9 +164,10 @@ _deps = [
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
-    "tensorflow-cpu>=2.4,<2.12",
-    "tensorflow>=2.4,<2.12",
-    "tensorflow-text",
+    # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
+    "tensorflow-cpu>=2.4,<2.13",
+    "tensorflow>=2.4,<2.13",
+    "tensorflow-text<2.13",
     "tf2onnx",
     "timeout-decorator",
     "timm",

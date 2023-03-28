@@ -194,6 +194,7 @@ else:
                     "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("mgp-str", ("MgpstrTokenizer", None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
@@ -210,6 +211,13 @@ else:
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "nllb",
+                (
+                    "NllbTokenizer" if is_sentencepiece_available() else None,
+                    "NllbTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "nllb-moe",
                 (
                     "NllbTokenizer" if is_sentencepiece_available() else None,
                     "NllbTokenizerFast" if is_tokenizers_available() else None,
