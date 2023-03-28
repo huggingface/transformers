@@ -1004,8 +1004,11 @@ class M2M100Decoder(M2M100PreTrainedModel):
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
+                input_shape,
+                inputs_embeds.dtype,
+                device=inputs_embeds.device,
+                past_key_values_length=past_key_values_length,
+            )
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
