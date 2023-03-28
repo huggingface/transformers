@@ -398,7 +398,7 @@ class BasicTokenizer(object):
         never_split=None,
         tokenize_chinese_chars=True,
         strip_accents=None,
-        do_split_on_punc=False,
+        do_split_on_punc=True,
         remove_control_chars=True,
     ):
         if never_split is None:
