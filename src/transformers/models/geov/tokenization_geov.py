@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
-# Modifications Copyright 2023 Better Planet Investments and Labml team. ALl rights reserved.
+# Copyright 2023 Better Planet Investments and Labml team. ALl rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
