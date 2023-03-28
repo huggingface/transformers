@@ -1471,7 +1471,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             tokenization process. Will be associated to `self.additional_special_tokens` and
             `self.additional_special_tokens_ids`.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cleanup the spaces that were added when splitting the input text during the tokenization process.
+            Whether or not the model should cleanup the spaces that were added when splitting the input text during the
+            tokenization process.
 """
 
 
