@@ -43,9 +43,9 @@ class GeoVModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=3,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=32*4,
         max_position_embeddings=512,
         num_labels=3,
     ):
