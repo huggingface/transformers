@@ -56,8 +56,10 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, texts=None):
         forward_kwargs = {}
+        preprocess_params = {}
+
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
@@ -69,76 +71,37 @@ class ImageToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+        if texts is not None:
+            preprocess_params["texts"] = texts
 
-        return {}, forward_kwargs, {}
+        return preprocess_params, forward_kwargs, {}
 
-    def __call__(
-        self,
-        images: Union[str, List[str], "Image.Image", List["Image.Image"]],
-        texts: Union[str, List[str]] = None,
-        **kwargs,
-    ):
+    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
-
                 - A string containing a HTTP(s) link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
-
                 The pipeline accepts either a single image or a batch of images.
-            texts (`str`, `List[str]`, *optional*):
-                The pipeline handles conditional generation. If `texts` is provided, the model will generate the image
-                caption conditioned on the text.
-
             max_new_tokens (`int`, *optional*):
                 The amount of maximum tokens to generate. By default it will use `generate` default.
-
-            kwargs (`Dict`, *optional*):
-                The kwargs will contain the preprocessing kwargs (including kwargs related to text input) as well as
-                the generate kwargs that will send all of these arguments directly to `generate` allowing full control
-                of this function.
-
+            generate_kwargs (`Dict`, *optional*):
+                Pass it to send all of these arguments directly to `generate` allowing full control of this function.
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
-
             - **generated_text** (`str`) -- The generated text.
         """
-        model_inputs = None
-        if isinstance(images, list) and texts is not None and isinstance(texts, list):
-            model_inputs = [{"images": image, "texts": texts} for image, texts in zip(images, texts)]
-        elif isinstance(images, list) and texts is not None:
-            # same text on all images
-            model_inputs = [{"images": image, "texts": texts} for image in images]
-        elif isinstance(images, list) and texts is None:
-            # no text
-            model_inputs = [{"images": image} for image in images]
-        elif not isinstance(images, list) and texts is None:
-            # classic input with only images
-            model_inputs = images
-        elif not isinstance(images, list) and texts is not None:
-            # classic input with images and text
-            model_inputs = {"images": images, "texts": texts}
+        return super().__call__(images, **kwargs)
 
-        if model_inputs is None:
-            raise ValueError("Input is not valid - got {} and {} for image and text".format(images, texts))
+    def preprocess(self, images, texts=None):
+        images = load_image(images)
 
-        return super().__call__(model_inputs, **kwargs)
-
-    def preprocess(self, model_input):
-        images = model_input["images"] if isinstance(model_input, dict) else model_input
-        if isinstance(images, list):
-            images = [load_image(image) for image in images]
-        else:
-            images = load_image(images)
-
-        if isinstance(model_input, dict) and "texts" in model_input:
-            texts = model_input["texts"]
-        else:
-            texts = None
+        if texts is not None and isinstance(texts, list) and len(texts) > 1:
+            raise ValueError("Only one single text can be provided for conditional image to text generation.")
 
         # check if the model is not a pix2struct model
         if texts is not None and self.model.config.model_type == "pix2struct":
