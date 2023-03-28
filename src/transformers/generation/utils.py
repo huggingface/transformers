@@ -4181,6 +4181,8 @@ class GenerationMixin:
                     )
                     if last_assistant_token_is_eos:
                         break
+                else:
+                    last_assistant_token_is_eos = False
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
@@ -4222,12 +4224,13 @@ class GenerationMixin:
                     )
 
             # 3. Obtain the argmax from the original model logits.
+            new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
-                    outputs.logits[:, i, :] = logits_processor(
-                        candidate_input_ids[:, : cur_len + i], outputs.logits[:, i, :]
+                    new_logits[:, i, :] = logits_processor(
+                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :]
                     )
-            max_logits = outputs.logits.argmax(dim=-1)[:, -candidate_length - 1 : -1]
+            max_logits = new_logits.argmax(dim=-1)[:, -candidate_length - 1 : -1]
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
@@ -4245,24 +4248,22 @@ class GenerationMixin:
                     assistant_model.max_assistant_tokens = 1.0
 
             # 6. Update variables according to the number of matching assistant tokens.
-            n_matches = min(n_matches, max_len - cur_len)
-            if (last_assistant_token_is_eos and n_matches == candidate_length):  # don't go beyond an EOS token
+            # 6.1. Ensure we don't generate beyond max_len or an EOS token (remember: one token will be added below)
+            if n_matches >= max_len - cur_len:
+                n_matches = max_len - cur_len - 1
+            if (last_assistant_token_is_eos and n_matches == candidate_length):
                 n_matches -= 1
             input_ids = candidate_input_ids[:, 0 : cur_len + n_matches]
             new_cur_len = input_ids.shape[-1]
 
-            # 6.1. Discard past key values relative to unused assistant tokens
+            # 6.2. Discard past key values relative to unused assistant tokens
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cur_len)
             model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
                 assistant_model, model_kwargs["assistant_past_key_values"], new_cur_len
             )
 
-            # 6.2. Extract the logits for the next token
-            if outputs.logits.shape[1] > candidate_length + 1:
-                last_valid_output_idx = new_cur_len - 1
-            else:
-                last_valid_output_idx = n_matches
-            next_token_scores = outputs.logits[:, last_valid_output_idx, :]
+            # 6.3. Extract the logits for the next token
+            next_token_scores = new_logits[:, n_matches, :]
 
             # 7. Use the set of logits after the last matching assistant token to obtain the next token. Note that,
             # because of this step, assisted greedy search reduces to a normal greedy search if there is no match.
@@ -4279,34 +4280,26 @@ class GenerationMixin:
             # Assistant: modified to append one tuple element per token, as in the other generation methods.
             if return_dict_in_generate:
                 if output_scores:
-                    scores += tuple(outputs.logits[:, i, :] for i in range(last_valid_output_idx + 1))
+                    scores += tuple(new_logits[:, i, :] for i in range(n_matches + 1))
+
+                if "past_key_values" not in model_kwargs:
+                    last_matching_idx = new_cur_len - 1
+                    prompt_length = cur_len
+                else:
+                    last_matching_idx = n_matches
+                    prompt_length = 0
+
                 if output_attentions:
                     if self.config.is_encoder_decoder:
-                        cross_attentions += tuple(
-                            layer[..., i:i + 1, :]
-                            for layer in outputs.cross_attentions
-                            for i in range(last_valid_output_idx + 1)
-                        )
-                        decoder_attentions += tuple(
-                            layer[..., i:i + 1, -(last_valid_output_idx - i):]
-                            for layer in outputs.decoder_attentions
-                            for i in range(last_valid_output_idx + 1)
-                        )
+                        cross_attentions = _split_model_outputs(cross_attentions, outputs.cross_attentions, prompt_length, last_matching_idx)
+                        decoder_attentions = _split_model_outputs(decoder_attentions, outputs.decoder_attentions, prompt_length, last_matching_idx, is_decoder_attention=True)
                     else:
-                        decoder_attentions += tuple(
-                            layer[..., i:i + 1, -(last_valid_output_idx - i):] for layer in outputs.attentions for i in range(last_valid_output_idx + 1)
-                        )
+                        decoder_attentions = _split_model_outputs(decoder_attentions, outputs.attentions, prompt_length, last_matching_idx, is_decoder_attention=True)
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
-                        decoder_hidden_states += tuple(
-                            layer[:, i:i + 1, :]
-                            for layer in outputs.decoder_hidden_states
-                            for i in range(last_valid_output_idx + 1)
-                        )
+                        decoder_hidden_states = _split_model_outputs(decoder_hidden_states, outputs.decoder_hidden_states, prompt_length, last_matching_idx)
                     else:
-                        decoder_hidden_states += tuple(
-                            layer[:, i:i + 1, :] for layer in outputs.hidden_states for i in range(last_valid_output_idx + 1)
-                        )
+                        decoder_hidden_states = _split_model_outputs(decoder_hidden_states, outputs.hidden_states, prompt_length, last_matching_idx)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -4356,6 +4349,7 @@ class GenerationMixin:
 
 
 def _crop_past_key_values(model, past_key_values, maximum_length):
+    """Crops the past key values up to a certain maximum length."""
     new_past = []
     if model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
@@ -4387,6 +4381,29 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             )
         past_key_values = tuple(new_past)
     return past_key_values
+
+
+def _split_model_outputs(outputs, new_outputs, prompt_length, last_matching_idx, is_decoder_attention=False):
+    """
+    Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
+    where each member corresponds to a single generated token.
+    """
+    # Retrocompatibility: in our generation functions, the first iteration includes the attention/hidden states for the
+    # prompt.
+    if prompt_length > 0:
+        new_tuple = ()
+        for layer in new_outputs:
+            last_dim_size = prompt_length if is_decoder_attention else layer.shape[-1]
+            new_tuple += (layer[..., :prompt_length, :last_dim_size],)
+        outputs += (new_tuple,)
+
+    for i in range(prompt_length, last_matching_idx + 1):
+        new_tuple = ()
+        for layer in new_outputs:
+            last_dim_size = i + 1 if is_decoder_attention else layer.shape[-1]
+            new_tuple += (layer[..., i:i + 1, :last_dim_size],)
+        outputs += (new_tuple,)
+    return outputs
 
 
 def top_k_top_p_filtering(

@@ -1478,9 +1478,10 @@ class GenerationTesterMixin:
                 return
 
             config.use_cache = True
+            config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             output_greedy = model.generate(
-                input_ids=input_ids,
+                input_ids,
                 attention_mask=attention_mask,
                 max_length=max_length,
                 num_beams=1,
@@ -1493,7 +1494,7 @@ class GenerationTesterMixin:
             # Note: with assisted generate, if the same model is used as assistant, then all assistant tokens will
             # match
             output_assisted = model.generate(
-                input_ids=input_ids,
+                input_ids,
                 attention_mask=attention_mask,
                 max_length=max_length,
                 num_beams=1,
@@ -1504,7 +1505,6 @@ class GenerationTesterMixin:
                 output_attentions=True,
                 return_dict_in_generate=True,
             )
-            breakpoint()
 
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
 
