@@ -56,9 +56,12 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, text=None):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, preprompt=None):
         forward_kwargs = {}
         preprocess_params = {}
+
+        if preprompt is not None:
+            preprocess_params["preprompt"] = preprompt
 
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
@@ -71,8 +74,6 @@ class ImageToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        if text is not None:
-            preprocess_params["text"] = text
 
         return preprocess_params, forward_kwargs, {}
 
@@ -97,19 +98,22 @@ class ImageToTextPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, images, text=None):
+    def preprocess(self, images, preprompt=None):
         images = load_image(images)
 
-        if text is not None and isinstance(text, list) and len(text) > 1:
-            raise ValueError("Only one single text can be provided for conditional image to text generation.")
+        if preprompt is not None and not isinstance(preprompt, str):
+            raise ValueError(
+                f"Received an invalid text input, got - {type(preprompt)} - but expected a single string. "
+                "Note also that one single text can be provided for conditional image to text generation."
+            )
 
         # check if the model is not a pix2struct model
-        if text is not None and self.model.config.model_type == "pix2struct":
-            model_inputs = self.image_processor(images=images, header_text=text, return_tensors=self.framework)
+        if preprompt is not None and self.model.config.model_type == "pix2struct":
+            model_inputs = self.image_processor(images=images, header_text=preprompt, return_tensors=self.framework)
         # vision-encoder-decoder does not support conditional generation
-        elif text is not None and self.model.config.model_type != "vision-encoder-decoder":
+        elif preprompt is not None and self.model.config.model_type != "vision-encoder-decoder":
             model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-            text_inputs = self.tokenizer(text, return_tensors=self.framework)
+            text_inputs = self.tokenizer(preprompt, return_tensors=self.framework)
 
             if "token_type_ids" in text_inputs:
                 text_inputs.pop("token_type_ids", None)
