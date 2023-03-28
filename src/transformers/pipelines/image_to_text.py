@@ -56,9 +56,8 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, padding=False, truncation=False):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None):
         forward_kwargs = {}
-        preprocess_kwargs = {}
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
@@ -70,11 +69,8 @@ class ImageToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        if padding is not None:
-            preprocess_kwargs["padding"] = padding
-        if truncation is not None:
-            preprocess_kwargs["truncation"] = truncation
-        return preprocess_kwargs, forward_kwargs, {}
+
+        return {}, forward_kwargs, {}
 
     def __call__(
         self,
@@ -132,7 +128,7 @@ class ImageToTextPipeline(Pipeline):
 
         return super().__call__(model_inputs, **kwargs)
 
-    def preprocess(self, model_input, padding=None, truncation=None):
+    def preprocess(self, model_input):
         images = model_input["images"]
         if isinstance(images, list):
             images = [load_image(image) for image in images]
@@ -144,12 +140,13 @@ class ImageToTextPipeline(Pipeline):
         else:
             texts = None
 
-        # check if "header_text" is not on the image_processor __call__ signature - for Pix2Struct models
-        if texts is not None and "header_text" in self.image_processor.preprocess.__code__.co_varnames:
+        # check if the model is not a pix2struct model
+        if texts is not None and self.model.config.model_type == "pix2struct":
             model_inputs = self.image_processor(images=images, header_text=texts, return_tensors=self.framework)
-        elif texts is not None:
+        # vision-encoder-decoder does not support conditional generation
+        elif texts is not None and self.model.config.model_type != "vision-encoder-decoder":
             model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-            text_inputs = self.tokenizer(texts, padding=padding, truncation=truncation, return_tensors=self.framework)
+            text_inputs = self.tokenizer(texts, return_tensors=self.framework)
 
             if "token_type_ids" in text_inputs:
                 text_inputs.pop("token_type_ids", None)
