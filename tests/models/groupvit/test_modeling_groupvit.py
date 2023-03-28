@@ -36,6 +36,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -521,8 +522,9 @@ class GroupViTModelTester:
 
 
 @require_torch
-class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
+class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

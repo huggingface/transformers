@@ -662,9 +662,8 @@ class Swinv2Layer(nn.Module):
             if isinstance(self.shift_size, collections.abc.Iterable)
             else (self.shift_size, self.shift_size)
         )
-        self.window_size = (
-            input_resolution[0] if input_resolution[0] <= target_window_size[0] else target_window_size[0]
-        )
+        window_dim = input_resolution[0].item() if torch.is_tensor(input_resolution[0]) else input_resolution[0]
+        self.window_size = window_dim if window_dim <= target_window_size[0] else target_window_size[0]
         self.shift_size = (
             0
             if input_resolution
@@ -1056,6 +1055,10 @@ class Swinv2Model(Swinv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Swinv2ModelOutput]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -391,8 +392,13 @@ class BlipModelTester:
 
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -1077,7 +1083,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    url = "https://huggingface.co/hf-internal-testing/blip-test-image/resolve/main/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -1111,6 +1117,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
             [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
+    @require_torch_gpu
     def test_inference_image_captioning_fp16(self):
         model = BlipForConditionalGeneration.from_pretrained(
             "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16

@@ -20,6 +20,7 @@ from transformers.testing_utils import require_tf, require_tf2onnx, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -361,13 +362,23 @@ class TFGPT2ModelTester:
 
 
 @require_tf
-class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
+class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
         if is_tf_available()
         else ()
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFGPT2Model,
+            "text-classification": TFGPT2ForSequenceClassification,
+            "text-generation": TFGPT2LMHeadModel,
+            "zero-shot": TFGPT2ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = True
     onnx_min_opset = 10

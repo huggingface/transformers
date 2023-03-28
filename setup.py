@@ -98,13 +98,15 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
+    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
+    "beautifulsoup4",
     "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.6.5",
+    "deepspeed>=0.8.3",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
@@ -125,8 +127,9 @@ _deps = [
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
+    "librosa",
     "nltk",
-    "natten>=0.14.4",
+    "natten>=0.14.6",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -147,6 +150,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rhoknp>=1.1.0",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff>=0.0.241",
@@ -157,16 +161,18 @@ _deps = [
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
-    "librosa",
     "starlette",
-    "tensorflow-cpu>=2.4,<2.12",
-    "tensorflow>=2.4,<2.12",
-    "tensorflow-text",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
+    # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
+    "tensorflow-cpu>=2.4,<2.13",
+    "tensorflow>=2.4,<2.13",
+    "tensorflow-text<2.13",
     "tf2onnx",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
-    "torch>=1.7,!=1.12.0",
+    "torch>=1.9,!=1.12.0",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -174,10 +180,6 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "beautifulsoup4",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
-    "rhoknp>=1.1.0",
 ]
 
 
@@ -289,7 +291,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord")
+extras["video"] = deps_list("decord", "av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -417,7 +419,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.27.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.28.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

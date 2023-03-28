@@ -78,6 +78,7 @@ from .token_classification import (
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
@@ -102,6 +103,7 @@ if is_tf_available():
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelForVision2Seq,
+        TFAutoModelForZeroShotImageClassification,
     )
 
 if is_torch_available():
@@ -134,6 +136,7 @@ if is_torch_available():
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
@@ -289,12 +292,23 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
-        "pt": (AutoModel,) if is_torch_available() else (),
+        "tf": (TFAutoModelForZeroShotImageClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
                 "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
+        "type": "multimodal",
+    },
+    "zero-shot-audio-classification": {
+        "impl": ZeroShotAudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",
@@ -534,6 +548,7 @@ def pipeline(
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):

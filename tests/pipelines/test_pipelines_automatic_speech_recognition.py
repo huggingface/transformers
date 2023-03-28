@@ -33,6 +33,7 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
+    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -42,7 +43,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -53,12 +54,12 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = {
-        k: v
-        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+@is_pipeline_test
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
+    model_mapping = dict(
+        (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
-    }
+    )
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
@@ -123,7 +124,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio, return_timestamps=True)
             self.assertIsInstance(outputs["chunks"], list)
             nb_chunks = len(outputs["chunks"])
-            self.assertGreaterThan(nb_chunks, 0)
+            self.assertGreater(nb_chunks, 0)
             self.assertEqual(
                 outputs,
                 {
@@ -526,7 +527,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
-            output,
+            nested_simplify(output),
             {
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
@@ -536,7 +537,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.94),
+                        "timestamp": (5.5, 11.95),
                     },
                     {
                         "text": (
@@ -544,15 +545,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.94, 19.6),
+                        "timestamp": (11.95, 19.61),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 24.98),
+                        "timestamp": (19.61, 25.0),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.98, 30.98),
+                        "timestamp": (25.0, 29.4),
                     },
                 ],
                 "text": (
@@ -1109,6 +1110,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
+
+        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6, ratio))
+        self.assertEqual(len(outs), 4)
+        self.assertEqual([o["stride"] for o in outs], [(36, 0, 6), (36, 6, 6), (36, 6, 6), (28, 6, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 36), (1, 36), (1, 36), (1, 28)])
 
         inputs = torch.LongTensor([i % 2 for i in range(100)])
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[

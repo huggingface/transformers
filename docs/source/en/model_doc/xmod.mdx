@@ -38,7 +38,7 @@ There are two ways to specify the input language:
 ```python
 from transformers import XmodModel
 
-model = XmodModel.from_pretrained("jvamvas/xmod-base")
+model = XmodModel.from_pretrained("facebook/xmod-base")
 model.set_default_language("en_XX")
 ```
 
@@ -77,6 +77,15 @@ After fine-tuning, zero-shot cross-lingual transfer can be tested by activating 
 model.set_default_language("de_DE")
 # Evaluate the model on German examples ...
 ```
+
+## Resources
+
+- [Text classification task guide](../tasks/sequence_classification)
+- [Token classification task guide](../tasks/token_classification)
+- [Question answering task guide](../tasks/question_answering)
+- [Causal language modeling task guide](../tasks/language_modeling)
+- [Masked language modeling task guide](../tasks/masked_language_modeling)
+- [Multiple choice task guide](../tasks/multiple_choice)
 
 ## XmodConfig
 

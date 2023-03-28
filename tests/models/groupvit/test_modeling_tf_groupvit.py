@@ -37,6 +37,7 @@ from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -569,8 +570,9 @@ class TFGroupViTModelTester:
 
 
 @require_tf
-class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFGroupViTModel,) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFGroupViTModel} if is_tf_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -628,7 +630,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
         if self.__class__.__name__ == "TFGroupViTModelTest":
             inputs_dict.pop("return_loss", None)
 
-        tf_main_layer_classes = set(
+        tf_main_layer_classes = {
             module_member
             for model_class in self.all_model_classes
             for module in (import_module(model_class.__module__),)
@@ -640,7 +642,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
             if isinstance(module_member, type)
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
-        )
+        }
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
             if "T5" in main_layer_class.__name__:

@@ -27,6 +27,7 @@ from transformers.testing_utils import require_soundfile, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -218,8 +219,9 @@ class TFHubertModelTester:
 
 
 @require_tf
-class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFHubertModel, TFHubertForCTC) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFHubertModel} if is_tf_available() else {}
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
@@ -321,19 +323,15 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_dataset_conversion()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_keras_fit()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
 
 @require_tf
@@ -450,19 +448,15 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_dataset_conversion()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_keras_fit()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
 
 @require_tf

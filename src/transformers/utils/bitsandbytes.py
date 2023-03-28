@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from transformers.utils import is_accelerate_available, is_bitsandbytes_available
+from .import_utils import is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -84,7 +84,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, current_key_name=None):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
@@ -105,23 +105,38 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
         threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
-        modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
-            Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
+        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
+        current_key_name (`List[`str`]`, *optional*):
+            An array to track the current key of the recursion. This is used to check whether the current key (part of
+            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
+            `disk`).
     """
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     for name, module in model.named_children():
+        if current_key_name is None:
+            current_key_name = []
+        current_key_name.append(name)
+
         if len(list(module.children())) > 0:
-            replace_8bit_linear(module, threshold, modules_to_not_convert)
+            replace_8bit_linear(module, threshold, modules_to_not_convert, current_key_name)
 
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
-            with init_empty_weights():
-                model._modules[name] = bnb.nn.Linear8bitLt(
-                    module.in_features,
-                    module.out_features,
-                    module.bias is not None,
-                    has_fp16_weights=False,
-                    threshold=threshold,
-                )
+            # Check if the current key is not in the `modules_to_not_convert`
+            if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
+                with init_empty_weights():
+                    model._modules[name] = bnb.nn.Linear8bitLt(
+                        module.in_features,
+                        module.out_features,
+                        module.bias is not None,
+                        has_fp16_weights=False,
+                        threshold=threshold,
+                    )
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
     return model
 
 
@@ -141,7 +156,12 @@ def get_keys_to_not_convert(model):
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
 
-    tied_keys = list(find_tied_parameters(tied_model).values())
+    tied_params = find_tied_parameters(tied_model)
+    # For compatibility with Accelerate < 0.18
+    if isinstance(tied_params, dict):
+        tied_keys = list(tied_params.values())
+    else:
+        tied_keys = sum([x[1:] for x in tied_params], [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
@@ -159,4 +179,13 @@ def get_keys_to_not_convert(model):
     intersection = set(list_last_module) - set(tied_keys)
     list_untouched = tied_keys + list(intersection)
 
-    return [module_name.split(".")[0] for module_name in list_untouched]
+    # remove ".weight" from the keys
+    names_to_remove = [".weight", ".bias"]
+    filtered_module_names = []
+    for name in list_untouched:
+        for name_to_remove in names_to_remove:
+            if name_to_remove in name:
+                name = name.replace(name_to_remove, "")
+        filtered_module_names.append(name)
+
+    return filtered_module_names

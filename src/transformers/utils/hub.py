@@ -49,8 +49,6 @@ from huggingface_hub.utils import (
 )
 from requests.exceptions import HTTPError
 
-from transformers.utils.logging import tqdm
-
 from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
@@ -61,6 +59,7 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+from .logging import tqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -391,7 +390,7 @@ def cached_file(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    if _commit_hash is not None:
+    if _commit_hash is not None and not force_download:
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(
             path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
@@ -902,7 +901,7 @@ def get_checkpoint_shard_files(
     with open(index_filename, "r") as f:
         index = json.loads(f.read())
 
-    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    shard_filenames = sorted(set(index["weight_map"].values()))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
@@ -914,7 +913,13 @@ def get_checkpoint_shard_files(
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
     cached_filenames = []
-    for shard_filename in shard_filenames:
+    # Check if the model is already cached or not. We only try the last checkpoint, this should cover most cases of
+    # downloaded (if interrupted).
+    last_shard = try_to_load_from_cache(
+        pretrained_model_name_or_path, shard_filenames[-1], cache_dir=cache_dir, revision=_commit_hash
+    )
+    show_progress_bar = last_shard is None or force_download
+    for shard_filename in tqdm(shard_filenames, desc="Downloading shards", disable=not show_progress_bar):
         try:
             # Load from URL
             cached_filename = cached_file(
