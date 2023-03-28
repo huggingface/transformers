@@ -118,7 +118,7 @@ class ImageToTextPipeline(Pipeline):
             model_inputs = [{"images": image} for image in images]
         elif not isinstance(images, list) and texts is None:
             # classic input with only images
-            model_inputs = {"images": images}
+            model_inputs = images
         elif not isinstance(images, list) and texts is not None:
             # classic input with images and text
             model_inputs = {"images": images, "texts": texts}
@@ -129,13 +129,13 @@ class ImageToTextPipeline(Pipeline):
         return super().__call__(model_inputs, **kwargs)
 
     def preprocess(self, model_input):
-        images = model_input["images"]
+        images = model_input["images"] if isinstance(model_input, dict) else model_input
         if isinstance(images, list):
             images = [load_image(image) for image in images]
         else:
             images = load_image(images)
 
-        if "texts" in model_input:
+        if isinstance(model_input, dict) and "texts" in model_input:
             texts = model_input["texts"]
         else:
             texts = None
