@@ -56,7 +56,7 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, texts=None):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, text=None):
         forward_kwargs = {}
         preprocess_params = {}
 
@@ -71,8 +71,8 @@ class ImageToTextPipeline(Pipeline):
                     " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        if texts is not None:
-            preprocess_params["texts"] = texts
+        if text is not None:
+            preprocess_params["text"] = text
 
         return preprocess_params, forward_kwargs, {}
 
@@ -97,19 +97,19 @@ class ImageToTextPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, images, texts=None):
+    def preprocess(self, images, text=None):
         images = load_image(images)
 
-        if texts is not None and isinstance(texts, list) and len(texts) > 1:
+        if text is not None and isinstance(text, list) and len(text) > 1:
             raise ValueError("Only one single text can be provided for conditional image to text generation.")
 
         # check if the model is not a pix2struct model
-        if texts is not None and self.model.config.model_type == "pix2struct":
-            model_inputs = self.image_processor(images=images, header_text=texts, return_tensors=self.framework)
+        if text is not None and self.model.config.model_type == "pix2struct":
+            model_inputs = self.image_processor(images=images, header_text=text, return_tensors=self.framework)
         # vision-encoder-decoder does not support conditional generation
-        elif texts is not None and self.model.config.model_type != "vision-encoder-decoder":
+        elif text is not None and self.model.config.model_type != "vision-encoder-decoder":
             model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-            text_inputs = self.tokenizer(texts, return_tensors=self.framework)
+            text_inputs = self.tokenizer(text, return_tensors=self.framework)
 
             if "token_type_ids" in text_inputs:
                 text_inputs.pop("token_type_ids", None)

@@ -154,11 +154,11 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         text = "a photography of"
 
-        outputs = pipe(image, texts=[text])
+        outputs = pipe(image, text=[text])
         self.assertEqual(outputs, [{"generated_text": "a photography of a volcano"}])
 
         with self.assertRaises(ValueError):
-            outputs = pipe([image, image], texts=[text, text])
+            outputs = pipe([image, image], text=[text, text])
 
     @slow
     @require_torch
@@ -169,11 +169,11 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         text = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
 
-        outputs = pipe(image, text)
+        outputs = pipe(image, text=text)
         self.assertEqual(outputs, [{"generated_text": "ash cloud"}])
 
         with self.assertRaises(ValueError):
-            outputs = pipe([image, image], [text, text])
+            outputs = pipe([image, image], text=[text, text])
 
     @slow
     @require_tf
