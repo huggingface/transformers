@@ -230,19 +230,14 @@ class RoFormerModelTester:
         token_labels,
         choice_labels,
     ):
+        model = RoFormerForCausalLM(config=config).to(torch_device).eval()
         torch.manual_seed(0)
-        config.is_decoder = True
-        config.bos_token_id = 0
-        config.eos_token_id = 1
-        config.pad_token_id = 2
-        model = RoFormerForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            input_ids = model.generate(do_sample=False, max_length=10)
-            output = model(input_ids=input_ids)
-        argmax_ids = output.logits.argmax(dim=-1)
-        self.parent.assertListEqual(argmax_ids[:-1].cpu().tolist(), input_ids[1:].cpu().tolist())
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=15, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=15, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
