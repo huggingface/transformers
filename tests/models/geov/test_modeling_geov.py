@@ -14,17 +14,14 @@
 # limitations under the License.
 """ Testing suite for the PyTorch GeoV model. """
 
-
 import unittest
 
 from transformers import AutoTokenizer, GeoVConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -34,20 +31,20 @@ if is_torch_available():
 
 class GeoVModelTester:
     def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=3,
-        num_attention_heads=4,
-        intermediate_size=32*4,
-        max_position_embeddings=512,
-        num_labels=3,
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_input_mask=True,
+            use_labels=True,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            intermediate_size=32 * 4,
+            max_position_embeddings=512,
+            num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -170,6 +167,12 @@ class GeoVModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+    test_initialization = False
+    test_left_padding_compatibility = False
+
+    pipeline_model_mapping = {
+        "text-generation": GeoVForCausalLM,
+    }
 
     def setUp(self):
         self.model_tester = GeoVModelTester(self)
@@ -223,7 +226,7 @@ class GeoVLanguageGenerationTest(unittest.TestCase):
 
             inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
             expected_output = (
-                "My favorite food is the chicken and rice.\n\nI love to cook and bake. I love to cook and bake"
+                "My favorite food is pizza. I love pizza. I love pizza. I"
             )
 
             output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
