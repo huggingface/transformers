@@ -110,10 +110,6 @@ class Mask2FormerConfig(PretrainedConfig):
             Feature strides corresponding to features generated from backbone network.
         output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.
-        is_video (`bool`, *optional*, defaults to `False` ):
-            Whether the input being passed to the model is a video or not.
-        num_frames (`int`, *optional*, defaults to 2):
-            Number of frames in the video.
 
     Examples:
 
@@ -128,9 +124,6 @@ class Mask2FormerConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-
-    >>> # If you want to use the model with video input then make sure that you set the `is_video` flag to True
-    >>> configuration.is_video = True
     ```
 
     """
