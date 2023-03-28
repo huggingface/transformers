@@ -12,22 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import importlib
 import logging
 import os
-import random
 import sys
 import tempfile
 import unittest
-from abc import abstractmethod
 from pathlib import Path
-from unittest import skipIf
 
 import datasets
 import numpy as np
-import requests
-from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -45,6 +39,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
+    is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_tensorflow_probability,
@@ -53,7 +48,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
 )
-from transformers.utils import is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -69,12 +64,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/tr
 
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 class ANY:
@@ -88,255 +78,7 @@ class ANY:
         return f"ANY({', '.join(_type.__name__ for _type in self._types)})"
 
 
-def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer_name, processor_name):
-    """Some tests are just not working"""
-
-    to_skip = False
-
-    if config_class.__name__ == "RoCBertConfig" and test_casse_name in [
-        "FillMaskPipelineTests",
-        "FeatureExtractionPipelineTests",
-        "TextClassificationPipelineTests",
-        "TokenClassificationPipelineTests",
-    ]:
-        # Get error: IndexError: index out of range in self.
-        # `word_shape_file` and `word_pronunciation_file` should be shrunk during tiny model creation,
-        # otherwise `IndexError` could occur in some embedding layers. Skip for now until this model has
-        # more usage.
-        to_skip = True
-    elif config_class.__name__ in ["LayoutLMv3Config", "LiltConfig"]:
-        # Get error: ValueError: Words must be of type `List[str]`. Previously, `LayoutLMv3` is not
-        # used in pipeline tests as it could not find a checkpoint
-        # TODO: check and fix if possible
-        to_skip = True
-    # config/model class we decide to skip
-    elif config_class.__name__ in ["TapasConfig"]:
-        # Get error: AssertionError: Table must be of type pd.DataFrame. Also, the tiny model has large
-        # vocab size as the fast tokenizer could not be converted. Previous, `Tapas` is not used in
-        # pipeline tests due to the same reason.
-        # TODO: check and fix if possible
-        to_skip = True
-
-    # TODO: check and fix if possible
-    if not to_skip and tokenizer_name is not None:
-        if (
-            test_casse_name == "QAPipelineTests"
-            and not tokenizer_name.endswith("Fast")
-            and config_class.__name__
-            in [
-                "FlaubertConfig",
-                "GPTJConfig",
-                "LongformerConfig",
-                "MvpConfig",
-                "OPTConfig",
-                "ReformerConfig",
-                "XLMConfig",
-            ]
-        ):
-            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
-            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
-            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
-            to_skip = True
-        elif test_casse_name == "ZeroShotClassificationPipelineTests" and config_class.__name__ in [
-            "CTRLConfig",
-            "OpenAIGPTConfig",
-        ]:
-            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
-            # `CTRLConfig` and `OpenAIGPTConfig` were never used in pipeline tests, either because of a missing
-            # checkpoint or because a tiny config could not be created
-            to_skip = True
-        elif test_casse_name == "TranslationPipelineTests" and config_class.__name__ in [
-            "M2M100Config",
-            "PLBartConfig",
-        ]:
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `M2M100Config` and `PLBartConfig` were never used in pipeline tests: cannot create a simple tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and config_class.__name__ in [
-            "ProphetNetConfig",
-            "TransfoXLConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `TransfoXLConfig` and `ProphetNetConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer.
-            to_skip = True
-        elif test_casse_name == "FillMaskPipelineTests" and config_class.__name__ in [
-            "FlaubertConfig",
-            "XLMConfig",
-        ]:
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `FlaubertConfig` and `TransfoXLConfig` were never used in pipeline tests: cannot create a simple
-            # tokenizer
-            to_skip = True
-        elif test_casse_name == "TextGenerationPipelineTests" and model_architecture.__name__ in [
-            "TFRoFormerForCausalLM"
-        ]:
-            # TODO: add `prepare_inputs_for_generation` for `TFRoFormerForCausalLM`
-            to_skip = True
-        elif test_casse_name == "QAPipelineTests" and model_architecture.__name__ in ["FNetForQuestionAnswering"]:
-            # TODO: The change in `base.py` in the PR #21132 (https://github.com/huggingface/transformers/pull/21132)
-            #       fails this test case. Skip for now - a fix for this along with the initial changes in PR #20426 is
-            #       too much. Let `ydshieh` to fix it ASAP once #20426 is merged.
-            to_skip = True
-        elif config_class.__name__ == "LayoutLMv2Config" and test_casse_name in [
-            "QAPipelineTests",
-            "TextClassificationPipelineTests",
-            "TokenClassificationPipelineTests",
-            "ZeroShotClassificationPipelineTests",
-        ]:
-            # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
-            # config. With new tiny model creation, it is available, but we need to fix the failed tests.
-            to_skip = True
-        elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
-            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
-            to_skip = True
-
-    return to_skip
-
-
-def validate_test_components(test_case, model, tokenizer, processor):
-    # TODO: Move this to tiny model creation script
-    # head-specific (within a model type) necessary changes to the config
-    # 1. for `BlenderbotForCausalLM`
-    if model.__class__.__name__ == "BlenderbotForCausalLM":
-        model.config.encoder_no_repeat_ngram_size = 0
-
-    # TODO: Change the tiny model creation script: don't create models with problematic tokenizers
-    # Avoid `IndexError` in embedding layers
-    CONFIG_WITHOUT_VOCAB_SIZE = ["CanineConfig"]
-    if tokenizer is not None:
-        config_vocab_size = getattr(model.config, "vocab_size", None)
-        # For CLIP-like models
-        if config_vocab_size is None and hasattr(model.config, "text_config"):
-            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
-        if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
-            raise ValueError(
-                "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."
-            )
-        # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
-        if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
-            test_case.skipTest(
-                f"Ignore {model.__class__.__name__}: `tokenizer` ({tokenizer.__class__.__name__}) has"
-                f" {len(tokenizer)} tokens which is greater than `config_vocab_size`"
-                f" ({config_vocab_size}). Something is wrong."
-            )
-
-
-class PipelineTestCaseMeta(type):
-    def __new__(mcs, name, bases, dct):
-        def gen_test(repo_name, model_architecture, tokenizer_name, processor_name):
-            @skipIf(
-                tokenizer_name is None and processor_name is None,
-                f"Ignore {model_architecture.__name__}: no processor class is provided (tokenizer, image processor,"
-                " feature extractor, etc)",
-            )
-            def test(self):
-                repo_id = f"hf-internal-testing/{repo_name}"
-
-                tokenizer = None
-                if tokenizer_name is not None:
-                    tokenizer_class = getattr(transformers_module, tokenizer_name)
-                    tokenizer = tokenizer_class.from_pretrained(repo_id)
-
-                processor = None
-                if processor_name is not None:
-                    processor_class = getattr(transformers_module, processor_name)
-                    # If the required packages (like `Pillow`) are not installed, this will fail.
-                    try:
-                        processor = processor_class.from_pretrained(repo_id)
-                    except Exception:
-                        self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
-
-                try:
-                    model = model_architecture.from_pretrained(repo_id)
-                except Exception:
-                    self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
-
-                # validate
-                validate_test_components(self, model, tokenizer, processor)
-
-                if hasattr(model, "eval"):
-                    model = model.eval()
-
-                pipeline, examples = self.get_test_pipeline(model, tokenizer, processor)
-                if pipeline is None:
-                    # The test can disable itself, but it should be very marginal
-                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-                    self.skipTest(f"Ignore {model_architecture.__name__}: could not create the pipeline")
-                self.run_pipeline_test(pipeline, examples)
-
-                def run_batch_test(pipeline, examples):
-                    # Need to copy because `Conversation` are stateful
-                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
-                        return  # No batching for this and it's OK
-
-                    # 10 examples with batch size 4 means there needs to be a unfinished batch
-                    # which is important for the unbatcher
-                    def data(n):
-                        for _ in range(n):
-                            # Need to copy because Conversation object is mutated
-                            yield copy.deepcopy(random.choice(examples))
-
-                    out = []
-                    for item in pipeline(data(10), batch_size=4):
-                        out.append(item)
-                    self.assertEqual(len(out), 10)
-
-                run_batch_test(pipeline, examples)
-
-            return test
-
-        # Download tiny model summary (used to avoid requesting from Hub too many times)
-        url = "https://huggingface.co/datasets/hf-internal-testing/tiny-random-model-summary/raw/main/processor_classes.json"
-        tiny_model_summary = requests.get(url).json()
-
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
-            mapping = dct.get(key, {})
-            if mapping:
-                for config_class, model_architectures in mapping.items():
-                    if not isinstance(model_architectures, tuple):
-                        model_architectures = (model_architectures,)
-
-                    for model_architecture in model_architectures:
-                        model_arch_name = model_architecture.__name__
-                        # Get the canonical name
-                        for _prefix in ["Flax", "TF"]:
-                            if model_arch_name.startswith(_prefix):
-                                model_arch_name = model_arch_name[len(_prefix) :]
-                                break
-
-                        tokenizer_names = []
-                        processor_names = []
-                        if model_arch_name in tiny_model_summary:
-                            tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
-                            processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
-                        # Adding `None` (if empty) so we can generate tests
-                        tokenizer_names = [None] if len(tokenizer_names) == 0 else tokenizer_names
-                        processor_names = [None] if len(processor_names) == 0 else processor_names
-
-                        repo_name = f"tiny-random-{model_arch_name}"
-                        for tokenizer_name in tokenizer_names:
-                            for processor_name in processor_names:
-                                if is_test_to_skip(
-                                    name, config_class, model_architecture, tokenizer_name, processor_name
-                                ):
-                                    continue
-                                test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                                dct[test_name] = gen_test(
-                                    repo_name, model_architecture, tokenizer_name, processor_name
-                                )
-
-        @abstractmethod
-        def inner(self):
-            raise NotImplementedError("Not implemented test")
-
-        # Force these 2 methods to exist
-        dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
-        dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
-
-        return type.__new__(mcs, name, bases, dct)
-
-
+@is_pipeline_test
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):
@@ -454,6 +196,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
 
+@is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):
     @require_torch
     def test_pipeline_predict_pt(self):
@@ -504,6 +247,7 @@ class PipelineScikitCompatTest(unittest.TestCase):
         self.assertEqual(expected_output, actual_output)
 
 
+@is_pipeline_test
 class PipelinePadTest(unittest.TestCase):
     @require_torch
     def test_pipeline_padding(self):
@@ -585,6 +329,7 @@ class PipelinePadTest(unittest.TestCase):
         )
 
 
+@is_pipeline_test
 class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     def test_pipeline_dataset(self):
@@ -612,7 +357,7 @@ class PipelineUtilsTest(unittest.TestCase):
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2})
         self.assertEqual(len(dataset), 4)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -630,7 +375,7 @@ class PipelineUtilsTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             len(dataset)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -644,7 +389,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
 
     @require_torch
@@ -660,7 +405,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
         )
@@ -677,7 +422,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineChunkIterator(dataset, preprocess_chunk, {}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
 
         self.assertEqual(outputs, [0, 1, 0, 1, 2])
 
@@ -698,7 +443,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dataset, pack, {})
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             outputs,
             [
@@ -725,7 +470,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
 
         # is_false Across batch
@@ -736,8 +481,16 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
+
+    def test_pipeline_negative_device(self):
+        # To avoid regressing, pipeline used to accept device=-1
+        classifier = pipeline("text-generation", "hf-internal-testing/tiny-random-bert", device=-1)
+
+        expected_output = [{"generated_text": ANY(str)}]
+        actual_output = classifier("Test input.")
+        self.assertEqual(expected_output, actual_output)
 
     @slow
     @require_torch
@@ -880,6 +633,7 @@ class CustomPipeline(Pipeline):
         return model_outputs["logits"].softmax(-1).numpy()
 
 
+@is_pipeline_test
 class CustomPipelineTest(unittest.TestCase):
     def test_warning_logs(self):
         transformers_logging.set_verbosity_debug()
@@ -1013,7 +767,6 @@ class DynamicPipelineTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

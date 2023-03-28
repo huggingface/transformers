@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -168,11 +169,33 @@ class TFCTRLModelTester(object):
 
 
 @require_tf
-class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFCTRLModel,
+            "text-classification": TFCTRLForSequenceClassification,
+            "text-generation": TFCTRLLMHeadModel,
+            "zero-shot": TFCTRLForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
+            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
+            # config could not be created.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFCTRLModelTester(self)

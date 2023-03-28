@@ -18,14 +18,11 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -33,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -103,8 +100,8 @@ class BlipImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
     def resize(

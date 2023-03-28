@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -240,9 +241,14 @@ class BertGenerationEncoderTester:
 
 
 @require_torch
-class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BertGenerationEncoder, BertGenerationDecoder) if is_torch_available() else ()
     all_generative_model_classes = (BertGenerationDecoder,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": BertGenerationEncoder, "text-generation": BertGenerationDecoder}
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)

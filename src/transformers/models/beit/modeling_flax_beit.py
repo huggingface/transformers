@@ -555,7 +555,7 @@ class FlaxBeitEncoder(nn.Module):
             )
 
         # stochastic depth decay rule
-        drop_path_rates = [x for x in np.linspace(0, self.config.drop_path_rate, self.config.num_hidden_layers)]
+        drop_path_rates = list(np.linspace(0, self.config.drop_path_rate, self.config.num_hidden_layers))
         self.layer = FlaxBeitLayerCollection(
             self.config,
             window_size=self.window_size,
@@ -831,7 +831,7 @@ class FlaxBeitForMaskedImageModeling(FlaxBeitPreTrainedModel):
 
 FLAX_BEIT_MLM_DOCSTRING = """
     bool_masked_pos (`numpy.ndarray` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
     Returns:
 

@@ -145,7 +145,11 @@ class MT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -170,7 +174,11 @@ class MT5DenseGatedActDense(nn.Module):
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
@@ -558,8 +566,12 @@ class MT5Block(nn.Module):
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
@@ -585,8 +597,12 @@ class MT5Block(nn.Module):
             hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            if hidden_states.dtype == torch.float16:
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Combine self attn and cross attn key value states
@@ -600,8 +616,12 @@ class MT5Block(nn.Module):
         hidden_states = self.layer[-1](hidden_states)
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
@@ -970,6 +990,13 @@ class MT5Stack(MT5PreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -1007,11 +1034,6 @@ class MT5Stack(MT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

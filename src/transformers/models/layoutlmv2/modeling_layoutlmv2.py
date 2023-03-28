@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, torch_int_div
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -604,7 +604,7 @@ class LayoutLMv2VisualBackbone(nn.Module):
         self_rank = torch.distributed.get_rank()
         node_size = torch.cuda.device_count()
         world_size = torch.distributed.get_world_size()
-        if not (world_size & node_size == 0):
+        if not (world_size % node_size == 0):
             raise RuntimeError("Make sure the number of processes can be divided by the number of nodes")
 
         node_global_ranks = [list(range(i * node_size, (i + 1) * node_size)) for i in range(world_size // node_size)]
@@ -770,7 +770,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return embeddings
 
     def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
-        visual_bbox_x = torch_int_div(
+        visual_bbox_x = torch.div(
             torch.arange(
                 0,
                 1000 * (image_feature_pool_shape[1] + 1),
@@ -779,8 +779,9 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 dtype=bbox.dtype,
             ),
             self.config.image_feature_pool_shape[1],
+            rounding_mode="floor",
         )
-        visual_bbox_y = torch_int_div(
+        visual_bbox_y = torch.div(
             torch.arange(
                 0,
                 1000 * (self.config.image_feature_pool_shape[0] + 1),
@@ -789,6 +790,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 dtype=bbox.dtype,
             ),
             self.config.image_feature_pool_shape[0],
+            rounding_mode="floor",
         )
         visual_bbox = torch.stack(
             [

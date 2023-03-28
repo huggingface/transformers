@@ -114,7 +114,7 @@ def char_token_ratio(example):
 
 def preprocess(example):
     """Chain all preprocessing steps into one function to not fill cache."""
-    results = dict()
+    results = {}
     results.update(get_hash(example))
     results.update(line_stats(example))
     results.update(alpha_stats(example))

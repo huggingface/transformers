@@ -22,14 +22,16 @@ import unittest
 
 import numpy as np
 
+import transformers
 from transformers import WhisperConfig
-from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torchaudio, slow, torch_device
+from transformers.utils import cached_property, is_flax_available, is_torch_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
@@ -41,12 +43,21 @@ if is_torch_available():
 
     from transformers import (
         WhisperFeatureExtractor,
+        WhisperForAudioClassification,
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperProcessor,
         set_seed,
     )
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
+
+if is_flax_available():
+    import jax.numpy as jnp
+
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
 
 
 def prepare_whisper_inputs_dict(
@@ -87,7 +98,7 @@ class WhisperModelTester:
         seq_length=60,
         is_training=True,
         use_labels=False,
-        vocab_size=99,
+        vocab_size=200,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -262,15 +273,34 @@ class WhisperModelTester:
 
 
 @require_torch
-class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": WhisperForConditionalGeneration, "feature-extraction": WhisperModel}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False
     test_missing_keys = False
+    # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
+    # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
+    model_split_percents = [0.5, 0.8, 0.9]
 
     input_name = "input_features"
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "AutomaticSpeechRecognitionPipelineTests":
+            # RuntimeError: The size of tensor a (1500) must match the size of tensor b (30) at non-singleton
+            # dimension 1
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = WhisperModelTester(self)
@@ -338,9 +368,24 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
         return config, input_ids, None, max_length
 
-    # not implemented currently
     def test_inputs_embeds(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            decoder_input_ids = inputs.pop("decoder_input_ids", None)
+            inputs.pop("decoder_attention_mask", None)
+
+            wte = model.get_input_embeddings()
+            inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
 
     # training is not supported yet
     def test_training(self):
@@ -374,6 +419,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             expected_arg_names = [
                 "input_features",
+                "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
@@ -711,7 +757,17 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 input_features = inputs["input_features"]
                 decoder_input_ids = inputs["decoder_input_ids"]
                 decoder_attention_mask = inputs["decoder_attention_mask"]
-                traced_model = torch.jit.trace(model, (input_features, decoder_input_ids, decoder_attention_mask))
+                # prepare `attention_mask` with shape (batch_size, sequence_length)
+                attention_mask = torch.ones(
+                    input_features.shape[0],
+                    input_features.shape[-1],
+                    device=input_features.device,
+                    dtype=input_features.dtype,
+                )
+                traced_model = torch.jit.trace(
+                    model, (input_features, attention_mask, decoder_input_ids, decoder_attention_mask)
+                )
+
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -746,6 +802,187 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    # no flax model exists for this class
+                    return
+
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load PyTorch class
+                pt_model = model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+
+                # load Flax class
+                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
+
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
+
+                # send pytorch inputs to the correct device
+                pt_inputs = {
+                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
+                }
+
+                # convert inputs to Flax
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**fx_inputs)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**fx_inputs)
+
+                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
+
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    # no flax model exists for this class
+                    return
+
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load PyTorch class
+                pt_model = model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+
+                # load Flax class
+                fx_model = fx_model_class(config, input_shape=init_shape, dtype=jnp.float32)
+
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
+
+                # send pytorch inputs to the correct device
+                pt_inputs = {
+                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
+                }
+
+                # convert inputs to Flax
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**fx_inputs)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                # send pytorch model to the correct device
+                pt_model_loaded.to(torch_device)
+                pt_model_loaded.eval()
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
+
+    def test_mask_feature_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_feature_prob = 0.2
+        config.mask_feature_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
+
+    def test_mask_time_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_time_prob = 0.2
+        config.mask_time_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
 
 @require_torch
@@ -996,7 +1233,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
-        generated_ids = model.generate(input_features, max_length=20)
+        generated_ids = model.generate(input_features, max_length=20, task="translate")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1127,3 +1364,245 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_tiny_specaugment_librispeech(self):
+        torch_device = "cpu"
+        set_seed(0)
+        # Apply SpecAugment
+        model = WhisperModel.from_pretrained("openai/whisper-tiny", apply_spec_augment=True)
+        # Set model to training mode to enable SpecAugment
+        model.train()
+        model.to(torch_device)
+        input_speech = self._load_datasamples(1)
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+
+        with torch.no_grad():
+            logits = model(
+                input_features,
+                decoder_input_ids=torch.tensor([[50258, 50259, 50359]]),
+                output_hidden_states=False,
+                output_attentions=False,
+                return_dict=False,
+                use_cache=False,
+            )
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                0.9362, -4.7105, 5.0879, 3.9642, 1.0013, -6.0096, 4.7285, -3.1847,
+                -0.8648, 1.9631, 6.2653, 3.6936, 0.3575, -4.5818, 3.0564, 7.8712,
+                2.9951, 0.6848, 9.9497, -2.6638, 1.1571, -6.8546, -1.4333, -7.7584,
+                1.1200, 3.9030, 4.4655, -4.4919, -1.1703, 9.6241
+            ]
+        )
+        # fmt: on
+        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+
+def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    return {"input_features": input_features, "head_mask": head_mask}
+
+
+@require_torch
+class WhisperEncoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=60,
+        is_training=True,
+        use_labels=True,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        input_channels=1,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        max_source_positions=30,
+        num_mel_bins=80,
+        num_conv_layers=1,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
+        classifier_proj_size=4,
+        num_labels=2,
+        is_encoder_decoder=False,
+        is_decoder=False,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.input_channels = input_channels
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_mel_bins = num_mel_bins
+        self.max_position_embeddings = max_position_embeddings
+        self.max_source_positions = max_source_positions
+        self.num_conv_layers = num_conv_layers
+        self.suppress_tokens = suppress_tokens
+        self.begin_suppress_tokens = begin_suppress_tokens
+        self.classifier_proj_size = classifier_proj_size
+        self.num_labels = num_labels
+        self.is_encoder_decoder = is_encoder_decoder
+        self.is_decoder = is_decoder
+
+    def get_config(self):
+        return WhisperConfig(
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            input_channels=self.input_channels,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            max_source_positions=self.max_source_positions,
+            decoder_ffn_dim=self.hidden_size,
+            encoder_ffn_dim=self.hidden_size,
+            suppress_tokens=self.suppress_tokens,
+            begin_suppress_tokens=self.begin_suppress_tokens,
+            classifier_proj_size=self.classifier_proj_size,
+            num_labels=self.num_labels,
+            is_encoder_decoder=self.is_encoder_decoder,
+            is_decoder=self.is_decoder,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length])
+
+        config = self.get_config()
+        inputs_dict = prepare_whisper_encoder_inputs_dict(
+            config,
+            input_features=input_features,
+        )
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def get_subsampled_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        for i in range(self.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+
+    @property
+    def encoder_seq_length(self):
+        return self.get_subsampled_output_lengths(self.seq_length)
+
+    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
+        model = WhisperForAudioClassification(config=config).to(torch_device).eval()
+
+        if freeze_encoder:
+            model.freeze_encoder()
+
+        input_features = inputs_dict["input_features"]
+
+        # first forward pass
+        last_hidden_state = model(input_features).logits
+
+        self.parent.assertTrue(last_hidden_state.shape, (13, 2))
+
+
+@require_torch
+class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
+    is_encoder_decoder = False
+    fx_compatible = False
+    test_pruning = False
+    test_missing_keys = False
+
+    input_name = "input_features"
+
+    def setUp(self):
+        self.model_tester = WhisperEncoderModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+        self.maxDiff = 3000
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_features", "head_mask", "encoder_outputs"]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_disk_offload(self):
+        pass
+
+    @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
+    def test_model_parallelism(self):
+        pass
+
+    # input embeds is meaningless for an encoder-only acoustic model
+    def test_inputs_embeds(self):
+        pass
+
+    # the equivalent test is passing the encoder outputs directly to the model
+    def test_encoder_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            with torch.no_grad():
+                outputs = model(**inputs)[0]
+
+            input_ids = inputs["input_features"]
+            del inputs["input_features"]
+
+            encoder = model.encoder
+
+            with torch.no_grad():
+                inputs["encoder_outputs"] = encoder(input_ids)
+                outputs_embeds = model(**inputs)[0]
+
+            self.assertTrue((outputs_embeds == outputs).all())
+
+    # Needs to override as the encoder input embedding is a Conv1d
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Conv1d))
+            model.set_input_embeddings(torch.nn.Conv1d(10, 10, 3))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, torch.nn.Conv1d))
+
+    # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass

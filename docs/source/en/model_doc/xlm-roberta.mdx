@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # XLM-RoBERTa
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlm-roberta">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/xlm-roberta-base">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The XLM-RoBERTa model was proposed in [Unsupervised Cross-lingual Representation Learning at Scale](https://arxiv.org/abs/1911.02116) by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume
@@ -38,6 +47,7 @@ Tips:
 - XLM-RoBERTa is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does
   not require `lang` tensors to understand which language is used, and should be able to determine the correct
   language from the input ids.
+- Uses RoBERTa tricks on the XLM approach, but does not use the translation language modeling objective. It only uses masked language modeling on sentences coming from one language.
 - This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples
   as well as the information relative to the inputs and outputs.
 
@@ -54,6 +64,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFXLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
 - [`FlaxXLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
 - [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
+- [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
@@ -61,11 +72,13 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFXLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 - [`FlaxXLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Token classification task guide](../tasks/token_classification)
 
 <PipelineTag pipeline="text-generation"/>
 
 - [`XLMRobertaForCausalLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [Causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides. 
+- [Causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
+- [Causal language modeling task guide](../tasks/language_modeling)
 
 <PipelineTag pipeline="fill-mask"/>
 
@@ -73,6 +86,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFXLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
 - [`FlaxXLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Masked language modeling](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
@@ -80,15 +94,17 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`TFXLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
 - [`FlaxXLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [Question answering task guide](../tasks/question_answering)
 
 **Multiple choice**
 
 - [`XLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 - [`TFXLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
+- [Multiple choice task guide](../tasks/multiple_choice)
 
 🚀 Deploy
 
-- A blog post on how to [Deploy Serveless XLM RoBERTa on AWS Lambda](https://www.philschmid.de/multilingual-serverless-xlm-roberta-with-huggingface).
+- A blog post on how to [Deploy Serverless XLM RoBERTa on AWS Lambda](https://www.philschmid.de/multilingual-serverless-xlm-roberta-with-huggingface).
 
 ## XLMRobertaConfig
 

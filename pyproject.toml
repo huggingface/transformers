@@ -4,8 +4,8 @@ target-version = ['py37']
 
 [tool.ruff]
 # Never enforce `E501` (line length violations).
-ignore = ["E501", "E741", "W605"]
-select = ["E", "F", "I", "W"]
+ignore = ["C901", "E501", "E741", "W605"]
+select = ["C", "E", "F", "I", "W"]
 line-length = 119
 
 # Ignore import violations in all `__init__.py` files.

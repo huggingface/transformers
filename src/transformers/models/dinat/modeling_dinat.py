@@ -347,7 +347,7 @@ class NeighborhoodAttention(nn.Module):
         query_layer = query_layer / math.sqrt(self.attention_head_size)
 
         # Compute NA between "query" and "key" to get the raw attention scores, and add relative positional biases.
-        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.dilation)
+        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.kernel_size, self.dilation)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -356,7 +356,7 @@ class NeighborhoodAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = natten2dav(attention_probs, value_layer, self.dilation)
+        context_layer = natten2dav(attention_probs, value_layer, self.kernel_size, self.dilation)
         context_layer = context_layer.permute(0, 2, 3, 1, 4).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
@@ -899,7 +899,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
             self.out_feature_channels[stage] = num_features[i]
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
+        hidden_states_norms = {}
         for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
