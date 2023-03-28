@@ -3922,7 +3922,7 @@ class TokenizerTesterMixin:
 
         tokenizer_fast.clean_up_tokenization_spaces = True
         assert tokenizer_fast.clean_up_tokenization_spaces is True
-        
+
         decoded = tokenizer_fast.decode(tokens)
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
