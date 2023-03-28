@@ -3911,19 +3911,24 @@ class TokenizerTesterMixin:
             == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
         )
 
+        # Fast from slow
         with tempfile.TemporaryDirectory() as tmp_dir_2:
             tokenizer.save_pretrained(tmp_dir_2)
             tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
             del tokenizer
 
         decoded = tokenizer_fast.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+        # fast and slow don't have the same output when we don't cleanup
+        # tokenization space. Here `be!` vs `be !` and `go.` vs `go .`
+        assert decoded == "[CLS] this shouldn ' t be! he ' ll go. [SEP]"
 
         tokenizer_fast.clean_up_tokenization_spaces = True
         decoded = tokenizer_fast.decode(tokens)
-        assert decoded == "This shouldn't be! He'll go."
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
+        # Slow from fast
         with tempfile.TemporaryDirectory() as tmp_dir_2:
+            tokenizer_fast.clean_up_tokenization_spaces = False
             tokenizer_fast.save_pretrained(tmp_dir_2)
             tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
 
@@ -3932,7 +3937,7 @@ class TokenizerTesterMixin:
 
         tokenizer.clean_up_tokenization_spaces = True
         decoded = tokenizer.decode(tokens)
-        assert decoded == "This shouldn't be! He'll go."
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
 
 class TokenizerUtilTester(unittest.TestCase):
