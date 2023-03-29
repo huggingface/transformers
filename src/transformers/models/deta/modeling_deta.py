@@ -244,7 +244,7 @@ class DetaObjectDetectionOutput(ModelOutput):
 
 
 def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+    return nn.ModuleList([module for i in range(N)])
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1778,7 +1778,7 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*"]
+    _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*", "model.decoder"]
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
     def __init__(self, config: DetaConfig):
@@ -1817,7 +1817,6 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             self.model.decoder.class_embed = self.class_embed
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
-
         # Initialize weights and apply final processing
         self.post_init()
 
