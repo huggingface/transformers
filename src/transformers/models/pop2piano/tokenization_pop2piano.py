@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Open AI Team Authors and The HuggingFace Inc. team.
+# Copyright 2023 The Pop2Piano Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

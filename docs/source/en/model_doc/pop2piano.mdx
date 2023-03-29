@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi, Kyogu Lee.
+The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi and Kyogu Lee.
 
 The abstract from the paper is the following:
 
@@ -55,7 +55,7 @@ tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
 
 model.eval()
 
-feature_extractor_outputs = fe(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
+feature_extractor_outputs = feature_extractor(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
 model_outputs = model.generate(feature_extractor_outputs, composer="composer1")
 
 opt_postprocess = tokenizer(relative_tokens=model_outputs,
