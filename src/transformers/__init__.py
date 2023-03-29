@@ -19,7 +19,6 @@
 # in the namespace without actually importing anything (and especially none of the backends).
 
 __version__ = "4.28.0.dev0"
-__version__bis__ = "4.28.0.dev0"
 
 from typing import TYPE_CHECKING
 

@@ -118,7 +118,8 @@ def get_all_tests():
 
     tests.remove("tests/models")
     # Sagemaker tests are not meant to be run on the CI.
-    tests.remove("tests/sagemaker")
+    if "tests/sagemaker" in tests:
+        tests.remove("tests/sagemaker")
     tests = model_test_folders + tests
 
     return tests
