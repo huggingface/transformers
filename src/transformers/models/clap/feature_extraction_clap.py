@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import fram_wave, get_mel_filter_banks, power_to_db, stft
+from ...audio_utils import fram_wave, mel_filter_bank, power_to_db, stft
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -116,21 +116,21 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
-        self.mel_filters = get_mel_filter_banks(
-            nb_frequency_bins=self.nb_frequency_bins,
-            nb_mel_filters=feature_size,
-            frequency_min=frequency_min,
-            frequency_max=frequency_max,
-            sample_rate=sampling_rate,
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=self.nb_frequency_bins,
+            num_mel_filters=feature_size,
+            min_frequency=frequency_min,
+            max_frequency=frequency_max,
+            sampling_rate=sampling_rate,
             norm=None,
             mel_scale="htk",
         )
-        self.mel_filters_slaney = get_mel_filter_banks(
-            nb_frequency_bins=self.nb_frequency_bins,
-            nb_mel_filters=feature_size,
-            frequency_min=frequency_min,
-            frequency_max=frequency_max,
-            sample_rate=sampling_rate,
+        self.mel_filters_slaney = mel_filter_bank(
+            num_frequency_bins=self.nb_frequency_bins,
+            num_mel_filters=feature_size,
+            min_frequency=frequency_min,
+            max_frequency=frequency_max,
+            sampling_rate=sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )

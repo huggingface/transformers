@@ -91,119 +91,104 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def _create_triangular_filterbank(
-    all_freqs: np.array,
-    f_pts: np.array,
-) -> np.array:
-    """Create a triangular filter bank.
+def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarray) -> np.ndarray:
+    """
+    Creates a triangular filter bank.
 
+    Adapted from *torchaudio* and *librosa*.
 
     Args:
-        all_freqs (`np.array` of shape (`nb_frequency_bins`, )):
-            Discrete frequencies used when the STFT was computed.
-        f_pts (`np.array`, of shape (`nb_mel_filters`, )):
-            Coordinates of the middle points of the triangular filters to create.
+        fft_freqs (`np.ndarray` of shape `(num_frequency_bins,)`):
+            Discrete frequencies of the FFT bins in Hz.
+        filter_freqs (`np.ndarray` of shape `(num_mel_filters,)`):
+            Center points of the triangular filters to create, in Hz.
 
     Returns:
-        fb (np.array):
-            The filter bank of size (`nb_frequency_bins`, `nb_mel_filters`).
+        `np.array` of shape `(num_frequency_bins, num_mel_filters)`
     """
-    # Adapted from Librosa
-    # calculate the difference between each filter mid point and each stft freq point in hertz
-    f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
-    slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (nb_frequency_bins, n_filter + 2)
-    # create overlapping triangles
-    zero = np.zeros(1)
-    down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (nb_frequency_bins, n_filter)
-    up_slopes = slopes[:, 2:] / f_diff[1:]  # (nb_frequency_bins, n_filter)
-    fb = np.maximum(zero, np.minimum(down_slopes, up_slopes))
-
-    return fb
+    filter_diff = np.diff(filter_freqs)
+    slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
+    down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+    up_slopes = slopes[:, 2:] / filter_diff[1:]
+    return np.maximum(np.zeros(1), np.minimum(down_slopes, up_slopes))
 
 
-def get_mel_filter_banks(
-    nb_frequency_bins: int,
-    nb_mel_filters: int,
-    frequency_min: float,
-    frequency_max: float,
-    sample_rate: int,
+def mel_filter_bank(
+    num_frequency_bins: int,
+    num_mel_filters: int,
+    min_frequency: float,
+    max_frequency: float,
+    sampling_rate: int,
     norm: Optional[str] = None,
     mel_scale: str = "htk",
 ) -> np.array:
     """
-    Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called a *mel filter bank*,
+    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*,
     and various implementation exist, which differ in the number of filters, the shape of the filters, the way the
     filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
     features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
-    This code is heavily inspired from the *torchaudio* implementation, see
-    [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
+    Different banks of mel filters were introduced in the literature. The following variations are supported:
 
-    Tips:
-        - Different banks of Mel filters were introduced in the litterature. The following variation are supported:
-            - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHertz
-            and a speech bandwidth of `[0, 4600]` Hertz
-            - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
-            speech bandwidth `[0, 8000]` Hertz (sampling rate ≥ 16 kHertz).
-            - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
-            of 16 kHertz, and speech bandwidth [133, 6854] Hertz. This version also includes an area normalization.
-            - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling
-            rate of 12.5 kHertz and speech bandwidth [0, 6250] Hertz
-        - The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa`
-        uses the `"slaney"` implementation.
+    - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz
+      and a speech bandwidth of `[0, 4600]` Hz.
+    - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
+      speech bandwidth of `[0, 8000]` Hz. This assumes sampling rate ≥ 16 kHz.
+    - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
+      of 16 kHz and speech bandwidth of `[133, 6854]` Hz. This version also includes area normalization.
+    - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes a sampling
+      rate of 12.5 kHz and speech bandwidth of `[0, 6250]` Hz.
+
+    This code is adapted from *torchaudio* and *librosa*. Note that the default parameters of torchaudio's `melscale_fbanks`
+    implement the `"htk"` filters while librosa uses the `"slaney"` implementation.
 
     Args:
-        nb_frequency_bins (`int`):
+        num_frequency_bins (`int`):
             Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
-        nb_mel_filters (`int`):
-            Number of Mel filers to generate.
-        frequency_min (`float`):
-            Minimum frequency of interest(Hertz).
-        frequency_max (`float`):
-            Maximum frequency of interest(Hertz).
-        sample_rate (`int`):
+        num_mel_filters (`int`):
+            Number of mel filters to generate.
+        min_frequency (`float`):
+            Lowest frequency of interest in Hz.
+        max_frequency (`float`):
+            Highest frequency of interest in Hz. This should not exceed `sampling_rate / 2`.
+        sampling_rate (`int`):
             Sample rate of the audio waveform.
-        norm (`str`, *optional*):
-            If "slaney", divide the triangular Mel weights by the width of the mel band (area normalization).
+        norm (`str`, *optional*, defaults to `None`):
+            If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
-            Scale to use: `"htk"` or `"slaney"`.
+            The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        `np.ndarray`: Triangular filter banks (fb matrix) of shape (`nb_frequency_bins`, `nb_mel_filters`). This matrix
-        is a projection matrix to go from a spectrogram to a Mel Spectrogram.
-
+        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix.
+        This is a projection matrix to go from a spectrogram to a mel spectrogram.
     """
-
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
 
-    # freqency bins
-    all_freqs = np.linspace(0, sample_rate // 2, nb_frequency_bins)
+    # frequencies of FFT bins in Hz
+    fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
 
-    # Compute mim and max frequencies in mel scale
-    m_min = hertz_to_mel(frequency_min, mel_scale=mel_scale)
-    m_max = hertz_to_mel(frequency_max, mel_scale=mel_scale)
+    # center points of the triangular mel filters
+    mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
+    mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
+    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+    filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
 
-    # create the centers of the triangular mel filters.
-    m_pts = np.linspace(m_min, m_max, nb_mel_filters + 2)
-    f_pts = mel_to_hertz(m_pts, mel_scale=mel_scale)
-
-    # create the filterbank
-    filterbank = _create_triangular_filterbank(all_freqs, f_pts)
+    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (f_pts[2 : nb_mel_filters + 2] - f_pts[:nb_mel_filters])
-        filterbank *= np.expand_dims(enorm, 0)
+        enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+        mel_filters *= np.expand_dims(enorm, 0)
 
-    if (filterbank.max(axis=0) == 0.0).any():
+    if (mel_filters.max(axis=0) == 0.0).any():
         warnings.warn(
-            "At least one mel filterbank has all zero values. "
-            f"The value for `nb_mel_filters` ({nb_mel_filters}) may be set too high. "
-            f"Or, the value for `nb_frequency_bins` ({nb_frequency_bins}) may be set too low."
+            "At least one mel filter has all zero values. "
+            f"The value for `num_mel_filters` ({num_mel_filters}) may be set too high. "
+            f"Or, the value for `num_frequency_bins` ({num_frequency_bins}) may be set too low."
         )
 
-    return filterbank
+    return mel_filters
 
 
 # TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
