@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 import unittest
+
+import pytest
 
 from transformers import AutoTokenizer, TextStreamer, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
+
 
 if is_torch_available():
     from transformers import AutoModelForCausalLM
