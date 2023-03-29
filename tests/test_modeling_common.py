@@ -1,6 +1,3 @@
-# coding=utf-8
-# Copyright 2019 HuggingFace Inc.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -31,12 +28,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
+import transformers
 from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
-
-import transformers
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -111,7 +107,6 @@ if is_torch_available():
     import torch
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
-
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_MAPPING,
@@ -162,7 +157,6 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
-
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -1625,6 +1619,13 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_can_use_safetensors(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model_tied.save_pretrained(d, safe_serialization=True)
 
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
