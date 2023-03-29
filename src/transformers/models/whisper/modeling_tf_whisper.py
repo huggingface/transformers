@@ -1345,10 +1345,10 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
-        seed=None,
-        return_timestamps=None,
-        task=None,
-        language=None,
+        seed: Optional[int] = None,
+        return_timestamps: Optional[bool] = None,
+        task: Optional[str] = None,
+        language: Optional[str] = None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
         if generation_config is None:
