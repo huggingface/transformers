@@ -326,6 +326,10 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass
+
 
 class TFBlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -431,6 +435,10 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass
 
 
 class BlipTextRetrievalModelTester:
@@ -640,6 +648,10 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_keras_fit(self):
         pass
 
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass
+
 
 @require_tf
 class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -815,6 +827,5 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out = model(**inputs, use_itm_head=False, training=False)
 
         expected_scores = tf.convert_to_tensor([[0.9798, 0.0202]])
-
         self.assertTrue(np.allclose(tf.nn.softmax(out_itm[0]).numpy(), expected_scores, rtol=1e-3, atol=1e-3))
         self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5053]]), rtol=1e-3, atol=1e-3))

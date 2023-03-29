@@ -1151,7 +1151,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFBlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
+    @replace_return_docstrings(output_type=TFBlipForConditionalGenerationModelOutput, config_class=BlipConfig)
     def call(
         self,
         pixel_values: tf.Tensor,
@@ -1161,6 +1161,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[Tuple, TFBlipForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -1185,7 +1186,6 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1467,7 +1467,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             # get decoder inputs from shifting lm labels to the right - this is used in training mode
             decoder_input_ids = self._shift_right(labels)
             # replace possible -100 values in labels by `pad_token_id`
-            # labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
             labels = tf.where(labels == self.decoder_pad_token_id, -100, labels)
 
         answer_output = self.text_decoder(

@@ -502,13 +502,15 @@ class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = tf.keras.layers.Dense(
-            config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="decoder"
+            config.vocab_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="decoder",
+            use_bias=False,
         )
-        # TODO Make sure we can copy weights from torch despite them doing this weird shit
-        # self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.config = config
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        # self.decoder.bias = self.bias
+    def build(self, input_shape):
+        self.bias = self.add_weight(name="bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -918,8 +920,11 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             labels = tf.reshape(labels, (-1,))
             # Keras won't give us label smoothing for sparse CE, so we de-sparsify things here
             one_hot_labels = tf.one_hot(labels, depth=self.config.vocab_size, dtype=tf.float32)
-            loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
-            lm_loss = loss_fct(shifted_prediction_scores, one_hot_labels)
+            loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1, reduction="none")
+            masked_positions = tf.cast(tf.not_equal(labels, -100), dtype=tf.float32)
+            lm_loss = loss_fct(one_hot_labels, shifted_prediction_scores)
+            lm_loss *= masked_positions
+            lm_loss = tf.reduce_sum(lm_loss, axis=0) / tf.math.count_nonzero(masked_positions, dtype=tf.float32)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
