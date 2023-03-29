@@ -1610,6 +1610,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         if not self.config.use_decoder_only_language_model:
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
+            self.language_model.lm_head = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""

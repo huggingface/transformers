@@ -1721,9 +1721,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Disable to see the damage.
         if safe_serialization:
             if self._keys_to_ignore_on_load_missing is not None:
-                for ignore_key in self._keys_to_ignore_on_load_missing:
-                    if ignore_key in state_dict.keys():
-                        del state_dict[ignore_key]
+                from collections import defaultdict
+
+                ptrs = defaultdict(list)
+                for k, v in state_dict.items():
+                    ptrs[v.data_ptr()].append(k)
+
+                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+
+                for _, names in shared_ptrs.items():
+                    for name in names:
+                        for ignore_key in self._keys_to_ignore_on_load_missing:
+                            if ignore_key in name:
+                                del state_dict[name]
+                # for ignore_key in self._keys_to_ignore_on_load_missing:
+                #     if ignore_key in state_dict.keys():
+                #         del state_dict[ignore_key]
 
         # Shard the model if it is too big.
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME

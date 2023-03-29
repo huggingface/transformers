@@ -893,7 +893,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     IMAGEGPT_START_DOCSTRING,
 )
 class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias"]
+    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
