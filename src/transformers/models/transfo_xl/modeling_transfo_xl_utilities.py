@@ -82,7 +82,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
         return logit
 
-    def forward(self, hidden, labels=None, keep_order=False, padding_index: int = None):
+    def forward(self, hidden, labels=None, keep_order=False):
         """
         Params:
             hidden :: [len*bsz x d_proj]
@@ -110,13 +110,11 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight, self.out_layers[0].bias, self.out_projs[0])
             if labels is not None:
-                if padding_index is not None:
-                    mask = labels != padding_index
-                    out = torch.zeros_like(labels, dtype=hidden.dtype, device=hidden.device)
-                    out[mask] = -nn.functional.log_softmax(
-                        logit, dim=-1)[mask].gather(1, labels[mask].unsqueeze(1)).squeeze(1)
-                else:
-                    out = -nn.functional.log_softmax(logit, dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
+                mask = labels != -100
+                out = torch.zeros_like(labels, dtype=hidden.dtype, device=hidden.device)
+                out[mask] = (
+                    -nn.functional.log_softmax(logit, dim=-1)[mask].gather(1, labels[mask].unsqueeze(1)).squeeze(1)
+                )
             else:
                 out = nn.functional.log_softmax(logit, dim=-1)
         else:
