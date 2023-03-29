@@ -34,7 +34,7 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
             The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        `float` or `np.array`: The frequencies on the mel scale.
+        `float` or `np.ndarray`: The frequencies on the mel scale.
     """
 
     if mel_scale not in ["slaney", "htk"]:
@@ -68,7 +68,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
             The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        `float` or `np.array`: The frequencies in hertz.
+        `float` or `np.ndarray`: The frequencies in hertz.
     """
 
     if mel_scale not in ["slaney", "htk"]:
@@ -104,7 +104,7 @@ def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarr
             Center points of the triangular filters to create, in Hz.
 
     Returns:
-        `np.array` of shape `(num_frequency_bins, num_mel_filters)`
+        `np.ndarray` of shape `(num_frequency_bins, num_mel_filters)`
     """
     filter_diff = np.diff(filter_freqs)
     slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
@@ -121,7 +121,7 @@ def mel_filter_bank(
     sampling_rate: int,
     norm: Optional[str] = None,
     mel_scale: str = "htk",
-) -> np.array:
+) -> np.ndarray:
     """
     Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
     various implementation exist, which differ in the number of filters, the shape of the filters, the way the filters
