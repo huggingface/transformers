@@ -1564,11 +1564,11 @@ class Blip2Model(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
-    _keys_to_ignore_on_load_missing = [
-        r"language_model.lm_head.weight",
-        r"language_model.encoder.embed_tokens.weight",
-        r"language_model.decoder.embed_tokens.weight",
-    ]
+    # _keys_to_ignore_on_load_missing = [
+    #     r"language_model.lm_head.weight",
+    #     r"language_model.encoder.embed_tokens.weight",
+    #     r"language_model.decoder.embed_tokens.weight",
+    # ]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1610,7 +1610,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         if not self.config.use_decoder_only_language_model:
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
-            self.language_model.lm_head = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""
