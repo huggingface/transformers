@@ -117,6 +117,8 @@ def get_all_tests():
     model_test_folders = sorted([f for f in model_test_folders if (PATH_TO_REPO / f).is_dir()])
 
     tests.remove("tests/models")
+    # Sagemaker tests are not meant to be run on the CI.
+    tests.remove("tests/sagemaker")
     tests = model_test_folders + tests
 
     return tests
@@ -498,6 +500,8 @@ def infer_tests_to_run(
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
+        # Remove SageMaker tests
+        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
         if filters is not None:
