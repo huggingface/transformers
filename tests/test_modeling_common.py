@@ -1638,7 +1638,7 @@ class ModelTesterMixin:
                 reloaded_state = model_reloaded.state_dict()
                 for k, v in model_tied.state_dict().items():
                     self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_all_close(v, reloaded_state[v])
+                    torch.testing.assert_close(v, reloaded_state[v])
 
                 # Checking the tensor sharing are correct
                 ptrs = defaultdict(list)
