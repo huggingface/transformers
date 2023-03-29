@@ -123,24 +123,24 @@ def mel_filter_bank(
     mel_scale: str = "htk",
 ) -> np.array:
     """
-    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*,
-    and various implementation exist, which differ in the number of filters, the shape of the filters, the way the
-    filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
+    Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
+    various implementation exist, which differ in the number of filters, the shape of the filters, the way the filters
+    are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
     features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
 
     Different banks of mel filters were introduced in the literature. The following variations are supported:
 
-    - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz
-      and a speech bandwidth of `[0, 4600]` Hz.
-    - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
-      speech bandwidth of `[0, 8000]` Hz. This assumes sampling rate ≥ 16 kHz.
-    - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
-      of 16 kHz and speech bandwidth of `[133, 6854]` Hz. This version also includes area normalization.
-    - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes a sampling
-      rate of 12.5 kHz and speech bandwidth of `[0, 6250]` Hz.
+    - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz and a speech
+      bandwidth of `[0, 4600]` Hz.
+    - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a speech
+      bandwidth of `[0, 8000]` Hz. This assumes sampling rate ≥ 16 kHz.
+    - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate of 16 kHz and
+      speech bandwidth of `[133, 6854]` Hz. This version also includes area normalization.
+    - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes a sampling rate of
+      12.5 kHz and speech bandwidth of `[0, 6250]` Hz.
 
-    This code is adapted from *torchaudio* and *librosa*. Note that the default parameters of torchaudio's `melscale_fbanks`
-    implement the `"htk"` filters while librosa uses the `"slaney"` implementation.
+    This code is adapted from *torchaudio* and *librosa*. Note that the default parameters of torchaudio's
+    `melscale_fbanks` implement the `"htk"` filters while librosa uses the `"slaney"` implementation.
 
     Args:
         num_frequency_bins (`int`):
@@ -159,8 +159,8 @@ def mel_filter_bank(
             The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix.
-        This is a projection matrix to go from a spectrogram to a mel spectrogram.
+        `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
+        projection matrix to go from a spectrogram to a mel spectrogram.
     """
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
