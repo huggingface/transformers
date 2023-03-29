@@ -9,7 +9,7 @@ on:
     - cron: "0 2 * * *"
 
 env:
-  TOKEN: ${{ secrets.SYLVAIN_HF_TOKEN }}
+  TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
 
 jobs:
   update_tiny_models:
