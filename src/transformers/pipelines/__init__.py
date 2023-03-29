@@ -32,13 +32,13 @@ from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoIma
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
     is_offline_mode,
     is_pyctcdecode_available,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
     logging,
 )
@@ -139,9 +139,16 @@ if is_torch_available():
         AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
+
+if is_tokenizers_available():
+    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+else:
+    from ..utils.dummy_tokenizers_objects import PreTrainedTokenizerFast
+
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
+
 
 logger = logging.get_logger(__name__)
 
