@@ -1695,7 +1695,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "can_serialize_bnb", False):
+        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
                 " behaviors. ",
@@ -2130,10 +2130,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if is_bitsandbytes_available():
             # TODO: uncomment this after the next release of bitsandbytes
-            # can_serialize_bnb = version.parse(
+            # is_8bit_serializable = version.parse(
             #     importlib_metadata.version("bitsandbytes")
             # ) >= version.parse("0.37.2")
-            can_serialize_bnb = True
+            is_8bit_serializable = True
 
             bnb_cached_file_kwargs = {
                 "cache_dir": cache_dir,
@@ -2155,7 +2155,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if device_map is None:
                         device_map = "auto"
 
-            if quantization_config is not None and not can_serialize_bnb:
+            if quantization_config is not None and not is_8bit_serializable:
                 logger.warning(
                     "Detected a `quantization_config.json` file on the You are trying to load a quantized model but your version of bitsandbytes is too old. Please "
                     "upgrade to bitsandbytes>=0.37.2 to load quantized models from the Hub. This feature will be ignored "
@@ -2619,7 +2619,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ) >= version.parse("0.37.0")
 
             model.quantization_config = quantization_config
-            model.can_serialize_bnb = can_serialize_bnb
+            model.is_8bit_serializable = is_8bit_serializable
 
         if isinstance(device_map, str):
             special_dtypes = {}
