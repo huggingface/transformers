@@ -383,8 +383,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
         Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
-
-        # memory_mapping = {0: "1GB", 1: "1GB"}
+-
         model_parallel = AutoModelForCausalLM.from_pretrained(
             self.model_name, load_in_8bit=True, device_map="balanced"
         )
