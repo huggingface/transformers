@@ -17,8 +17,7 @@ from typing import TYPE_CHECKING
 from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
-_import_structure = {"configuration_utils": ["GenerationConfig"]}
-
+_import_structure = {"configuration_utils": ["GenerationConfig"], "streamers": ["TextStreamer"]}
 
 try:
     if not is_torch_available():
@@ -71,7 +70,6 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
     ]
-    _import_structure["streamers"] = ["TextStreamer"]
     _import_structure["utils"] = [
         "GenerationMixin",
         "top_k_top_p_filtering",
@@ -151,6 +149,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
+    from .streamers import TextStreamer
 
     try:
         if not is_torch_available():
@@ -193,7 +192,6 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
             validate_stopping_criteria,
         )
-        from .streamers import TextStreamer
         from .utils import (
             BeamSampleDecoderOnlyOutput,
             BeamSampleEncoderDecoderOutput,

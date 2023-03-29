@@ -96,7 +96,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": ["GenerationConfig"],
+    "generation": ["GenerationConfig", "TextStreamer"],
     "hf_argparser": ["HfArgumentParser"],
     "image_transforms": [],
     "integrations": [
@@ -934,7 +934,6 @@ else:
             "StoppingCriteria",
             "StoppingCriteriaList",
             "TemperatureLogitsWarper",
-            "TextStreamer",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
@@ -3770,7 +3769,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig
+    from .generation import GenerationConfig, TextStreamer
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -4533,7 +4532,6 @@ if TYPE_CHECKING:
             StoppingCriteria,
             StoppingCriteriaList,
             TemperatureLogitsWarper,
-            TextStreamer,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,

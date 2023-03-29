@@ -2046,6 +2046,9 @@ class GenerationMixin:
                 else:
                     this_peer_finished = True
 
+        if streamer is not None:
+            streamer.end()
+
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return ContrastiveSearchEncoderDecoderOutput(
@@ -2297,6 +2300,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -2572,6 +2578,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:

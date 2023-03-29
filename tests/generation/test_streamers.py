@@ -15,10 +15,8 @@
 
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, TextStreamer, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
 
@@ -29,13 +27,7 @@ if is_torch_available():
 
 @require_torch
 class StreamerTester(unittest.TestCase):
-    @pytest.fixture(autouse=True)
-    def capfd(self, capfd):
-        self.capfd = capfd
-
     def test_text_streamer_stdout(self):
-        # Note: this test relies on pytest's capfd fixture to capture the stdout from a subprocess.
-        # testing_utils.CaptureStdout cannot capture the output from a subprocess.
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
@@ -43,12 +35,10 @@ class StreamerTester(unittest.TestCase):
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
         greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
         greedy_text = tokenizer.decode(greedy_ids[0])
-        print(greedy_text)
-        captured_print = self.capfd.readouterr().out
 
-        with TextStreamer(tokenizer) as streamer:
+        with CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer)
             model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
-        captured_stream = self.capfd.readouterr().out
 
-        # The greedy text should be printed to stdout
-        self.assertEqual(captured_print, captured_stream)
+        # The greedy text should be printed to stdout, except for the final "\n" in the streamer
+        self.assertEqual(cs.out[:-1], greedy_text)

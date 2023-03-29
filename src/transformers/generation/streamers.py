@@ -13,26 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import multiprocessing
+from typing import TYPE_CHECKING
 
-from transformers import AutoTokenizer
+
+if TYPE_CHECKING:
+    from ..models.auto import AutoTokenizer
 
 
 class BaseStreamer:
     """
-    Base class from which `.generate()` streamers should inherit. In a nutshell, a `put()` method needs to be
-    implemented, as it is called by `.generate()` to send tokens to the streamer.
+    Base class from which `.generate()` streamers should inherit.
     """
 
     def put(self, value):
+        """Function that is called by `.generate()` to push new tokens"""
+        raise NotImplementedError()
+
+    def end(self):
+        """Function that is called by `.generate()` to signal the end of generation"""
         raise NotImplementedError()
 
 
 class TextStreamer(BaseStreamer):
     """
-    Simple text streamer that uses a queue to receive tokens and print them to stdout in a separate process. It is
-    meant to be used as a context manager wrapping `.generate()`. Since it relies on spawning a new process, the `if
-    __name__ == '__main__':` guard is required when using this class.
+    Simple text streamer that prints a token as soon as it gets them.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -43,44 +47,26 @@ class TextStreamer(BaseStreamer):
         ```python
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
-        >>> if __name__ == "__main__":
-        ...     tok = AutoTokenizer.from_pretrained("distilgpt2")
-        ...     model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-        ...     inputs = tok(["This cat is"], return_tensors="pt")
-        ...     with TextStreamer(tok) as streamer:
-        ...         model.generate(**inputs, streamer=streamer)
+        >>> tok = AutoTokenizer.from_pretrained("distilgpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+        >>> inputs = tok(["This cat is"], return_tensors="pt")
+        >>> streamer = TextStreamer(tok)
+        >>> model.generate(**inputs, streamer=streamer)
         ```
     """
 
-    def __init__(self, tokenizer: AutoTokenizer):
+    def __init__(self, tokenizer: "AutoTokenizer"):
         self.tokenizer = tokenizer
-        self.ctx = multiprocessing.get_context("spawn")  # CUDA complains otherwise :)
-        self.queue = self.ctx.Queue()
-        self.end_signal = -1
 
     def put(self, value):
-        self.queue.put(value)
+        """Prints the token(s) to stdout"""
+        if len(value.shape) > 1 and value.shape[0] > 1:
+            raise ValueError("TextStreamer only supports batch size 1")
+        elif len(value.shape) > 1:
+            value = value[0]
+        text = self.tokenizer.decode(value)
+        print(text, flush=True, end="")
 
-    def _decode_text(self):
-        while True:
-            queue_value = self.queue.get()
-
-            if isinstance(queue_value, int) and queue_value == self.end_signal:
-                print("", flush=True)
-                break
-            else:
-                if len(queue_value.shape) > 1 and queue_value.shape[0] > 1:
-                    raise ValueError("TextStreamer only supports batch size 1")
-                elif len(queue_value.shape) > 1:
-                    queue_value = queue_value[0]
-                text = self.tokenizer.decode(queue_value)
-                print(text, flush=True, end="")
-
-    def __enter__(self):
-        self.process = self.ctx.Process(target=self._decode_text)
-        self.process.start()
-        return self
-
-    def __exit__(self, *args):
-        self.queue.put(self.end_signal)
-        self.process.join()
+    def end(self):
+        """Prints a newline to stdout"""
+        print("", flush=True)
