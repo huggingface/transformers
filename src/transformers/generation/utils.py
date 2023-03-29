@@ -1337,7 +1337,7 @@ class GenerationMixin:
             )
 
         # 7. determine generation mode
-        is_constraint_gen_mode = (generation_config.num_beams > 1) and (
+        is_constraint_gen_mode = (
             generation_config.constraints is not None or generation_config.force_words_ids is not None
         )
 
@@ -1621,6 +1621,9 @@ class GenerationMixin:
 
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
+
+            if generation_config.num_beams <= 1:
+                raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
 
             if generation_config.do_sample:
                 raise ValueError("`do_sample` needs to be false for constrained generation.")
