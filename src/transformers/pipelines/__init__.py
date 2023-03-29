@@ -38,7 +38,6 @@ from ..utils import (
     is_offline_mode,
     is_pyctcdecode_available,
     is_tf_available,
-    is_tokenizers_available,
     is_torch_available,
     logging,
 )
@@ -140,14 +139,11 @@ if is_torch_available():
         AutoModelForZeroShotObjectDetection,
     )
 
-if is_tokenizers_available():
-    from ..tokenization_utils_fast import PreTrainedTokenizerFast
-else:
-    from ..utils.dummy_tokenizers_objects import PreTrainedTokenizerFast
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -502,7 +498,7 @@ def pipeline(
     task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
