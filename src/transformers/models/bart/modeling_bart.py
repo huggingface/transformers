@@ -1297,6 +1297,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
         r"lm_head.weight",
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
+        "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BartConfig):
@@ -1469,7 +1471,12 @@ class BartForConditionalGeneration(BartPretrainedModel):
     BART_START_DOCSTRING,
 )
 class BartForSequenceClassification(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+        "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1598,7 +1605,12 @@ class BartForSequenceClassification(BartPretrainedModel):
     BART_START_DOCSTRING,
 )
 class BartForQuestionAnswering(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+        "model.encoder.embed_tokens.weight",
+        "model.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config):
         super().__init__(config)

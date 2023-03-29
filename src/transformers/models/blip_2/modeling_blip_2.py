@@ -1219,6 +1219,11 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _keys_to_ignore_on_load_missing = [
+        r"language_model.lm_head.weight",
+        r"language_model.encoder.embed_tokens.weight",
+        r"language_model.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1240,6 +1245,12 @@ class Blip2Model(Blip2PreTrainedModel):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
+
+    def _tie_weights(self):
+        if not self.config.use_decoder_only_language_model:
+            self.language_model.encoder.embed_tokens = self.language_model.shared
+            self.language_model.decoder.embed_tokens = self.language_model.shared
+            self.language_model.lm_head = self.language_model.shared
 
     @add_start_docstrings_to_model_forward(BLIP_2_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
@@ -1553,6 +1564,11 @@ class Blip2Model(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _keys_to_ignore_on_load_missing = [
+        r"language_model.lm_head.weight",
+        r"language_model.encoder.embed_tokens.weight",
+        r"language_model.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
