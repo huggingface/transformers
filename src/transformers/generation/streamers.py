@@ -14,14 +14,16 @@
 # limitations under the License.
 
 import multiprocessing
+
 from transformers import AutoTokenizer
 
 
-class BaseStreamer():
+class BaseStreamer:
     """
     Base class from which `.generate()` streamers should inherit. In a nutshell, a `put()` method needs to be
     implemented, as it is called by `.generate()` to send tokens to the streamer.
     """
+
     def put(self, value):
         raise NotImplementedError()
 
@@ -39,13 +41,20 @@ class TextStreamer(BaseStreamer):
     Examples:
 
         ```python
-        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer >>> if __name__ == '__main__':
-        >>> tok = AutoTokenizer.from_pretrained("distilgpt2") >>> model =
-        AutoModelForCausalLM.from_pretrained("distilgpt2") >>> inputs = tok(["This cat is"], return_tensors="pt") >>>
-        with TextStreamer(tok) as streamer: >>> model.generate(**inputs, streamer=streamer)"""
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
+
+        >>> if __name__ == "__main__":
+        ...     tok = AutoTokenizer.from_pretrained("distilgpt2")
+        ...     model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+        ...     inputs = tok(["This cat is"], return_tensors="pt")
+        ...     with TextStreamer(tok) as streamer:
+        ...         model.generate(**inputs, streamer=streamer)
+        ```
+    """
+
     def __init__(self, tokenizer: AutoTokenizer):
         self.tokenizer = tokenizer
-        self.ctx = multiprocessing.get_context('spawn')  # CUDA complains otherwise :)
+        self.ctx = multiprocessing.get_context("spawn")  # CUDA complains otherwise :)
         self.queue = self.ctx.Queue()
         self.end_signal = -1
 
