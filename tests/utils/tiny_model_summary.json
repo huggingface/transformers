@@ -21,6 +21,7 @@
     },
     "AlbertForMaskedLM": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -28,10 +29,11 @@
             "AlbertForMaskedLM",
             "TFAlbertForMaskedLM"
         ],
-        "sha": "75ab12f94d4a1edd9610636547c5fb515e240e2b"
+        "sha": "d29de71ac29e1019c3a7762f7357f750730cb037"
     },
     "AlbertForMultipleChoice": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -39,10 +41,11 @@
             "AlbertForMultipleChoice",
             "TFAlbertForMultipleChoice"
         ],
-        "sha": "ba1531e4373cccce03195928b3ba2f6825311980"
+        "sha": "242aecce6a589a2964c0f695621fa22a83751579"
     },
     "AlbertForPreTraining": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -50,10 +53,11 @@
             "AlbertForPreTraining",
             "TFAlbertForPreTraining"
         ],
-        "sha": "6022449842a83d9cea298c4fbaf1e1e1c0db3568"
+        "sha": "41330be4b271687f4d88ddc96346c12aa11de983"
     },
     "AlbertForQuestionAnswering": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -61,10 +65,11 @@
             "AlbertForQuestionAnswering",
             "TFAlbertForQuestionAnswering"
         ],
-        "sha": "1b6584d6a267dae8ff20b9f89e2b424a7972fb45"
+        "sha": "040b81c15f437f4722349dc5b41fccd17ebd7fdc"
     },
     "AlbertForSequenceClassification": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -72,10 +77,11 @@
             "AlbertForSequenceClassification",
             "TFAlbertForSequenceClassification"
         ],
-        "sha": "1e709531344ee0e4a34777c79507a07b69130958"
+        "sha": "39c1a0e2c1c2623106d3211d751e9b32f23a91a0"
     },
     "AlbertForTokenClassification": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -83,10 +89,11 @@
             "AlbertForTokenClassification",
             "TFAlbertForTokenClassification"
         ],
-        "sha": "f6c0d721d6d9f0751ab975148932948d5853fcc8"
+        "sha": "359c3f4a311a4053a6f6d6a880db5f82c8e3ff1f"
     },
     "AlbertModel": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
@@ -94,7 +101,7 @@
             "AlbertModel",
             "TFAlbertModel"
         ],
-        "sha": "62974edf8b7246a943f6ecc8a3f7bfca052351ff"
+        "sha": "34a63314686b64aaeb595ddb95006f1ff2ffda17"
     },
     "AlignModel": {
         "tokenizer_classes": [
@@ -318,133 +325,146 @@
     },
     "BigBirdForCausalLM": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForCausalLM"
         ],
-        "sha": "04578a05f11c0006e4e5deaf38b48889a8dc8f4f"
+        "sha": "5c7a487af5248d9c01b45d5481b7d7bb9b36e1b5"
     },
     "BigBirdForMaskedLM": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForMaskedLM"
         ],
-        "sha": "52b8e93488b5d8235711543d4671ea08ea3f9560"
+        "sha": "476ef8225c0f69270b577706ad4f1dda13e4dde5"
     },
     "BigBirdForMultipleChoice": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForMultipleChoice"
         ],
-        "sha": "56459f9bcde6a36870e4d743295f6ce69ba5fc7b"
+        "sha": "cf93eaa1019987112c171a407745bc183a20513a"
     },
     "BigBirdForPreTraining": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForPreTraining"
         ],
-        "sha": "49f55d7252dd9151722b330fa02073c6d809c55e"
+        "sha": "5fb9efa13334431e7c186a9fa314b89c4a1eee72"
     },
     "BigBirdForQuestionAnswering": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForQuestionAnswering"
         ],
-        "sha": "a5b3c8567610d4dde63c282d6fb6fd2ec04cbb39"
+        "sha": "f82f88bd71fba819a8ffb0692915d3529e705417"
     },
     "BigBirdForSequenceClassification": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForSequenceClassification"
         ],
-        "sha": "2b29389f623fa7af3ffb08c51e9bcbda270ae9ee"
+        "sha": "ea398090858f9af93b54fc9a8d65cfed78ac27ff"
     },
     "BigBirdForTokenClassification": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdForTokenClassification"
         ],
-        "sha": "beda63d67d07b133e603f51aea6b84cae29b9ea7"
+        "sha": "2cdea118999fa58ba9fb0162d99e2ffa146c3df1"
     },
     "BigBirdModel": {
         "tokenizer_classes": [
+            "BigBirdTokenizer",
             "BigBirdTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdModel"
         ],
-        "sha": "814adde7ccd69821684a0c6124401f0c180d700c"
+        "sha": "9c55989f31df156194e6997606fb14d9897e0300"
     },
     "BigBirdPegasusForCausalLM": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdPegasusForCausalLM"
         ],
-        "sha": "e1a5b87220073127f718fec558cbc86795b6ed61"
+        "sha": "49bc8816c666dee32e27cd8e00136b604eb85243"
     },
     "BigBirdPegasusForConditionalGeneration": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdPegasusForConditionalGeneration"
         ],
-        "sha": "40fad528589229426174241a641034f1f971a2b7"
+        "sha": "e791aa6d1af5a76ca0926d95b1f28bd2d8adf376"
     },
     "BigBirdPegasusForQuestionAnswering": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdPegasusForQuestionAnswering"
         ],
-        "sha": "18d836e06a02bd1dc36af9a5eeaf3d326b1d368a"
+        "sha": "7650e076713ca707a37062adc8c9c1cd60dad7c7"
     },
     "BigBirdPegasusForSequenceClassification": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdPegasusForSequenceClassification"
         ],
-        "sha": "a451bdb3f36fb76af06a51274d19fd88729443e6"
+        "sha": "02500e8ebd9c53528750013fb963fbdc2be34034"
     },
     "BigBirdPegasusModel": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "BigBirdPegasusModel"
         ],
-        "sha": "3ece62a543ced3755e5ae239bcc3a4a5a6b75dd4"
+        "sha": "b07c5304dfba673cf8b9cf5cd1aa45fbfea1c2f3"
     },
     "BioGptForCausalLM": {
         "tokenizer_classes": [
@@ -1240,6 +1260,7 @@
     },
     "DebertaV2ForMaskedLM": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
@@ -1247,20 +1268,22 @@
             "DebertaV2ForMaskedLM",
             "TFDebertaV2ForMaskedLM"
         ],
-        "sha": "9089b6afa8f66fd16503fca2b7c54b50c2195123"
+        "sha": "a053dedc2cdf32918a84277cb0c05186604496a5"
     },
     "DebertaV2ForMultipleChoice": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "DebertaV2ForMultipleChoice"
         ],
-        "sha": "7acf4b7415b2869e225a5ed82e68f1c0374e9668"
+        "sha": "07e39f520ce239b39ef8cb24cd7874d06c791063"
     },
     "DebertaV2ForQuestionAnswering": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
@@ -1268,10 +1291,11 @@
             "DebertaV2ForQuestionAnswering",
             "TFDebertaV2ForQuestionAnswering"
         ],
-        "sha": "17ef18fefddc0ec61a972eea06af430059ae3759"
+        "sha": "9cecb3a7fc6b95099122283644ea1f8ced287d1b"
     },
     "DebertaV2ForSequenceClassification": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
@@ -1279,10 +1303,11 @@
             "DebertaV2ForSequenceClassification",
             "TFDebertaV2ForSequenceClassification"
         ],
-        "sha": "1ef484d43eb15ac6b1f8be393c3d59bea2267dc9"
+        "sha": "df9ea1f5c0f2ccd139b21cfb3963a5a5ebfb5b81"
     },
     "DebertaV2ForTokenClassification": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
@@ -1290,10 +1315,11 @@
             "DebertaV2ForTokenClassification",
             "TFDebertaV2ForTokenClassification"
         ],
-        "sha": "5c4e629b5b03957a546f7f76c31f6887f99fc17c"
+        "sha": "51fe01989df38a540ac1abca5ee71a51365defd5"
     },
     "DebertaV2Model": {
         "tokenizer_classes": [
+            "DebertaV2Tokenizer",
             "DebertaV2TokenizerFast"
         ],
         "processor_classes": [],
@@ -1301,7 +1327,7 @@
             "DebertaV2Model",
             "TFDebertaV2Model"
         ],
-        "sha": "a1945cc2bb1ef207f8fdeb4ea146711ade1db77a"
+        "sha": "211df4bd1a4a9b66c97af3f9231a5d2af8de7b9f"
     },
     "DeformableDetrForObjectDetection": {
         "tokenizer_classes": [],
@@ -1881,83 +1907,91 @@
     },
     "FNetForMaskedLM": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForMaskedLM"
         ],
-        "sha": "235602782fb4b4ff0291c999cc174b4a257f1e7f"
+        "sha": "91eaae1eac894af5d96c0221ec9bcef7f1af41c8"
     },
     "FNetForMultipleChoice": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForMultipleChoice"
         ],
-        "sha": "d84b9ee07323895465a29f234e9109b66fd623cf"
+        "sha": "c15d98d5f7a6f3ef3099b1257949bee208d5466e"
     },
     "FNetForNextSentencePrediction": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForNextSentencePrediction"
         ],
-        "sha": "9b11a763f599a95c3dff8e4255cd952a04101a65"
+        "sha": "c59440b44d07d61fc45a90ded7fc11d6f25b143d"
     },
     "FNetForPreTraining": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForPreTraining"
         ],
-        "sha": "ed6ec245f3a8f7b53c7b09b020cfae1f8c4aaf7d"
+        "sha": "c05f55ccfb2f2533babd3c6e99de7749bc8081da"
     },
     "FNetForQuestionAnswering": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForQuestionAnswering"
         ],
-        "sha": "c77c577acae60cd268b0eebdbffcbd75f8e31141"
+        "sha": "47788e49dd435653fa2aa4b3ccae3572a870758e"
     },
     "FNetForSequenceClassification": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForSequenceClassification"
         ],
-        "sha": "6e6dbab691e5ec18e04b98514f1656dc3a842192"
+        "sha": "a3049b896ea6c5a32c364989c3afe604ee58b9fc"
     },
     "FNetForTokenClassification": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetForTokenClassification"
         ],
-        "sha": "b27e341994ef7913dcdd72326d3475c9668d07d5"
+        "sha": "3bcdafca57d544bb81e2f7eead1e512c168582fc"
     },
     "FNetModel": {
         "tokenizer_classes": [
+            "FNetTokenizer",
             "FNetTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "FNetModel"
         ],
-        "sha": "38041395aa488da543dec9ed86318d9ec4d4839e"
+        "sha": "48fa66de37df126504db3b658806135eb877f505"
     },
     "FSMTForConditionalGeneration": {
         "tokenizer_classes": [
@@ -2828,23 +2862,25 @@
     },
     "LongT5ForConditionalGeneration": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "LongT5ForConditionalGeneration"
         ],
-        "sha": "3c83684439875f33fc0f79d164e7b446245cbc74"
+        "sha": "c685cbbe706ad5c9a28689631765726a1874dcc7"
     },
     "LongT5Model": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "LongT5Model"
         ],
-        "sha": "3b825c077d41103476d88bd93a6a9af52194b99e"
+        "sha": "6b468e55e2490565e6155690201086ac00c72062"
     },
     "LongformerForMaskedLM": {
         "tokenizer_classes": [
@@ -3042,7 +3078,7 @@
         "model_classes": [
             "MBartForCausalLM"
         ],
-        "sha": "e0f8bdbcc8afd38ef9a9d78ad96d3e93ddd19d71"
+        "sha": "a45044f8056328d20a764356eca3d0746a7a195e"
     },
     "MBartForConditionalGeneration": {
         "tokenizer_classes": [
@@ -3054,7 +3090,7 @@
             "MBartForConditionalGeneration",
             "TFMBartForConditionalGeneration"
         ],
-        "sha": "9d2a48747c3671ef7a9b0c202d79c677b6d6f272"
+        "sha": "171e918962d6c0ee56c6b070858e19e16c8dd09f"
     },
     "MBartForQuestionAnswering": {
         "tokenizer_classes": [
@@ -3065,7 +3101,7 @@
         "model_classes": [
             "MBartForQuestionAnswering"
         ],
-        "sha": "0ad08bf0c1c39d358b92b38f75cbe04609167c3f"
+        "sha": "1ee08565d24777335595e0d2940e454abdcff731"
     },
     "MBartForSequenceClassification": {
         "tokenizer_classes": [
@@ -3076,7 +3112,7 @@
         "model_classes": [
             "MBartForSequenceClassification"
         ],
-        "sha": "05ed9ea84c02f4a5347f5c235d38f9df891cb811"
+        "sha": "53e9c88ecfa2475d27afe099ffa7a8bcdb7ef7e4"
     },
     "MBartModel": {
         "tokenizer_classes": [
@@ -3088,7 +3124,7 @@
             "MBartModel",
             "TFMBartModel"
         ],
-        "sha": "21e9aa6eff4ae280e299ac33c94f1a317300571b"
+        "sha": "2d492b34d69dd63b411990d5c8bb692fd637e91c"
     },
     "MCTCTForCTC": {
         "tokenizer_classes": [],
@@ -3767,63 +3803,69 @@
     },
     "NystromformerForMaskedLM": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerForMaskedLM"
         ],
-        "sha": "a21609ab92ea2ea438a4c78f9c2faf0594681fb2"
+        "sha": "37036847783f1e65e81ecd43803270a1ecb276f3"
     },
     "NystromformerForMultipleChoice": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerForMultipleChoice"
         ],
-        "sha": "417bcc3c7636f1b0a5cbd7371ddce566c302e52d"
+        "sha": "42a077d5ab6830e20560466eaccc525eff10c3ae"
     },
     "NystromformerForQuestionAnswering": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerForQuestionAnswering"
         ],
-        "sha": "206c4a09179f8eda76dab66a0b8d5bd61e031a79"
+        "sha": "1cfaf79051731824db4f09989f093f87f4fceec5"
     },
     "NystromformerForSequenceClassification": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerForSequenceClassification"
         ],
-        "sha": "0e0f7cc4d7cf9a759ac5d1a2ebbcc6026b4c7df3"
+        "sha": "d75231203066df41e9b6b25dbee9ad40e8515c18"
     },
     "NystromformerForTokenClassification": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerForTokenClassification"
         ],
-        "sha": "3b140a528dd8d259f4edf229430edc8f7633473e"
+        "sha": "5a499dc96e106bf41fc9166f2ad06527ec7ca14e"
     },
     "NystromformerModel": {
         "tokenizer_classes": [
+            "AlbertTokenizer",
             "AlbertTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "NystromformerModel"
         ],
-        "sha": "761c4db14685ba334ec012a5075847b3439da7d1"
+        "sha": "2b6adb37ec473b15d71e2eb459acea08df6940ce"
     },
     "OPTForCausalLM": {
         "tokenizer_classes": [
@@ -4001,16 +4043,18 @@
     },
     "PegasusForCausalLM": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "PegasusForCausalLM"
         ],
-        "sha": "bedf3a4a4188e44309417b70243f210c68b0a6f8"
+        "sha": "6e685a698302a3ba33e5379d3a37eb0bc1ae2f70"
     },
     "PegasusForConditionalGeneration": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
@@ -4018,10 +4062,11 @@
             "PegasusForConditionalGeneration",
             "TFPegasusForConditionalGeneration"
         ],
-        "sha": "cacda18e0c679447ca1f38895fc08650df13d571"
+        "sha": "15e58ee2ebc14b6e80ef2891259057ee5f049be2"
     },
     "PegasusModel": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
@@ -4029,27 +4074,29 @@
             "PegasusModel",
             "TFPegasusModel"
         ],
-        "sha": "a3e9e2ccb99adb9ac068f7ab74946bbdbfed52ec"
+        "sha": "fa36b24523db411ef77903453346b8be81ef73fe"
     },
     "PegasusXForConditionalGeneration": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "PegasusXForConditionalGeneration"
         ],
-        "sha": "7edff1791c2c20a6983202836a5b9c732f64631e"
+        "sha": "7588a8120f26a36c1687c14bdf1e9f9656891c1a"
     },
     "PegasusXModel": {
         "tokenizer_classes": [
+            "PegasusTokenizer",
             "PegasusTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "PegasusXModel"
         ],
-        "sha": "921751ff0cf59e7cfe909fa6803b5d5ceb0d3059"
+        "sha": "a0bdff627416ac3c39c22d081f5d88d8b8fd99cc"
     },
     "PerceiverForImageClassificationConvProcessing": {
         "tokenizer_classes": [
@@ -4250,6 +4297,7 @@
     },
     "RemBertForCausalLM": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4257,10 +4305,11 @@
             "RemBertForCausalLM",
             "TFRemBertForCausalLM"
         ],
-        "sha": "0b85a3f867b04078e2b3070dbb7033475946415f"
+        "sha": "8d9ae3d74a0e0a8958b4ee8c9dca3632abf52ef9"
     },
     "RemBertForMaskedLM": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4268,10 +4317,11 @@
             "RemBertForMaskedLM",
             "TFRemBertForMaskedLM"
         ],
-        "sha": "706f273263519d12cb35736b3b03a96908f752bf"
+        "sha": "b7c27d01e1cc3bef9ddd6a78627d700b3bffd759"
     },
     "RemBertForMultipleChoice": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4279,10 +4329,11 @@
             "RemBertForMultipleChoice",
             "TFRemBertForMultipleChoice"
         ],
-        "sha": "e03cd3b6eddb3ad9045e4d6d1053812a393a9417"
+        "sha": "2fe192677b9740cf24dd559339d46925e8ac23d4"
     },
     "RemBertForQuestionAnswering": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4290,10 +4341,11 @@
             "RemBertForQuestionAnswering",
             "TFRemBertForQuestionAnswering"
         ],
-        "sha": "882925e63c946dfb9679cd80a4c4909fbf1e4f2c"
+        "sha": "22b8ba44681b96292a1cf7f6df4ba6bb7937ec6e"
     },
     "RemBertForSequenceClassification": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4301,10 +4353,11 @@
             "RemBertForSequenceClassification",
             "TFRemBertForSequenceClassification"
         ],
-        "sha": "d315ecf3be15d52df6d7a137702f896265f112b1"
+        "sha": "20f3e89341ea15266d2685a8798142fba03c3f98"
     },
     "RemBertForTokenClassification": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4312,10 +4365,11 @@
             "RemBertForTokenClassification",
             "TFRemBertForTokenClassification"
         ],
-        "sha": "622e82ab7284c36acb1260a171623b650f0a8f52"
+        "sha": "15712ff753708da3cf0550e76e73a5d0bba7784e"
     },
     "RemBertModel": {
         "tokenizer_classes": [
+            "RemBertTokenizer",
             "RemBertTokenizerFast"
         ],
         "processor_classes": [],
@@ -4323,7 +4377,7 @@
             "RemBertModel",
             "TFRemBertModel"
         ],
-        "sha": "7dc1b9ee6493a52c377a4ceda0e6a24780c33281"
+        "sha": "59cc6d099b1ded0aaead8684457415b129f79e86"
     },
     "ResNetBackbone": {
         "tokenizer_classes": [],
@@ -5038,26 +5092,29 @@
     },
     "SwitchTransformersForConditionalGeneration": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "SwitchTransformersForConditionalGeneration"
         ],
-        "sha": "332cf96ed681e6cadb5b0788d1925224b62f9cf4"
+        "sha": "c8fcd2bb735894c78db7f1e5b51afc78aced7adb"
     },
     "SwitchTransformersModel": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "SwitchTransformersModel"
         ],
-        "sha": "a367b372751ab0e647724c25fc3698f5d46bce20"
+        "sha": "275bbf6d389bfd0540b9f824c609c6b22a577328"
     },
     "T5ForConditionalGeneration": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
@@ -5065,10 +5122,11 @@
             "T5ForConditionalGeneration",
             "TFT5ForConditionalGeneration"
         ],
-        "sha": "718845103ac90ab0c0594b6a7149ca10e5680f7e"
+        "sha": "593fd6072a4e265f5cc73b1973cd8af76b261f29"
     },
     "T5Model": {
         "tokenizer_classes": [
+            "T5Tokenizer",
             "T5TokenizerFast"
         ],
         "processor_classes": [],
@@ -5076,7 +5134,7 @@
             "T5Model",
             "TFT5Model"
         ],
-        "sha": "e47412452747fd8a9921371fa8f7cc92c9be973f"
+        "sha": "eb3d20dda0ba77c1de618d78116a1a0c784c515c"
     },
     "TableTransformerForObjectDetection": {
         "tokenizer_classes": [],
@@ -5776,6 +5834,7 @@
     },
     "XGLMForCausalLM": {
         "tokenizer_classes": [
+            "XGLMTokenizer",
             "XGLMTokenizerFast"
         ],
         "processor_classes": [],
@@ -5783,10 +5842,11 @@
             "TFXGLMForCausalLM",
             "XGLMForCausalLM"
         ],
-        "sha": "95dc5c571119b6bf7d7c58e98897be4c724ca4ee"
+        "sha": "d5381ce297c249d559937c6bb6316cf1fdad2613"
     },
     "XGLMModel": {
         "tokenizer_classes": [
+            "XGLMTokenizer",
             "XGLMTokenizerFast"
         ],
         "processor_classes": [],
@@ -5794,7 +5854,7 @@
             "TFXGLMModel",
             "XGLMModel"
         ],
-        "sha": "fcc8ad648ae1561cb4b35a1fd31c68b58296ef00"
+        "sha": "2b5cef167822cfaa558d259af1722e2f785cd3d5"
     },
     "XLMForMultipleChoice": {
         "tokenizer_classes": [
@@ -5853,73 +5913,80 @@
     },
     "XLMRobertaXLForCausalLM": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForCausalLM"
         ],
-        "sha": "54d7d901a31fcea581772a62a574f88ea994d931"
+        "sha": "fc05408e5b33a31638476ef337719dfbb7615ef3"
     },
     "XLMRobertaXLForMaskedLM": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForMaskedLM"
         ],
-        "sha": "b9b8090515146aa703fc30da03f3c0995ad2ac58"
+        "sha": "e96f198eede757e5ae2c87632fdcfb341073ef6e"
     },
     "XLMRobertaXLForMultipleChoice": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForMultipleChoice"
         ],
-        "sha": "c6e7ef0a2d640d14f5b0333ffcd32fb2fb83312d"
+        "sha": "52732625f1bfbbb7cb4ba1cf0963de596d81822d"
     },
     "XLMRobertaXLForQuestionAnswering": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForQuestionAnswering"
         ],
-        "sha": "4e433426b85bf8c1cea9261e91bd52d78d7bf397"
+        "sha": "da388fdd2d28e0757eb0c2b2c612a8ff03af2223"
     },
     "XLMRobertaXLForSequenceClassification": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForSequenceClassification"
         ],
-        "sha": "0b8361e84d0d75c0c7540e8dfcc339d37f683800"
+        "sha": "980721187633bcf21ac0b8edbed933527f4611df"
     },
     "XLMRobertaXLForTokenClassification": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLForTokenClassification"
         ],
-        "sha": "70c4a472222415f8611c25ac7eea48944a6fa0aa"
+        "sha": "37a97280faf6fef0bd946d3934d77a1b60fbf473"
     },
     "XLMRobertaXLModel": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XLMRobertaXLModel"
         ],
-        "sha": "df4e5bb09f2fa1e5582dc9424882e544c8b28aed"
+        "sha": "8fbeb39a984912e47f5d24a31be61639031a0fc3"
     },
     "XLMWithLMHeadModel": {
         "tokenizer_classes": [
@@ -5942,7 +6009,7 @@
             "TFXLNetForMultipleChoice",
             "XLNetForMultipleChoice"
         ],
-        "sha": "874306eaf380012b985180563bf140d604272f40"
+        "sha": "8bb7e28d0cd1e93154d3232baf5e9c79acaf9f1a"
     },
     "XLNetForQuestionAnsweringSimple": {
         "tokenizer_classes": [
@@ -5954,7 +6021,7 @@
             "TFXLNetForQuestionAnsweringSimple",
             "XLNetForQuestionAnsweringSimple"
         ],
-        "sha": "8c6ac70e1946da872e5f93853247728d672a1dee"
+        "sha": "fabd06a45d947f3d46f1b8dce2186cf3b27776dc"
     },
     "XLNetForSequenceClassification": {
         "tokenizer_classes": [
@@ -5966,7 +6033,7 @@
             "TFXLNetForSequenceClassification",
             "XLNetForSequenceClassification"
         ],
-        "sha": "3bba8894ba1d8e34cd807fd5a0f858449abf65b4"
+        "sha": "e3c194f24537ebf2c474ade60becb9397696edec"
     },
     "XLNetForTokenClassification": {
         "tokenizer_classes": [
@@ -5978,7 +6045,7 @@
             "TFXLNetForTokenClassification",
             "XLNetForTokenClassification"
         ],
-        "sha": "70598399e95e6df689fe5459ef9f016e55cc05ee"
+        "sha": "16aa15029aa667046d504c4a88ceddfdd5b5fb40"
     },
     "XLNetLMHeadModel": {
         "tokenizer_classes": [
@@ -5990,7 +6057,7 @@
             "TFXLNetLMHeadModel",
             "XLNetLMHeadModel"
         ],
-        "sha": "fef32495d187c73201ba4e2854559bcc68e41e22"
+        "sha": "c9a98cc982a16ca162832a8cbea25116479bb938"
     },
     "XLNetModel": {
         "tokenizer_classes": [
@@ -6002,77 +6069,84 @@
             "TFXLNetModel",
             "XLNetModel"
         ],
-        "sha": "bebc65e9a3da5c0007713a61f6719293d361baa3"
+        "sha": "1d6e231942135faf32b8d9a97773d8f6c85ca561"
     },
     "XmodForCausalLM": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForCausalLM"
         ],
-        "sha": "daf792dff8fef2f3d99eb5ee63b206032b3f69d7"
+        "sha": "c6b746071f2f067099a8fb4f57ce3c27a7e4b67d"
     },
     "XmodForMaskedLM": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForMaskedLM"
         ],
-        "sha": "b7c020898ef638ed4c2f420431b4efc0075c0e32"
+        "sha": "e1085818f4ed3c6073b2038635e5f3061208923d"
     },
     "XmodForMultipleChoice": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForMultipleChoice"
         ],
-        "sha": "1fce9673e9f557d3204d504ebb86e285b20937f8"
+        "sha": "c63042cdf196be3fed846421b345d439b2483f69"
     },
     "XmodForQuestionAnswering": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForQuestionAnswering"
         ],
-        "sha": "fc9ebdfeb481281375c25d585569404cc48b02da"
+        "sha": "75acd3071fae9978c82618cd0f090c87aabc1f23"
     },
     "XmodForSequenceClassification": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForSequenceClassification"
         ],
-        "sha": "bba89c4e18b6a29a1865462a75cb8bde12e7cc0c"
+        "sha": "523a16570be048618913ac17ccd00d343bcb5e99"
     },
     "XmodForTokenClassification": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodForTokenClassification"
         ],
-        "sha": "efe3dad234d5a60f1165887d8b4bb1627e271508"
+        "sha": "a0f0a02732b4579670dad11a69ae244ebd777b49"
     },
     "XmodModel": {
         "tokenizer_classes": [
+            "XLMRobertaTokenizer",
             "XLMRobertaTokenizerFast"
         ],
         "processor_classes": [],
         "model_classes": [
             "XmodModel"
         ],
-        "sha": "62f3ca59e02a9637b12ce81566f1996c16fad872"
+        "sha": "bc286de0035450e7dcd6bcce78098a967b9c2b6c"
     },
     "YolosForObjectDetection": {
         "tokenizer_classes": [],
@@ -6102,7 +6176,7 @@
         "model_classes": [
             "YosoForMaskedLM"
         ],
-        "sha": "4ff7ab217e6d05d40ae8afd37df1a0bf5c6ab25f"
+        "sha": "cb291bedcbec199ea195f086e3ebea6fab026bba"
     },
     "YosoForMultipleChoice": {
         "tokenizer_classes": [
@@ -6112,7 +6186,7 @@
         "model_classes": [
             "YosoForMultipleChoice"
         ],
-        "sha": "c42bd94e4563cdfeb28e07aef80e801188706d9d"
+        "sha": "cf2d3a3f0628bc9d0da68ea8de26b12016453fee"
     },
     "YosoForQuestionAnswering": {
         "tokenizer_classes": [
@@ -6122,7 +6196,7 @@
         "model_classes": [
             "YosoForQuestionAnswering"
         ],
-        "sha": "284f170b902c65ee257a2e8f255fa672cb4700c5"
+        "sha": "e8c3091f674588adfa3371b3de0427a9b39dd03f"
     },
     "YosoForSequenceClassification": {
         "tokenizer_classes": [
@@ -6132,7 +6206,7 @@
         "model_classes": [
             "YosoForSequenceClassification"
         ],
-        "sha": "2e0a37a4dd12cee00eb15e4ecd0de4231a638966"
+        "sha": "88132cbaa1a9a87f65b6f9813c388011377f18cf"
     },
     "YosoForTokenClassification": {
         "tokenizer_classes": [
@@ -6142,7 +6216,7 @@
         "model_classes": [
             "YosoForTokenClassification"
         ],
-        "sha": "50dd3fe46f28f0efaacf8aa311b09f67b10edb74"
+        "sha": "fd2219856608d3dba70dc7b1a06af629903dec31"
     },
     "YosoModel": {
         "tokenizer_classes": [
@@ -6152,6 +6226,6 @@
         "model_classes": [
             "YosoModel"
         ],
-        "sha": "6b42cca4d4f9204a3aa1197664663656719095cb"
+        "sha": "e144d9f1fe39c21eda1177702640e126892605ce"
     }
 }
