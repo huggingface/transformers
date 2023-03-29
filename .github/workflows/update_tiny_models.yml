@@ -1,4 +1,4 @@
-name: Self-hosted runner (push)
+name: Update Tiny Models
 
 on:
   push:
