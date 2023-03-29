@@ -261,6 +261,13 @@ class TemperatureLogitsWarper(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TextStreamer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TopKLogitsWarper(metaclass=DummyObject):
     _backends = ["torch"]
 

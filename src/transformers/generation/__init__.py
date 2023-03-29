@@ -71,6 +71,7 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
     ]
+    _import_structure["streamers"] = ["TextStreamer"]
     _import_structure["utils"] = [
         "GenerationMixin",
         "top_k_top_p_filtering",
@@ -192,6 +193,7 @@ if TYPE_CHECKING:
             StoppingCriteriaList,
             validate_stopping_criteria,
         )
+        from .streamers import TextStreamer
         from .utils import (
             BeamSampleDecoderOnlyOutput,
             BeamSampleEncoderDecoderOutput,
