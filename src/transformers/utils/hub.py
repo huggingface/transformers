@@ -1082,7 +1082,10 @@ if not os.path.isfile(cache_version_file):
     cache_version = 0
 else:
     with open(cache_version_file) as f:
-        cache_version = int(f.read())
+        try:
+            cache_version = int(f.read())
+        except ValueError:
+            cache_version = 0
 
 cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
 
