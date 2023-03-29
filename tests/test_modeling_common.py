@@ -1630,15 +1630,18 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
-                model_tied.save_pretrained(d, safe_serialization=True)
+                try:
+                    model_tied.save_pretrained(d, safe_serialization=True)
+                except Exception as e:
+
+                    raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
 
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-
                 # Checking the state dicts are correct
                 reloaded_state = model_reloaded.state_dict()
                 for k, v in model_tied.state_dict().items():
                     self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(v, reloaded_state[v])
+                    torch.testing.assert_close(v, reloaded_state[k])
 
                 # Checking the tensor sharing are correct
                 ptrs = defaultdict(list)
@@ -1648,7 +1651,7 @@ class ModelTesterMixin:
                 shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
 
                 for _, shared_names in shared_ptrs.items():
-                    reloaded_ptrs = {reloaded_state[k] for k in shared_names}
+                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
                     self.assertEqual(
                         len(reloaded_ptrs),
                         1,
