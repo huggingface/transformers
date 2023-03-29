@@ -146,6 +146,7 @@ from . import (
     plbart,
     poolformer,
     prophetnet,
+    pvt,
     qdqbert,
     rag,
     realm,

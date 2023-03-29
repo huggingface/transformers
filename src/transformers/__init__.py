@@ -415,6 +415,7 @@ _import_structure = {
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
+    "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PVTConfig", "PVTTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
@@ -945,6 +946,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2170,6 +2172,16 @@ else:
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pvt"].extend(
+        [
+            "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PVTForImageClassification",
+            "PVTImageProcessor",
+            "PVTLayer",
+            "PVTModel",
+            "PVTPreTrainedModel",
         ]
     )
     _import_structure["models.qdqbert"].extend(
@@ -4071,6 +4083,7 @@ if TYPE_CHECKING:
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+    from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PVTConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
@@ -4538,8 +4551,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5538,6 +5549,18 @@ if TYPE_CHECKING:
             ProphetNetForConditionalGeneration,
             ProphetNetModel,
             ProphetNetPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.pvt import (
+            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PVTDecodeHead,
+            PVTForImageClassification,
+            PVTForSemanticSegmentation,
+            PVTLayer,
+            PVTModel,
+            PVTPreTrainedModel,
+            load_tf_weights_in_pvt,
         )
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
