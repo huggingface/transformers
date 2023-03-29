@@ -115,6 +115,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         pad_token="<pad>",
         add_prefix_space=False,
+        clean_up_tokenization_spaces=False,
         **kwargs,
     ):
         super().__init__(
@@ -126,6 +127,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
