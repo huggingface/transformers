@@ -18,6 +18,10 @@ def sigmoid(_outputs):
     return 1.0 / (1.0 + np.exp(-_outputs))
 
 
+def sigmoid_bis(_outputs):
+    return 1.0 / (1.0 + np.exp(-_outputs))
+
+
 def softmax(_outputs):
     maxes = np.max(_outputs, axis=-1, keepdims=True)
     shifted_exp = np.exp(_outputs - maxes)
