@@ -1698,7 +1698,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. ",
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>=0.37.2` installed.",
                 UserWarning,
             )
 
