@@ -159,7 +159,7 @@ _deps = [
     "rhoknp>=1.1.0",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff>=0.0.241",
+    "ruff>=0.0.241,<=0.0.259",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.2.1",
