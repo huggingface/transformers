@@ -478,7 +478,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             break
     if not reporting_to_wandb:
         trainer.add_callback(WandbCallback())
-    trainer.args.report_to = "wandb"
+    trainer.args.report_to = ["wandb"]
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
     sweep_id = kwargs.pop("sweep_id", None)
     project = kwargs.pop("project", None)
