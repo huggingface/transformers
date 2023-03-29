@@ -188,13 +188,6 @@ class MixedInt8Test(BaseMixedInt8Test):
                 llm_int8_enable_fp32_cpu_offload=True,
             )
 
-    def test_warns_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
-
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
@@ -298,7 +291,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         """
         from bitsandbytes.nn import Int8Params
 
-        model_id = "ybelkada/bloom-560m-8bit"
+        model_id = "ybelkada/bloom-1b7-8bit"
 
         model = AutoModelForCausalLM.from_pretrained(model_id)
 

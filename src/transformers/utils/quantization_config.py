@@ -135,7 +135,7 @@ class BitsAndBytesConfig(PushToHubMixin):
         else:
             return config
 
-    # Adapted from transformers.quantization.configuration_utils.BitsAndBytesConfig.save_pretrained
+    # Adapted from transformers.generation.configuration_utils.GenerationConfig.save_pretrained
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -203,6 +203,7 @@ class BitsAndBytesConfig(PushToHubMixin):
 
             writer.write(json_string)
 
+    # Adapted from transformers.generation.configuration_utils.GenerationConfig.to_dict
     @classmethod
     def from_pretrained(
         cls,

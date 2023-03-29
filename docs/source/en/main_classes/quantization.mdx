@@ -54,7 +54,7 @@ Note that once a model has been loaded in 8-bit it is currently not possible to 
 
 ### Push quantized models on the 🤗 Hub
 
-You can push a quantized model on the Hub by naively using `push_to_hub` method. This will first push the quantization configuration file, then push the model weights.
+You can push a quantized model on the Hub by naively using `push_to_hub` method. This will first push the quantization configuration file, then push the quantized model weights.
 Make sure to use `bitsandbytes>=0.37.2` to be able to use this feature. 
 
 ```python
