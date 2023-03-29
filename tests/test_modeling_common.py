@@ -1633,7 +1633,6 @@ class ModelTesterMixin:
                 try:
                     model_tied.save_pretrained(d, safe_serialization=True)
                 except Exception as e:
-
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
 
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
