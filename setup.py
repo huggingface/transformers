@@ -38,6 +38,10 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
+   Clean up your build and dist folders (to avoid re-uploading oldies):
+   rm -rf dist
+   rm -rf build
+
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
    (this will build a wheel for the python version you use to build it).
 
@@ -46,10 +50,10 @@ To create the package for pypi.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
 
-   twine upload dist/* -r pypitest
+   twine upload dist/* -r testpypi
    (pypi suggest using twine as other methods upload files via plaintext.)
    You may have to specify the repository url, use the following command then:
-   twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
+   twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
@@ -57,6 +61,8 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
+
+   If making a patch release, double check the bug you are patching is indeed resolved.
 
 9. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
