@@ -24,15 +24,17 @@ import tempfile
 import unittest
 import unittest.mock as mock
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-import transformers
 from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -107,6 +109,7 @@ if is_torch_available():
     import torch
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
+
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_MAPPING,
@@ -157,6 +160,7 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -1620,12 +1624,36 @@ class ModelTesterMixin:
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
+    @require_safetensors
     def test_can_use_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 model_tied.save_pretrained(d, safe_serialization=True)
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model_tied.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_all_close(v, reloaded_state[v])
+
+                # Checking the tensor sharing are correct
+                ptrs = defaultdict(list)
+                for k, v in model_tied.state_dict().items():
+                    ptrs[v.data_ptr()].append(k)
+
+                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+
+                for _, shared_names in shared_ptrs.items():
+                    reloaded_ptrs = {reloaded_state[k] for k in shared_names}
+                    self.assertEqual(
+                        len(reloaded_ptrs),
+                        1,
+                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                    )
 
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
