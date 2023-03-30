@@ -615,10 +615,10 @@ def parse_commit_message(commit_message):
     """
     Parses the commit message to detect if a command is there to skip, force all or part of the CI.
 
-    Returns a tuple of three bools for skip, test_all_models and test_all
+    Returns a dictionary of strings to bools with keys skip, test_all_models and test_all.
     """
     if commit_message is None:
-        return False, False, False
+        return {"skip": False, "test_all_models": False, "test_all": False}
 
     command_search = re.search(r"\[([^\]]*)\]", commit_message)
     if command_search is not None:
@@ -627,9 +627,9 @@ def parse_commit_message(commit_message):
         skip = command in ["ci skip", "skip ci", "circleci skip", "skip circleci"]
         all_models = set(command.split(" ")) == {"test", "all", "models"}
         test_all = set(command.split(" ")) == {"test", "all"}
-        return skip, all_models, test_all
+        return {"skip": skip, "test_all_models": all_models, "test_all": test_all}
     else:
-        return False, False, False
+        return {"skip": False, "test_all_models": False, "test_all": False}
 
 
 if __name__ == "__main__":
@@ -680,13 +680,13 @@ if __name__ == "__main__":
     else:
         repo = Repo(PATH_TO_REPO)
         commit_message = repo.head.commit.message
-        skip, test_all_models, test_all = parse_commit_message(commit_message)
-        if skip:
+        commit_flags = parse_commit_message(commit_message)
+        if commit_flags["skip"]:
             print("Force-skipping the CI")
             quit()
-        if test_all_models:
+        if commit_flags["test_all_models"]:
             print("Testing all models found.")
-        if test_all:
+        if commit_flags["test_all"]:
             print("Force- launching all tests")
 
         diff_with_last_commit = args.diff_with_last_commit
@@ -694,21 +694,21 @@ if __name__ == "__main__":
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
-        if not test_all:
+        if not commit_flags["test_all"]:
             try:
                 infer_tests_to_run(
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     filters=args.filters,
                     json_output_file=args.json_output_file,
-                    filter_models=not test_all_models,
+                    filter_models=not commit_flags["test_all_models"],
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
                 print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
-                test_all = True
+                commit_flags["test_all"] = True
 
-        if test_all:
+        if commit_flags["test_all"]:
             with open(args.output_file, "w", encoding="utf-8") as f:
                 if args.filters is None:
                     f.write("./tests/")

@@ -636,19 +636,31 @@ src/transformers/configuration_utils.py
             assert set(tests_to_run.split(" ")) == expected_tests
 
     def test_parse_commit_message(self):
-        assert parse_commit_message("Normal commit") == (False, False, False)
+        assert parse_commit_message("Normal commit") == {"skip": False, "test_all_models": False, "test_all": False}
 
-        assert parse_commit_message("[skip ci] commit") == (True, False, False)
-        assert parse_commit_message("[ci skip] commit") == (True, False, False)
-        assert parse_commit_message("[skip-ci] commit") == (True, False, False)
-        assert parse_commit_message("[skip_ci] commit") == (True, False, False)
+        assert parse_commit_message("[skip ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
+        assert parse_commit_message("[ci skip] commit") == {"skip": True, "test_all_models": False, "test_all": False}
+        assert parse_commit_message("[skip-ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
+        assert parse_commit_message("[skip_ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
 
-        assert parse_commit_message("[test all models] commit") == (False, True, False)
-        assert parse_commit_message("[test models all] commit") == (False, True, False)
-        assert parse_commit_message("[test-all-models] commit") == (False, True, False)
-        assert parse_commit_message("[all_models_test] commit") == (False, True, False)
+        self.assertDictEqual(
+            parse_commit_message("[test all models] commit"),
+            {"skip": False, "test_all_models": True, "test_all": False},
+        )
+        self.assertDictEqual(
+            parse_commit_message("[test models all] commit"),
+            {"skip": False, "test_all_models": True, "test_all": False},
+        )
+        self.assertDictEqual(
+            parse_commit_message("[test-all-models] commit"),
+            {"skip": False, "test_all_models": True, "test_all": False},
+        )
+        self.assertDictEqual(
+            parse_commit_message("[all_models_test] commit"),
+            {"skip": False, "test_all_models": True, "test_all": False},
+        )
 
-        assert parse_commit_message("[test all] commit") == (False, False, True)
-        assert parse_commit_message("[all test] commit") == (False, False, True)
-        assert parse_commit_message("[test-all] commit") == (False, False, True)
-        assert parse_commit_message("[all_test] commit") == (False, False, True)
+        assert parse_commit_message("[test all] commit") == {"skip": False, "test_all_models": False, "test_all": True}
+        assert parse_commit_message("[all test] commit") == {"skip": False, "test_all_models": False, "test_all": True}
+        assert parse_commit_message("[test-all] commit") == {"skip": False, "test_all_models": False, "test_all": True}
+        assert parse_commit_message("[all_test] commit") == {"skip": False, "test_all_models": False, "test_all": True}
