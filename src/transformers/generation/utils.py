@@ -18,7 +18,7 @@ import copy
 import inspect
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -70,6 +70,10 @@ from .stopping_criteria import (
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
+
+
+if TYPE_CHECKING:
+    from .streamers import BaseStreamer
 
 
 logger = logging.get_logger(__name__)
@@ -1116,6 +1120,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1165,6 +1170,9 @@ class GenerationMixin:
                 Whether to continue running the while loop until max_length. Unless overridden this flag will be set to
                 `True` under DeepSpeed ZeRO Stage 3 multiple GPUs environment to avoid hanging if one GPU finished
                 generating before other GPUs. Otherwise it'll be set to `False`.
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
 
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
@@ -1295,6 +1303,9 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
@@ -1335,7 +1346,8 @@ class GenerationMixin:
         )
 
         is_contrastive_search_gen_mode = (
-            generation_config.top_k is not None
+            (generation_config.num_beams == 1)
+            and generation_config.top_k is not None
             and generation_config.top_k > 1
             and generation_config.do_sample is False
             and generation_config.penalty_alpha is not None
@@ -1384,6 +1396,11 @@ class GenerationMixin:
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
 
+        if streamer is not None and (generation_config.num_beams > 1):
+            raise ValueError(
+                "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
+            )
+
         if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
@@ -1426,6 +1443,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -1447,6 +1465,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -1473,6 +1492,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -1703,6 +1723,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -1750,6 +1771,9 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2010,6 +2034,8 @@ class GenerationMixin:
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -2026,6 +2052,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -2061,6 +2090,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
@@ -2105,6 +2135,9 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2256,6 +2289,8 @@ class GenerationMixin:
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -2272,6 +2307,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -2308,6 +2346,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -2354,6 +2393,9 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2525,6 +2567,8 @@ class GenerationMixin:
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -2541,6 +2585,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
