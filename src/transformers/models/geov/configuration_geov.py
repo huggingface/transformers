@@ -65,10 +65,10 @@ class GeoVConfig(PretrainedConfig):
     ```python
     >>> from transformers import GeoVConfig, GeoVModel
 
-    >>> # Initializing a GeoV gpt-neox-20b style configuration
+    >>> # Initializing a GeoV configuration
     >>> configuration = GeoVConfig()
 
-    >>> # Initializing a model (with random weights) from the gpt-neox-20b style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = GeoVModel(configuration)  # doctest: +SKIP
 
     >>> # Accessing the model configuration

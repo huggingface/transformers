@@ -36,7 +36,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "GeoV/GeoV-9b"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
+_REAL_CHECKPOINT_FOR_DOC = "GeoV/GeoV-9b"
 _CONFIG_FOR_DOC = "GeoVConfig"
 
 GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
