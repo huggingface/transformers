@@ -6,7 +6,7 @@ mkdir -p $LOG_DIR
 mkdir -p $OUTPUT_DIR
 
 model=${1:-"microsoft/resnet-50"}
-bs=${2:-64}
+bs=${2:-32}
 model_name=${model#*/}
 log_file="${LOG_DIR}/${model_name}.log"
 output_dir="${OUTPUT_DIR}/${model_name}"
@@ -19,13 +19,13 @@ COMMON_ARGS="""
     --do_train \
     --do_eval \
     --learning_rate 2e-5 \
-    --num_train_epochs 2 \
+    --num_train_epochs 5 \
     --logging_strategy steps \
     --logging_steps 100 \
     --evaluation_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
-    --save_total_limit 3 \
+    --save_total_limit 1 \
     --report_to tensorboard \
     --disable_tqdm True \
     --seed 42
