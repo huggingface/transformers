@@ -761,10 +761,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
         self.post_init()
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
