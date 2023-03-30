@@ -276,6 +276,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding,
             model_name="hf-internal-testing/llama-tokenizer",
             revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
+            padding=False
         )
 
 
@@ -284,10 +285,12 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
     checkpoint_name = "hf-internal-testing/llama-tokenizer"
-
+   
+     
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.rust_tokenizer = cls.tokenizer # TODO @narsil replace with the rust one
         cls.pad_token_id = 1
         return cls
 
@@ -308,3 +311,46 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
         )
+
+    def test_simple_encode_decode(self):
+        pyth_tokenizer = self.tokenizer
+        rust_tokenizer = self.rust_tokenizer
+
+        self.assertEqual(pyth_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
+        self.assertEqual(rust_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
+        self.assertEqual(pyth_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
+        self.assertEqual(rust_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
+
+        # bytefallback showcase
+        self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])
+        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])
+        self.assertEqual(pyth_tokenizer.decode([1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True), "生活的真谛是")
+        self.assertEqual(
+            rust_tokenizer.decode(
+                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+            ),
+            "生活的真谛是",
+        )
+
+        # Inner spaces showcase
+        self.assertEqual(pyth_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
+        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
+        self.assertEqual(pyth_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
+
+        self.assertEqual(pyth_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
+        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
+        self.assertEqual(pyth_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
+
+        self.assertEqual(pyth_tokenizer.encode(""), [1])
+        self.assertEqual(rust_tokenizer.encode(""), [1])
+
+        self.assertEqual(pyth_tokenizer.encode(" "), [1, 259])
+        self.assertEqual(rust_tokenizer.encode(" "), [1, 259])
+
+        self.assertEqual(pyth_tokenizer.encode("  "), [1, 1678])
+        self.assertEqual(rust_tokenizer.encode("  "), [1, 1678])
+
+        self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
