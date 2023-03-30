@@ -412,6 +412,8 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
 @keras_serializable
 class TFBlipTextEncoder(tf.keras.layers.Layer):
+    config_class = BlipTextConfig
+
     def __init__(self, config, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.config = config

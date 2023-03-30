@@ -564,6 +564,7 @@ BLIP_INPUTS_DOCSTRING = r"""
 
 @keras_serializable
 class TFBlipEncoder(tf.keras.layers.Layer):
+    config_class = BlipConfig
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`BlipEncoderLayer`].
