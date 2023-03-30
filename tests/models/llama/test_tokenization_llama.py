@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    slow
+    slow,
 )
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -265,6 +265,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(cr_output, r_output)
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
+
     @slow
     def test_tokenizer_integration(self):
         # fmt: off
@@ -272,7 +273,9 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding, model_name="hf-internal-testing/llama-tokenizer", revision="0984d03108b1a041ed679bd253b6519b7e1a4778"
+            expected_encoding=expected_encoding,
+            model_name="hf-internal-testing/llama-tokenizer",
+            revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
         )
 
 
@@ -305,5 +308,3 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
         )
-
-

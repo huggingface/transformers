@@ -41,6 +41,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.json",
     },
 }
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "hf-internal-testing/llama-tokenizer": 2048,
+}
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
@@ -54,6 +57,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -66,7 +70,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
-        decode_with_prefix_space=False,
         clean_up_tokenization_spaces=False,
         **kwargs,
     ):
@@ -79,15 +82,28 @@ class LlamaTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
+            pad_token=pad_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
+            sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.decode_with_prefix_space = decode_with_prefix_space
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(self.vocab_file)
 
     @property
     def vocab_size(self):
@@ -112,12 +128,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         token = self.sp_model.IdToPiece(index)
         return token
-
-    def _maybe_add_prefix_space(self, tokens, decoded):
-        if tokens and tokens[0] not in self.no_prefix_space_tokens:
-            return " " + decoded
-        else:
-            return decoded
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
@@ -166,18 +176,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if self.add_bos_token:
-            bos_token_ids = [self.bos_token_id]
-        else:
-            bos_token_ids = []
+        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
+        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
 
-        output = bos_token_ids + token_ids_0
+        output = bos_token_id + token_ids_0 + eos_token_id
 
         if token_ids_1 is not None:
-            output = output + token_ids_1
-
-        if self.add_eos_token:
-            output = output + [self.eos_token_id]
+            output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
 
@@ -204,9 +209,19 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
+        bos_token_id = [1] if self.add_bos_token else []
+        eos_token_id = [1] if self.add_eos_token else []
+
         if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+            return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id
+        return (
+            bos_token_id
+            + ([0] * len(token_ids_0))
+            + eos_token_id
+            + bos_token_id
+            + ([0] * len(token_ids_1))
+            + eos_token_id
+        )
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
