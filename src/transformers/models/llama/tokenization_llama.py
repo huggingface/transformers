@@ -223,7 +223,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             + eos_token_id
         )
 
-
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:

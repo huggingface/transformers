@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import shutil
 import tempfile
 import unittest
+
+from datasets import load_dataset
 
 from transformers import (
     SPIECE_UNDERLINE,
@@ -276,7 +279,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding,
             model_name="hf-internal-testing/llama-tokenizer",
             revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
-            padding=False
+            padding=False,
         )
 
 
@@ -285,12 +288,11 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
     checkpoint_name = "hf-internal-testing/llama-tokenizer"
-   
-     
+
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(cls.checkpoint_name)
-        cls.rust_tokenizer = cls.tokenizer # TODO @narsil replace with the rust one
+        cls.rust_tokenizer = cls.tokenizer  # TODO @narsil replace with the rust one
         cls.pad_token_id = 1
         return cls
 
@@ -324,7 +326,12 @@ class LlamaIntegrationTest(unittest.TestCase):
         # bytefallback showcase
         self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])
-        self.assertEqual(pyth_tokenizer.decode([1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True), "生活的真谛是")
+        self.assertEqual(
+            pyth_tokenizer.decode(
+                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+            ),
+            "生活的真谛是",
+        )
         self.assertEqual(
             rust_tokenizer.decode(
                 [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
@@ -354,3 +361,52 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
         self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
+
+        self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
+        self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
+
+        self.assertEqual(pyth_tokenizer.encode(""), [1])
+        self.assertEqual(rust_tokenizer.encode(""), [1])
+
+        self.assertEqual(pyth_tokenizer.decode([869]), ".")
+        self.assertEqual(rust_tokenizer.decode([869]), ".")
+
+        self.assertEqual(pyth_tokenizer.decode([30112, 869]), "ا .")
+        self.assertEqual(rust_tokenizer.decode([30112, 869]), "ا .")
+
+    @unittest.skipIf(
+        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
+        "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
+    )
+    def test_integration_test_xnli(self):
+        import tqdm
+
+        pyth_tokenizer = self.tokenizer
+        rust_tokenizer = self.rust_tokenizer
+
+        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        for item in tqdm.tqdm(dataset["validation"]):
+            string = item["code"]
+            encoded1 = pyth_tokenizer.encode(string)
+            encoded2 = rust_tokenizer.encode(string)
+
+            self.assertEqual(encoded1, encoded2)
+
+            decoded1 = pyth_tokenizer.decode(encoded1)
+            decoded2 = rust_tokenizer.decode(encoded2)
+
+            self.assertEqual(decoded1, decoded2)
+
+        dataset = load_dataset("xnli", "all_languages")
+
+        for item in tqdm.tqdm(dataset["train"]):
+            for string in item["premise"].values():
+                encoded1 = pyth_tokenizer.encode(string)
+                encoded2 = rust_tokenizer.encode(string)
+
+                self.assertEqual(encoded1, encoded2)
+
+                decoded1 = pyth_tokenizer.decode(encoded1)
+                decoded2 = rust_tokenizer.decode(encoded2)
+
+                self.assertEqual(decoded1, decoded2)
