@@ -223,24 +223,33 @@ class LlamaTokenizer(PreTrainedTokenizer):
             + eos_token_id
         )
 
+
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
-        use of token type ids, therefore a list of zeros is returned.
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
+        sequence pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        if token_ids_1 is None, only returns the first portion of the mask (0s).
 
         Args:
             token_ids_0 (`List[int]`):
-                List of IDs.
+                List of ids.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
-        eos = [self.eos_token_id]
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
 
         if token_ids_1 is None:
-            return len(token_ids_0 + eos) * [0]
-        return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
