@@ -87,14 +87,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """Returns vocab size"""
         return self.sp_model.get_piece_size()
 
-    @property
-    def bos_token_id(self) -> Optional[int]:
-        return self.sp_model.bos_id()
-
-    @property
-    def eos_token_id(self) -> Optional[int]:
-        return self.sp_model.eos_id()
-
     def get_vocab(self):
         """Returns vocab as a dict"""
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
