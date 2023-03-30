@@ -132,6 +132,7 @@ from . import (
     nat,
     nezha,
     nllb,
+    nllb_moe,
     nystromformer,
     oneformer,
     openai,
