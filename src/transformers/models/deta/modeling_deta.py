@@ -1778,7 +1778,7 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*", "model.decoder"]
+    _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*"]
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
     def __init__(self, config: DetaConfig):
