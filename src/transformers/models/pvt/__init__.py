@@ -19,15 +19,13 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tokenizers_available,
-    # is_tf_available,
     is_torch_available,
     is_vision_available,
 )
 
 
 _import_structure = {
-    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PVTConfig"],
+    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PVTConfig", "PVTOnnxConfig"],
 }
 
 try:
@@ -45,17 +43,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pvt"] = [
-        "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PVTForImageClassification",
-        "PVTForSemanticSegmentation",
-        "PVTLayer",
         "PVTModel",
         "PVTPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PVTConfig
+    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PVTConfig, PVTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -63,7 +58,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_pvt import PVTFeatureExtractor
         from .image_processing_pvt import PVTImageProcessor
 
     try:
@@ -73,9 +67,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pvt import (
-            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             PVTForImageClassification,
-            PVTLayer,
             PVTModel,
             PVTPreTrainedModel,
         )

@@ -75,8 +75,6 @@ class PVTConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability before the classification head.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
@@ -118,7 +116,6 @@ class PVTConfig(PretrainedConfig):
         hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
-        classifier_dropout_prob: float = 0.1,
         initializer_range: float = 0.02,
         drop_path_rate: float = 0.0,
         layer_norm_eps: float = 1e-6,
@@ -147,7 +144,6 @@ class PVTConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.classifier_dropout_prob = classifier_dropout_prob
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps

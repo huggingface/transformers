@@ -59,7 +59,6 @@ PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.timm.layers.weight_init
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -97,7 +96,6 @@ def _trunc_normal_(tensor, mean, std, a, b):
     return tensor
 
 
-# Copied from transformers.timm.layers.weight_init
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (Tensor, float, float, float, float) -> Tensor
     r"""Fills the input Tensor with values drawn from a truncated
@@ -187,7 +185,7 @@ class PVTPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=stride, stride=patch_size)
 
-        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
@@ -331,7 +329,7 @@ class PVTEfficientSelfAttention(nn.Module):
             self.sr = nn.Conv2d(
                 hidden_size, hidden_size, kernel_size=sequences_reduction_ratio, stride=sequences_reduction_ratio
             )
-            self.layer_norm = nn.LayerNorm(hidden_size)
+            self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def transpose_for_scores(self, hidden_states: int) -> torch.Tensor:
         new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -463,7 +461,7 @@ class PVTLayer(nn.Module):
         mlp_ratio: float,
     ):
         super().__init__()
-        self.layer_norm_1 = nn.LayerNorm(hidden_size)
+        self.layer_norm_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.attention = PVTAttention(
             config=config,
             hidden_size=hidden_size,
@@ -471,7 +469,7 @@ class PVTLayer(nn.Module):
             sequences_reduction_ratio=sequences_reduction_ratio,
         )
         self.drop_path = PVTDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.layer_norm_2 = nn.LayerNorm(hidden_size)
+        self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = PVTFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
@@ -515,7 +513,7 @@ class PVTEncoder(nn.Module):
                     config=config,
                     image_size=config.image_size if i == 0 else self.config.image_size // (2 ** (i + 1)),
                     patch_size=config.patch_sizes[i],
-                    stride=config.patch_sizes[i],
+                    stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
                     hidden_size=config.hidden_sizes[i],
                     cls_token=i == config.num_encoder_blocks - 1,
@@ -547,7 +545,7 @@ class PVTEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1])
+        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
     def forward(
         self,

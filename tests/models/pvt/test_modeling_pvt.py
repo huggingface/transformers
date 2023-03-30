@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     from PIL import Image
 
-    from transformers import MODEL_MAPPING, PVTConfig, PVTForImageClassification, PVTImageProcessor
+    from transformers import MODEL_MAPPING, PVTConfig, PVTForImageClassification, PVTImageProcessor, PVTModel
     from transformers.models.pvt.modeling_pvt import (
         PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -145,6 +145,8 @@ class PVTModelTester:
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+
+    all_model_classes = (PVTForImageClassification, PVTModel) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = PVTModelTester(self)
