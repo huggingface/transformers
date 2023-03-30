@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-from huggingface_hub import snapshot_download, hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -1163,6 +1163,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch_gpu
     def test_slow_unfinished_sequence(self):
         from transformers import GenerationConfig
+
         pipe = pipeline(
             "automatic-speech-recognition",
             model="vasista22/whisper-hindi-large-v2",
@@ -1177,13 +1178,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             audio,
             return_timestamps=True,
         )
-        self.assertEqual(out, 
-{'chunks': [{'text': '', 'timestamp': (18.94, 0.0)},
-           {'text': 'मिर्ची में कितने विभिन्न प्रजातियां हैं',
-            'timestamp': (None, None)}], 
-           "text":  'मिर्ची में कितने विभिन्न प्रजातियां हैं'
-           }
-            )
+        self.assertEqual(
+            out,
+            {
+                "chunks": [
+                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
+                ],
+                "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+            },
+        )
+
 
 def require_ffmpeg(test_case):
     """
