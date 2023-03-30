@@ -648,10 +648,6 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_keras_fit(self):
         pass
 
-    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
-    def test_pt_tf_model_equivalence(self):
-        pass
-
 
 @require_tf
 class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
