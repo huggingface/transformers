@@ -39,10 +39,10 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        tokenizer.pad_token_id = 50256
-        tokenizer.pad_token = "<|endoftext|>"
-        tokenizer.save_pretrained(self.tmpdirname)
+        self.tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        self.tokenizer.pad_token_id = 50256
+        self.tokenizer.pad_token = "<|endoftext|>"
+        self.tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -193,6 +193,46 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         seq3 = [4, 97, 6, 7, 8]
         merge = _find_longest_common_sequence([seq1, seq2, seq3])
         self.assertEqual(merge, [1, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_skip_special_tokens_skips_intial_prompt(self):
+        encoded_input = [
+            50361,
+            2221,
+            13,
+            2326,
+            388,
+            391,
+            50258,
+            50259,
+            50359,
+            50363,
+            1282,
+            264,
+            2674,
+            9156,
+            295,
+            1523,
+            11,
+            2221,
+            13,
+            2326,
+            388,
+            391,
+            13657,
+            365,
+            2681,
+            21296,
+            17711,
+            13,
+            50257,
+        ]
+        expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
+        expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
+
+        self.assertEqual(self.tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(
+            self.tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
+        )
 
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):

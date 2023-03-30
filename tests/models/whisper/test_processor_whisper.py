@@ -146,3 +146,11 @@ class WhisperProcessorTest(unittest.TestCase):
 
         expected_ids = [TRANSCRIBE, NOTIMESTAMPS]
         self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
+
+    def test_create_initial_prompt_ids(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        initial_prompt_ids = processor.create_initial_prompt_ids("Mr. Quilter")
+        decoded_initial_prompt = processor.tokenizer.decode(initial_prompt_ids)
+
+        self.assertListEqual(initial_prompt_ids, [50360, 1770, 13, 2264, 346, 353])
+        self.assertEqual(decoded_initial_prompt, "<|startofprev|> Mr. Quilter")

@@ -16,7 +16,7 @@
 
 import math
 import random
-from typing import Optional, Tuple, Union, List
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1523,9 +1523,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             initial_prompt_ids (`List[int]`, *optional*):
-                Optional list of token IDs created by passing text to `model.processor.create_initial_prompt_ids` and provided as a prompt for the first window. This can be used to provide or
-                "prompt-engineer" a context for transcription, e.g. custom vocabularies or proper nouns
-                to make it more likely to predict those word correctly.
+                Optional list of token IDs created by passing text to `processor.create_initial_prompt_ids` that is
+                provided as a prompt for the first window. This can be used to provide or "prompt-engineer" a context
+                for transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those
+                word correctly.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1629,7 +1630,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             initial_prompt_ids.append(generation_config.decoder_start_token_id)
             initial_prompt_ids.extend([id for _, id in generation_config.forced_decoder_ids])
             indexed_initial_prompt_ids = [[idx + 1, id] for idx, id in enumerate(initial_prompt_ids)]
-            kwargs.update({"forced_decoder_ids": indexed_initial_prompt_ids })
+            kwargs.update({"forced_decoder_ids": indexed_initial_prompt_ids})
 
         return super().generate(
             inputs,

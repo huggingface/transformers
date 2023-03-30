@@ -1429,6 +1429,28 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
+    @slow
+    def test_generate_with_intial_prompt(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-base")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
+        model.to(torch_device)
+        input_speech = self._load_datasamples(7)[-1]
+        input_features = processor(input_speech, return_tensors="pt").input_features
+
+        # Generate without initial prompt
+        output_without_initial_prompt = model.generate(input_features, max_new_tokens=128)
+        actual_without_initial_prompt = processor.decode(output_without_initial_prompt[0], skip_special_tokens=True)
+
+        # Generate with initial prompt
+        intial_prompt_ids = processor.create_initial_prompt_ids("Mr. Quilter")
+        output_with_initial_prompt = model.generate(
+            input_features, initial_prompt_ids=intial_prompt_ids, max_new_tokens=128
+        )
+        actual_with_initial_prompt = processor.decode(output_with_initial_prompt[0], skip_special_tokens=True)
+
+        self.assertTrue("Mr. Quilter" not in actual_without_initial_prompt)
+        self.assertTrue("Mr. Quilter" in actual_with_initial_prompt)
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
