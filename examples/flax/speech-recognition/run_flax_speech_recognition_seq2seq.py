@@ -34,7 +34,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from datasets import Dataset, DatasetDict, load_dataset, load_metric
+from datasets import Dataset, DatasetDict, load_dataset
+import evaluate
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
@@ -596,7 +597,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = load_metric("wer")
+    metric = evaluate.load("wer")
 
     def compute_metrics(preds, labels):
         # replace padded labels by the padding token
