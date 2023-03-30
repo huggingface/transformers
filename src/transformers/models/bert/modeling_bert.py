@@ -55,7 +55,6 @@ from .configuration_bert import BertConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
-_CHECKPOINT_FOR_DOC_BIS = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 
 # TokenClassification docstring
