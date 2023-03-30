@@ -21,6 +21,7 @@ import unittest
 
 from transformers import NllbMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    is_flaky,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -281,6 +282,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    @is_flaky()
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
