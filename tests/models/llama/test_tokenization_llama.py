@@ -308,16 +308,17 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch
     def integration_tests(self):
         inputs = self.tokenizer(
-            "The following string should be properly encoded: Hello. But ird and ปี   ird   ด", return_tensors="pt"
+            ["The following string should be properly encoded: Hello.", "But ird and ปี   ird   ด"],
+            return_tensors="pt",
         )
 
         self.assertEqual(
             nested_simplify(inputs),
             {
-                # A, test, EOS, en_XX
-                "input_ids": [[70, 7356, 2, 256047]],
-                "attention_mask": [[1, 1, 1, 1]],
-                # ar_AR
-                "forced_bos_token_id": 256057,
+                "input_ids": [
+                    [1, 450, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889],
+                    [1, 1205, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718],
+                ],
+                "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
         )
