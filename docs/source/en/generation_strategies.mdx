@@ -216,11 +216,11 @@ We pride ourselves on being the best in the business and our customer service is
 ### Multinomial sampling
 
 As opposed to greedy search that always chooses a token with the highest probability as the
-next token, multinomial sampling randomly selects the next token based on the probability distribution over the entire
+next token, multinomial sampling (also called ancestral sampling) randomly selects the next token based on the probability distribution over the entire
 vocabulary given by the model. Every token with a non-zero probability has a chance of being selected, thus reducing the
 risk of repetition.
 
-To enable multinomial sampling set `do_sample=True`.
+To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -232,7 +232,7 @@ To enable multinomial sampling set `do_sample=True`.
 >>> prompt = "Today was an amazing day because"
 >>> inputs = tokenizer(prompt, return_tensors="pt")
 
->>> outputs = model.generate(**inputs, do_sample=True, max_new_tokens=100)
+>>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough. \
 It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and \
