@@ -1817,6 +1817,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             self.model.decoder.class_embed = self.class_embed
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
+
         # Initialize weights and apply final processing
         self.post_init()
 
