@@ -354,14 +354,14 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tokenizer(self):
-        return NllbTokenizer.from_pretrained("ArthurZ/random-nllb-moe-2-experts")
+        return NllbTokenizer.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts")
 
     @cached_property
     def big_model(self):
         return NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
 
     def inference_no_head(self):
-        model = NllbMoeModel.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
+        model = NllbMoeModel.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
         with torch.no_grad():
             output = model(**self.model_inputs)
         # fmt: off
@@ -382,7 +382,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of NLLB-MoE transformers. We only check the logits
         of the second sample of the batch, as it is padded.
         """
-        model = NllbMoeForConditionalGeneration.from_pretrained("ArthurZ/random-nllb-moe-2-experts").eval()
+        model = NllbMoeForConditionalGeneration.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
         with torch.no_grad():
             output = model(**self.model_inputs)
 
