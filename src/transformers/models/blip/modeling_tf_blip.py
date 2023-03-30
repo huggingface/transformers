@@ -25,6 +25,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
+    keras_serializable,
     shape_list,
     unpack_inputs,
 )
@@ -561,6 +562,7 @@ BLIP_INPUTS_DOCSTRING = r"""
 """
 
 
+@keras_serializable
 class TFBlipEncoder(tf.keras.layers.Layer):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -576,6 +578,7 @@ class TFBlipEncoder(tf.keras.layers.Layer):
         self.config = config
         self.layers = [TFBlipEncoderLayer(config, name=f"layers_._{i}") for i in range(config.num_hidden_layers)]
 
+    @unpack_inputs
     def call(
         self,
         inputs_embeds,

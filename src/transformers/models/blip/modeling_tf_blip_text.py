@@ -28,9 +28,11 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
+    keras_serializable,
     shape_list,
     unpack_inputs,
 )
+from ...tf_utils import stable_softmax
 from ...utils import add_start_docstrings_to_model_forward, logging
 from .configuration_blip import BlipTextConfig
 
@@ -233,7 +235,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
             attention_scores = attention_scores + tf.cast(attention_mask, attention_scores.dtype)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = stable_softmax(attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -408,12 +410,14 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
+@keras_serializable
 class TFBlipTextEncoder(tf.keras.layers.Layer):
     def __init__(self, config, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.config = config
         self.layer = [TFBlipTextLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
+    @unpack_inputs
     def call(
         self,
         hidden_states,
