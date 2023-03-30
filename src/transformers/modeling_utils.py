@@ -1718,23 +1718,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
-        # Disable to see the damage.
         if safe_serialization:
-            from collections import defaultdict
-
-            ptrs = defaultdict(list)
+            # Safetensors does not allow tensor aliasing.
+            # We're going to remove aliases before saving
+            ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
                 ptrs[tensor.data_ptr()].append(name)
 
+            # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
             warn_names = set()
             for _, names in shared_ptrs.items():
+                # Removing the keys which are declared as known duplicates on
+                # load. This allows to make sure the name which is kept is consistent.
                 if self._keys_to_ignore_on_load_missing is not None:
                     for name in names:
                         for pat in self._keys_to_ignore_on_load_missing:
                             if re.search(pat, name):
                                 if name in state_dict:
                                     del state_dict[name]
+
+                # When not all duplicates have been cleaned
+                # Still remove those keys, but put a clear warning
+                # Since if the link between tensors was done at runtime
+                # then `from_pretrained` will still not get the key back
+                # Leading to random tensor. With a proper warning.
                 found = 0
                 for name in names:
                     if name in state_dict:
