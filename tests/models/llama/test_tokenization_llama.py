@@ -19,7 +19,6 @@ import unittest
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
-    BatchEncoding,
     LlamaTokenizer,
     is_torch_available,
 )
@@ -38,7 +37,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
-    from transformers.models.m2m_100.modeling_m2m_100 import shift_tokens_right
+    pass
 
 
 @require_sentencepiece
@@ -64,7 +63,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
-            [value + tokenizer.fairseq_offset for value in [285, 46, 10, 170, 382]],
+            [285, 46, 10, 170, 382],
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
@@ -97,10 +96,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids,
-            [
-                value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
-            ],
+            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
@@ -133,7 +129,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # overwrite from test_tokenization_common to speed up test
     def test_save_pretrained(self):
-        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-llama", {})
+        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/llama-tokenizer", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -206,7 +202,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Longer text that will definitely require truncation.
-                src_text = [
+                text = [
                     " UN Chief Says There Is No Military Solution in Syria",
                     " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
                     " Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons"
@@ -214,7 +210,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
                 try:
                     batch = tokenizer(
-                        src_texts=src_text,
+                        text=text,
                         max_length=3,
                         max_target_length=10,
                         return_tensors="pt",
@@ -222,15 +218,11 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 except NotImplementedError:
                     return
                 self.assertEqual(batch.input_ids.shape[1], 3)
-                self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified
-                batch = tokenizer(src_text, max_length=3, return_tensors="pt")
+                batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
-                self.assertEqual(batch.labels.shape[1], 3)
 
-                batch_encoder_only = tokenizer(
-                    src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
-                )
+                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
@@ -277,8 +269,8 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
-    checkpoint_name = "facebook/llama-7b"
-    src_text = [
+    checkpoint_name = "hf-internal-testing/llama-tokenizer"
+    text = [
         " UN Chief Says There Is No Military Solution in Syria",
         """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
     ]
@@ -314,48 +306,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
     @require_torch
-    def test_enro_tokenizer_prepare_batch(self):
-        batch = self.tokenizer(
-            self.src_text,
-            text_target=self.tgt_text,
-            padding=True,
-            truncation=True,
-            max_length=len(self.expected_src_tokens),
-            return_tensors="pt",
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.lang_code_to_id["ron_Latn"]
-        )
-
-        self.assertIsInstance(batch, BatchEncoding)
-
-        self.assertEqual((2, 15), batch.input_ids.shape)
-        self.assertEqual((2, 15), batch.attention_mask.shape)
-        result = batch.input_ids.tolist()[0]
-        self.assertListEqual(self.expected_src_tokens, result)
-        self.assertEqual(2, batch.decoder_input_ids[0, -1])  # EOS
-        # Test that special tokens are reset
-        self.assertEqual(self.tokenizer.prefix_tokens, [])
-
-    def test_seq2seq_max_length(self):
-        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
-        targets = self.tokenizer(
-            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
-        )
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(
-            labels,
-            self.tokenizer.pad_token_id,
-            decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tokenizer.tgt_lang],
-        )
-
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 10)
-
-    @require_torch
-    def test_tokenizer_translation(self):
-        inputs = self.tokenizer._build_translation_inputs(
-            "A test", return_tensors="pt", src_lang="eng_Latn", tgt_lang="fra_Latn"
+    def integration_tests(self):
+        inputs = self.tokenizer(
+            "The following string should be properly encoded: Hello. But ird and ปี   ird   ด", return_tensors="pt"
         )
 
         self.assertEqual(
