@@ -249,6 +249,14 @@ class ImageTransformsTester(unittest.TestCase):
         # PIL size is in (width, height) order
         self.assertEqual(resized_image.size, (40, 30))
 
+        # Check an image with float values between 0-1 is returned with values in this range
+        image = np.random.rand(3, 224, 224)
+        resized_image = resize(image, (30, 40))
+        self.assertIsInstance(resized_image, np.ndarray)
+        self.assertEqual(resized_image.shape, (3, 30, 40))
+        self.assertTrue(np.all(resized_image >= 0))
+        self.assertTrue(np.all(resized_image <= 1))
+
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
