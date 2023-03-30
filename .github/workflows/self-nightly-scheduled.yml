@@ -1,4 +1,4 @@
-name: Self-hosted runner (nightly)
+name: Self-hosted runner (nightly-ci)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -8,9 +8,7 @@ name: Self-hosted runner (nightly)
 
 on:
   repository_dispatch:
-# Disable temporarily until the test suite can be run under 12 hours.
-#  schedule:
-#    - cron: "0 16 * * *"
+  workflow_call:
 
 env:
   HF_HOME: /mnt/cache
@@ -33,7 +31,7 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-scheduled-ci-runner-docker,multi-gpu-scheduled-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-past-ci-runner-docker,multi-gpu-past-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
   check_runners:
     name: Check Runners
@@ -41,7 +39,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -56,7 +54,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -96,7 +94,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -143,7 +141,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
@@ -153,7 +151,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -200,7 +198,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_all_tests_torch_cuda_extensions_gpu:
@@ -209,7 +207,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     needs: setup
     container:
       image: huggingface/transformers-pytorch-deepspeed-nightly-gpu
@@ -258,7 +256,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
+          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports_postfix_nightly
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   send_results:
@@ -292,7 +290,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_PAST_FUTURE }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: nightly-build
+          CI_EVENT: Nightly CI
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
           RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
           SETUP_STATUS: ${{ needs.setup.result }}
@@ -302,3 +300,11 @@ jobs:
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+
+
+      # delete-artifact
+      - uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+              single-*
+              multi-*

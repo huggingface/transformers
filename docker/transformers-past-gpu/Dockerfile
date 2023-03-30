@@ -1,4 +1,4 @@
-ARG BASE_DOCKER_IMAGE="nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04"
+ARG BASE_DOCKER_IMAGE
 FROM $BASE_DOCKER_IMAGE
 LABEL maintainer="Hugging Face"
 
@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 SHELL ["sh", "-lc"]
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs libaio-dev
 RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
@@ -23,6 +23,9 @@ RUN cd transformers && python3 setup.py develop
 ARG FRAMEWORK
 ARG VERSION
 
+# Control `setuptools` version to avoid some issues
+RUN [ "$VERSION" != "1.9" -a "$VERSION" != "1.10" ] && python3 -m pip install -U setuptools || python3 -m pip install -U "setuptools<=59.5"
+
 # Remove all frameworks
 # (`accelerate` requires `torch`, and this causes import issues for TF-only testing)
 RUN python3 -m pip uninstall -y torch torchvision torchaudio accelerate tensorflow jax flax
@@ -34,4 +37,20 @@ RUN python3 ./transformers/utils/past_ci_versions.py --framework $FRAMEWORK --ve
 RUN echo "INSTALL_CMD = $INSTALL_CMD"
 RUN $INSTALL_CMD
 
+RUN [ "$FRAMEWORK" != "pytorch" ] && echo "`deepspeed-testing` installation is skipped" || python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+
+# Uninstall `torch-tensorrt` and `apex` shipped with the base image
+RUN python3 -m pip uninstall -y torch-tensorrt apex
+
+# Pre-build **nightly** release of DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
+RUN python3 -m pip uninstall -y deepspeed
+# This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
+# Issue: https://github.com/microsoft/DeepSpeed/issues/2010
+# RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
+#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
+
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
+
+# When installing in editable mode, `transformers` is not recognized as a package.
+# this line must be added in order for python to be aware of transformers.
+RUN cd transformers && python3 setup.py develop

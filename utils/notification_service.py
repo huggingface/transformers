@@ -590,23 +590,20 @@ class Message:
                     time.sleep(1)
 
 
-def retrieve_artifact(name: str, gpu: Optional[str]):
+def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
-    if gpu is not None:
-        name = f"{gpu}-gpu_{name}"
-
     _artifact = {}
 
-    if os.path.exists(name):
-        files = os.listdir(name)
+    if os.path.exists(artifact_path):
+        files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(name, file)) as f:
+                with open(os.path.join(artifact_path, file)) as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
-                raise ValueError(f"Could not open {os.path.join(name, file)}.") from e
+                raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
 
     return _artifact
 
@@ -629,8 +626,14 @@ def retrieve_available_artifacts():
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
-        if directory.startswith("single-gpu"):
-            artifact_name = directory[len("single-gpu") + 1 :]
+        artifact_name = directory
+
+        name_parts = artifact_name.split("_postfix_")
+        if len(name_parts) > 1:
+            artifact_name = name_parts[0]
+
+        if artifact_name.startswith("single-gpu"):
+            artifact_name = artifact_name[len("single-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
@@ -639,7 +642,7 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
-        elif directory.startswith("multi-gpu"):
+        elif artifact_name.startswith("multi-gpu"):
             artifact_name = directory[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
@@ -649,7 +652,6 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="multi")
         else:
-            artifact_name = directory
             if artifact_name not in _available_artifacts:
                 _available_artifacts[artifact_name] = Artifact(artifact_name)
 
@@ -805,10 +807,12 @@ if __name__ == "__main__":
         framework, version = ci_event.replace("Past CI - ", "").split("-")
         framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
         job_name_prefix = f"{framework} {version}"
+    elif ci_event.startswith("Nightly CI"):
+        job_name_prefix = "Nightly CI"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
@@ -901,7 +905,7 @@ if __name__ == "__main__":
             else:
                 additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
 
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
