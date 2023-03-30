@@ -49,7 +49,7 @@ PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
-# List here the models to always test. 
+# List here the models to always test.
 IMPORTANT_MODELS = [
     # Most downloaded models
     "bert",
