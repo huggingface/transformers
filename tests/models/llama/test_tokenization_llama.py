@@ -53,6 +53,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # We have a SentencePiece fixture for testing
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
@@ -270,40 +271,12 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
     checkpoint_name = "hf-internal-testing/llama-tokenizer"
-    text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
-    ]
-    expected_src_tokens = [
-        16297,
-        134408,
-        8165,
-        248066,
-        14734,
-        950,
-        1135,
-        105721,
-        3573,
-        83,
-        27352,
-        108,
-        49486,
-        2,
-        256047,
-    ]
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(cls.checkpoint_name)
         cls.pad_token_id = 1
         return cls
-
-    def test_special_tokens_unaffacted_by_save_load(self):
-        tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
-        self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = LlamaTokenizer.from_pretrained(tmpdirname)
-        self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
     @require_torch
     def integration_tests(self):
