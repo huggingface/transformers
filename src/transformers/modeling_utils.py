@@ -1720,21 +1720,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[ignore_key]
         # Disable to see the damage.
         if safe_serialization:
-            if self._keys_to_ignore_on_load_missing is not None:
-                from collections import defaultdict
+            from collections import defaultdict
 
-                ptrs = defaultdict(list)
-                for name, tensor in state_dict.items():
-                    ptrs[tensor.data_ptr()].append(name)
+            ptrs = defaultdict(list)
+            for name, tensor in state_dict.items():
+                ptrs[tensor.data_ptr()].append(name)
 
-                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-
-                for _, names in shared_ptrs.items():
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+            for _, names in shared_ptrs.items():
+                if self._keys_to_ignore_on_load_missing is not None:
                     for name in names:
                         for pat in self._keys_to_ignore_on_load_missing:
                             if re.search(pat, name):
                                 if name in state_dict:
                                     del state_dict[name]
+                found = 0
+                for name in names:
+                    if name in state_dict:
+                        found += 1
+                        if found > 1:
+                            del state_dict[name]
+                            raise ValueError(".")
+                            logger.warning(
+                                "Removed shared tensor {name} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading"
+                            )
 
         # Shard the model if it is too big.
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
@@ -2814,6 +2823,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
+        existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
+        missing_keys = [
+            k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
+        ]
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
                 missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
