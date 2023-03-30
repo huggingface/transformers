@@ -31,11 +31,42 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings_to_model_forward, logging
 from .configuration_blip import BlipTextConfig
 
 
 logger = logging.get_logger(__name__)
+
+BLIP_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L52
@@ -659,6 +690,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
+    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     @unpack_inputs
     def call(
         self,
@@ -853,6 +885,7 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             attentions=attns,
         )
 
+    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     @unpack_inputs
     def call(
         self,

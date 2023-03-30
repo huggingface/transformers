@@ -37,7 +37,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
-from .modeling_tf_blip_text import TFBlipTextLMHeadModel, TFBlipTextModel
+from .modeling_tf_blip_text import BLIP_TEXT_INPUTS_DOCSTRING, TFBlipTextLMHeadModel, TFBlipTextModel
 
 
 logger = logging.get_logger(__name__)
@@ -507,37 +507,6 @@ BLIP_START_DOCSTRING = r"""
         config ([`BlipConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BLIP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 BLIP_VISION_INPUTS_DOCSTRING = r"""
