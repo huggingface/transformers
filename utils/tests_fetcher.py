@@ -472,6 +472,39 @@ def _print_list(l):
     return "\n".join([f"- {f}" for f in l])
 
 
+def create_json_map(test_files_to_run, json_output_file):
+    if json_output_file is None:
+        return
+
+    test_map = {}
+    for test_file in test_files_to_run:
+        # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
+        #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
+        #   - `tests/trainer/test_trainer.py` or `tests/trainer`
+        #   - `tests/test_modeling_common.py`
+        names = test_file.split(os.path.sep)
+        if names[1] == "models":
+            # take the part like `models/bert` for modeling tests
+            key = os.path.sep.join(names[1:3])
+        elif len(names) > 2 or not test_file.endswith(".py"):
+            # test folders under `tests` or python files under them
+            # take the part like tokenization, `pipeline`, etc. for other test categories
+            key = os.path.sep.join(names[1:2])
+        else:
+            # common test files directly under `tests/`
+            key = "common"
+
+        if key not in test_map:
+            test_map[key] = []
+        test_map[key].append(test_file)
+
+    # sort the keys & values
+    keys = sorted(test_map.keys())
+    test_map = {k: " ".join(sorted(test_map[k])) for k in keys}
+    with open(json_output_file, "w", encoding="UTF-8") as fp:
+        json.dump(test_map, fp, ensure_ascii=False)
+
+
 def infer_tests_to_run(
     output_file, diff_with_last_commit=False, filters=None, filter_models=True, json_output_file=None
 ):
@@ -530,34 +563,7 @@ def infer_tests_to_run(
         if "tests" in test_files_to_run:
             test_files_to_run = get_all_tests()
 
-        if json_output_file is not None:
-            test_map = {}
-            for test_file in test_files_to_run:
-                # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
-                #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
-                #   - `tests/trainer/test_trainer.py` or `tests/trainer`
-                #   - `tests/test_modeling_common.py`
-                names = test_file.split(os.path.sep)
-                if names[1] == "models":
-                    # take the part like `models/bert` for modeling tests
-                    key = os.path.sep.join(names[1:3])
-                elif len(names) > 2 or not test_file.endswith(".py"):
-                    # test folders under `tests` or python files under them
-                    # take the part like tokenization, `pipeline`, etc. for other test categories
-                    key = os.path.sep.join(names[1:2])
-                else:
-                    # common test files directly under `tests/`
-                    key = "common"
-
-                if key not in test_map:
-                    test_map[key] = []
-                test_map[key].append(test_file)
-
-            # sort the keys & values
-            keys = sorted(test_map.keys())
-            test_map = {k: " ".join(sorted(test_map[k])) for k in keys}
-            with open(json_output_file, "w", encoding="UTF-8") as fp:
-                json.dump(test_map, fp, ensure_ascii=False)
+        create_json_map(test_files_to_run, json_output_file)
 
 
 def filter_tests(output_file, filters):
@@ -585,6 +591,27 @@ def filter_tests(output_file, filters):
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
+
+
+def parse_commit_message(commit_message):
+    """
+    Parses the commit message to detect if a command is there to skip, force all or part of the CI.
+
+    Returns a tuple of three bools for skip, test_all_models and test_all
+    """
+    if commit_message is None:
+        return False, False, False
+
+    command_search = re.search(r"\[([^\]]*)\]", commit_message)
+    if command_search is not None:
+        command = command_search.groups()[0]
+        command = command.lower().replace("-", " ").replace("_", " ")
+        skip = command in ["ci skip", "skip ci", "circleci skip", "skip circleci"]
+        all_models = set(command.split(" ")) == {"test", "all", "models"}
+        test_all = set(command.split(" ")) == {"test", "all"}
+        return skip, all_models, test_all
+    else:
+        return False, False, False
 
 
 if __name__ == "__main__":
@@ -621,12 +648,22 @@ if __name__ == "__main__":
         help="Will only print the tree of modules depending on the file passed.",
         default=None,
     )
+    parser.add_argument(
+        "--commit_message",
+        type=str,
+        help="The commit message (which could contain a command to force all tests or skip the CI).",
+        default=None,
+    )
     args = parser.parse_args()
     if args.print_dependencies_of is not None:
         print_tree_deps_of(args.print_dependencies_of)
     elif args.filter_tests:
         filter_tests(args.output_file, ["pipelines", "repo_utils"])
     else:
+        skip, test_all_models, test_all = parse_commit_message(args.commit_message)
+        if skip:
+            quit()
+
         repo = Repo(PATH_TO_REPO)
 
         diff_with_last_commit = args.diff_with_last_commit
@@ -634,18 +671,26 @@ if __name__ == "__main__":
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
-        try:
-            infer_tests_to_run(
-                args.output_file,
-                diff_with_last_commit=diff_with_last_commit,
-                filters=args.filters,
-                json_output_file=args.json_output_file,
-            )
-            filter_tests(args.output_file, ["repo_utils"])
-        except Exception as e:
-            print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+        if not test_all:
+            try:
+                infer_tests_to_run(
+                    args.output_file,
+                    diff_with_last_commit=diff_with_last_commit,
+                    filters=args.filters,
+                    json_output_file=args.json_output_file,
+                    filter_models=not test_all_models,
+                )
+                filter_tests(args.output_file, ["repo_utils"])
+            except Exception as e:
+                print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+                test_all = True
+
+        if test_all:
             with open(args.output_file, "w", encoding="utf-8") as f:
                 if args.filters is None:
                     f.write("./tests/")
                 else:
                     f.write(" ".join(args.filters))
+
+            test_files_to_run = get_all_tests()
+            create_json_map(test_files_to_run, args.json_output_file)

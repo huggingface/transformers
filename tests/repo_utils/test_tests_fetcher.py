@@ -42,6 +42,7 @@ from tests_fetcher import (  # noqa: E402
     get_module_dependencies,
     get_tree_starting_at,
     infer_tests_to_run,
+    parse_commit_message,
     print_tree_deps_of,
 )
 
@@ -633,3 +634,21 @@ src/transformers/configuration_utils.py
             expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
             expected_tests = set(expected_tests + ["tests/test_modeling_common.py"])
             assert set(tests_to_run.split(" ")) == expected_tests
+
+    def test_parse_commit_message(self):
+        assert parse_commit_message("Normal commit") == (False, False, False)
+
+        assert parse_commit_message("[skip ci] commit") == (True, False, False)
+        assert parse_commit_message("[ci skip] commit") == (True, False, False)
+        assert parse_commit_message("[skip-ci] commit") == (True, False, False)
+        assert parse_commit_message("[skip_ci] commit") == (True, False, False)
+
+        assert parse_commit_message("[test all models] commit") == (False, True, False)
+        assert parse_commit_message("[test models all] commit") == (False, True, False)
+        assert parse_commit_message("[test-all-models] commit") == (False, True, False)
+        assert parse_commit_message("[all_models_test] commit") == (False, True, False)
+
+        assert parse_commit_message("[test all] commit") == (False, False, True)
+        assert parse_commit_message("[all test] commit") == (False, False, True)
+        assert parse_commit_message("[test-all] commit") == (False, False, True)
+        assert parse_commit_message("[all_test] commit") == (False, False, True)
