@@ -1,0 +1,44 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Team Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a clone of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+from transformers import AutoTokenizer, TextStreamer, is_torch_available
+from transformers.testing_utils import CaptureStdout, require_torch, torch_device
+
+from ..test_modeling_common import ids_tensor
+
+
+if is_torch_available():
+    from transformers import AutoModelForCausalLM
+
+
+@require_torch
+class StreamerTester(unittest.TestCase):
+    def test_text_streamer_stdout(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
+        greedy_text = tokenizer.decode(greedy_ids[0])
+
+        with CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer)
+            model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
+
+        # The greedy text should be printed to stdout, except for the final "\n" in the streamer
+        self.assertEqual(cs.out[:-1], greedy_text)

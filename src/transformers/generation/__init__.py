@@ -17,8 +17,7 @@ from typing import TYPE_CHECKING
 from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
-_import_structure = {"configuration_utils": ["GenerationConfig"]}
-
+_import_structure = {"configuration_utils": ["GenerationConfig"], "streamers": ["TextStreamer"]}
 
 try:
     if not is_torch_available():
@@ -150,6 +149,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
+    from .streamers import TextStreamer
 
     try:
         if not is_torch_available():
