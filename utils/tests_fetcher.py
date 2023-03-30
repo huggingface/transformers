@@ -28,7 +28,7 @@ dependencies of each model and the recursively builds the 'reverse' map of depen
 impacted by a given file. We then only keep the tests (and only the code models tests if there are too many modules).
 
 Caveats:
-  - This module only filter tests by files (not individual tests) so it's better to have tests for different things
+  - This module only filters tests by files (not individual tests) so it's better to have tests for different things
     in different files.
   - This module assumes inits are just importing things, not really building objects, so it's better to structure
     them this way and move objects building in separate submodules.
