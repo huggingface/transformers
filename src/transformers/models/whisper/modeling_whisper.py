@@ -16,7 +16,7 @@
 
 import math
 import random
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import numpy as np
 import torch
@@ -1464,6 +1464,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
+        initial_prompt_ids: Optional[List[int]] = None,
         **kwargs,
     ):
         """
@@ -1521,6 +1522,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
+            initial_prompt_ids (`List[int]`, *optional*):
+                Optional list of token IDs created by passing text to `model.processor.create_initial_prompt_ids` and provided as a prompt for the first window. This can be used to provide or
+                "prompt-engineer" a context for transcription, e.g. custom vocabularies or proper nouns
+                to make it more likely to predict those word correctly.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1614,17 +1619,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        prompt = kwargs.pop("prompt", None)
-        if prompt is not None:
+        if initial_prompt_ids is not None:
             if "decoder_start_token_id" in kwargs or "forced_decoder_ids" in kwargs:
                 raise ValueError(
-                    "When specifying `prompt`, you cannot also specify `decoder_start_token_id` or `forced_decoder_ids`"
+                    "When specifying `initial_prompt_ids`, you cannot also specify `decoder_start_token_id` or `forced_decoder_ids`"
                 )
-            kwargs.update({"decoder_start_token_id": prompt.pop(0)})
-            prompt.append(generation_config.decoder_start_token_id)
-            prompt.extend([id for _, id in generation_config.forced_decoder_ids])
-            prompt = [[idx + 1, id] for idx, id in enumerate(prompt)]
-            kwargs.update({"forced_decoder_ids": prompt})
+            # Set <|startofprev|> to the decoder_start_token_id
+            kwargs.update({"decoder_start_token_id": initial_prompt_ids.pop(0)})
+            initial_prompt_ids.append(generation_config.decoder_start_token_id)
+            initial_prompt_ids.extend([id for _, id in generation_config.forced_decoder_ids])
+            indexed_initial_prompt_ids = [[idx + 1, id] for idx, id in enumerate(initial_prompt_ids)]
+            kwargs.update({"forced_decoder_ids": indexed_initial_prompt_ids })
 
         return super().generate(
             inputs,

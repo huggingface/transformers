@@ -586,6 +586,16 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
+        
+        initial_prompt_start_id = self("<|startofprev|>", add_special_tokens=False)["input_ids"][0]
+        has_initial_prompt = (token_ids[0] == initial_prompt_start_id) and len(token_ids) > 1
+        # If an initial prompt was used, we need to remove it as part of the special tokens
+        if has_initial_prompt and skip_special_tokens:
+            for i in range(1, len(token_ids)):
+                initial_prompt_end_idx = i
+                if token_ids[i] in self.all_special_ids:
+                    break
+            token_ids = token_ids[initial_prompt_end_idx:]
         text = super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
