@@ -313,7 +313,6 @@ class BlipAttention(nn.Module):
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        mixed_qkv = self.qkv(hidden_states)
         mixed_qkv = (
             self.qkv(hidden_states)
             .reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads)
