@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# Query for SDA usage, asuming only one SDA in use
+
+set -f  	# in order to prevent a literal asterisk "*" from expanding
+
+query_process_info() {
+    local moreh_smi_output=$(moreh-smi)
+
+    local sda=$(echo $moreh_smi_output | awk -F'|' '{print $13}')
+    local mem=$(echo $moreh_smi_output | awk -F'|' '{print $14}')
+    local full_cmd=$(echo $moreh_smi_output | awk -F'|' '{print $27}')
+    local timestamp=$(date)
+
+    [[ -z $full_cmd || -z $mem ]] && return 
+
+    printf "%s|%s|%s|%s\n" "$timestamp" "$mem" "$sda" "$full_cmd"
+}
+
+
+while true; do 
+    info=$(query_process_info)
+    if [[ -z $info ]]; then
+	continue
+    else
+    	echo $info 
+    fi 
+    sleep 1m
+done

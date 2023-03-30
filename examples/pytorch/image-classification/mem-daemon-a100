@@ -2,7 +2,9 @@
 
 
 query_process_info() {
-    local csv_info=$(nvidia-smi --query-compute-apps=timestamp,pid,used_memory --format=csv,noheader,nounits)
+    # assume only one process using GPU at a time, else will break
+    local csv_info=$(nvidia-smi --query-compute-apps=timestamp,pid,used_memory \
+			--format=csv,noheader,nounits)
     [[ -z $csv_info ]] && return
 
     local timestamp=$(echo $csv_info | awk -F',' '{print $1}')
