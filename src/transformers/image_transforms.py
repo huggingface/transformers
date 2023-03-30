@@ -301,6 +301,7 @@ def resize(
 
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
+    do_rescale = False
     if not isinstance(image, PIL.Image.Image):
         do_rescale = _rescale_for_pil_conversion(image)
         image = to_pil_image(image, do_rescale=do_rescale)
