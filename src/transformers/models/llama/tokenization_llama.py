@@ -31,9 +31,16 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/spiece.model",
+    },
+    "tokenizer_file": {
+        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.json",
+    },
+}
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
