@@ -342,6 +342,10 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass
+
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -523,6 +527,10 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass
 
 
 class BlipTextRetrievalModelTester:
