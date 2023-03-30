@@ -671,7 +671,7 @@ def main():
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
-        layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
+        layer_norm_candidates = ["layer_norm", "self_attn_layer_norm", "final_layer_norm", "encoder_attn_layer_norm"]
         layer_norm_named_params = set(
             [
                 layer[-2:]
