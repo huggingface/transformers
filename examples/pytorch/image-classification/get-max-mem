@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+MEM_LOG_FILE="logs/gpu-mem.log"
+
+while read model discard; do
+    max_mem=$(awk -F'|' '/'"${model#*/}"'/ {print $2}' $MEM_LOG_FILE | sort -rn | head -n1)
+    echo $model $max_mem
+done < $1
