@@ -662,7 +662,6 @@ if __name__ == "__main__":
     else:
         repo = Repo(PATH_TO_REPO)
         commit_message = repo.head.commit.message
-        print(commit_message)
         skip, test_all_models, test_all = parse_commit_message(commit_message)
         if skip:
             print("Force-skipping the CI")
