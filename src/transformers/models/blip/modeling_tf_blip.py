@@ -369,6 +369,7 @@ class TFBlipAttention(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         head_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        training: Optional[bool] = None,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor], Optional[Tuple[tf.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -390,7 +391,7 @@ class TFBlipAttention(tf.keras.layers.Layer):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attention_probs = self.dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -446,6 +447,7 @@ class TFBlipEncoderLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         output_attentions: Optional[bool] = False,
+        training: Optional[bool] = None,
     ) -> Tuple[tf.Tensor]:
         """
         Args:
@@ -464,6 +466,7 @@ class TFBlipEncoderLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states,
             head_mask=attention_mask,
             output_attentions=output_attentions,
+            training=training,
         )
         hidden_states = hidden_states + residual
         residual = hidden_states
@@ -611,6 +614,7 @@ class TFBlipEncoder(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBaseModelOutput]:
         r"""
         Args:
@@ -651,6 +655,7 @@ class TFBlipEncoder(tf.keras.layers.Layer):
                 hidden_states,
                 attention_mask,
                 output_attentions=output_attentions,
+                training=training,
             )
 
             hidden_states = layer_outputs[0]
@@ -732,6 +737,7 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -753,6 +759,7 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -839,6 +846,7 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBlipOutput]:
         # Use BLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -852,6 +860,7 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         text_outputs = self.text_model(
@@ -861,6 +870,7 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         image_embeds = vision_outputs[1]
@@ -967,6 +977,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBlipOutput]:
         r"""
         Returns:
@@ -1001,6 +1012,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         return outputs
 
@@ -1161,7 +1173,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
-        training: bool = False,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBlipForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -1191,6 +1203,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         image_embeds = vision_outputs[0]
@@ -1201,6 +1214,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             encoder_hidden_states=image_embeds,
             labels=labels,
             return_dict=return_dict,
+            training=training,
         )
 
         if not return_dict:
@@ -1399,6 +1413,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBlipTextVisionModelOutput]:
         r"""
         Returns:
@@ -1448,6 +1463,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         image_embeds = vision_outputs[0]
@@ -1459,6 +1475,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
             return_dict=return_dict,
+            training=training,
         )
 
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
@@ -1476,6 +1493,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
             encoder_attention_mask=attention_mask,
             labels=labels,
             return_dict=return_dict,
+            training=training,
         )
 
         if labels is not None:
@@ -1678,6 +1696,7 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
     ) -> Union[Tuple, TFBlipImageTextMatchingModelOutput]:
         r"""
         Returns:
@@ -1707,6 +1726,7 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         image_embeds = vision_outputs[0]
@@ -1722,6 +1742,7 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_atts,
             return_dict=return_dict,
+            training=training,
         )
         itm_question_embeds = itm_question_embeds[0] if not return_dict else itm_question_embeds.last_hidden_state
 
@@ -1731,6 +1752,7 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             return_dict=return_dict,
+            training=training,
         )
         no_itm_question_embeds = (
             no_itm_question_embeds[0] if not return_dict else no_itm_question_embeds.last_hidden_state

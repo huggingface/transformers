@@ -164,3 +164,7 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass

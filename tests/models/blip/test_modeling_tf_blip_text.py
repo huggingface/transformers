@@ -165,3 +165,7 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
             except OSError:
                 model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    def test_pt_tf_model_equivalence(self):
+        pass

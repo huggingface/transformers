@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO Check whether 'training' is propagated correctly without us manually specifying it
-# TODO Propagate name correctly
-
 import math
 from typing import Dict, Optional, Tuple
 
@@ -70,7 +67,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
-    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
+    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0, training=None):
         if input_ids is not None:
             input_shape = tf.shape(input_ids)
         else:
@@ -100,7 +97,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
+        embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
 
@@ -154,6 +151,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        training=None,
     ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -208,7 +206,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
+        attention_probs_dropped = self.dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -226,7 +224,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BlipText,BertConfig->BlipTextConfig
+# Adapted from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
 class TFBlipTextSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
@@ -237,7 +235,7 @@ class TFBlipTextSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: Optional[bool] = None) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -262,6 +260,7 @@ class TFBlipTextAttention(tf.keras.layers.Layer):
         encoder_attention_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
+        training: Optional[bool] = None,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -271,8 +270,9 @@ class TFBlipTextAttention(tf.keras.layers.Layer):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            training=training,
         )
-        attention_output = self.self_output(self_outputs[0], hidden_states)
+        attention_output = self.self_output(self_outputs[0], hidden_states, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -338,6 +338,7 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        training=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -347,6 +348,7 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
+            training=training,
         )
         attention_output = self_attention_outputs[0]
 
@@ -361,11 +363,12 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
                 encoder_hidden_states,
                 encoder_attention_mask,
                 output_attentions=output_attentions,
+                training=training,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.self_output(intermediate_output, attention_output)
+        layer_output = self.self_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + outputs
 
         outputs = outputs + (present_key_value,)
@@ -392,6 +395,7 @@ class TFBlipTextEncoder(tf.keras.layers.Layer):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        training=None,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -415,6 +419,7 @@ class TFBlipTextEncoder(tf.keras.layers.Layer):
                 encoder_attention_mask,
                 past_key_value,
                 output_attentions,
+                training=training,
             )
 
             hidden_states = layer_outputs[0]
@@ -669,6 +674,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         is_decoder=False,
+        training=None,
     ):
         r"""
         encoder_hidden_states  (`tf.Tensor`, *optional*):
@@ -770,6 +776,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -862,6 +869,7 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         return_dict=None,
         return_logits=False,
         is_decoder=True,
+        training=None,
     ):
         r"""
         encoder_hidden_states (`tf.Tensor`, *optional*): Sequence of
@@ -903,6 +911,7 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             is_decoder=is_decoder,
+            training=training,
         )
 
         sequence_output = outputs[0]
