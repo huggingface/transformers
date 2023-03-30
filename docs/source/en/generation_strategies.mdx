@@ -139,6 +139,29 @@ one for summarization with beam search). You must have the right Hub permissions
 ['Les fichiers de configuration sont faciles à utiliser !']
 ```
 
+## Streaming
+
+The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible any instance
+from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
+`end()` is used to flag the end of text generation.
+
+In practice, you can craft your own streaming class for all sorts of purposes! We also have basic streaming classes
+ready for you to use. For example, you can use the [`TextStreamer`] class to stream the output of `generate()` into
+your screen, one word at a time:
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
+
+>>> tok = AutoTokenizer.from_pretrained("gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+>>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
+>>> streamer = TextStreamer(tok)
+
+>>> # Despite returning the usual output, the streamer will also print the generated text to stdout.
+>>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
+An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
+```
+
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
