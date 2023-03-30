@@ -49,13 +49,31 @@ PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
-# List here the models to always test.
+# List here the models to always test. 
 IMPORTANT_MODELS = [
+    # Most downloaded models
     "bert",
-    "gpt2",
+    "clip",
     "t5",
-    "vit",
+    "xlm-roberta",
+    "gpt2",
+    "bart",
+    "mpnet",
+    "gpt-j",
     "wav2vec2",
+    "deberta-v2",
+    "layoutlm",
+    "opt",
+    "longformer",
+    "vit",
+    # Pipeline-specific model (to be sure each pipeline has one model in this list)
+    "tapas",
+    "vilt",
+    "clap",
+    "detr",
+    "owlvit",
+    "dpt",
+    "videomae",
 ]
 
 
