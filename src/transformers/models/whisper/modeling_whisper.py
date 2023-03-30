@@ -1614,6 +1614,18 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
+        prompt = kwargs.pop("prompt", None)
+        if prompt is not None:
+            if "decoder_start_token_id" in kwargs or "forced_decoder_ids" in kwargs:
+                raise ValueError(
+                    "When specifying `prompt`, you cannot also specify `decoder_start_token_id` or `forced_decoder_ids`"
+                )
+            kwargs.update({"decoder_start_token_id": prompt.pop(0)})
+            prompt.append(generation_config.decoder_start_token_id)
+            prompt.extend([id for _, id in generation_config.forced_decoder_ids])
+            prompt = [[idx + 1, id] for idx, id in enumerate(prompt)]
+            kwargs.update({"forced_decoder_ids": prompt})
+
         return super().generate(
             inputs,
             generation_config,

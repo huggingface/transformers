@@ -91,3 +91,9 @@ class WhisperProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def create_initial_prompt_ids(self, text):
+        """Creates an initial prompt for generating text."""
+        initial_prompt = "<|startofprev|>" + " " + text.strip()
+        tokenized_initial_prompt = self.tokenizer(initial_prompt, add_special_tokens=False)
+        return tokenized_initial_prompt["input_ids"]
