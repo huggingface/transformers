@@ -36,7 +36,7 @@ class BaseStreamer:
 
 class TextStreamer(BaseStreamer):
     """
-    Simple text streamer that prints a token as soon as it gets them.
+    Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -47,26 +47,58 @@ class TextStreamer(BaseStreamer):
         ```python
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
-        >>> tok = AutoTokenizer.from_pretrained("distilgpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-        >>> inputs = tok(["This cat is"], return_tensors="pt")
+        >>> tok = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
         >>> streamer = TextStreamer(tok)
-        >>> model.generate(**inputs, streamer=streamer)
+
+        >>> # Despite returning the usual output, the streamer will also print the generated text to stdout.
+        >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
+        An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
         ```
     """
 
     def __init__(self, tokenizer: "AutoTokenizer"):
         self.tokenizer = tokenizer
+        self.token_cache = []
+        self.print_len = 0
 
     def put(self, value):
-        """Prints the token(s) to stdout"""
+        """
+        Recives tokens, decodes them, and prints them to stdout as soon as they form entire words.
+        """
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
         elif len(value.shape) > 1:
             value = value[0]
-        text = self.tokenizer.decode(value)
-        print(text, flush=True, end="")
+
+        # Add the new token to the cache and decodes the entire thing.
+        self.token_cache.extend(value.tolist())
+        text = self.tokenizer.decode(self.token_cache)
+
+        # After symbol for a new line, we flush the cache.
+        if text.endswith("\n"):
+            printable_text = text[self.print_len :]
+            self.token_cache = []
+            self.print_len = 0
+        # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
+        # which may change with the subsequent token -- there are probably smarter ways to do this!)
+        else:
+            printable_text = text[self.print_len : text.rfind(" ") + 1]
+            self.print_len += len(printable_text)
+
+        print(printable_text, flush=True, end="")
 
     def end(self):
-        """Prints a newline to stdout"""
-        print("", flush=True)
+        """Flushes any remaining cache and prints a newline to stdout."""
+        # Flush the cache, if it exists
+        if len(self.token_cache) > 0:
+            text = self.tokenizer.decode(self.token_cache)
+            printable_text = text[self.print_len :]
+            self.token_cache = []
+            self.print_len = 0
+        else:
+            printable_text = ""
+
+        # Print a newline (and the remaining text, if any)
+        print(printable_text, flush=True)
