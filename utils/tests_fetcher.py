@@ -662,7 +662,12 @@ if __name__ == "__main__":
     else:
         skip, test_all_models, test_all = parse_commit_message(args.commit_message)
         if skip:
+            print("Force-skipping the CI")
             quit()
+        if test_all_models:
+            print("Testing all models found.")
+        if test_all:
+            print("Force- launching all tests")
 
         repo = Repo(PATH_TO_REPO)
 

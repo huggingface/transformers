@@ -34,7 +34,9 @@ jobs:
             - run: pip install GitPython
             - run: pip install .
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - run: git log --format=oneline -n 1 $CIRCLE_SHA1 >> "$GIT_COMMIT_MSG"
+            - run: echo $GIT_COMMIT_MSG
+            - run: python utils/tests_fetcher.py --commit_message "$GIT_COMMIT_MESSAGE" | tee tests_fetched_summary.txt
             - store_artifacts:
                   path: ~/transformers/tests_fetched_summary.txt
             - run: |
