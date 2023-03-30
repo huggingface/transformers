@@ -486,13 +486,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         self.encoder = ConvNextEncoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        out_feature_channels = {}
-        out_feature_channels["stem"] = config.hidden_sizes[0]
-        for idx, stage in enumerate(self.stage_names[1:]):
-            out_feature_channels[stage] = config.hidden_sizes[idx]
-
-        self.out_feature_channels = out_feature_channels
+        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
@@ -502,10 +496,6 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
 
         # initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
