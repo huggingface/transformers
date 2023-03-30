@@ -660,7 +660,10 @@ if __name__ == "__main__":
     elif args.filter_tests:
         filter_tests(args.output_file, ["pipelines", "repo_utils"])
     else:
-        skip, test_all_models, test_all = parse_commit_message(args.commit_message)
+        repo = Repo(PATH_TO_REPO)
+        commit_message = repo.head.commit.message
+        print(commit_message)
+        skip, test_all_models, test_all = parse_commit_message(commit_message)
         if skip:
             print("Force-skipping the CI")
             quit()
@@ -668,8 +671,6 @@ if __name__ == "__main__":
             print("Testing all models found.")
         if test_all:
             print("Force- launching all tests")
-
-        repo = Repo(PATH_TO_REPO)
 
         diff_with_last_commit = args.diff_with_last_commit
         if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
