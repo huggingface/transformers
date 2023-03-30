@@ -198,7 +198,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 shutil.rmtree(tmpdirname2)
 
     @require_torch
-    def test_prepare_seq2seq_batch(self):
+    def test_batch_tokenization(self):
         if not self.test_seq2seq:
             return
 
@@ -213,7 +213,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     " will only worsen the violence and misery for millions of people.",
                 ]
                 try:
-                    batch = tokenizer.prepare_seq2seq_batch(
+                    batch = tokenizer(
                         src_texts=src_text,
                         max_length=3,
                         max_target_length=10,
@@ -224,11 +224,11 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified
-                batch = tokenizer.prepare_seq2seq_batch(src_text, max_length=3, return_tensors="pt")
+                batch = tokenizer(src_text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 3)
 
-                batch_encoder_only = tokenizer.prepare_seq2seq_batch(
+                batch_encoder_only = tokenizer(
                     src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
                 )
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
