@@ -512,6 +512,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/pvt
+        title: Pyramid Vision Transformer (PVT)
       title: Vision models
     - isExpanded: false
       sections:
