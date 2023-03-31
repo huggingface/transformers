@@ -726,14 +726,8 @@ class TrainingArguments:
         },
     )
     save_safetensors: Optional[bool] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save. "
-                "This will default to True if safetensors are installed and False otherwise. To enforce using torch "
-                "functions, set this to False."
-            )
-        },
+        default=False,
+        metadata={"help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."},
     )
     save_on_each_node: bool = field(
         default=False,
@@ -1182,14 +1176,12 @@ class TrainingArguments:
                 )
 
         safetensors_available = is_safetensors_available()
-        if self.save_safetensors is None:
-            self.save_safetensors = safetensors_available
         if self.save_safetensors and not safetensors_available:
             raise ValueError(f"--save_safetensors={self.save_safetensors} requires safetensors to be installed!")
         if not self.save_safetensors and safetensors_available:
             logger.info(
                 f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
-                f"Safetensors should be a preferred weights saving format due to security and performance reasons."
+                f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
                 f"If your model cannot be saved by safetensors please feel free to open an issue at "
                 f"https://github.com/huggingface/safetensors!"
             )

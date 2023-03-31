@@ -352,9 +352,7 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=None):
-        if safe_weights is None:
-            safe_weights = is_safetensors_available()
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=False):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
@@ -366,10 +364,8 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=None
+        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=False
     ):
-        if safe_weights is None:
-            safe_weights = is_safetensors_available()
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
 
@@ -409,17 +405,21 @@ class TrainerIntegrationCommon:
                 _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder, safe_weights=None):
+    def convert_to_sharded_checkpoint(self, folder, save_safe=False, load_safe=False):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
-        if safe_weights is None:
-            safe_weights = is_safetensors_available()
-
-        if safe_weights:
+        if load_safe:
             loader = safetensors.torch.load_file
             weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
         else:
             loader = torch.load
             weights_file = os.path.join(folder, WEIGHTS_NAME)
+
+        if save_safe:
+            saver = safetensors.torch.save_file
+            shard_name = SAFE_WEIGHTS_NAME
+        else:
+            saver = torch.save
+            shard_name = WEIGHTS_NAME
 
         state_dict = loader(weights_file)
 
@@ -427,7 +427,7 @@ class TrainerIntegrationCommon:
         keys = list(state_dict.keys())
 
         shard_files = [
-            WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))
+            shard_name.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
 
@@ -1441,7 +1441,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     state = dataclasses.asdict(trainer.state)
 
                     checkpoint = os.path.join(tmpdir, "checkpoint-5")
-                    self.convert_to_sharded_checkpoint(checkpoint, safe_weights=initial_safe)
+                    self.convert_to_sharded_checkpoint(checkpoint, load_safe=initial_safe, save_safe=loaded_safe)
 
                     # Reinitialize trainer
                     trainer = get_regression_trainer(
