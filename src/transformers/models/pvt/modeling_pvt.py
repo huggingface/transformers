@@ -633,7 +633,7 @@ PVT_START_DOCSTRING = r"""
 PVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`PVTImageProcessor`]. See [`PVTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PVTImageProcessor.__call__`]
             for details.
 
         output_attentions (`bool`, *optional*):

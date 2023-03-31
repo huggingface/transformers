@@ -77,8 +77,8 @@ class PVTImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = [0.485, 0.456, 0.406],
+        image_std: Optional[Union[float, List[float]]] = [0.229, 0.224, 0.225],
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
