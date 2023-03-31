@@ -587,7 +587,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `str`: The decoded sentence.
         """
         initial_prompt_start_id = self.added_tokens_encoder["<|startofprev|>"]
-        has_initial_prompt = (token_ids[0] == initial_prompt_start_id) and len(token_ids) > 1
+        has_initial_prompt = len(token_ids) > 1 and (token_ids[0] == initial_prompt_start_id)
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_initial_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
