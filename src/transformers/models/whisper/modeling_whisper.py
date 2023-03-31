@@ -1621,9 +1621,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             generation_config.forced_decoder_ids = forced_decoder_ids
 
         if initial_prompt_ids is not None:
-            if "decoder_start_token_id" in kwargs or "forced_decoder_ids" in kwargs:
+            if "decoder_start_token_id":
                 raise ValueError(
-                    "When specifying `initial_prompt_ids`, you cannot also specify `decoder_start_token_id` or `forced_decoder_ids`"
+                    "When specifying `initial_prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
             # Set <|startofprev|> to the decoder_start_token_id
             kwargs.update({"decoder_start_token_id": initial_prompt_ids.pop(0)})
