@@ -106,9 +106,8 @@ if is_torch_available():
     )
     from transformers.modeling_utils import unwrap_model
 
-
-if is_safetensors_available():
-    import safetensors.torch
+    if is_safetensors_available():
+        import safetensors.torch
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
