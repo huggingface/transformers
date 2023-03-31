@@ -2246,8 +2246,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_8bit = quantization_config.load_in_8bit
 
             if load_in_8bit:
-                device_map = "auto"
                 torch_dtype = torch.float16
+
+                if device_map is None:
+                    device_map = "auto"
 
                 if low_cpu_mem_usage is None:
                     low_cpu_mem_usage = True

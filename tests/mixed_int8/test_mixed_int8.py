@@ -151,6 +151,13 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_warns_save_pretrained(self):
+        r"""
+        Test whether trying to save a model after converting it in 8-bit will throw a warning.
+        """
+        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+
     def test_raise_if_config_and_load_in_8bit(self):
         r"""
         Test that loading the model with the config and `load_in_8bit` raises an error
@@ -353,6 +360,38 @@ class MixedInt8T5Test(unittest.TestCase):
         )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
+
+    def test_inference_with_keep_in_fp32_serialized(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly on
+        a serialized model.
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        both cases.
+        """
+        import bitsandbytes as bnb
+
+        from transformers import T5ForConditionalGeneration
+
+        # test with `t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
+
+            # there was a bug with decoders - this test checks that it is fixed
+            self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear8bitLt))
+
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+            _ = model.generate(**encoded_input)
+
+            # test with `flan-t5-small`
+            model = T5ForConditionalGeneration.from_pretrained(
+                self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+            )
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+            _ = model.generate(**encoded_input)
 
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):

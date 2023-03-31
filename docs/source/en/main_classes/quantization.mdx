@@ -74,7 +74,7 @@ Pushing 8bit models on the Hub is strongely encouraged for large models. This wi
 
 ### Load a quantized model from the 🤗 Hub
 
-You can load a quantized model from the Hub by using `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the file `quantization_config.json` is present in the model repository.
+You can load a quantized model from the Hub by using `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
