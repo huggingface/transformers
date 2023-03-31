@@ -143,14 +143,14 @@ class IteratorStreamer(BaseStreamer):
         self.token_cache = []
         self.print_len = 0
         self.queue = Queue()
+        self.stop_signal = None
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        """Gets the next item in the queue"""
         value = self.queue.get()
-        if value is None:
+        if value == self.stop_signal:
             raise StopIteration()
         else:
             return value
@@ -192,4 +192,4 @@ class IteratorStreamer(BaseStreamer):
             printable_text = ""
 
         self.queue.put(printable_text)
-        self.queue.put(None)  # Put the stop signal
+        self.queue.put(self.stop_signal)  # Put the stop signal
