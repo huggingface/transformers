@@ -85,7 +85,7 @@ class GeoVConfig(PretrainedConfig):
         intermediate_size=1024 * 5 * 4,
         layer_norm_eps=1e-4,
         rotary_emb_base=10000,
-        max_position_embeddings=2049,
+        max_position_embeddings=2048,
         use_extra_biases_ffn=False,
         use_cache=True,
         bos_token_id=0,
