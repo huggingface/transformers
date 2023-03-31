@@ -176,7 +176,6 @@ jobs:
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
             - run: make deps_table_check_updated
-            - run: python utils/tests_fetcher.py --sanity_check
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_task_guides.py
 
