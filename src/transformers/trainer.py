@@ -147,9 +147,9 @@ from .utils import (
     is_datasets_available,
     is_in_notebook,
     is_ipex_available,
+    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_safetensors_available,
     is_torch_compile_available,
     is_torch_neuroncore_available,
     is_torch_tpu_available,
@@ -2848,7 +2848,9 @@ class Trainer:
                 state_dict = self.model.state_dict()
 
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors)
+                unwrap_model(self.model).save_pretrained(
+                    output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+                )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if self.args.save_safetensors:
@@ -2856,7 +2858,9 @@ class Trainer:
                 else:
                     torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors)
+            self.model.save_pretrained(
+                output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+            )
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)

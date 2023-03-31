@@ -30,7 +30,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-import safetensors.torch
 from huggingface_hub import HfFolder, Repository, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
@@ -56,6 +55,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_optuna,
     require_ray,
+    require_safetensors,
     require_sentencepiece,
     require_sigopt,
     require_tokenizers,
@@ -70,7 +70,7 @@ from transformers.testing_utils import (
     require_torch_up_to_2_gpus,
     require_torchdynamo,
     require_wandb,
-    slow, require_safetensors,
+    slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
@@ -1165,13 +1165,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, save_safetensors=save_safetensors)
                 trainer.train()
-                self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors)
+                self.check_saved_checkpoints(
+                    tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
+                )
 
             # With a regular model that is not a PreTrainedModel
             with tempfile.TemporaryDirectory() as tmpdir:
-                trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False, save_safetensors=save_safetensors)
+                trainer = get_regression_trainer(
+                    output_dir=tmpdir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
+                )
                 trainer.train()
-                self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors)
+                self.check_saved_checkpoints(
+                    tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
+                )
 
     @require_torch_multi_gpu
     def test_run_seq2seq_double_train_wrap_once(self):
@@ -1424,7 +1430,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for initial_safe in [False, True]:
             for loaded_safe in [False, True]:
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=initial_safe)
+                    trainer = get_regression_trainer(
+                        output_dir=tmpdir,
+                        train_len=128,
+                        save_steps=5,
+                        learning_rate=0.1,
+                        save_safetensors=initial_safe,
+                    )
                     trainer.train()
                     (a, b) = trainer.model.a.item(), trainer.model.b.item()
                     state = dataclasses.asdict(trainer.state)
@@ -1433,7 +1445,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     self.convert_to_sharded_checkpoint(checkpoint, safe_weights=initial_safe)
 
                     # Reinitialize trainer
-                    trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe)
+                    trainer = get_regression_trainer(
+                        output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe
+                    )
 
                     trainer.train(resume_from_checkpoint=checkpoint)
                     (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -1606,7 +1620,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     save_steps=5,
                     load_best_model_at_end=True,
                     save_safetensors=save_safetensors,
-                    pretrained=pretrained
+                    pretrained=pretrained,
                 )
                 self.assertFalse(trainer.args.greater_is_better)
                 trainer.train()
@@ -1614,7 +1628,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.check_best_model_has_been_loaded(
                     tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained, safe_weights=save_safetensors
                 )
-
 
     @slow
     def test_trainer_eval_mrpc(self):
