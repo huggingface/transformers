@@ -539,7 +539,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self,
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
@@ -548,6 +548,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text

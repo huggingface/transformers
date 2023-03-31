@@ -24,15 +24,13 @@ ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
-## TODO: Handle these in a python utility script
-#RUN [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
-#RUN echo torch=$VERSION
-## `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
-## Currently, let's just use their latest releases (when `torch` is installed with a release version)
-## TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
-#RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
-
-RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu117
+# TODO: Handle these in a python utility script
+RUN [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
+RUN echo torch=$VERSION
+# `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
+# Currently, let's just use their latest releases (when `torch` is installed with a release version)
+# TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -U tensorflow==2.11
 RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
@@ -56,8 +54,8 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
-## For `dinat` model
-#RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+# For `dinat` model
+RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

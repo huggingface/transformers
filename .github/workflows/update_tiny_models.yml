@@ -1,0 +1,47 @@
+name: Update Tiny Models
+
+on:
+  push:
+    branches:
+      - update_tiny_models*
+  repository_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+env:
+  TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
+
+jobs:
+  update_tiny_models:
+    name: Update tiny models
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Install
+        run: |
+            python -m pip install -U .[dev]
+            python -m pip install -U natten
+
+      - name: Update tiny models
+        run: | 
+          python utils/update_tiny_models.py
+
+      - name: Full report
+        run: cat tiny_models/reports/tiny_model_creation_report.json
+
+      - name: Failure report
+        run: cat tiny_models/reports/simple_failed_report.txt
+
+      - name: Summary report
+        run: cat tiny_models/reports/tiny_model_summary.json
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: tiny_model_creation_reports
+          path: tiny_models/reports

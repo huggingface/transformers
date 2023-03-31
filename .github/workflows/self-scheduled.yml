@@ -10,6 +10,9 @@ on:
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
+  push:
+    branches:
+      - run_scheduled_ci*
 
 env:
   HF_HOME: /mnt/cache
