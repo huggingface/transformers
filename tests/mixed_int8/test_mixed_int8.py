@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import os
 import tempfile
 import unittest
 
 from packaging import version
 
 from transformers import (
+    AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
@@ -109,28 +109,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         gc.collect()
         torch.cuda.empty_cache()
-
-    def test_config_save_pretrained(self):
-        r"""
-        A simple test to test if the config is saved correctly.
-        """
-        config = BitsAndBytesConfig()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            config = BitsAndBytesConfig.from_pretrained(tmp_dir)
-            self.assertFalse(config.llm_int8_enable_fp32_cpu_offload)
-
-            # assert that `quantization_config.json` is inside the directory
-            self.assertTrue("quantization_config.json" in os.listdir(tmp_dir))
-
-        config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            config = BitsAndBytesConfig.from_pretrained(tmp_dir)
-            self.assertTrue(config.llm_int8_enable_fp32_cpu_offload)
-
-            # assert that `quantization_config.json` is inside the directory
-            self.assertTrue("quantization_config.json" in os.listdir(tmp_dir))
 
     def test_memory_footprint(self):
         r"""
@@ -244,8 +222,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname)
 
-            # check that the file `quantization_config.json` is present
-            self.assertTrue(os.path.exists(os.path.join(tmpdirname, "quantization_config.json")))
+            # check that the file `quantization_config` is present
+            config = AutoConfig.from_pretrained(tmpdirname)
+            self.assertTrue(hasattr(config, "quantization_config"))
 
             model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
@@ -269,10 +248,11 @@ class MixedInt8Test(BaseMixedInt8Test):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname, max_shard_size="200MB")
 
-            # check that the file `quantization_config.json` is present
-            self.assertTrue(os.path.exists(os.path.join(tmpdirname, "quantization_config.json")))
+            # check that the file `quantization_config` is present
+            config = AutoConfig.from_pretrained(tmpdirname)
+            self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname)
 
             self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
