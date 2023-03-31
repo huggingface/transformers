@@ -40,7 +40,7 @@ class PVTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PVTModel`]. It is used to instantiate an PVT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PVT
-    [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+    [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
