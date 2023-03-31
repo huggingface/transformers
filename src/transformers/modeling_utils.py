@@ -101,14 +101,6 @@ if is_safetensors_available():
 
 logger = logging.get_logger(__name__)
 
-WARNED = set()
-
-
-def warn_once(key, msg):
-    if key not in WARNED:
-        WARNED.add(key)
-        logger.warn(msg)
-
 
 _init_weights = True
 
@@ -1758,8 +1750,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                warn_once(
-                    "shared_tensors",
+                logger.warning_once(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
