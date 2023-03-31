@@ -415,10 +415,8 @@ class TrainerIntegrationCommon:
             weights_file = os.path.join(folder, WEIGHTS_NAME)
 
         if save_safe:
-            saver = safetensors.torch.save_file
             shard_name = SAFE_WEIGHTS_NAME
         else:
-            saver = torch.save
             shard_name = WEIGHTS_NAME
 
         state_dict = loader(weights_file)
@@ -426,9 +424,7 @@ class TrainerIntegrationCommon:
         os.remove(weights_file)
         keys = list(state_dict.keys())
 
-        shard_files = [
-            shard_name.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))
-        ]
+        shard_files = [shard_name.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
 
         save_index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)

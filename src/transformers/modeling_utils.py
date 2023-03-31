@@ -352,8 +352,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
         strict (`bool`, *optional`, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
         prefer_safe (`bool`, *optional*, defaults to `False`)
-            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the safetensors files will be
-            loaded. Otherwise, PyTorch files are always loaded when possible.
+            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
+            safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
     Returns:
         `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
@@ -378,7 +378,9 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
             if safetensors_installed:
                 load_safe = True  # load safe due to preference
             else:
-                logger.warning(f'Cannot load sharded checkpoint at {folder} safely since safetensors are not installed!')
+                logger.warning(
+                    f"Cannot load sharded checkpoint at {folder} safely since safetensors are not installed!"
+                )
         elif not index_present:
             load_safe = True  # load safe since we have no other choice
 
@@ -404,7 +406,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = partial(torch.load, map_location="cpu") if not load_safe else partial(safetensors.torch.load_file, device="cpu")
+    loader = (
+        partial(torch.load, map_location="cpu")
+        if not load_safe
+        else partial(safetensors.torch.load_file, device="cpu")
+    )
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))

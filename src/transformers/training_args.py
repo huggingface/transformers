@@ -727,7 +727,9 @@ class TrainingArguments:
     )
     save_safetensors: Optional[bool] = field(
         default=False,
-        metadata={"help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."},
+        metadata={
+            "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
+        },
     )
     save_on_each_node: bool = field(
         default=False,
