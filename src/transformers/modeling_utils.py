@@ -1750,8 +1750,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if found > 1:
                             del state_dict[name]
                             warn_names.add(name)
-            if warn_names:
-                logger.warning(
+            if len(warn_names) > 0:
+                logger.warn_once(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading"
                 )
 
@@ -2831,7 +2831,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        # Some tensors maybe have been already filled by another key.
+        # Some tensors maybe have been already filled by another key (tied weights).
         existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
         missing_keys = [
             k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
