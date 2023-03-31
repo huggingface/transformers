@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BitsAndBytesConfig(object):
+class BitsAndBytesConfig:
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
