@@ -40,8 +40,7 @@ class PVTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PVTModel`]. It is used to instantiate an PVT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PVT
-    [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224)
-    architecture.
+    [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
