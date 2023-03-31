@@ -296,7 +296,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: The decoded sentence.
         """
-        initial_prompt_start_id = self.get_vocab()["<|startofprev|>"]
+        initial_prompt_start_id = self.convert_tokens_to_ids("<|startofprev|>")
         has_initial_prompt = len(token_ids) > 0 and (token_ids[0] == initial_prompt_start_id)
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_initial_prompt and skip_special_tokens:
@@ -498,6 +498,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.create_initial_prompt_ids
     def create_initial_prompt_ids(self, text):
         """Creates an initial prompt for generating text."""
-        intial_prompt_start_id = self.get_vocab()["<|startofprev|>"]
+        intial_prompt_start_id = self.convert_tokens_to_ids("<|startofprev|>")
         tokenized_text = self(" " + text.strip(), add_special_tokens=False)
         return [intial_prompt_start_id, *tokenized_text["input_ids"]]

@@ -39,10 +39,10 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        self.tokenizer.pad_token_id = 50256
-        self.tokenizer.pad_token = "<|endoftext|>"
-        self.tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        tokenizer.pad_token_id = 50256
+        tokenizer.pad_token = "<|endoftext|>"
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -195,6 +195,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(merge, [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_skip_special_tokens_skips_intial_prompt(self):
+        tokenizer = self.get_tokenizer()
         encoded_input = [
             50361,
             2221,
@@ -229,14 +230,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
         expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
 
-        self.assertEqual(self.tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
-        self.assertEqual(
-            self.tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
-        )
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
 
     def test_create_initial_prompt_ids(self):
-        initial_prompt_ids = self.tokenizer.create_initial_prompt_ids("Mr. Quilter")
-        decoded_initial_prompt = self.tokenizer.decode(initial_prompt_ids)
+        tokenizer = self.get_tokenizer()
+        initial_prompt_ids = tokenizer.create_initial_prompt_ids("Mr. Quilter")
+        decoded_initial_prompt = tokenizer.decode(initial_prompt_ids)
 
         self.assertListEqual(initial_prompt_ids, [50361, 2221, 13, 2326, 388, 391])
         self.assertEqual(decoded_initial_prompt, "<|startofprev|> Mr. Quilter")
