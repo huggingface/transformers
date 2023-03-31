@@ -25,10 +25,12 @@ import sys
 import tempfile
 import time
 import unittest
+from itertools import product
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
+import safetensors.torch
 from huggingface_hub import HfFolder, Repository, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
@@ -68,15 +70,17 @@ from transformers.testing_utils import (
     require_torch_up_to_2_gpus,
     require_torchdynamo,
     require_wandb,
-    slow,
+    slow, require_safetensors,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_apex_available,
     is_bitsandbytes_available,
+    is_safetensors_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -101,6 +105,10 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.modeling_utils import unwrap_model
+
+
+if is_safetensors_available():
+    import safetensors.torch
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -345,8 +353,11 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True):
-        file_list = [WEIGHTS_NAME, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=None):
+        if safe_weights is None:
+            safe_weights = is_safetensors_available()
+        weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
+        file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
         for step in range(freq, total, freq):
@@ -356,7 +367,7 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True
+        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=False
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
@@ -370,7 +381,10 @@ class TrainerIntegrationCommon:
             best_model.to(trainer.args.device)
         else:
             best_model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            if not safe_weights:
+                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            else:
+                state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
             best_model.to(trainer.args.device)
         self.assertTrue(torch.allclose(best_model.a, trainer.model.a))
@@ -1132,6 +1146,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
+    @require_safetensors
+    def test_safe_checkpoints(self):
+        for save_safetensors in [True, False]:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, save_safetensors=save_safetensors)
+                trainer.train()
+                self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors)
+
+            # With a regular model that is not a PreTrainedModel
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False, save_safetensors=save_safetensors)
+                trainer.train()
+                self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors)
+
     @require_torch_multi_gpu
     def test_run_seq2seq_double_train_wrap_once(self):
         # test that we don't wrap the model more than once
@@ -1521,6 +1549,31 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=False)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
+
+    @require_safetensors
+    def test_load_best_model_from_safetensors(self):
+        total = int(self.n_epochs * 64 / self.batch_size)
+        for save_safetensors, pretrained in product([False, True], [False, True]):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    output_dir=tmpdir,
+                    learning_rate=0.1,
+                    eval_steps=5,
+                    evaluation_strategy="steps",
+                    save_steps=5,
+                    load_best_model_at_end=True,
+                    save_safetensors=save_safetensors,
+                    pretrained=pretrained
+                )
+                self.assertFalse(trainer.args.greater_is_better)
+                trainer.train()
+                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained, safe_weights=save_safetensors)
+                self.check_best_model_has_been_loaded(
+                    tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained, safe_weights=save_safetensors
+                )
+
 
     @slow
     def test_trainer_eval_mrpc(self):
