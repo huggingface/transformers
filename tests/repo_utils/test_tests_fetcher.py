@@ -635,6 +635,25 @@ src/transformers/configuration_utils.py
             expected_tests = set(expected_tests + ["tests/test_modeling_common.py"])
             assert set(tests_to_run.split(" ")) == expected_tests
 
+    def test_infer_tests_to_run_with_test_modifs(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
+            repo = create_tmp_repo(tmp_folder, models=models)
+
+            commit_changes(
+                "tests/models/bert/test_modeling_bert.py",
+                "from transformers import BertConfig, BertModel\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode1",
+                repo,
+            )
+
+            with patch_transformer_repo_path(tmp_folder):
+                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                with open(tmp_folder / "test-output.txt", "r") as f:
+                    tests_to_run = f.read()
+
+            assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
+
     def test_parse_commit_message(self):
         assert parse_commit_message("Normal commit") == {"skip": False, "test_all_models": False, "test_all": False}
 
