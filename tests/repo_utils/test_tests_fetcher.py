@@ -570,7 +570,7 @@ src/transformers/configuration_utils.py
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
-            models = models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
+            models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
             repo = create_tmp_repo(tmp_folder, models=models)
 
             commit_changes("src/transformers/models/bert/modeling_bert.py", BERT_MODEL_FILE_NEW_CODE, repo)

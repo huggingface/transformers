@@ -546,7 +546,7 @@ def infer_tests_to_run(
         repo_utils_launch = True
     else:
         # Grab the corresponding test files:
-        test_files_to_run = []
+        test_files_to_run = [f for f in impacted_files if f.startswith("tests")]
         test_map = create_module_to_test_map(reverse_map=reverse_map, filter_models=filter_models)
         for f in modified_files:
             if f in test_map:
