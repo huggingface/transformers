@@ -655,31 +655,19 @@ src/transformers/configuration_utils.py
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
 
     def test_parse_commit_message(self):
-        assert parse_commit_message("Normal commit") == {"skip": False, "test_all_models": False, "test_all": False}
+        assert parse_commit_message("Normal commit") == {"skip": False, "no_filter": False, "test_all": False}
 
-        assert parse_commit_message("[skip ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
-        assert parse_commit_message("[ci skip] commit") == {"skip": True, "test_all_models": False, "test_all": False}
-        assert parse_commit_message("[skip-ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
-        assert parse_commit_message("[skip_ci] commit") == {"skip": True, "test_all_models": False, "test_all": False}
+        assert parse_commit_message("[skip ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
+        assert parse_commit_message("[ci skip] commit") == {"skip": True, "no_filter": False, "test_all": False}
+        assert parse_commit_message("[skip-ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
+        assert parse_commit_message("[skip_ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
 
-        self.assertDictEqual(
-            parse_commit_message("[test all models] commit"),
-            {"skip": False, "test_all_models": True, "test_all": False},
-        )
-        self.assertDictEqual(
-            parse_commit_message("[test models all] commit"),
-            {"skip": False, "test_all_models": True, "test_all": False},
-        )
-        self.assertDictEqual(
-            parse_commit_message("[test-all-models] commit"),
-            {"skip": False, "test_all_models": True, "test_all": False},
-        )
-        self.assertDictEqual(
-            parse_commit_message("[all_models_test] commit"),
-            {"skip": False, "test_all_models": True, "test_all": False},
-        )
+        assert parse_commit_message("[no filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
+        assert parse_commit_message("[no-filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
+        assert parse_commit_message("[no_filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
+        assert parse_commit_message("[filter-no] commit") == {"skip": False, "no_filter": True, "test_all": False}
 
-        assert parse_commit_message("[test all] commit") == {"skip": False, "test_all_models": False, "test_all": True}
-        assert parse_commit_message("[all test] commit") == {"skip": False, "test_all_models": False, "test_all": True}
-        assert parse_commit_message("[test-all] commit") == {"skip": False, "test_all_models": False, "test_all": True}
-        assert parse_commit_message("[all_test] commit") == {"skip": False, "test_all_models": False, "test_all": True}
+        assert parse_commit_message("[test all] commit") == {"skip": False, "no_filter": False, "test_all": True}
+        assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+        assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
+        assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}

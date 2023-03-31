@@ -621,18 +621,18 @@ def parse_commit_message(commit_message):
     Returns a dictionary of strings to bools with keys skip, test_all_models and test_all.
     """
     if commit_message is None:
-        return {"skip": False, "test_all_models": False, "test_all": False}
+        return {"skip": False, "no_filter": False, "test_all": False}
 
     command_search = re.search(r"\[([^\]]*)\]", commit_message)
     if command_search is not None:
         command = command_search.groups()[0]
         command = command.lower().replace("-", " ").replace("_", " ")
         skip = command in ["ci skip", "skip ci", "circleci skip", "skip circleci"]
-        all_models = set(command.split(" ")) == {"test", "all", "models"}
+        no_filter = set(command.split(" ")) == {"no", "filter"}
         test_all = set(command.split(" ")) == {"test", "all"}
-        return {"skip": skip, "test_all_models": all_models, "test_all": test_all}
+        return {"skip": skip, "no_filter": no_filter, "test_all": test_all}
     else:
-        return {"skip": False, "test_all_models": False, "test_all": False}
+        return {"skip": False, "no_filter": False, "test_all": False}
 
 
 if __name__ == "__main__":
@@ -687,10 +687,10 @@ if __name__ == "__main__":
         if commit_flags["skip"]:
             print("Force-skipping the CI")
             quit()
-        if commit_flags["test_all_models"]:
-            print("Testing all models found.")
+        if commit_flags["no_filter"]:
+            print("Running all tests fetched without filtering.")
         if commit_flags["test_all"]:
-            print("Force- launching all tests")
+            print("Force-launching all tests")
 
         diff_with_last_commit = args.diff_with_last_commit
         if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
@@ -704,7 +704,7 @@ if __name__ == "__main__":
                     diff_with_last_commit=diff_with_last_commit,
                     filters=args.filters,
                     json_output_file=args.json_output_file,
-                    filter_models=not commit_flags["test_all_models"],
+                    filter_models=not commit_flags["no_filter"],
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
