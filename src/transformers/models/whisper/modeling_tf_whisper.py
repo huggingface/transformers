@@ -1387,3 +1387,88 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
         }
+
+class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        
+        self.encoder = TFWhisperEncoder(config)
+        num_layers = config.num_hidden_layers + 1
+        if config.use_weighted_layer_sum:
+            self.layer_weights = tf.Variable(tf.ones(shape=(num_layers,)) / num_layers)
+        self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, input_shape=(config.hidden_size,))
+        self.classifier = tf.keras.layers.Dense(units=config.num_labels, input_shape=(config.classifier_proj_size,), 
+                                                activation=None)
+    
+    @unpack_inputs
+    def call(
+        self,
+        input_features: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.encoder(
+            input_features,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        if self.config.use_weighted_layer_sum:
+            hidden_states = tf.stack(encoder_outputs, axis=1)
+            norm_weights = tf.nn.softmax(self.layer_weights, axis=-1)
+            hidden_states = tf.reduce_sum(hidden_states * tf.reshape(norm_weights, [-1, 1, 1]), axis=1)
+        else:
+            hidden_states = encoder_outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        pooled_output = tf.reduce_mean(hidden_states, axis=1)
+
+        logits = self.classifier(pooled_output)
+        
+        loss = None
+        
+        if labels is not None:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+            loss = loss_fn(tf.reshape(labels, [-1]), tf.reshape(logits, [-1, self.config.num_labels]))
+        
+        if not return_dict:
+            output = (logits,) + encoder_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+     
