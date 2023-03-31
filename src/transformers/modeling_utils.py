@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import safetensors.torch
 import torch
 from packaging import version
 from torch import Tensor, nn
