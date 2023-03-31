@@ -367,8 +367,10 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=False
+        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=None
     ):
+        if safe_weights is None:
+            safe_weights = is_safetensors_available()
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
 
@@ -408,10 +410,21 @@ class TrainerIntegrationCommon:
                 _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder):
+    def convert_to_sharded_checkpoint(self, folder, safe_weights=None):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
-        state_dict = torch.load(os.path.join(folder, WEIGHTS_NAME))
-        os.remove(os.path.join(folder, WEIGHTS_NAME))
+        if safe_weights is None:
+            safe_weights = is_safetensors_available()
+
+        if safe_weights:
+            loader = safetensors.torch.load_file
+            weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
+        else:
+            loader = torch.load
+            weights_file = os.path.join(folder, WEIGHTS_NAME)
+
+        state_dict = loader(weights_file)
+
+        os.remove(weights_file)
         keys = list(state_dict.keys())
 
         shard_files = [
@@ -1400,6 +1413,34 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+
+    @require_safetensors
+    @require_torch_up_to_2_gpus
+    def test_resume_training_with_safe_checkpoint(self):
+        # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+        # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+        # won't be the same since the training dataloader is shuffled).
+
+        for initial_safe in [False, True]:
+            for loaded_safe in [False, True]:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=initial_safe)
+                    trainer.train()
+                    (a, b) = trainer.model.a.item(), trainer.model.b.item()
+                    state = dataclasses.asdict(trainer.state)
+
+                    checkpoint = os.path.join(tmpdir, "checkpoint-5")
+                    self.convert_to_sharded_checkpoint(checkpoint, safe_weights=initial_safe)
+
+                    # Reinitialize trainer
+                    trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe)
+
+                    trainer.train(resume_from_checkpoint=checkpoint)
+                    (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+                    state1 = dataclasses.asdict(trainer.state)
+                    self.assertEqual(a, a1)
+                    self.assertEqual(b, b1)
+                    self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_gpus
     def test_resume_training_with_gradient_accumulation(self):
