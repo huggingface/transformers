@@ -24,7 +24,7 @@ only.
 
 Stage 2: Extract the tests to run. This is done by looking at the imports in each module and test file: if module A
 imports module B, then changing module B impacts module A, so the tests using module A should be run. We thus get the
-dependencies of each model and the recursively builds the 'reverse' map of dependencies to get all modules and tests
+dependencies of each model and then recursively builds the 'reverse' map of dependencies to get all modules and tests
 impacted by a given file. We then only keep the tests (and only the code models tests if there are too many modules).
 
 Caveats:
