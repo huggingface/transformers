@@ -1123,33 +1123,32 @@ class NeptuneMissingConfiguration(Exception):
 
 
 class NeptuneCallback(TrainerCallback):
-    """TrainerCallback that sends the logs to [Neptune](https://neptune.ai).
+    """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
     Args:
-        api_token (`str`, optional):
-            Neptune API token obtained upon registration. You can leave this argument out if you have saved your token
-            to the `NEPTUNE_API_TOKEN` environment variable (strongly recommended). See full setup instructions in the
-            [docs](https://docs.neptune.ai/getting-started/installation).
-        project (`str`, optional):
-            Name of an existing Neptune project, in the form: "workspace-name/project-name". You can find and copy the
-            name from the project Settings -> Properties in Neptune. If None (default), the value of the
-            `NEPTUNE_PROJECT` environment variable will be used.
-        name (`str`, optional): Custom name for the run.
+        api_token (`str`, *optional*): Neptune API token obtained upon registration.
+            You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
+            variable (strongly recommended). See full setup instructions in the
+            [docs](https://docs.neptune.ai/setup/installation).
+        project (`str`, *optional*): Name of an existing Neptune project, in the form "workspace-name/project-name".
+            You can find and copy the name in Neptune from the project settings -> Properties. If None (default), the
+            value of the `NEPTUNE_PROJECT` environment variable is used.
+        name (`str`, *optional*): Custom name for the run.
         base_namespace (`str`, optional, defaults to "finetuning"): In the Neptune run, the root namespace
-            that will contain all of the logged metadata.
-        log_parameters (`bool`, optional, defaults to True):
+            that will contain all of the metadata logged by the callback.
+        log_parameters (`bool`, *optional*, defaults to `True`):
             If True, logs all Trainer arguments and model parameters provided by the Trainer.
-        log_checkpoints (`str`, optional, defaults to None):
-            If "same", uploads checkpoints whenever they are saved by the Trainer. If "last", uploads only the most
-            recently saved checkpoint. If "best", uploads the best checkpoint (among the ones saved by the Trainer). If
-            None, does not upload checkpoints.
-        run (`Run`, optional):
-            Pass a Neptune run object if you want to continue logging to an existing run. Read more about resuming runs
-            in the [docs](https://docs.neptune.ai/how-to-guides/neptune-api/resume-run).
-        **neptune_run_kwargs (optional):
+        log_checkpoints (`str`, *optional*): If "same", uploads checkpoints whenever they are saved by the Trainer.
+            If "last", uploads only the most recently saved checkpoint. If "best", uploads the best checkpoint (among
+            the ones saved by the Trainer). If `None`, does not upload checkpoints.
+        run (`Run`, *optional*): Pass a Neptune run object if you want to continue logging to an existing run.
+            Read more about resuming runs in the [docs](https://docs.neptune.ai/logging/to_existing_object).
+        **neptune_run_kwargs (*optional*):
             Additional keyword arguments to be passed directly to the
-            [neptune.init_run()](https://docs.neptune.ai/api-reference/neptune#.init_run) function when a new run is
-            created.
+            [`neptune.init_run()`](https://docs.neptune.ai/api/neptune#init_run) function when a new run is created.
+
+    For instructions and examples, see the [Transformers integration
+    guide](https://docs.neptune.ai/integrations/transformers) in the Neptune documentation.
     """
 
     integration_version_key = "source_code/integrations/transformers"
