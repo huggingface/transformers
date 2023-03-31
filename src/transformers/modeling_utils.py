@@ -1728,21 +1728,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
             warn_names = set()
-            for _, names in shared_ptrs.items():
+            for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
                 if self._keys_to_ignore_on_load_missing is not None:
                     for name in names:
-                        for pat in self._keys_to_ignore_on_load_missing:
-                            if re.search(pat, name):
-                                if name in state_dict:
-                                    del state_dict[name]
+                        matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
+                        if matches_pattern and name in state_dict:
+                            del state_dict[name]
 
-                # When not all duplicates have been cleaned
-                # Still remove those keys, but put a clear warning
-                # Since if the link between tensors was done at runtime
-                # then `from_pretrained` will still not get the key back
-                # Leading to random tensor. With a proper warning.
+                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+                # If the link between tensors was done at runtime then `from_pretrained` will still not get the key back leading to random tensor. With a proper warning.
                 found = 0
                 for name in names:
                     if name in state_dict:
