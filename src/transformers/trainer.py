@@ -2089,7 +2089,7 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
 
-        if not any(map(os.path.isfile, [weights_file, safe_weights_file, weights_index_file])):
+        if not any([os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file]]):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
         logger.info(f"Loading model from {resume_from_checkpoint}.")
