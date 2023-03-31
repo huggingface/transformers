@@ -933,7 +933,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         self.lm_head = tf.keras.layers.Dense(
             units=config.vocab_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier",
+            name="lm_head",
         )
 
     @unpack_inputs
