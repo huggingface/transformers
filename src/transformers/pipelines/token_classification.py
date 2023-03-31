@@ -615,7 +615,6 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         return model_inputs
 
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
-        # TODO: Implement this
         if ignore_labels is None:
             ignore_labels = ["O"]
 
@@ -625,7 +624,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         original_logits = model_outputs["logits"].numpy()
 
         # Shape: (num_windows, window_length)
-        input_ids = model_outputs["input_ids"]
+        all_window_input_ids = model_outputs["input_ids"]
         special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
 
         # Shape: (num_windows, window_length, 2)
@@ -636,7 +635,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         logit_sums = np.zeros((num_tokens, num_categories))
         logit_writes = np.zeros((num_tokens,))
 
-        flattened_input_ids = np.zeros((num_tokens,), dtype=np.int)
+        input_ids = np.zeros((num_tokens,), dtype=np.int)
         flattened_offset_mapping = np.zeros((num_tokens, 2), dtype=np.int)
 
         num_windows = original_logits.shape[0]
@@ -649,7 +648,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             logit_sums[idx: end_idx] += real_token_logits
             logit_writes[idx: end_idx] += 1
 
-            flattened_input_ids[idx: end_idx] = input_ids[window_idx, is_real_token]
+            input_ids[idx: end_idx] = all_window_input_ids[window_idx, is_real_token]
             flattened_offset_mapping[idx: end_idx] = offset_mapping[window_idx, is_real_token, :]
             idx += self.window_length - self.stride - special_tokens_mask[window_idx].sum()
 
@@ -658,7 +657,6 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         logits = logit_sums / logit_writes[:, np.newaxis]
 
         special_tokens_mask = np.zeros_like(logit_writes)
-        input_ids = flattened_input_ids
         offset_mapping = flattened_offset_mapping
 
         # NOTE: End of Connor's code
