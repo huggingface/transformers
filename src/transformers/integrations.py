@@ -1124,14 +1124,13 @@ class NeptuneMissingConfiguration(Exception):
 
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
-    For instructions and examples, see the
-    [Transformers integration guide](https://docs.neptune.ai/integrations/transformers) in the Neptune documentation.
+
     Args:
         api_token (`str`, *optional*): Neptune API token obtained upon registration.
             You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
             variable (strongly recommended). See full setup instructions in the
             [docs](https://docs.neptune.ai/setup/installation).
-        project (`str`, *optional*): Name of an existing Neptune project, in the form: "workspace-name/project-name".
+        project (`str`, *optional*): Name of an existing Neptune project, in the form "workspace-name/project-name".
             You can find and copy the name in Neptune from the project settings -> Properties.
             If None (default), the value of the `NEPTUNE_PROJECT` environment variable is used.
         name (`str`, *optional*): Custom name for the run.
@@ -1148,6 +1147,9 @@ class NeptuneCallback(TrainerCallback):
         **neptune_run_kwargs (*optional*):
             Additional keyword arguments to be passed directly to the
             [`neptune.init_run()`](https://docs.neptune.ai/api/neptune#init_run) function when a new run is created.
+
+    For instructions and examples, see the
+    [Transformers integration guide](https://docs.neptune.ai/integrations/transformers) in the Neptune documentation.
     """
 
     integration_version_key = "source_code/integrations/transformers"
