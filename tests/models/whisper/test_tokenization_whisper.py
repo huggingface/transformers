@@ -234,11 +234,11 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             self.tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
         )
 
-    def test_tokenizer_create_initial_prompt_ids(self):
+    def test_create_initial_prompt_ids(self):
         initial_prompt_ids = self.tokenizer.create_initial_prompt_ids("Mr. Quilter")
         decoded_initial_prompt = self.tokenizer.decode(initial_prompt_ids)
 
-        self.assertListEqual(initial_prompt_ids, [50360, 1770, 13, 2264, 346, 353])
+        self.assertListEqual(initial_prompt_ids, [50361, 2221, 13, 2326, 388, 391])
         self.assertEqual(decoded_initial_prompt, "<|startofprev|> Mr. Quilter")
 
 
