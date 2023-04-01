@@ -43,34 +43,6 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
-class GeoVPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = GeoVConfig
-    base_model_prefix = "geov"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GeoVLayer"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GeoVModel):
-            module.gradient_checkpointing = value
-
 
 # Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
 class GeoVAttention(nn.Module):
@@ -363,6 +335,34 @@ GEOV_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
+
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
+class GeoVPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = GeoVConfig
+    base_model_prefix = "geov"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GeoVLayer"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GeoVModel):
+            module.gradient_checkpointing = value
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel
