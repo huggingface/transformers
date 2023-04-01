@@ -44,8 +44,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PVTConfig"
 
-_CHECKPOINT_FOR_DOC = "pvt-tiny-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
+_CHECKPOINT_FOR_DOC = "Xrenya/pvt-tiny-224"
+_EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 
 _IMAGE_CLASS_CHECKPOINT = "Xrenya/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
