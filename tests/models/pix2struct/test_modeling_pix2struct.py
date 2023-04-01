@@ -703,6 +703,7 @@ def prepare_img():
 class Pix2StructIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
         model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
+        model.config.is_encoder_decoder = True
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image = prepare_img()
 
