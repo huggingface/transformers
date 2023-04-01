@@ -46,36 +46,6 @@ GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class GPTNeoXPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = GPTNeoXConfig
-    base_model_prefix = "gpt_neox"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GPTNeoXLayer"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXModel):
-            module.gradient_checkpointing = value
-
-
 class GPTNeoXAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -348,6 +318,36 @@ class GPTNeoXLayer(nn.Module):
             outputs = (hidden_states,) + outputs[1:]  # hidden_states, (attn_weights)
 
         return outputs
+
+
+class GPTNeoXPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = GPTNeoXConfig
+    base_model_prefix = "gpt_neox"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GPTNeoXLayer"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPTNeoXModel):
+            module.gradient_checkpointing = value
 
 
 GPT_NEOX_START_DOCSTRING = r"""
