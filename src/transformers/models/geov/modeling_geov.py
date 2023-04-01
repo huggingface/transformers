@@ -43,6 +43,53 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
+class RotaryEmbedding(torch.nn.Module):
+    def __init__(self, dim, base=10000):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+        self.max_seq_len_cached = -1
+
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
+        if seq_len > self.max_seq_len_cached:
+            self.max_seq_len_cached = seq_len
+            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            # Different from paper, but it uses a different permutation in order to obtain the same calculation
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            self.cos_cached = emb.cos()[None, None, :, :].to(x.dtype)
+            self.sin_cached = emb.sin()[None, None, :, :].to(x.dtype)
+        return self.cos_cached.to(x.device), self.sin_cached.to(x.device)
+
+
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
+    """Apply positional embeddings"""
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    return q_embed
+
+
+def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
+    """Apply positional embeddings in reverse"""
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
+    q_embed = (q * cos) - (rotate_half(q) * sin)
+    return q_embed
+
 
 # Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
 class GeoVAttention(nn.Module):
@@ -167,54 +214,6 @@ class GeoVAttention(nn.Module):
 
         attn_output = torch.matmul(attn_weights, value)
         return attn_output, attn_weights
-
-
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
-class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, base=10000):
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-        self.max_seq_len_cached = -1
-
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :].to(x.dtype)
-            self.sin_cached = emb.sin()[None, None, :, :].to(x.dtype)
-        return self.cos_cached.to(x.device), self.sin_cached.to(x.device)
-
-
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.rotate_half
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
-    """Apply positional embeddings"""
-    cos = cos[..., offset : q.shape[-2] + offset, :]
-    sin = sin[..., offset : q.shape[-2] + offset, :]
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    return q_embed
-
-
-def apply_rotary_pos_emb_reverse(q, cos, sin, offset: int = 0):
-    """Apply positional embeddings in reverse"""
-    cos = cos[..., offset : q.shape[-2] + offset, :]
-    sin = sin[..., offset : q.shape[-2] + offset, :]
-    q_embed = (q * cos) - (rotate_half(q) * sin)
-    return q_embed
 
 
 class GeoVMLP(nn.Module):
