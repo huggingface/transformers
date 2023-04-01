@@ -9,6 +9,8 @@
 - sections:
   - local: in_translation
     title: (번역 중)
+  - local: autoclass_tutorial
+    title: 자동 클래스로 사전 학습된 인스턴스 로드
   title: 튜토리얼
 - sections:
   - local: in_translation
