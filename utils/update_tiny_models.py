@@ -23,6 +23,7 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 
 import copy
 import json
+import multiprocessing
 import os
 import time
 
@@ -197,6 +198,9 @@ def update_tiny_model_summary_file(report_path):
 
 
 if __name__ == "__main__":
+    # This has to be `spawn` to avoid hanging forever!
+    multiprocessing.set_start_method("spawn")
+
     output_path = "tiny_models"
     all = True
     model_types = None
