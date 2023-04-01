@@ -75,6 +75,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
@@ -415,8 +416,14 @@ class TrainerIntegrationCommon:
             weights_file = os.path.join(folder, WEIGHTS_NAME)
 
         if save_safe:
+            extension = "safetensors"
+            saver = safetensors.torch.save_file
+            index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
             shard_name = SAFE_WEIGHTS_NAME
         else:
+            extension = "bin"
+            saver = torch.save
+            index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
             shard_name = WEIGHTS_NAME
 
         state_dict = loader(weights_file)
@@ -424,16 +431,18 @@ class TrainerIntegrationCommon:
         os.remove(weights_file)
         keys = list(state_dict.keys())
 
-        shard_files = [shard_name.replace(".bin", f"-{idx+1:05d}-of-{len(keys):05d}.bin") for idx in range(len(keys))]
+        shard_files = [
+            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            for idx in range(len(keys))
+        ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}
 
-        save_index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-        with open(save_index_file, "w", encoding="utf-8") as f:
+        with open(index_file, "w", encoding="utf-8") as f:
             content = json.dumps(index, indent=2, sort_keys=True) + "\n"
             f.write(content)
 
         for param_name, shard_file in zip(keys, shard_files):
-            torch.save({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
+            saver({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
 
 
 @require_torch
