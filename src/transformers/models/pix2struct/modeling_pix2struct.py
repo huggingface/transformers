@@ -1685,20 +1685,23 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+        >>> from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
-        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
+        >>> processor = Pix2StructProcessor.from_pretrained("google/pix2struct-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-base")
 
-        >>> labels = "A stop sign is on the street corner."
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "A stop sign is on the street corner."
 
-        >>> inputs = processor(images=image, text=labels, return_tensors="pt", add_special_tokens=True)
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> labels = processor(text=text, return_tensors="pt").input_ids
 
         >>> # forward pass
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.loss
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> print(loss.item())
+        5.239729881286621
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -358,9 +358,10 @@ class Pix2StructConfig(PretrainedConfig):
         initializer_range=0.02,
         is_vqa=False,
         tie_word_embeddings=False,
+        is_encoder_decoder=False,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
 
         if text_config is None:
             text_config = {}
