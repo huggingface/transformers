@@ -234,9 +234,9 @@ class GeoVMLP(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.dense_h_to_4h(hidden_states)
         # Gated GELU
-        h1, h2 = torch.tensor_split(hidden_states, 2, dim=-1)
-        h1 = self.act(h1)
-        hidden_states = h1 * h2
+        gate, pass_through = torch.tensor_split(hidden_states, 2, dim=-1)
+        gate = self.act(gate)
+        hidden_states = gate * pass_through
 
         hidden_states = self.dense_2h_to_h(hidden_states)
         return hidden_states
