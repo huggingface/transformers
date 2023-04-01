@@ -37,16 +37,16 @@ class GeoVConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50432):
+        vocab_size (`int`, *optional*, defaults to 65536):
             Vocabulary size of the GeoV model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GeoVModel`].
-        hidden_size (`int`, *optional*, defaults to 6144):
+        hidden_size (`int`, *optional*, defaults to 5120):
             Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 44):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
+        num_attention_heads (`int`, *optional*, defaults to 40):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 24576):
+        intermediate_size (`int`, *optional*, defaults to 20480):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
@@ -78,11 +78,11 @@ class GeoVConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=65536,
-        hidden_size=1024 * 5,
+        vocab_size=65_536,
+        hidden_size=5_120,
         num_hidden_layers=32,
         num_attention_heads=40,
-        intermediate_size=1024 * 5 * 4,
+        intermediate_size=20_480,
         layer_norm_eps=1e-4,
         rotary_emb_base=10000,
         max_position_embeddings=2048,
