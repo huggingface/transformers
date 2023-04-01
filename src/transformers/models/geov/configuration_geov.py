@@ -27,7 +27,7 @@ GEOV_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GeoVConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GeoVModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GeoVModel`]. It is used to instantiate a
     GeoV model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GeoV
     [GeoV/GeoV-9b](https://huggingface.co/GeoV/GeoV-9b) architecture.
