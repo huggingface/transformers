@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022 EleutherAI The HuggingFace Inc. team. All rights reserved.
-# Modifications Copyright 2023 Better Planet Investments and labml.ai team. ALl rights reserved.
+# Copyright 2023 Better Planet Investments and labml.ai team. ALl rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +43,7 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
 
-
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
 class GeoVPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -73,6 +72,7 @@ class GeoVPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+# Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
 class GeoVAttention(nn.Module):
     """
     Attention module
@@ -197,6 +197,7 @@ class GeoVAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, base=10000):
         super().__init__()
@@ -219,6 +220,7 @@ class RotaryEmbedding(torch.nn.Module):
         return self.cos_cached.to(x.device), self.sin_cached.to(x.device)
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -226,6 +228,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, cos, sin, offset: int = 0):
     """Apply positional embeddings"""
     cos = cos[..., offset : q.shape[-2] + offset, :]
@@ -264,6 +267,7 @@ class GeoVMLP(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer
 class GeoVLayer(nn.Module):
     """GeoV transformer layer"""
 
@@ -361,6 +365,7 @@ GEOV_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel
 @add_start_docstrings(
     "The bare GeoV Model transformer outputting raw hidden-states without any specific head on top.",
     GEOV_START_DOCSTRING,
@@ -519,6 +524,7 @@ class GeoVModel(GeoVPreTrainedModel):
         )
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM
 @add_start_docstrings(
     """GeoV Model with a `language modeling` head on top for CLM fine-tuning.""", GEOV_START_DOCSTRING
 )
