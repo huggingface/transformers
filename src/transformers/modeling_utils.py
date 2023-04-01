@@ -2181,9 +2181,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         if load_in_8bit:
-            if not (is_accelerate_available() and is_bitsandbytes_available()):
+            if not is_accelerate_available():
                 raise ImportError(
-                    "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
+                    "Using `load_in_8bit=True` requires Accelerate"
+                    " `pip install accelerate` "
+                )
+            if not is_bitsandbytes_available():
+                raise ImportError(
+                    "Using `load_in_8bit=True` requires the latest version of"
                     " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
                     " pip install bitsandbytes` "
                 )

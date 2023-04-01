@@ -36,6 +36,7 @@ def is_deepspeed_available():
 
 if is_accelerate_available() and is_deepspeed_available():
     from accelerate.utils.deepspeed import HfDeepSpeedConfig as DeepSpeedConfig
+    from accelerate import init_empty_weights
 else:
     # Inherits from a dummy `object` if accelerate is not available, so that python succeeds to import this file.
     # Deepspeed glue code will never inherit this dummy object as it checks if accelerate is available.
