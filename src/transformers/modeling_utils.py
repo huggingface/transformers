@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import safetensors.torch
 import torch
 from packaging import version
 from torch import Tensor, nn
@@ -406,7 +405,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = partial(torch.load, map_location="cpu") if not load_safe else safetensors.torch.load_file
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
