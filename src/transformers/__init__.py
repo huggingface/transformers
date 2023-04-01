@@ -2291,7 +2291,6 @@ else:
             "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SeaformerDecodeHead",
             "SeaformerForSemanticSegmentation",
-            "SeaformerLayer",
             "SeaformerModel",
             "SeaformerPreTrainedModel",
         ]
@@ -5621,7 +5620,6 @@ if TYPE_CHECKING:
             SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeaformerDecodeHead,
             SeaformerForSemanticSegmentation,
-            SeaformerLayer,
             SeaformerModel,
             SeaformerPreTrainedModel,
         )

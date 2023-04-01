@@ -46,7 +46,6 @@ if is_vision_available():
 class SeaformerConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
-        self.parent.assertTrue(hasattr(config, "hidden_sizes"))
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         for block_cfg in config.mv2_blocks_cfgs:
             for layer_cfg in block_cfg:

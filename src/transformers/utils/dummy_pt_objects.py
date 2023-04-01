@@ -5824,21 +5824,7 @@ class SeaformerDecodeHead(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SeaformerForImageClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SeaformerForSemanticSegmentation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SeaformerLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
