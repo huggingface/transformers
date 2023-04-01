@@ -2290,7 +2290,6 @@ else:
         [
             "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SeaformerDecodeHead",
-            "SeaformerForImageClassification",
             "SeaformerForSemanticSegmentation",
             "SeaformerLayer",
             "SeaformerModel",
@@ -5621,7 +5620,6 @@ if TYPE_CHECKING:
         from .models.seaformer import (
             SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeaformerDecodeHead,
-            SeaformerForImageClassification,
             SeaformerForSemanticSegmentation,
             SeaformerLayer,
             SeaformerModel,
