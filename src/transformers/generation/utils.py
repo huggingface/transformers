@@ -637,6 +637,8 @@ class GenerationMixin:
         encoder_kwargs[model_input_name] = inputs_tensor
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
 
+        print("Model kwargs:", model_kwargs)
+
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -1256,6 +1258,8 @@ class GenerationMixin:
         )
         batch_size = inputs_tensor.shape[0]
 
+        print("inputs_tensor", inputs_tensor.shape)
+
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
@@ -1432,6 +1436,13 @@ class GenerationMixin:
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
+
+            print("Starting greedy search...")
+            print("Shape of input_ids:", input_ids.shape)
+            print("Model kwargs:")
+            for k, v in model_kwargs.items():
+                if isinstance(v, torch.Tensor):
+                    print(k, v.shape)
 
             # 11. run greedy search
             return self.greedy_search(
