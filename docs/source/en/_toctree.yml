@@ -482,6 +482,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seaformer
+        title: SeaFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2
