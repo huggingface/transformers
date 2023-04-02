@@ -620,46 +620,37 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
 
         sentence: str = model_outputs["sentence"]
 
-        # Shape: (num_windows, window_length, categories)
-        original_logits = model_outputs["logits"].numpy()
-
-        # Shape: (num_windows, window_length)
+        all_window_logits = model_outputs["logits"].numpy()
         all_window_input_ids = model_outputs["input_ids"].numpy()
-        special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
+        all_window_special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
+        all_window_offset_mapping = model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
 
-        # Shape: (num_windows, window_length, 2)
-        offset_mapping = model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
-
-        num_tokens = (special_tokens_mask ^ 1).sum()
-        num_categories = original_logits.shape[-1]
+        num_tokens = (all_window_special_tokens_mask ^ 1).sum()
+        num_categories = all_window_logits.shape[-1]
         logit_sums = np.zeros((num_tokens, num_categories))
         logit_writes = np.zeros((num_tokens,))
 
         input_ids = np.zeros((num_tokens,), dtype=np.int)
-        flattened_offset_mapping = np.zeros((num_tokens, 2), dtype=np.int)
+        offset_mapping = np.zeros((num_tokens, 2), dtype=np.int)
 
-        num_windows = original_logits.shape[0]
+        num_windows = all_window_logits.shape[0]
         idx = 0
         for window_idx in range(num_windows):
-            is_real_token = special_tokens_mask[window_idx] == 0
-            real_token_logits = original_logits[window_idx, is_real_token, :]
+            is_real_token = all_window_special_tokens_mask[window_idx] == 0
+            real_token_logits = all_window_logits[window_idx, is_real_token, :]
             end_idx = idx + len(real_token_logits)
             logit_sums[idx: end_idx] += real_token_logits
             logit_writes[idx: end_idx] += 1
 
             input_ids[idx: end_idx] = all_window_input_ids[window_idx, is_real_token]
-            flattened_offset_mapping[idx: end_idx] = offset_mapping[window_idx, is_real_token, :]
-            idx += self.window_length - self.stride - special_tokens_mask[window_idx].sum()
+            offset_mapping[idx: end_idx] = all_window_offset_mapping[window_idx, is_real_token, :]
+            idx += self.window_length - self.stride - all_window_special_tokens_mask[window_idx].sum()
 
-
-        # Average the logits across all windows
+        # Average the logits across all window passes
         logits = logit_sums / logit_writes[:, np.newaxis]
-
         special_tokens_mask = np.zeros_like(logit_writes)
-        offset_mapping = flattened_offset_mapping
 
-        # NOTE: End of Connor's code
-
+        # Below is copied from superclass's .postprocess():
         # Normalize the logits by subtracting max in each category
         maxes = np.max(logits, axis=-1, keepdims=True)
         shifted_exp = np.exp(logits - maxes)
