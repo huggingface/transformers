@@ -74,7 +74,7 @@ from .token_classification import (
     AggregationStrategy,
     NerPipeline,
     TokenClassificationArgumentHandler,
-    TokenClassificationPipeline,
+    TokenClassificationPipeline, SlidingWindowTokenClassificationPipeline,
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
@@ -193,6 +193,18 @@ SUPPORTED_TASKS = {
     },
     "token-classification": {
         "impl": TokenClassificationPipeline,
+        "tf": (TFAutoModelForTokenClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+                "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+            },
+        },
+        "type": "text",
+    },
+    "token-classification-sliding-window": {
+        "impl": SlidingWindowTokenClassificationPipeline,
         "tf": (TFAutoModelForTokenClassification,) if is_tf_available() else (),
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
