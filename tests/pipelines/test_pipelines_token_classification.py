@@ -1033,6 +1033,28 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             expected_output
         )
 
+    @slow
+    @require_torch
+    def test_sliding_window_multiple(self):
+        input_text = ["Parliamentary elections were held in Estonia on 5 March 2023.", "The Estonian Centre Party led by Jüri Ratas formed a government after the 2019 Estonian parliamentary election."]
+        token_classifier = pipeline('token-classification-sliding-window', model="dslim/bert-base-NER", aggregation_strategy="FIRST")
+        output_ = nested_simplify(token_classifier(input_text))
+
+        expected_output = [
+            [
+                {'entity_group': 'LOC', 'score': 1.0, 'word': 'Estonia', 'start': 37, 'end': 44}
+            ],
+            [
+                {'entity_group': 'ORG', 'score': 0.998, 'word': 'Estonian Centre Party', 'start': 4, 'end': 25},
+                {'entity_group': 'PER', 'score': 1.0, 'word': 'Jüri Ratas', 'start': 33, 'end': 43},
+                {'entity_group': 'MISC', 'score': 0.999, 'word': 'Estonian', 'start': 79, 'end': 87}
+            ]
+        ]
+        self.assertEqual(
+            output_,
+            expected_output
+        )
+
 
     @slow
     @require_tf
