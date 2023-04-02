@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Image processor class for Vivit."""
 from typing import Dict, List, Optional, Union
 
@@ -183,7 +197,7 @@ class VivitImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         scale: Union[int, float],
-        do_zero_centering: bool,
+        offset: bool = True,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ):
@@ -195,11 +209,18 @@ class VivitImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
+           offset (`bool`, *optional*):
+                Whether to scale the image in both negative and positive directions.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        if do_zero_centering:
-            return rescale(image, scale=scale * 2.0, data_format=data_format, **kwargs) - 1.0
+        if offset:
+            rescaled_image = (image - 127.5) * scale
+            if data_format is not None:
+                rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+            rescaled_image = rescaled_image.astype(np.float32)
+        else:
+            rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
 
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
@@ -298,7 +319,7 @@ class VivitImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            images (`ImageInput`):
+            videos (`ImageInput`):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -312,7 +333,7 @@ class VivitImageProcessor(BaseImageProcessor):
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
+                Whether to rescale the image values between `[-1 - 1]` if `do_zero_centering` is `True`, `[0, 1]` otherwise.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_zero_centering (`bool`, *optional*, defaults to `self.do_zero_centering`):

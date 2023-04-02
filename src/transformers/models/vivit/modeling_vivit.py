@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -528,11 +528,11 @@ class VivitModel(VivitPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
+        >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         >>> model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)

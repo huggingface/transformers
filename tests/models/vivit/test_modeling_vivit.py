@@ -69,9 +69,13 @@ class VivitModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
+        self.num_labels = num_labels
+        self.image_size = image_size
+        self.num_frames = num_frames
+        self.tubelet_size = tubelet_size
+        self.num_channels = num_channels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -82,11 +86,7 @@ class VivitModelTester:
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
-        self.image_size = image_size
-        self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
         self.scope = scope
-        self.num_labels = num_labels
 
         self.seq_length = (
             (self.image_size // self.tubelet_size[2])
@@ -224,63 +224,59 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
-        if not self.has_attentions:
-            pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
-        else:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            seq_len = self.model_tester.seq_length
+
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
             config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            for model_class in self.all_model_classes:
-                seq_len = self.model_tester.seq_length
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                inputs_dict["output_attentions"] = True
-                inputs_dict["output_hidden_states"] = False
-                config.return_dict = True
-                model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.attentions
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
+            out_len = len(outputs)
 
-                # check that output_attentions also work using config
-                del inputs_dict["output_attentions"]
-                config.output_attentions = True
-                model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.attentions
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
-                out_len = len(outputs)
+            self.assertEqual(out_len + 1, len(outputs))
 
-                # Check attention is always last and order is fine
-                inputs_dict["output_attentions"] = True
-                inputs_dict["output_hidden_states"] = True
-                model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self_attentions = outputs.attentions
 
-                self.assertEqual(out_len + 1, len(outputs))
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
-                self_attentions = outputs.attentions
-
-                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -329,16 +325,16 @@ def prepare_video():
 @require_vision
 class VivitModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return VivitImageProcessor() if is_vision_available() else None
 
     @slow
     def test_inference_for_video_classification(self):
         model = VivitForVideoClassification.from_pretrained("google/vivit-b-16x2-kinetics400").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = image_processor(video, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

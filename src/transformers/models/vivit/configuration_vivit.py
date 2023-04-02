@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class VivitConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_frames (`int`, *optional*, defaults to 32):
             The number of frames in each video.
-        tubelet_size (`List[int]`, *optional*, defaults to [2, 16, 16]):
+        tubelet_size (`List[int]`, *optional*, defaults to `[2, 16, 16]`):
             The size (resolution) of each tubelet.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
