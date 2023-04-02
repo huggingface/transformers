@@ -625,7 +625,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         all_window_special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
         all_window_offset_mapping = model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
 
-        num_tokens = (all_window_special_tokens_mask ^ 1).sum()
+        num_tokens = len(self.tokenizer.tokenize(sentence))
         num_categories = all_window_logits.shape[-1]
         logit_sums = np.zeros((num_tokens, num_categories))
         logit_writes = np.zeros((num_tokens,))
