@@ -24,7 +24,6 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import cached_file, extract_commit_hash, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
@@ -35,6 +34,12 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+
+
+if is_tokenizers_available():
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
+else:
+    PreTrainedTokenizerFast = None
 
 
 logger = logging.get_logger(__name__)
