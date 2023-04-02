@@ -12,27 +12,25 @@ specific language governing permissions and limitations under the License.
 
 # 자동 클래스로 사전 학습된 인스턴스 로드
 
-With so many different Transformer architectures, it can be challenging to create one for your checkpoint. As a part of 🤗 Transformers core philosophy to make the library easy, simple and flexible to use, an `AutoClass` automatically infer and load the correct architecture from a given checkpoint. The `from_pretrained()` method lets you quickly load a pretrained model for any architecture so you don't have to devote time and resources to train a model from scratch. Producing this type of checkpoint-agnostic code means if your code works for one checkpoint, it will work with another checkpoint - as long as it was trained for a similar task - even if the architecture is different.
-
+트랜스포머 아키텍처가 매우 다양하기 때문에 체크포인트에 맞는 아키텍처를 생성하는 것이 어려울 수 있습니다. 라이브러리를 쉽고 간단하며 유연하게 사용하기 위한 Transformer 핵심 철학의 일환으로, `AutoClass`는 주어진 체크포인트에서 올바른 아키텍처를 자동으로 추론하여 로드합니다. `from_pretrained()` 메서드를 사용하면 모든 아키텍처에 대해 사전 학습된 모델을 빠르게 로드할 수 있으므로 모델을 처음부터 학습하는 데 시간과 리소스를 투입할 필요가 없습니다. 이러한 유형의 체크포인트에 구애받지 않는 코드를 생성한다는 것은 코드가 한 체크포인트에서 작동한다면 아키텍처가 다르더라도 유사한 작업에 대해 학습된 것이라면 다른 체크포인트에서도 작동한다는 것을 의미합니다.
 <Tip>
 
-Remember, architecture refers to the skeleton of the model and checkpoints are the weights for a given architecture. For example, [BERT](https://huggingface.co/bert-base-uncased) is an architecture, while `bert-base-uncased` is a checkpoint. Model is a general term that can mean either architecture or checkpoint.
+아키텍처는 모델의 골격을 의미하며 체크포인트는 주어진 아키텍처에 대한 가중치입니다. 예를 들어, [BERT](https://huggingface.co/bert-base-uncased)는 아키텍처이고, `bert-base-uncased`는 체크포인트입니다. 모델은 아키텍처 또는 체크포인트를 의미할 수 있는 일반적인 용어입니다.
 
 </Tip>
 
-In this tutorial, learn to:
+이 튜토리얼에서는 다음을 학습합니다:
 
-* Load a pretrained tokenizer.
-* Load a pretrained image processor
-* Load a pretrained feature extractor.
-* Load a pretrained processor.
-* Load a pretrained model.
+* 사전 학습된 tokenizer 로드하기.
+* 사전 학습된 image processor 로드하기
+* 사전 학습된 feature extractor 로드하기.
+* 사전 훈련된 processor 로드하기.
+* 사전 학습된 모델 로드하기.
 
 ## AutoTokenizer
 
-Nearly every NLP task begins with a tokenizer. A tokenizer converts your input into a format that can be processed by the model.
-
-Load a tokenizer with [`AutoTokenizer.from_pretrained`]:
+거의 모든 NLP 작업은 tokenizer로 시작됩니다. tokenizer는 사용자의 입력을 모델에서 처리할 수 있는 형식으로 변환합니다.
+[`AutoTokenizer.from_pretrained`]로 tokenizer를 로드합니다.:
 
 ```py
 >>> from transformers import AutoTokenizer
