@@ -101,7 +101,7 @@ class VivitConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-06,
         qkv_bias=True,
-        **kwargs
+        **kwargs,
     ):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

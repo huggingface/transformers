@@ -117,7 +117,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
@@ -143,7 +143,7 @@ class VivitImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image.
@@ -174,7 +174,7 @@ class VivitImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
@@ -199,7 +199,7 @@ class VivitImageProcessor(BaseImageProcessor):
         scale: Union[int, float],
         offset: bool = True,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -230,7 +230,7 @@ class VivitImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -333,7 +333,8 @@ class VivitImageProcessor(BaseImageProcessor):
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between `[-1 - 1]` if `do_zero_centering` is `True`, `[0, 1]` otherwise.
+                Whether to rescale the image values between `[-1 - 1]` if `do_zero_centering` is `True`, `[0, 1]`
+                otherwise.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_zero_centering (`bool`, *optional*, defaults to `self.do_zero_centering`):
