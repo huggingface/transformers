@@ -1,4 +1,4 @@
-name: Self-hosted runner (past)
+name: Self-hosted runner (past-ci)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -157,7 +157,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
@@ -223,14 +223,80 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+
+  run_all_tests_torch_cuda_extensions_gpu:
+    name: Torch CUDA extension tests
+    if: inputs.framework == 'pytorch'
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    needs: setup
+    container:
+      image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Remove cached torch extensions
+        run: rm -rf /github/home/.cache/torch_extensions/
+
+      # To avoid unknown test failures
+      - name: Pre build DeepSpeed *again*
+        working-directory: /
+        run: |
+          python3 -m pip uninstall -y deepspeed
+          rm -rf DeepSpeed
+          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [check_runner_status, check_runners, setup, run_tests_single_gpu, run_tests_multi_gpu]
+    needs: [
+      check_runner_status,
+      check_runners,
+      setup,
+      run_tests_single_gpu,
+      run_tests_multi_gpu,
+      run_all_tests_torch_cuda_extensions_gpu
+    ]
     steps:
       - name: Preliminary job status
         shell: bash
@@ -273,3 +339,10 @@ jobs:
         with:
           name: test_failure_tables_${{ inputs.framework }}-${{ inputs.version }}
           path: test_failure_tables
+
+      # delete-artifact
+      - uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+              single-*
+              multi-*
