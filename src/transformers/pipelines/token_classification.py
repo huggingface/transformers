@@ -624,11 +624,11 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         original_logits = model_outputs["logits"].numpy()
 
         # Shape: (num_windows, window_length)
-        all_window_input_ids = model_outputs["input_ids"]
+        all_window_input_ids = model_outputs["input_ids"].numpy()
         special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
 
         # Shape: (num_windows, window_length, 2)
-        offset_mapping = model_outputs["offset_mapping"] if model_outputs["offset_mapping"] is not None else None
+        offset_mapping = model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
 
         num_tokens = (special_tokens_mask ^ 1).sum()
         num_categories = original_logits.shape[-1]
@@ -644,7 +644,6 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             is_real_token = special_tokens_mask[window_idx] == 0
             real_token_logits = original_logits[window_idx, is_real_token, :]
             end_idx = idx + len(real_token_logits)
-            print(f"Writing window: ({idx}, {idx+len(real_token_logits)})")
             logit_sums[idx: end_idx] += real_token_logits
             logit_writes[idx: end_idx] += 1
 
@@ -666,14 +665,11 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-        if self.framework == "tf":
-            input_ids = input_ids.numpy()
-            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
-
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
+
         # Filter anything that is in self.ignore_labels
         entities = [
             entity
