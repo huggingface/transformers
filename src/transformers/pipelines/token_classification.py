@@ -1,4 +1,3 @@
-import torch
 import types
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -574,12 +573,10 @@ class TokenClassificationPipeline(ChunkPipeline):
 
 class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
     """Modified version of TokenClassificationPipeline that uses a sliding
-    window approach to fit long texts into the limited position embeddings of a
-    transformer.
+    window approach to fit long texts into the limited position embeddings of a transformer.
     """
 
-    def __init__(self, window_length: Optional[int] = None,
-                 stride: Optional[int] = None, *args, **kwargs):
+    def __init__(self, window_length: Optional[int] = None, stride: Optional[int] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.window_length = window_length or self.tokenizer.model_max_length
         if stride is None:
@@ -589,8 +586,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         elif 0 < stride <= self.window_length:
             self.stride = stride
         else:
-            raise ValueError("`stride` must be a positive integer no greater "
-                             "than `window_length`")
+            raise ValueError("`stride` must be a positive integer no greater " "than `window_length`")
 
     def preprocess(self, sentence, offset_mapping=None):
         model_inputs = self.tokenizer(
@@ -603,7 +599,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             padding=True,
             max_length=self.window_length,
             stride=self.stride,
-            return_overflowing_tokens=True
+            return_overflowing_tokens=True,
         )
         model_inputs.pop("overflow_to_sample_mapping")
 
@@ -623,7 +619,9 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         all_window_logits = model_outputs["logits"].numpy()
         all_window_input_ids = model_outputs["input_ids"].numpy()
         all_window_special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
-        all_window_offset_mapping = model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
+        all_window_offset_mapping = (
+            model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
+        )
 
         num_tokens = len(self.tokenizer.tokenize(sentence))
         num_categories = all_window_logits.shape[-1]
@@ -639,11 +637,11 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             is_real_token = all_window_special_tokens_mask[window_idx] == 0
             real_token_logits = all_window_logits[window_idx, is_real_token, :]
             end_idx = idx + len(real_token_logits)
-            logit_sums[idx: end_idx] += real_token_logits
-            logit_writes[idx: end_idx] += 1
+            logit_sums[idx:end_idx] += real_token_logits
+            logit_writes[idx:end_idx] += 1
 
-            input_ids[idx: end_idx] = all_window_input_ids[window_idx, is_real_token]
-            offset_mapping[idx: end_idx] = all_window_offset_mapping[window_idx, is_real_token, :]
+            input_ids[idx:end_idx] = all_window_input_ids[window_idx, is_real_token]
+            offset_mapping[idx:end_idx] = all_window_offset_mapping[window_idx, is_real_token, :]
             idx += self.window_length - self.stride - all_window_special_tokens_mask[window_idx].sum()
 
         # Average the logits across all window passes
@@ -666,7 +664,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
             entity
             for entity in grouped_entities
             if entity.get("entity", None) not in ignore_labels
-               and entity.get("entity_group", None) not in ignore_labels
+            and entity.get("entity_group", None) not in ignore_labels
         ]
         return entities
 

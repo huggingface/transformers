@@ -73,8 +73,9 @@ from .text_generation import TextGenerationPipeline
 from .token_classification import (
     AggregationStrategy,
     NerPipeline,
+    SlidingWindowTokenClassificationPipeline,
     TokenClassificationArgumentHandler,
-    TokenClassificationPipeline, SlidingWindowTokenClassificationPipeline,
+    TokenClassificationPipeline,
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
