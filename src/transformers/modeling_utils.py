@@ -378,7 +378,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
                 load_safe = True  # load safe due to preference
             else:
                 logger.warning(
-                    f"Cannot load sharded checkpoint at {folder} safely since safetensors are not installed!"
+                    f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
                 )
         elif not index_present:
             load_safe = True  # load safe since we have no other choice
