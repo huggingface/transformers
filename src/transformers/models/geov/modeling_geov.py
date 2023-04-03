@@ -273,9 +273,18 @@ class GeoVLayer(nn.Module):
         attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
 
-        attn_output = attn_output + hidden_states
-        mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
-        hidden_states = mlp_output + attn_output
+        if self.use_parallel_residual:
+            # pseudocode:
+            # x = x + attn(ln1(x)) + mlp(ln2(x))
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + hidden_states
+        else:
+            # pseudocode:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            attn_output = attn_output + hidden_states
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
@@ -673,6 +682,7 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "position_ids": position_ids,
             "past_key_values": past_key_values,
         }
 
