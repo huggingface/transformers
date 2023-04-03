@@ -410,7 +410,6 @@ class TFBlipAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPMLP with CLIP->Blip
 class TFBlipMLP(tf.keras.layers.Layer):
     def __init__(self, config: BlipConfig, **kwargs):
         super().__init__(**kwargs)
