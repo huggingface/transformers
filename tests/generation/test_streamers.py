@@ -16,7 +16,7 @@
 import unittest
 from threading import Thread
 
-from transformers import AutoTokenizer, IteratorStreamer, TextStreamer, is_torch_available
+from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -54,7 +54,7 @@ class StreamerTester(unittest.TestCase):
         greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
         greedy_text = tokenizer.decode(greedy_ids[0])
 
-        streamer = IteratorStreamer(tokenizer)
+        streamer = TextIteratorStreamer(tokenizer)
         generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()

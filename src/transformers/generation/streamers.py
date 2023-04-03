@@ -105,7 +105,7 @@ class TextStreamer(BaseStreamer):
         print(printable_text, flush=True)
 
 
-class IteratorStreamer(BaseStreamer):
+class TextIteratorStreamer(BaseStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
     useful for applications that want to use the generated text in a non-blocking way (e.g. in an interactive Gradio
@@ -118,13 +118,13 @@ class IteratorStreamer(BaseStreamer):
     Examples:
 
         ```python
-        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, IteratorStreamer
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
         >>> from threading import Thread
 
         >>> tok = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
-        >>> streamer = IteratorStreamer(tok)
+        >>> streamer = TextIteratorStreamer(tok)
 
         >>> # Run the generation in a separate thread, so that we can fetch the generated text in a non-blocking way.
         >>> generation_kwargs = dict(inputs, streamer=streamer, max_new_tokens=20)
