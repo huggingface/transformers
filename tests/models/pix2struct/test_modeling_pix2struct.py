@@ -720,6 +720,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
     def test_batched_inference_image_captioning(self):
         model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
+        model.config.is_encoder_decoder = True
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
@@ -744,6 +745,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
     def test_batched_inference_image_captioning_conditioned(self):
         model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base").to(torch_device)
+        model.config.is_encoder_decoder = True
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
@@ -766,7 +768,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         )
 
     def test_vqa_model(self):
-        model_id = "ybelkada/pix2struct-ai2d-base"
+        model_id = "google/pix2struct-ai2d-base"
 
         image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
@@ -774,6 +776,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
             torch_device
         )
+        model.config.is_encoder_decoder = True
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         # image only
@@ -785,7 +788,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "ash cloud")
 
     def test_vqa_model_batched(self):
-        model_id = "ybelkada/pix2struct-ai2d-base"
+        model_id = "google/pix2struct-ai2d-base"
 
         image_urls = [
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
@@ -802,6 +805,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
             torch_device
         )
+        model.config.is_encoder_decoder = True
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         inputs = processor(images=images, return_tensors="pt", text=texts).to(torch_device, torch.bfloat16)
