@@ -1093,6 +1093,13 @@ class BioGptForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class BioGptForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BioGptModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4807,6 +4814,44 @@ class NezhaModel(metaclass=DummyObject):
 
 
 class NezhaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class NllbMoeForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NllbMoeModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NllbMoePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NllbMoeSparseMLP(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NllbMoeTop2Router(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
