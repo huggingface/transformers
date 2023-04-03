@@ -43,6 +43,8 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
 
+
+# Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding.forward
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, base=10000):
         super().__init__()
@@ -51,7 +53,6 @@ class RotaryEmbedding(torch.nn.Module):
 
         self.max_seq_len_cached = -1
 
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding.forward
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
@@ -363,6 +364,8 @@ class GeoVPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -408,7 +411,7 @@ class GeoVModel(GeoVPreTrainedModel):
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel.forward
+    # Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -530,6 +533,7 @@ class GeoVModel(GeoVPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (outputs[2 if use_cache else 1],)
 
+        # Cast the hidden state to final layer norm data type (this is the modification from GPTNeoX)
         hidden_states = self.final_layer_norm(hidden_states.to(self.final_layer_norm.weight.dtype))
         # Add last hidden state
         if output_hidden_states:
@@ -571,7 +575,7 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.forward
+    # Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
