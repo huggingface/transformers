@@ -3932,7 +3932,7 @@ class TokenizerTesterMixin:
             tokenizer_fast.save_pretrained(tmp_dir_2)
             tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
 
-        assert tokenizer_fast.clean_up_tokenization_spaces is False
+        assert tokenizer.clean_up_tokenization_spaces is False
         decoded = tokenizer.decode(tokens)
         assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
 
