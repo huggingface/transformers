@@ -17,11 +17,14 @@
 import inspect
 import unittest
 
-from transformers import UdopConfig, is_torch_available
+from huggingface_hub import hf_hub_download
+
+from transformers import UdopConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_vision,
     slow,
     torch_device,
 )
@@ -35,8 +38,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import T5Tokenizer, UdopForConditionalGeneration, UdopModel
+    from transformers import UdopForConditionalGeneration, UdopModel, UdopProcessor
     from transformers.models.udop.modeling_udop import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 class UdopModelTester:
@@ -328,33 +335,42 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def use_task_specific_params(model, task):
-    model.config.update(model.config.task_specific_params[task])
-
-
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@require_vision
+@slow
 class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def model(self):
-        return UdopForConditionalGeneration.from_pretrained("udop-base").to(torch_device)
+    def image(self):
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+
+        return image
 
     @cached_property
-    def tokenizer(self):
-        return T5Tokenizer.from_pretrained("udop-base")
+    def processor(self):
+        # TODO update organization
+        return UdopProcessor.from_pretrained("nielsr/udop-large")
 
-    @slow
-    def test_small_generation(self):
-        model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large").to(torch_device)
-        model.config.max_length = 8
-        model.config.num_beams = 1
-        model.config.do_sample = False
-        tokenizer = T5Tokenizer.from_pretrained("microsoft/udop-large")
+    @cached_property
+    def model(self):
+        # TODO update organization
+        return UdopForConditionalGeneration.from_pretrained("nielsr/udop-large").to(torch_device)
 
-        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
+    def test_conditional_generation(self):
+        processor = self.processor
+        model = self.model
 
-        sequences = model.generate(input_ids)
+        prompt = "Question answering. In which year is the report made?"
+        encoding = processor(images=self.image, text=prompt, return_tensors="pt")
 
-        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
-        self.assertTrue(output_str == "Hello there!")
+        # TODO fix this
+        encoding["bbox"] = encoding.bbox.float()
+
+        predicted_ids = model.generate(**encoding)
+
+        predicted_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+        self.assertEquals(predicted_text, "2013")
