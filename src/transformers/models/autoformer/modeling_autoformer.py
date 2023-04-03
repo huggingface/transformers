@@ -1587,8 +1587,20 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        trend_init =
+        # Decoder inputs
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
+        # TODO ask kashif what to do if encoder_outputs is not None. In that case, enc_input is not initialized
+        mean_enc_input = torch.mean(enc_input, dim=1).unsqueeze(1).repeat(1, config.prediction_length, 1)
+        zeros = torch.zeros([dec_input.size(0), config.prediction_length, dec_input.size(2)], device=enc_input.device)
+        seasonal_enc_input, trend_enc_input = self.decomposition_layer(enc_input)
+
+        trend_init = torch.cat([trend_enc_input[:, self.config.context_length:, :], mean_enc_input], dim=1)
+        seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length:, :], zeros], dim=1)
+
+        # From the paper: "the past seasonal information from encoder is utilized by the decoder"
+        # so dec_input is the seasonal init
+        dec_input = seasonal_init
+
         decoder_outputs = self.decoder(
             trend=trend_init,
             inputs_embeds=dec_input,
