@@ -34,10 +34,6 @@ class BaseStreamer:
         """Function that is called by `.generate()` to signal the end of generation"""
         raise NotImplementedError()
 
-    def on_new_token(self, token: str, stream_end: bool = False):
-        """Callback function to signal the generation of a new token"""
-        pass
-
 
 class TextStreamer(BaseStreamer):
     """
@@ -92,7 +88,7 @@ class TextStreamer(BaseStreamer):
             printable_text = text[self.print_len : text.rfind(" ") + 1]
             self.print_len += len(printable_text)
 
-        self.on_new_token(printable_text)
+        self.on_finalized_text(printable_text)
 
     def end(self):
         """Flushes any remaining cache and prints a newline to stdout."""
@@ -106,10 +102,10 @@ class TextStreamer(BaseStreamer):
             printable_text = ""
 
         # Print a newline (and the remaining text, if any)
-        self.on_new_token(printable_text, stream_end=True)
+        self.on_finalized_text(printable_text, stream_end=True)
 
-    def on_new_token(self, token: str, stream_end: bool = False):
-        """Prints the new token to stdout."""
+    def on_finalized_text(self, token: str, stream_end: bool = False):
+        """Prints the new text to stdout."""
         print(token, flush=True, end="" if not stream_end else None)
 
 
