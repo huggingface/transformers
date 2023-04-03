@@ -117,7 +117,7 @@ class InformerModelTester:
 
         past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
         past_values = floats_tensor([self.batch_size, _past_length])
-        past_observed_mask = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         # decoder inputs
         future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
