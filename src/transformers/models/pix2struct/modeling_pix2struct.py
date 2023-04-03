@@ -1663,9 +1663,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration
+        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = Pix2StructProcessor.from_pretrained("google/pix2struct-base")
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-base")
         >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
