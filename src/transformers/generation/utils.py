@@ -1303,7 +1303,7 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        if streamer is not None:
+        if streamer is not None and not streamer.skip_prompt:
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.

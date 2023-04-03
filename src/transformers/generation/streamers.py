@@ -25,7 +25,6 @@ class BaseStreamer:
     """
     Base class from which `.generate()` streamers should inherit.
     """
-
     def put(self, value):
         """Function that is called by `.generate()` to push new tokens"""
         raise NotImplementedError()
@@ -71,7 +70,12 @@ class TextStreamer(BaseStreamer):
         # variables used in the streaming process
         self.token_cache = []
         self.print_len = 0
+<<<<<<< HEAD
         self.next_tokens_are_prompt = True
+=======
+        self.skipt_prompt = skip_prompt
+        self.decode_kwargs = decode_kwargs
+>>>>>>> 3039638a6 (tmp commit)
 
     def put(self, value):
         """
