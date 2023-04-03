@@ -145,7 +145,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("/Users/nielsrogge/Documents/python_projecten/UDOP")
+        tokenizer = self.tokenizer_class.from_pretrained("nielsr/udop-large")
 
         question, words, boxes = self.get_question_words_and_boxes()
 
@@ -1342,9 +1342,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words, boxes = self.get_words_and_boxes()
 
         # TODO update path
-        tokenizer = UdopTokenizer.from_pretrained(
-            "/Users/nielsrogge/Documents/python_projecten/UDOP", model_max_length=512
-        )
+        tokenizer = UdopTokenizer.from_pretrained("nielsr/udop-large", model_max_length=512)
 
         for i in range(12, 512):
             new_encoded_inputs = tokenizer.encode_boxes(words, boxes=boxes, max_length=i, truncation=True)
@@ -1743,26 +1741,28 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         word_labels = [0, 1]
 
         # test slow tokenizer
-        tokenizer_p = UdopTokenizer.from_pretrained("/Users/nielsrogge/Documents/python_projecten/UDOP")
+        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, -100, -100, -100])
 
-        tokenizer_p = UdopTokenizer.from_pretrained(
-            "/Users/nielsrogge/Documents/python_projecten/UDOP", only_label_first_subword=False
-        )
+        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large", only_label_first_subword=False)
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, 1, 1, -100])
 
-        # TODO test fast tokenizer
-        # tokenizer_r = UdopTokenizerFast.from_pretrained("/Users/nielsrogge/Documents/python_projecten/UDOP")
-        # encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
-        # self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100, -100])
+        # test fast tokenizer
+        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
+        encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [0, 1, -100, -100, -100])
+
+        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large", only_label_first_subword=False)
+        encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [0, 1, 1, 1, -100])
 
     @slow
     def test_udop_integration_test(self):
-        tokenizer_p = UdopTokenizer.from_pretrained("/Users/nielsrogge/Documents/python_projecten/UDOP")
-        # TODO test fast tokenizer
-        # tokenizer_r = UdopTokenizerFast.from_pretrained("/Users/nielsrogge/Documents/python_projecten/UDOP")
+        # TODO update organization everywhere
+        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
@@ -1777,17 +1777,14 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 1: not batched
         words, boxes = self.get_words_and_boxes()
 
-        print("Words:", words)
-        print("Boxes:", boxes)
-
         # fmt: off
         expected_results = {'input_ids': [3, 9, 10088, 120, 794, 21820, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[423, 237, 440, 251], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [961, 885, 992, 912], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
         encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 1: batched
         words, boxes = self.get_words_and_boxes_batch()
@@ -1797,22 +1794,26 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: not batched
         words, boxes = self.get_words_and_boxes()
-        word_labels = [1, 2, 3]
+        word_labels = [1, 2, 3, 4]
 
         # fmt: off
-        expected_results = {'input_ids': [3, 9, 10088, 120, 794, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[423, 237, 440, 251], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [1, -100, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
+        expected_results = {'input_ids': [3, 9, 10088, 120, 794, 21820, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[423, 237, 440, 251], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [961, 885, 992, 912], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [1, -100, 2, -100, 3, 4, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
         encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+
+        for key in expected_results:
+            self.assertListEqual(encoding_p[key], encoding_r[key])
+
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: batched
         words, boxes = self.get_words_and_boxes_batch()
@@ -1823,9 +1824,9 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: not batched
         question, words, boxes = self.get_question_words_and_boxes()
@@ -1835,9 +1836,9 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(question, words, boxes, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(question, words, boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(question, words, boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: batched
         questions, words, boxes = self.get_question_words_and_boxes_batch()
@@ -1847,9 +1848,9 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(questions, words, boxes, padding="max_length", max_length=20)
-        # encoding_r = tokenizer_r(questions, words, boxes, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(questions, words, boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        # self.assertDictEqual(dict(encoding_r), expected_results)
+        self.assertDictEqual(dict(encoding_r), expected_results)
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
