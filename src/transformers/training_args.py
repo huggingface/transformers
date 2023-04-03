@@ -264,8 +264,7 @@ class TrainingArguments:
             `output_dir`.
         save_safetensors (`bool`, *optional*):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
-            default `torch.load` and `torch.save`. This will default to True if safetensors are installed and False
-            otherwise. To enforce using torch functions, set this to False.
+            default `torch.load` and `torch.save`.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
             the main one.
