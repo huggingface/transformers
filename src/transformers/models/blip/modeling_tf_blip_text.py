@@ -32,7 +32,7 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...tf_utils import stable_softmax
+from ...tf_utils import invert_attention_mask, stable_softmax
 from ...utils import add_start_docstrings_to_model_forward, logging
 from .configuration_blip import BlipTextConfig
 
@@ -777,12 +777,12 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
             if type(encoder_attention_mask) == list:
-                encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
+                encoder_extended_attention_mask = [invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = tf.ones(encoder_hidden_shape)
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = invert_attention_mask(encoder_attention_mask)
             else:
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 

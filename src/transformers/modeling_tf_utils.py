@@ -1158,33 +1158,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
-    def invert_attention_mask(self, encoder_attention_mask: tf.Tensor) -> tf.Tensor:
-        """
-        Invert an attention mask (e.g., switches 0. and 1.).
-
-        Args:
-            encoder_attention_mask (`torch.Tensor`): An attention mask.
-
-        Returns:
-            `tf.Tensor`: The inverted attention mask.
-        """
-        if not isinstance(encoder_attention_mask, tf.Tensor):
-            encoder_attention_mask = tf.convert_to_tensor(encoder_attention_mask)  # Catches stray NumPy inputs
-        if encoder_attention_mask.shape.rank == 3:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-        if encoder_attention_mask.shape.rank == 2:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-        # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow
-        # /transformer/transformer_layers.py#L270
-        # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
-        # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = (
-            tf.cast(1, encoder_attention_mask.dtype) - encoder_extended_attention_mask
-        ) * encoder_extended_attention_mask.dtype.min
-
-        return encoder_extended_attention_mask
-
     def get_head_mask(self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
         """
         Prepare the head mask if needed.
