@@ -65,7 +65,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
 
     def prepare_dummy_image(self):
-        img_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
         return raw_image
 
@@ -87,7 +87,6 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processor, "do_normalize"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    @unittest.skip("fix me Younes.")
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
