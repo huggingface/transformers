@@ -25,7 +25,6 @@ class BaseStreamer:
     """
     Base class from which `.generate()` streamers should inherit.
     """
-
     def put(self, value):
         """Function that is called by `.generate()` to push new tokens"""
         raise NotImplementedError()
@@ -42,6 +41,10 @@ class TextStreamer(BaseStreamer):
     Parameters:
         tokenizer (`AutoTokenizer`):
             The tokenized used to decode the tokens.
+        skip_prompt (`bool`, *optional*, defaults to `False`):
+            Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
 
     Examples:
 
@@ -59,10 +62,12 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer"):
+    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
         self.tokenizer = tokenizer
         self.token_cache = []
         self.print_len = 0
+        self.skipt_prompt = skip_prompt
+        self.decode_kwargs = decode_kwargs
 
     def put(self, value):
         """
@@ -112,8 +117,8 @@ class TextStreamer(BaseStreamer):
 class TextIteratorStreamer(BaseStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
-    useful for applications that want to use the generated text in a non-blocking way (e.g. in an interactive Gradio
-    demo).
+    useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
+    Gradio demo).
 
     Parameters:
         tokenizer (`AutoTokenizer`):
