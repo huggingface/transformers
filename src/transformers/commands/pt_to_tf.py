@@ -256,9 +256,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # Extra input requirements, in addition to the input modality
         if (
-                config.is_encoder_decoder
-                or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"))
-                or "decoder_input_ids" in tf_dummy_inputs
+            config.is_encoder_decoder
+            or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"))
+            or "decoder_input_ids" in tf_dummy_inputs
         ):
             decoder_input_ids = np.asarray([[1], [1]], dtype=int) * (pt_model.config.decoder_start_token_id or 0)
             pt_input.update({"decoder_input_ids": torch.tensor(decoder_input_ids)})

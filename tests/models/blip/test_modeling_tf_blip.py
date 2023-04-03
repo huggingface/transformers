@@ -330,7 +330,6 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
-
 class TFBlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
@@ -438,7 +437,6 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
 
 
 class BlipTextRetrievalModelTester:
@@ -784,7 +782,6 @@ class TFBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             predictions[0].numpy().tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
         )
-
 
         # image and context
         context = ["a picture of"]
