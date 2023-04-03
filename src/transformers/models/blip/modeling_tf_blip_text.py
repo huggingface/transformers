@@ -123,9 +123,6 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
                 ),
             )
             inputs_embeds = self.word_embeddings(input_ids)
-            # In PyTorch, input IDs equal to the padding idx get an output of all zeroes. TF embedding doesn't
-            # do that, so we have to do it manually to make the outputs line up
-            inputs_embeds = tf.where(tf.expand_dims(input_ids == self.config.pad_token_id, -1), inputs_embeds, 0)
 
         embeddings = inputs_embeds
 
