@@ -1197,7 +1197,9 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
 
         >>> answer_offset = len(tokenizer(question)[0])
 
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_offset + answer_start_index : answer_offset + answer_end_index + 1]
+        >>> predict_answer_tokens = inputs.input_ids[
+        ...     0, answer_offset + answer_start_index : answer_offset + answer_end_index + 1
+        ... ]
         >>> predicted = tokenizer.decode(predict_answer_tokens)
         >>> predicted
         ' a nice puppet'
