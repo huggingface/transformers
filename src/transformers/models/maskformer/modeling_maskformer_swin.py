@@ -859,6 +859,10 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         if "stem" in self.out_features:
             raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 
+        if config.out_indices is not None:
+            self.out_indices = config.out_indices
+        else:
+            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(num_channels) for num_channels in self.channels])
 
