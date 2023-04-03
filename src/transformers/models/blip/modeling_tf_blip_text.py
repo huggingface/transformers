@@ -331,7 +331,6 @@ class TFBlipTextIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Adapted from transformers.models.bert.modeling_tf_bert.TFBertOutput
 class TFBlipTextOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
