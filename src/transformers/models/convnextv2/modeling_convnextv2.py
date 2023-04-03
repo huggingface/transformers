@@ -510,6 +510,10 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
+        if config.out_indices is not None:
+            self.out_indices = config.out_indices
+        else:
+            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
