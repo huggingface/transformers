@@ -365,23 +365,23 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto."
             )
 
-        if (
-            getattr(model, "hf_device_map", None) is not None
-            and len(set(model.hf_device_map.values())) > 1
-            and not args.is_model_parallel
-        ):
-            # warn users
-            logger.warning(
-                "You have loaded a model on multiple GPUs and you did not set `is_model_parallel` to `True`. ",
-                "You may encounter unexpected behavior when training. Please re-run your script with `is_model_parallel=True`.",
-            )
-
-        if (
-            hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel
-        ) or args.is_model_parallel:
+        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
+
+        if (
+            getattr(model, "hf_device_map", None) is not None
+            and len(set(model.hf_device_map.values())) > 1
+            and not self.is_model_parallel
+        ):
+            self.is_model_parallel = True
+
+            # warn users
+            logger.warning(
+                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set",
+                " to `True` to avoid any unexpected behavior such as device placement mismatching.",
+            )
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
