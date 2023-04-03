@@ -374,9 +374,9 @@ class Pix2StructConfig(PretrainedConfig):
         self.text_config = Pix2StructTextConfig(**text_config)
         self.vision_config = Pix2StructVisionConfig(**vision_config)
 
-        self.text_config.encoder_hidden_size = self.vision_config.hidden_size
         self.decoder_start_token_id = self.text_config.decoder_start_token_id
         self.pad_token_id = self.text_config.pad_token_id
+        self.eos_token_id = self.text_config.eos_token_id
 
         self.initializer_factor = initializer_factor
         self.initializer_range = initializer_range

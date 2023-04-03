@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Pix2Struct modeling file"""
 
-import copy
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1599,13 +1598,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
-        encoder_config = copy.deepcopy(config.vision_config)
-        self.encoder = Pix2StructVisionModel(encoder_config)
 
-        decoder_config = copy.deepcopy(config.text_config)
-        self.decoder_start_token_id = decoder_config.pad_token_id
-        self.decoder_eos_token_ids = decoder_config.eos_token_id
-        self.decoder = Pix2StructTextModel(decoder_config)
+        self.encoder = Pix2StructVisionModel(config.vision_config)
+        self.decoder = Pix2StructTextModel(config.text_config)
 
         self.is_vqa = config.is_vqa
 
