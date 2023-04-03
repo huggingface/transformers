@@ -15,6 +15,8 @@
     title: (번역 중)
   title: How-to 가이드
 - sections:
+  - local: sagemaker
+    title: Amazon SageMaker에서 학습 실행하기
   - local: in_translation
     title: (번역 중)
   title: 개념 가이드
