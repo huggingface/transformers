@@ -30,6 +30,7 @@ else:
     _import_structure["modeling_biogpt"] = [
         "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BioGptForCausalLM",
+        "BioGptForTokenClassification",
         "BioGptModel",
         "BioGptPreTrainedModel",
     ]
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         from .modeling_biogpt import (
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BioGptForCausalLM,
+            BioGptForTokenClassification,
             BioGptModel,
             BioGptPreTrainedModel,
         )
