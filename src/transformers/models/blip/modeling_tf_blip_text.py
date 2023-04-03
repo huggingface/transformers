@@ -257,7 +257,6 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Adapted from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
 class TFBlipTextSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
