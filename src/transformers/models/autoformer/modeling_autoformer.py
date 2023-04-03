@@ -692,6 +692,7 @@ class AutoformerDecoderLayer(nn.Module):
         self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_avg)
         self.decomp3 = AutoformerSeriesDecompositionLayer(config.moving_avg)
 
+        # source: https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/layers/Autoformer_EncDec.py#L128
         self.trend_projection = nn.Conv1d(
             in_channels=self.embed_dim,
             out_channels=config.input_size,
@@ -1379,6 +1380,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self.encoder = AutoformerEncoder(config)
         self.decoder = AutoformerDecoder(config)
 
+        # used for seasonal and trendg initialization
+        self.decomposition_layer = AutoformerSeriesDecompositionLayer(config.moving_avg)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1583,7 +1587,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        trend_init = 
+        trend_init =
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
             trend=trend_init,
