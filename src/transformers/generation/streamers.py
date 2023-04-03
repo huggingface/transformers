@@ -88,7 +88,7 @@ class TextStreamer(BaseStreamer):
             printable_text = text[self.print_len : text.rfind(" ") + 1]
             self.print_len += len(printable_text)
 
-        print(printable_text, flush=True, end="")
+        self.on_finalized_text(printable_text)
 
     def end(self):
         """Flushes any remaining cache and prints a newline to stdout."""
@@ -102,7 +102,11 @@ class TextStreamer(BaseStreamer):
             printable_text = ""
 
         # Print a newline (and the remaining text, if any)
-        print(printable_text, flush=True)
+        self.on_finalized_text(printable_text, stream_end=True)
+
+    def on_finalized_text(self, token: str, stream_end: bool = False):
+        """Prints the new text to stdout."""
+        print(token, flush=True, end="" if not stream_end else None)
 
 
 class TextIteratorStreamer(BaseStreamer):
