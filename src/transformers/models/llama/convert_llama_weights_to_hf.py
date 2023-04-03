@@ -34,7 +34,7 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import LlamaForCausalLM, LlamaForTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer
 
 model = LlamaForCausalLM.from_pretrained("/output/path")
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
