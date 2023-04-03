@@ -372,13 +372,13 @@ class Trainer:
 
         if (
             getattr(model, "hf_device_map", None) is not None
-            and len(set(model.hf_device_map.values())) > 1
+            and len([device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]) > 1
             and not self.is_model_parallel
         ):
             self.is_model_parallel = True
 
             # warn users
-            logger.warning(
+            logger.info(
                 "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
                 " to `True` to avoid any unexpected behavior such as device placement mismatching."
             )
