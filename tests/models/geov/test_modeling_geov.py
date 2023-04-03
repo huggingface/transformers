@@ -170,9 +170,7 @@ class GeoVModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_initialization = False
     test_left_padding_compatibility = False
 
-    pipeline_model_mapping = {
-        "text-generation": GeoVForCausalLM,
-    }
+    pipeline_model_mapping = {"text-generation": GeoVForCausalLM} if is_torch_available() else {}
 
     def setUp(self):
         self.model_tester = GeoVModelTester(self)
