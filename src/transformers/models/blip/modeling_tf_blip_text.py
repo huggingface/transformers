@@ -559,7 +559,7 @@ class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
+        hidden_states = self.decoder(hidden_states) + self.bias
         return hidden_states
 
 

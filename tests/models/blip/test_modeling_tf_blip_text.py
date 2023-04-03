@@ -166,6 +166,66 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
+    # @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
     def test_pt_tf_model_equivalence(self):
-        pass
+        import transformers
+        import inspect
+        import tempfile
+        import os
+        import torch
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # Output all for aggressive testing
+            config.output_hidden_states = True
+            config.output_attentions = self.has_attentions
+
+            # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
+            # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
+            self._make_attention_mask_non_null(inputs_dict)
+
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class = getattr(transformers, pt_model_class_name)
+
+            tf_model = model_class(config)
+            pt_model = pt_model_class(config)
+
+            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            tf_inputs_dict_with_labels = self._prepare_for_class(
+                inputs_dict,
+                model_class,
+                # Not all models accept "labels" in the forward pass (yet :) )
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
+
+            # For some models (e.g. base models), there is no label returned.
+            # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
+            if not set(tf_inputs_dict_with_labels.keys()).symmetric_difference(tf_inputs_dict.keys()):
+                tf_inputs_dict_with_labels = None
+            # Check we can load pt model in tf and vice-versa with model => model functions
+            breakpoint()
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=True)
+
+            # Original test: check without `labels`
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+            # check with `labels`
+            if tf_inputs_dict_with_labels:
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
+
+            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
+                torch.save(pt_model.state_dict(), pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+
+                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
+                tf_model.save_weights(tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+
+            # Original test: check without `labels`
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+            # check with `labels`
+            if tf_inputs_dict_with_labels:
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)

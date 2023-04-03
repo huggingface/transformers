@@ -769,7 +769,7 @@ def prepare_img():
 @require_vision
 @require_tf
 @slow
-class BlipModelIntegrationTest(unittest.TestCase):
+class TFBlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
         model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -784,6 +784,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             predictions[0].numpy().tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
         )
+
 
         # image and context
         context = ["a picture of"]
@@ -803,7 +804,6 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         text = "how many dogs are in the picture?"
-
         inputs = processor(image, text=text, return_tensors="tf")
         out = model.generate(**inputs)
 
