@@ -326,9 +326,9 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
-    def test_pt_tf_model_equivalence(self):
-        pass
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
 
 
 class TFBlipModelTester:
@@ -436,9 +436,9 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    @unittest.skip(reason="This test class covers encoder-decoder models that the base test does not work with.")
-    def test_pt_tf_model_equivalence(self):
-        pass
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
 
 
 class BlipTextRetrievalModelTester:
