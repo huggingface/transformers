@@ -50,7 +50,6 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
-    strtobool,
     is_bs4_available,
     is_cython_available,
     is_decord_available,
@@ -93,6 +92,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    strtobool,
 )
 
 
