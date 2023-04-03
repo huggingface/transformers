@@ -28,7 +28,6 @@ import tempfile
 import time
 import unittest
 from collections.abc import Mapping
-from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
@@ -51,6 +50,7 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    strtobool,
     is_bs4_available,
     is_cython_available,
     is_decord_available,
