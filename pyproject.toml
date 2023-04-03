@@ -82,3 +82,6 @@ line-length = 119
 [tool.ruff.isort]
 lines-after-imports = 2
 known-first-party = ["transformers"]
+
+[tool.pytest]
+doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
