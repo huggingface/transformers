@@ -577,6 +577,9 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        is_model_parallel (`bool`, *optional*, defaults to `False`):
+            Whether or not to use model parallelism. This is useful when loading large models using `accelerate` to
+            place the input on the correct device.
     """
 
     framework = "pt"
@@ -1097,6 +1100,12 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
+        },
+    )
+    is_model_parallel: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use model parallelism, useful when the model is loaded across multiple GPUs."
         },
     )
 

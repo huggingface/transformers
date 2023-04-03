@@ -365,7 +365,9 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto."
             )
 
-        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
+        if (
+            hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel
+        ) or args.is_model_parallel:
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
