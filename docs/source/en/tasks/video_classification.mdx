@@ -127,7 +127,12 @@ Next up, you will derive the set of labels present in the dataset. Also, create 
 * `id2label`: maps the integers to class names. 
 
 ```py 
->>> class_labels = sorted({str(path).split("/")[2] for path in all_video_file_paths})
+>>> from pathlib import Path
+
+>>> base_path = Path("/path/to/UCF101_subset")
+>>> all_video_file_paths = list(base_path.glob("**/*.avi")) 
+
+>>> class_labels = sorted({str(path).split("/")[-2] for path in all_video_file_paths})
 >>> label2id = {label: i for i, label in enumerate(class_labels)}
 >>> id2label = {i: label for label, i in label2id.items()}
 
