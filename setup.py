@@ -76,10 +76,9 @@ To create the package for pypi.
 import os
 import re
 import shutil
-from distutils.core import Command
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup, Command
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466

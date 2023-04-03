@@ -28,7 +28,6 @@ import tempfile
 import time
 import unittest
 from collections.abc import Mapping
-from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
@@ -93,6 +92,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    strtobool,
 )
 
 

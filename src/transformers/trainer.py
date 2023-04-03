@@ -29,7 +29,6 @@ import sys
 import time
 import warnings
 from collections.abc import Mapping
-from distutils.util import strtobool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -152,6 +151,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
+    strtobool,
 )
 from .utils.generic import ContextManagers
 
