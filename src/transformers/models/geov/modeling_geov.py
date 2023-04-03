@@ -343,7 +343,7 @@ GEOV_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXPreTrainedModel
 class GeoVPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -372,11 +372,11 @@ class GeoVPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel
 @add_start_docstrings(
     "The bare GeoV Model transformer outputting raw hidden-states without any specific head on top.",
     GEOV_START_DOCSTRING,
 )
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel
 class GeoVModel(GeoVPreTrainedModel):
     def __init__(self, config: "GeoVConfig"):
         super().__init__(config)
@@ -544,10 +544,10 @@ class GeoVModel(GeoVPreTrainedModel):
         )
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM
 @add_start_docstrings(
     """GeoV Model with a `language modeling` head on top for CLM fine-tuning.""", GEOV_START_DOCSTRING
 )
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM
 class GeoVForCausalLM(GeoVPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"causal_mask", r"inv_freq"]
 
