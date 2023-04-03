@@ -379,8 +379,8 @@ class Trainer:
 
             # warn users
             logger.warning(
-                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set",
-                " to `True` to avoid any unexpected behavior such as device placement mismatching.",
+                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
+                " to `True` to avoid any unexpected behavior such as device placement mismatching."
             )
 
         # At this stage the model is already loaded
