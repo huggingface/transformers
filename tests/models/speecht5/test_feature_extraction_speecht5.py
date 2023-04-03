@@ -67,7 +67,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
         hop_length=16,
         win_length=64,
         win_function="hann_window",
-        frame_signal_scale=1.0,
         fmin=80,
         fmax=7600,
         mel_floor=1e-10,
@@ -86,7 +85,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
         self.hop_length = hop_length
         self.win_length = win_length
         self.win_function = win_function
-        self.frame_signal_scale = frame_signal_scale
         self.fmin = fmin
         self.fmax = fmax
         self.mel_floor = mel_floor
@@ -102,7 +100,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
             "hop_length": self.hop_length,
             "win_length": self.win_length,
             "win_function": self.win_function,
-            "frame_signal_scale": self.frame_signal_scale,
             "fmin": self.fmin,
             "fmax": self.fmax,
             "mel_floor": self.mel_floor,

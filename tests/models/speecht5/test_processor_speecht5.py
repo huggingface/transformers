@@ -51,7 +51,6 @@ class SpeechT5ProcessorTest(unittest.TestCase):
             "hop_length": 16,
             "win_length": 64,
             "win_function": "hann_window",
-            "frame_signal_scale": 1.0,
             "fmin": 80,
             "fmax": 7600,
             "mel_floor": 1e-10,

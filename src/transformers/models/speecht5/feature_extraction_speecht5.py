@@ -59,8 +59,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             Number of ms per window.
         win_function (`str`, *optional*, defaults to `"hann_window"`):
             Name for the window function used for windowing, must be accessible via `torch.{win_function}`
-        frame_signal_scale (`float`, *optional*, defaults to 1.0):
-            Constant multiplied in creating the frames before applying DFT.
         fmin (`float`, *optional*, defaults to 80):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*, defaults to 7600):
@@ -83,7 +81,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         hop_length: int = 16,
         win_length: int = 64,
         win_function: str = "hann_window",
-        frame_signal_scale: float = 1.0,
         fmin: float = 80,
         fmax: float = 7600,
         mel_floor: float = 1e-10,
@@ -98,7 +95,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         self.hop_length = hop_length
         self.win_length = win_length
         self.win_function = win_function
-        self.frame_signal_scale = frame_signal_scale
         self.fmin = fmin
         self.fmax = fmax
         self.mel_floor = mel_floor
