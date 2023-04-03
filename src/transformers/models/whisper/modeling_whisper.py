@@ -1526,7 +1526,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Optional list of token IDs created by passing text to `processor.create_initial_prompt_ids` that is
                 provided as a prompt for the first window. This can be used to provide or "prompt-engineer" a context
                 for transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those
-                word correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+                word correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this
+                value.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
