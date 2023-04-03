@@ -425,3 +425,21 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
                 "forced_bos_token_id": 256057,
             },
         )
+
+    @require_torch
+    def test_legacy_behaviour(self):
+        self.tokenizer.legacy_behaviour = True
+        inputs = self.tokenizer(
+            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
+        )
+        self.assertEqual(
+            inputs.input_ids, [16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2, 256047]
+        )
+
+        self.tokenizer.legacy_behaviour = False
+        inputs = self.tokenizer(
+            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
+        )
+        self.assertEqual(
+            inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
+        )
