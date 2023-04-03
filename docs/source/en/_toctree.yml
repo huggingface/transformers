@@ -299,6 +299,8 @@
         title: Funnel Transformer
       - local: model_doc/openai-gpt
         title: GPT
+      - local: model_doc/geov
+        title: GeoV
       - local: model_doc/gpt_neo
         title: GPT Neo
       - local: model_doc/gpt_neox
