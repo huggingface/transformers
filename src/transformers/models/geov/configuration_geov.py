@@ -53,6 +53,8 @@ class GeoVConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
+        initializer_range (`float`, *optional*, defaults to 1e-5):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-4):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -60,6 +62,9 @@ class GeoVConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         use_extra_biases_ffn (`bool`, *optional*, defaults to `False`):
             Whether or not to have extra bias parameters in the final layer of FFN modules.
+        use_parallel_residual (`bool`, *optional*, defaults to `True`):
+            Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
+            speedup at large scales (e.g. 20B).
         Example:
 
     ```python
@@ -86,11 +91,13 @@ class GeoVConfig(PretrainedConfig):
         layer_norm_eps=1e-4,
         rotary_emb_base=10000,
         max_position_embeddings=2048,
+        initializer_range=0.02,
         use_extra_biases_ffn=False,
         use_cache=True,
         bos_token_id=0,
         eos_token_id=2,
         tie_word_embeddings=False,
+        use_parallel_residual=False,
         **kwargs,
     ):
         super().__init__(
@@ -104,5 +111,7 @@ class GeoVConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.rotary_emb_base = rotary_emb_base
         self.use_cache = use_cache
+        self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_extra_biases_ffn = use_extra_biases_ffn
+        self.use_parallel_residual = use_parallel_residual

@@ -43,7 +43,6 @@ GEOV_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GeoV models at https://huggingface.co/models?filter=geov
 ]
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, base=10000):
         super().__init__()
@@ -52,6 +51,7 @@ class RotaryEmbedding(torch.nn.Module):
 
         self.max_seq_len_cached = -1
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding.forward
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
@@ -74,7 +74,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, cos, sin, position_ids):
     """Apply positional embeddings"""
     gather_indices = position_ids[:, None, :, None]  # [bs, 1, seq_len, 1]
@@ -85,7 +84,6 @@ def apply_rotary_pos_emb(q, cos, sin, position_ids):
     return q_embed
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
 def apply_rotary_pos_emb_reverse(q, cos, sin, position_ids):
     """Apply positional embeddings in reverse"""
     gather_indices = position_ids[:, None, :, None]  # [bs, 1, seq_len, 1]
@@ -96,7 +94,6 @@ def apply_rotary_pos_emb_reverse(q, cos, sin, position_ids):
     return q_embed
 
 
-# Copied (and modified) from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
 class GeoVAttention(nn.Module):
     """
     Attention module
@@ -246,7 +243,7 @@ class GeoVMLP(nn.Module):
 class GeoVLayer(nn.Module):
     """GeoV transformer layer"""
 
-    def __init__(self, config: "GeoVConfig"):
+    def __init__(self, config):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -361,11 +358,11 @@ class GeoVPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
