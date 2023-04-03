@@ -239,7 +239,6 @@ class GeoVMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer
 class GeoVLayer(nn.Module):
     """GeoV transformer layer"""
 
@@ -250,6 +249,7 @@ class GeoVLayer(nn.Module):
         self.attention = GeoVAttention(config)
         self.mlp = GeoVMLP(config)
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer.forward
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor],
@@ -343,7 +343,6 @@ GEOV_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXPreTrainedModel
 class GeoVPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -355,6 +354,7 @@ class GeoVPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GeoVLayer"]
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -376,7 +376,6 @@ class GeoVPreTrainedModel(PreTrainedModel):
     "The bare GeoV Model transformer outputting raw hidden-states without any specific head on top.",
     GEOV_START_DOCSTRING,
 )
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel
 class GeoVModel(GeoVPreTrainedModel):
     def __init__(self, config: "GeoVConfig"):
         super().__init__(config)
@@ -394,9 +393,11 @@ class GeoVModel(GeoVPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embed_in
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embed_in = value
 
@@ -407,6 +408,7 @@ class GeoVModel(GeoVPreTrainedModel):
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -547,7 +549,6 @@ class GeoVModel(GeoVPreTrainedModel):
 @add_start_docstrings(
     """GeoV Model with a `language modeling` head on top for CLM fine-tuning.""", GEOV_START_DOCSTRING
 )
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM
 class GeoVForCausalLM(GeoVPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"causal_mask", r"inv_freq"]
 
@@ -560,14 +561,17 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.get_output_embeddings
     def get_output_embeddings(self):
         return self.embed_out
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
     @add_start_docstrings_to_model_forward(GEOV_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -642,6 +646,7 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
         input_shape = input_ids.shape
 
@@ -667,6 +672,7 @@ class GeoVForCausalLM(GeoVPreTrainedModel):
             "past_key_values": past_key_values,
         }
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
