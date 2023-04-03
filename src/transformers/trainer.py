@@ -2243,12 +2243,14 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             if isinstance(self.eval_dataset, dict):
+                metrics = {}
                 for eval_dataset_name, eval_dataset in self.eval_dataset.items():
-                    metrics = self.evaluate(
+                    dataset_metrics = self.evaluate(
                         eval_dataset=eval_dataset,
                         ignore_keys=ignore_keys_for_eval,
                         metric_key_prefix=f"eval_{eval_dataset_name}",
                     )
+                    metrics.update(dataset_metrics)
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
