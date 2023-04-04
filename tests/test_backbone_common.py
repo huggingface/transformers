@@ -44,14 +44,15 @@ class BackboneTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
+            num_features = model.num_features
             self.assertEqual(len(model.channels), len(config.out_features))
-            self.assertListEqual(model.channels, config.hidden_sizes[1:])
+            self.assertListEqual(model.channels, num_features[1 : len(config.out_features) + 1])
 
             config.out_features = None
             config.out_indices = None
             model = model_class(config)
             self.assertEqual(len(model.channels), 1)
-            self.assertListEqual(model.channels, [config.hidden_sizes[-1]])
+            self.assertListEqual(model.channels, [num_features[-1]])
 
     def test_create_from_modified_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

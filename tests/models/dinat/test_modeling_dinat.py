@@ -388,19 +388,3 @@ class DinatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     def setUp(self):
         self.model_tester = DinatModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DinatConfig, embed_dim=37)
-
-    def test_channels(self):
-        # Dinat config doesn't have hidden_sizes attribute
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-
-            model = model_class(config)
-            self.assertListEqual(model.channels, num_features[1 : len(config.out_features) + 1])
-
-            config.out_features = None
-            config.out_indices = None
-            model = model_class(config)
-            self.assertEqual(len(model.channels), 1)
-            self.assertListEqual(model.channels, [num_features[-1]])

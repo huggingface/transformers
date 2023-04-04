@@ -324,6 +324,8 @@ class BitModelIntegrationTest(unittest.TestCase):
 class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (BitBackbone,) if is_torch_available() else ()
 
+    has_attentions = False
+
     def setUp(self):
         self.model_tester = BitModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BitConfig, has_text_modality=False)

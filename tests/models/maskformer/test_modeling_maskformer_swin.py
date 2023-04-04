@@ -405,3 +405,38 @@ class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)
+
+    def test_backbone_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size = inputs_dict["pixel_values"].shape[0]
+
+        for backbone_class in self.all_model_classes:
+            backbone = backbone_class(config)
+            backbone.to(torch_device)
+            backbone.eval()
+
+            outputs = backbone(**inputs_dict)
+
+            # Test default outputs and verify feature maps
+            self.assertIsInstance(outputs.feature_maps, tuple)
+            self.assertTrue(len(outputs.feature_maps) == len(backbone.channels))
+            for feature_map, n_channels in zip(outputs.feature_maps, backbone.channels):
+                self.assertTrue(feature_map.shape[:2], (batch_size, n_channels))
+            self.assertIsNone(outputs.hidden_states)
+            self.assertIsNone(outputs.attentions)
+
+            # Test output_hidden_states=True
+            outputs = backbone(**inputs_dict, output_hidden_states=True)
+            self.assertIsNotNone(outputs.hidden_states)
+            self.assertTrue(len(outputs.hidden_states), len(backbone.stage_names))
+            # We skip the stem layer
+            for hidden_states, n_channels in zip(outputs.hidden_states[1:], backbone.channels):
+                for hidden_state in hidden_states:
+                    # Hidden states are in the format (batch_size, (height * width), n_channels)
+                    h_batch_size, _, h_n_channels = hidden_state.shape
+                    self.assertTrue((h_batch_size, h_n_channels), (batch_size, n_channels))
+
+            # Test output_attentions=True
+            if self.has_attentions:
+                outputs = backbone(**inputs_dict, output_attentions=True)
+                self.assertIsNotNone(outputs.attentions)

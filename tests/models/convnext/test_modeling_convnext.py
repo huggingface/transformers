@@ -310,6 +310,8 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
 class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (ConvNextBackbone,) if is_torch_available() else ()
 
+    has_attentions = False
+
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
