@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_tf,
     require_torch,
+    require_torch_gpu,
     require_torchaudio,
     slow,
 )
@@ -1157,6 +1158,36 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # 2nd arange
         output = speech_recognizer({"raw": waveform, "stride": (1000, 8000), "sampling_rate": 16_000})
         self.assertEqual(output, {"text": "XB"})
+
+    @slow
+    @require_torch_gpu
+    def test_slow_unfinished_sequence(self):
+        from transformers import GenerationConfig
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="vasista22/whisper-hindi-large-v2",
+            device="cuda:0",
+        )
+        # Original model wasn't trained with timestamps and has incorrect generation config
+        pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        out = pipe(
+            audio,
+            return_timestamps=True,
+        )
+        self.assertEqual(
+            out,
+            {
+                "chunks": [
+                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
+                ],
+                "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+            },
+        )
 
 
 def require_ffmpeg(test_case):
