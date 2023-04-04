@@ -32,12 +32,12 @@ if is_torch_available():
 
     from transformers import (
         GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Tokenizer,
         GPTBigCodeDoubleHeadsModel,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
         GPTBigCodeLMHeadModel,
         GPTBigCodeModel,
-        GPT2Tokenizer,
     )
 
 
@@ -432,12 +432,20 @@ class GPTBigCodeModelTester:
 @require_torch
 class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPTBigCodeModel, GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel, GPTBigCodeForSequenceClassification, GPTBigCodeForTokenClassification)
+        (
+            GPTBigCodeModel,
+            GPTBigCodeLMHeadModel,
+            GPTBigCodeDoubleHeadsModel,
+            GPTBigCodeForSequenceClassification,
+            GPTBigCodeForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
+    )
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True

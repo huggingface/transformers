@@ -17,7 +17,6 @@
 """PyTorch GPTBigCode model."""
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -25,7 +24,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -444,7 +442,6 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPTBigCodeConfig
-    load_tf_weights = load_tf_weights_in_gpt_bigcode
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -483,6 +480,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTBigCodeModel):
             module.gradient_checkpointing = value
+
 
 # TODO: Data types are incorrect
 @dataclass
@@ -621,8 +619,8 @@ PARALLELIZE_DOCSTRING = r"""
         device_map (`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the gpt_bigcode models have the
-            following number of attention modules:
+            have fewer attention modules mapped to it than other devices. For reference, the gpt_bigcode models have
+            the following number of attention modules:
 
                 - gpt_bigcode: 12
                 - gpt_bigcode-medium: 24
@@ -1366,14 +1364,15 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
             for layer_past in past_key_values
         )
 
+
 # TODO: Fix type hints?
 # TODO: Add copy comment?
 @add_start_docstrings(
     """
     The GPT_BIGCODE Model transformer with a sequence classification head on top (linear layer).
 
-    [`GPTBigCodeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-1) do.
+    [`GPTBigCodeForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    models (e.g. GPT-1) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
@@ -1500,12 +1499,13 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 # TODO: Fix type hints?
 # TODO: Add copy comment?
 @add_start_docstrings(
     """
-    GPT_BIGCODE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    GPT_BIGCODE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )

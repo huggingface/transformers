@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ GPTBigCode configuration"""
+from enum import IntEnum
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -34,9 +35,9 @@ class AttentionType(IntEnum):
 
 class GPTBigCodeConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GPTBigCodeModel`] or a [`TFGPTBigCodeModel`]. It is used to
-    instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-2
+    This is the configuration class to store the configuration of a [`GPTBigCodeModel`] or a [`TFGPTBigCodeModel`]. It
+    is used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT-2
     [gpt_bigcode](https://huggingface.co/gpt_bigcode) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -161,8 +162,6 @@ class GPTBigCodeConfig(PretrainedConfig):
         attention_softmax_in_fp32=True,
         scale_attention_softmax_in_fp32=True,
         attention_type=AttentionType.MULTI_HEAD,
-        inference_runner=InferenceRunnerType.NO_RUNNER,
-        validate_runner_input=True,
         pre_allocate_kv_cache=False,
         max_sequence_length=None,
         max_batch_size=None,
