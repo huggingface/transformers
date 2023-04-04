@@ -12,8 +12,45 @@ specific language governing permissions and limitations under the License.
 
 # NLLB
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=bug&template=bug-report.yml) and assign
-@LysandreJik
+**DISCLAIMER:** The default behaviour for the tokenizer has recently been fixed (and thus changed)!
+
+The previous version adds `[self.eos_token_id, self.cur_lang_code]` at the end of the token sequence for both target and source tokenization. This is wrong as the NLLB paper mentions (page 48, 6.1.1. Model Architecture) :
+
+*Note that we prefix the source sequence with the source language, as opposed to the target
+language as previously done in several works (Arivazhagan et al., 2019; Johnson et al.,
+2017). This is primarily because we prioritize optimizing zero-shot performance of our
+model on any pair of 200 languages at a minor cost to supervised performance.*
+
+Previous behaviour:
+
+```python
+>>> from transformers import NllbTokenizer
+
+>>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+>>> tokenizer("How was your day?").input_ids
+[13374, 1398, 4260, 4039, 248130, 2, 256047]
+
+>>> # 2: '</s>'
+>>> # 256047 : 'eng_Latn'
+```
+New behaviour
+
+```python
+>>> from transformers import NllbTokenizer
+
+>>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+>>> tokenizer("How was your day?").input_ids
+[256047, 13374, 1398, 4260, 4039, 248130, 2]
+ ```
+
+Enabling the old behaviour can be done as follows:
+```python
+>>> from transformers import NllbTokenizer
+
+>>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", legacy_behaviour=True)
+```
+
+For more details, feel free to check the linked [PR](https://github.com/huggingface/transformers/pull/22313) and [Issue](https://github.com/huggingface/transformers/issues/19943).
 
 ## Overview of NLLB
 
