@@ -49,6 +49,8 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
+import datetime
+from azureml.core import Run
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
 
@@ -158,7 +160,7 @@ class ModelArguments:
 
 
 def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
+    pixel_values = torch.stack([torch.Tensor(example["pixel_values"]) for example in examples])
     labels = torch.tensor([example["labels"] for example in examples])
     return {"pixel_values": pixel_values, "labels": labels}
 
@@ -299,22 +301,20 @@ def main():
         size = image_processor.size["shortest_edge"]
     else:
         size = (image_processor.size["height"], image_processor.size["width"])
-    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+
+    _train_transforms_list = [RandomResizedCrop(size), RandomHorizontalFlip(), ToTensor()]	
+    _val_transforms_list = [Resize(size), CenterCrop(size), ToTensor()]
+
+    if model_args.model_name_or_path != "apple/mobilevit-small":	
+        normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)	
+        _train_transforms_list.append(normalize)	
+        _val_transforms_list.append(normalize)	
+
     _train_transforms = Compose(
-        [
-            RandomResizedCrop(size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
+        _train_transforms_list
     )
     _val_transforms = Compose(
-        [
-            Resize(size),
-            CenterCrop(size),
-            ToTensor(),
-            normalize,
-        ]
+        _val_transforms_list
     )
 
     def train_transforms(example_batch):
@@ -337,7 +337,7 @@ def main():
                 dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
             )
         # Set the training transforms
-        dataset["train"].set_transform(train_transforms)
+        dataset["train"] = dataset["train"].map(train_transforms, batched=True, batch_size=training_args.per_device_train_batch_size)
 
     if training_args.do_eval:
         if "validation" not in dataset:
@@ -347,7 +347,7 @@ def main():
                 dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
             )
         # Set the validation transforms
-        dataset["validation"].set_transform(val_transforms)
+        dataset["validation"] = dataset["validation"].map(val_transforms, batched=True, batch_size=training_args.per_device_eval_batch_size)
 
     # Initalize our trainer
     trainer = Trainer(
@@ -359,6 +359,8 @@ def main():
         tokenizer=image_processor,
         data_collator=collate_fn,
     )
+
+    _ = Run.get_context()
 
     # Training
     if training_args.do_train:
