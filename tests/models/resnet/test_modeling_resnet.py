@@ -58,6 +58,7 @@ class ResNetModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -73,6 +74,7 @@ class ResNetModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -94,6 +96,7 @@ class ResNetModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

@@ -68,6 +68,7 @@ class DinatModelTester:
         use_labels=True,
         num_labels=10,
         out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -93,6 +94,7 @@ class DinatModelTester:
         self.use_labels = use_labels
         self.num_labels = num_labels
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -126,6 +128,7 @@ class DinatModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

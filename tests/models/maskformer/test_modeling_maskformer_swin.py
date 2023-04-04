@@ -65,6 +65,7 @@ class MaskFormerSwinModelTester:
         type_sequence_label_size=10,
         encoder_stride=8,
         out_features=["stage1", "stage2", "stage3"],
+        out_indices=[1, 2, 3],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +92,7 @@ class MaskFormerSwinModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -124,6 +126,7 @@ class MaskFormerSwinModelTester:
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

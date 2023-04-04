@@ -44,9 +44,11 @@ class BackboneTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            num_features = model.num_features
             self.assertEqual(len(model.channels), len(config.out_features))
-            self.assertListEqual(model.channels, num_features[1 : len(config.out_features) + 1])
+            num_features = model.num_features
+            out_indices = [config.stage_names.index(feat) for feat in config.out_features]
+            out_channels = [num_features[idx] for idx in out_indices]
+            self.assertListEqual(model.channels, out_channels)
 
             config.out_features = None
             config.out_indices = None

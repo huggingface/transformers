@@ -56,6 +56,7 @@ class BitModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         num_groups=1,
     ):
         self.parent = parent
@@ -72,6 +73,7 @@ class BitModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
         self.num_groups = num_groups
 
     def prepare_config_and_inputs(self):
@@ -94,6 +96,7 @@ class BitModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_groups=self.num_groups,
         )
 
