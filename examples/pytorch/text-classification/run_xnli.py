@@ -273,6 +273,8 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
+        id2label={str(i): label for i, label in enumerate(label_list)},
+        label2id={label: i for i, label in enumerate(label_list)},
         finetuning_task="xnli",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
