@@ -133,6 +133,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, curre
                         has_fp16_weights=False,
                         threshold=threshold,
                     )
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model
@@ -154,7 +156,12 @@ def get_keys_to_not_convert(model):
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
 
-    tied_keys = list(find_tied_parameters(tied_model).values())
+    tied_params = find_tied_parameters(tied_model)
+    # For compatibility with Accelerate < 0.18
+    if isinstance(tied_params, dict):
+        tied_keys = list(tied_params.values())
+    else:
+        tied_keys = sum([x[1:] for x in tied_params], [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
