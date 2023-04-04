@@ -277,6 +277,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "GPTBigCodeDoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
