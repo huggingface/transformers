@@ -1358,7 +1358,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
     "The bare Autoformer Model outputting raw hidden-states without any specific head on top.",
     AUTOFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Autoformer,TIME_SERIES_TRANSFORMER->AUTOFORMER,TimeSeries->Autoformer
 class AutoformerModel(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
@@ -1380,7 +1379,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self.encoder = AutoformerEncoder(config)
         self.decoder = AutoformerDecoder(config)
 
-        # used for seasonal and trendg initialization
+        # used for decoder seasonal and trend initialization
         self.decomposition_layer = AutoformerSeriesDecompositionLayer(config.moving_avg)
 
         # Initialize weights and apply final processing
@@ -1594,8 +1593,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
         zeros = torch.zeros([dec_input.size(0), config.prediction_length, dec_input.size(2)], device=enc_input.device)
         seasonal_enc_input, trend_enc_input = self.decomposition_layer(enc_input)
 
-        trend_init = torch.cat([trend_enc_input[:, self.config.context_length:, :], mean_enc_input], dim=1)
-        seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length:, :], zeros], dim=1)
+        trend_init = torch.cat([trend_enc_input[:, self.config.context_length :, :], mean_enc_input], dim=1)
+        seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length :, :], zeros], dim=1)
 
         # From the paper: "the past seasonal information from encoder is utilized by the decoder"
         # so dec_input is the seasonal init
