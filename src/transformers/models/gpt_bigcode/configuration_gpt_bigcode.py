@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,24 @@ GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigcode/santacoder-fast-inference": "https://huggingface.co/bigcode/santacoder-fast-inference/resolve/main/config.json",
 }
 
+
+class AttentionType(IntEnum):
+    MULTI_HEAD = 1
+    MULTI_QUERY_1 = 2
+    MULTI_QUERY_2 = 3
+
+
+class InferenceRunnerType(IntEnum):
+    NO_RUNNER = 0
+    # Use the inference runner without cuda graphs.
+    BASE_RUNNER = 1
+    # Use cuda graphs in the inference runner. Leave out the attention which has a variable shape.
+    # This significantly lowers the cpu time and prevent a cpu bottleneck for smaller batches and models.
+    PARTIAL_GRAPH = 2
+    # Turn the whole model into a cuda graph. One graph for each sequence length.
+    # Note: only useful for small batches and models, graphs take some time to generate, flaky.
+    # Crashes with jit on A100 but seems to work without jit (PYTORCH_JIT=0) and on V100.
+    FULL_GRAPH = 3
 
 
 class GPTBigCodeConfig(PretrainedConfig):
@@ -138,7 +156,7 @@ class GPTBigCodeConfig(PretrainedConfig):
         n_layer=12,
         n_head=12,
         n_inner=None,
-        activation_function="gelu_new",
+        activation_function="gelu_pytorch_tanh",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
@@ -153,8 +171,15 @@ class GPTBigCodeConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False,
+        attention_softmax_in_fp32=True,
+        scale_attention_softmax_in_fp32=True,
+        attention_type=AttentionType.MULTI_HEAD,
+        inference_runner=InferenceRunnerType.NO_RUNNER,
+        validate_runner_input=True,
+        pre_allocate_kv_cache=False,
+        max_sequence_length=None,
+        max_batch_size=None,
+        pad_key_length=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -176,10 +201,24 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.attention_softmax_in_fp32 = attention_softmax_in_fp32
+        self.scale_attention_softmax_in_fp32 = scale_attention_softmax_in_fp32
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+        self.attention_type = AttentionType(attention_type)
+
+        self.inference_runner = InferenceRunnerType(inference_runner)
+        # Set to False to disable input validation of safe inputs, for a small speedup.
+        self.validate_runner_input = validate_runner_input
+
+        self.pre_allocate_kv_cache = pre_allocate_kv_cache
+        # The max sequence length for the pre-allocated KV cache (`n_positions` if not provided).
+        self.max_sequence_length = max_sequence_length
+        # The max batch size for the pre-allocated KV cache, (deduce from input if not provided).
+        self.max_batch_size = max_batch_size
+        # Pad key length to a multiple of 8 (requires pre_allocate_kv_cache).
+        self.pad_key_length = pad_key_length
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
