@@ -336,7 +336,7 @@ def shard_checkpoint(
     return shards, index
 
 
-def load_sharded_checkpoint(model, folder, strict=True):
+def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     """
     This is the same as
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
@@ -350,6 +350,9 @@ def load_sharded_checkpoint(model, folder, strict=True):
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
         strict (`bool`, *optional`, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+        prefer_safe (`bool`, *optional*, defaults to `False`)
+            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
+            safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
     Returns:
         `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
@@ -358,10 +361,32 @@ def load_sharded_checkpoint(model, folder, strict=True):
     """
     # Load the index
     index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-    if not os.path.isfile(index_file):
-        raise ValueError(f"Can't find a checkpoint index ({WEIGHTS_INDEX_NAME}) in {folder}.")
+    safe_index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
 
-    with open(index_file, "r", encoding="utf-8") as f:
+    index_present = os.path.isfile(index_file)
+    safe_index_present = os.path.isfile(safe_index_file)
+
+    if not index_present and not (safe_index_present and is_safetensors_available()):
+        filenames = (
+            (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if is_safetensors_available() else (WEIGHTS_INDEX_NAME,)
+        )
+        raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
+
+    load_safe = False
+    if safe_index_present:
+        if prefer_safe:
+            if is_safetensors_available():
+                load_safe = True  # load safe due to preference
+            else:
+                logger.warning(
+                    f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
+                )
+        elif not index_present:
+            load_safe = True  # load safe since we have no other choice
+
+    load_index = safe_index_file if load_safe else index_file
+
+    with open(load_index, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     shard_files = list(set(index["weight_map"].values()))
@@ -381,11 +406,13 @@ def load_sharded_checkpoint(model, folder, strict=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
+
     for shard_file in shard_files:
-        state_dict = torch.load(os.path.join(folder, shard_file), map_location="cpu")
+        state_dict = loader(os.path.join(folder, shard_file))
         model.load_state_dict(state_dict, strict=False)
 
-        # Make sure memory is fred before we load the next state dict.
+        # Make sure memory is freed before we load the next state dict.
         del state_dict
         gc.collect()
 
