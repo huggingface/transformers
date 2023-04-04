@@ -924,11 +924,12 @@ class AutoConfig:
                     "ensure no malicious code has been contributed in a newer revision."
                 )
             class_ref = config_dict["auto_map"]["AutoConfig"]
+            if "--" in class_ref:
+                repo_id, class_ref = class_ref.split("--")
+            else:
+                repo_id = pretrained_model_name_or_path
             module_file, class_name = class_ref.split(".")
-            config_class = get_class_from_dynamic_module(
-                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
-            )
-            config_class.register_for_auto_class()
+            config_class = get_class_from_dynamic_module(repo_id, module_file + ".py", class_name, **kwargs)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
