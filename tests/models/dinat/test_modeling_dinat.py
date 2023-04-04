@@ -168,9 +168,6 @@ class DinatModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
 
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-
         # verify backbone works with out_features=None
         config.out_features = None
         model = DinatBackbone(config=config)
@@ -181,9 +178,6 @@ class DinatModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -394,3 +388,19 @@ class DinatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     def setUp(self):
         self.model_tester = DinatModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DinatConfig, embed_dim=37)
+
+    def test_channels(self):
+        # Dinat config doesn't have hidden_sizes attribute
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
+
+            model = model_class(config)
+            self.assertListEqual(model.channels, num_features[1 : len(config.out_features) + 1])
+
+            config.out_features = None
+            config.out_indices = None
+            model = model_class(config)
+            self.assertEqual(len(model.channels), 1)
+            self.assertListEqual(model.channels, [num_features[-1]])
