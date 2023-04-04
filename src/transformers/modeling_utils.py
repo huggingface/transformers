@@ -2974,6 +2974,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     if (
                         model_key in model_state_dict
+                        and checkpoint_key in state_dict
                         and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
                     ):
                         mismatched_keys.append(
