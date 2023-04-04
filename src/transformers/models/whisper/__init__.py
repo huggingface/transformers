@@ -63,6 +63,7 @@ else:
         "TFWhisperForConditionalGeneration",
         "TFWhisperModel",
         "TFWhisperPreTrainedModel",
+        "TFWhisperForAudioClassification"
     ]
 
 try:
@@ -114,6 +115,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_tf_whisper import (
             TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWhisperForAudioClassification,
             TFWhisperForConditionalGeneration,
             TFWhisperModel,
             TFWhisperPreTrainedModel,
