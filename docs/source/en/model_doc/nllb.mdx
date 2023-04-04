@@ -16,10 +16,10 @@ specific language governing permissions and limitations under the License.
 
 The previous version adds `[self.eos_token_id, self.cur_lang_code]` at the end of the token sequence for both target and source tokenization. This is wrong as the NLLB paper mentions (page 48, 6.1.1. Model Architecture) :
 
-> Note that we prefix the source sequence with the source language, as opposed to the target
+*Note that we prefix the source sequence with the source language, as opposed to the target
 language as previously done in several works (Arivazhagan et al., 2019; Johnson et al.,
 2017). This is primarily because we prioritize optimizing zero-shot performance of our
-model on any pair of 200 languages at a minor cost to supervised performance.
+model on any pair of 200 languages at a minor cost to supervised performance.*
 
 Previous behaviour:
 
