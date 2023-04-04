@@ -881,6 +881,27 @@ class FlaxPegasusPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxRegNetForImageClassification(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRegNetModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRegNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxResNetForImageClassification(metaclass=DummyObject):
     _backends = ["flax"]
 
