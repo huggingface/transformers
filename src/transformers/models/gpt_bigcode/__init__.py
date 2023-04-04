@@ -17,14 +17,12 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_keras_nlp_available,
-    is_tensorflow_text_available,
     is_torch_available,
 )
 
 
 _import_structure = {
-    "configuration_gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig", "GPTBigCodeOnnxConfig"],
+    "configuration_gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
 }
 
 try:
@@ -41,19 +39,10 @@ else:
         "GPTBigCodeLMHeadModel",
         "GPTBigCodeModel",
         "GPTBigCodePreTrainedModel",
-        "load_tf_weights_in_gpt_bigcode",
     ]
 
-try:
-    if not is_keras_nlp_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_gpt_bigcode_tf"] = ["TFGPT2Tokenizer"]
-
 if TYPE_CHECKING:
-    from .configuration_gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig, GPTBigCodeOnnxConfig
+    from .configuration_gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
 
     try:
         if not is_torch_available():
@@ -69,15 +58,8 @@ if TYPE_CHECKING:
             GPTBigCodeLMHeadModel,
             GPTBigCodeModel,
             GPTBigCodePreTrainedModel,
-            load_tf_weights_in_gpt_bigcode,
         )
 
-    try:
-        if not is_keras_nlp_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
 
 else:
     import sys

@@ -1650,7 +1650,6 @@ else:
             "GPTBigCodeLMHeadModel",
             "GPTBigCodeModel",
             "GPTBigCodePreTrainedModel",
-            "load_tf_weights_in_gpt_bigcode",
         ]
     )
     _import_structure["models.gpt_neo"].extend(
