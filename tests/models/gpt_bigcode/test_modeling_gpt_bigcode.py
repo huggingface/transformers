@@ -18,6 +18,8 @@ import datetime
 import math
 import unittest
 
+from parameterized import parameterized
+
 from transformers import GPTBigCodeConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -39,9 +41,12 @@ if is_torch_available():
         GPTBigCodeLMHeadModel,
         GPTBigCodeModel,
     )
+    from transformers.models.gpt_bigcode.configuration_gpt_bigcode import AttentionType
+    from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
 
 class GPTBigCodeModelTester:
+    # TODO: Update the tests to use valid pretrained models.
     def __init__(
         self,
         parent,
@@ -96,7 +101,7 @@ class GPTBigCodeModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPTBigCodeConfig.from_pretrained("gpt_bigcode")
+        return GPTBigCodeConfig.from_pretrained("bigcode/santacoder-fast-inference")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -431,6 +436,7 @@ class GPTBigCodeModelTester:
 
 @require_torch
 class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    # TODO: Update the tests to use valid pretrained models.
     all_model_classes = (
         (
             GPTBigCodeModel,
@@ -530,9 +536,9 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @slow
     def test_batch_generation(self):
-        model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode")
+        model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt_bigcode")
+        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -589,9 +595,9 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GPTBigCodeDoubleHeadsModel.from_pretrained("gpt_bigcode")
+        model = GPTBigCodeDoubleHeadsModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt_bigcode")
+        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -664,7 +670,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GPTBigCodeLMHeadModel.from_pretrained(
-            "gpt_bigcode",
+            "bigcode/santacoder-fast-inference",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -705,8 +711,8 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_bigcode_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt_bigcode")
-        model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode")
+        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -733,8 +739,8 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_bigcode_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt_bigcode")
-        model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode")
+        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -779,8 +785,8 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt_bigcode_tokenizer = GPT2Tokenizer.from_pretrained("gpt_bigcode-large")
-        gpt_bigcode_model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode-large").to(torch_device)
+        gpt_bigcode_tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        gpt_bigcode_model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference").to(torch_device)
         input_ids = gpt_bigcode_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt_bigcode_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
@@ -805,3 +811,74 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
                 "but said in a statement to The Associated Press that"
             ],
         )
+
+
+@require_torch
+class GPTBigCodeAttentionTest(unittest.TestCase):
+    def get_attention(self, attention_type: AttentionType):
+        config = GPTBigCodeConfig.from_pretrained(
+            "bigcode/santacoder-fast-inference",
+            attention_type=attention_type,
+            attn_pdrop=0,
+            resid_pdrop=0,
+        )
+        return GPTBigCodeAttention(config)
+
+    @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])
+    def test_mqa_correctness(self, seed, is_train_mode=True):
+        torch.manual_seed(seed)
+        embed_dim = 2048
+        head_dim = 128
+
+        # GET THE WEIGHTS FROM MULTI-QUERY ATTENTION 1
+        attention_mq1 = self.get_attention(AttentionType.MULTI_QUERY_1)
+        state_dict_mq1 = attention_mq1.state_dict()
+        attn_weight, attn_k_weight, attn_v_weight = torch.split(
+            state_dict_mq1["c_attn.weight"], [embed_dim, head_dim, head_dim], dim=1
+        )
+        attn_bias, attn_k_bias, attn_v_bias = torch.split(
+            state_dict_mq1["c_attn.bias"], [embed_dim, head_dim, head_dim], dim=0
+        )
+        proj = state_dict_mq1["c_proj.weight"]
+        proj_bias = state_dict_mq1["c_proj.bias"]
+
+        # PUT THEM INTO THE MULTI-HEAD ATTENTION
+        num_heads = 16
+        c_attn_weight = torch.hstack([attn_weight] + num_heads * [attn_k_weight] + num_heads * [attn_v_weight])
+        c_attn_bias = torch.hstack([attn_bias] + num_heads * [attn_k_bias] + num_heads * [attn_v_bias])
+        attention_mh = self.get_attention(AttentionType.MULTI_HEAD)
+        state_dict = attention_mh.state_dict()
+        state_dict["c_attn.weight"] = c_attn_weight
+        state_dict["c_attn.bias"] = c_attn_bias
+        state_dict["c_proj.weight"] = proj
+        state_dict["c_proj.bias"] = proj_bias
+        attention_mh.load_state_dict(state_dict)
+
+        # PUT THEM INTO THE MULTI-QUERY ATTENTION 2
+        attention_mq2 = self.get_attention(AttentionType.MULTI_QUERY_2)
+        state_dict_mq2 = attention_mq2.state_dict()
+        state_dict_mq2["q_attn.weight"] = attn_weight
+        state_dict_mq2["q_attn.bias"] = attn_bias
+        state_dict_mq2["kv_attn.weight"] = torch.hstack([attn_k_weight, attn_v_weight])
+        state_dict_mq2["kv_attn.bias"] = torch.hstack([attn_k_bias, attn_v_bias])
+        state_dict_mq2["c_proj.weight"] = proj
+        state_dict_mq2["c_proj.bias"] = proj_bias
+        attention_mq2.load_state_dict(state_dict_mq2)
+
+        # PUT THE MODEL INTO THE CORRECT MODE
+        attention_mh.train(is_train_mode)
+        attention_mq1.train(is_train_mode)
+        attention_mq2.train(is_train_mode)
+
+        # RUN AN INPUT THROUGH THE MODELS
+        num_tokens = 5
+        hidden_states = torch.randn(1, num_tokens, embed_dim)
+        attention_mh_result = attention_mh(hidden_states)[0]
+        attention_mq1_result = attention_mq1(hidden_states)[0]
+        attention_mq2_result = attention_mq2(hidden_states)[0]
+
+        # CHECK THAT ALL OUTPUTS ARE THE SAME
+        tolerance = 1e-5
+        self.assertTrue(torch.allclose(attention_mh_result, attention_mq1_result, atol=tolerance))
+        self.assertTrue(torch.allclose(attention_mh_result, attention_mq2_result, atol=tolerance))
+        self.assertTrue(torch.allclose(attention_mq1_result, attention_mq2_result, atol=tolerance))
