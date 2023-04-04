@@ -877,9 +877,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
 
     if previous_tokens:
         if return_timestamps:
-            # Last token should always be timestamps, so there shouldn't be
-            # leftover
-            raise ValueError(
+            logger.warning(
                 "There was an error while processing timestamps, we haven't found a timestamp as last token. Was"
                 " WhisperTimeStampLogitsProcessor used?"
             )
