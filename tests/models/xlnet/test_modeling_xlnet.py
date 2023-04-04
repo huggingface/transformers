@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -509,7 +510,7 @@ class XLNetModelTester:
 
 
 @require_torch
-class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLNetModel,
@@ -526,8 +527,27 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     all_generative_model_classes = (
         (XLNetLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XLNetModel,
+            "question-answering": XLNetForQuestionAnsweringSimple,
+            "text-classification": XLNetForSequenceClassification,
+            "text-generation": XLNetLMHeadModel,
+            "token-classification": XLNetForTokenClassification,
+            "zero-shot": XLNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        # IndexError: index out of range in self
+        return True
 
     # XLNet has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

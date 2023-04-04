@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -341,6 +342,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -391,8 +395,13 @@ class BlipModelTester:
 
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -517,6 +526,9 @@ class BlipModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
 
 
 class BlipTextRetrievalModelTester:

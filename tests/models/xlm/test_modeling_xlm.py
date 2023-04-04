@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -359,7 +360,7 @@ class XLMModelTester:
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLMModel,
@@ -376,6 +377,39 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XLMModel,
+            "fill-mask": XLMWithLMHeadModel,
+            "question-answering": XLMForQuestionAnsweringSimple,
+            "text-classification": XLMForSequenceClassification,
+            "text-generation": XLMWithLMHeadModel,
+            "token-classification": XLMForTokenClassification,
+            "zero-shot": XLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "FillMaskPipelineTests":
+            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
+            # `XLMConfig` was never used in pipeline tests: cannot create a simple tokenizer
+            return True
+        elif (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     # XLM has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

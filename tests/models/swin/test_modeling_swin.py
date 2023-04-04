@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -32,9 +33,7 @@ if is_torch_available():
 
     from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
     from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
+
 
 if is_vision_available():
     from PIL import Image
@@ -218,7 +217,7 @@ class SwinModelTester:
 
 
 @require_torch
-class SwinModelTest(ModelTesterMixin, unittest.TestCase):
+class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SwinModel,
@@ -228,6 +227,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": SwinModel, "image-classification": SwinForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -255,7 +259,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for SwinModel when torch < 1.9")
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
 

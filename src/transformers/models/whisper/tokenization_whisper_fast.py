@@ -24,7 +24,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
 
 logger = logging.get_logger(__name__)
@@ -266,7 +266,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
@@ -283,8 +283,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):
@@ -475,3 +476,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         forced_tokens = self.prefix_tokens[1:]
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
+
+    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
+        return _decode_asr(
+            self,
+            model_outputs,
+            return_timestamps=return_timestamps,
+            return_language=return_language,
+            time_precision=time_precision,
+        )

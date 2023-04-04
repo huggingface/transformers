@@ -24,6 +24,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -150,11 +151,16 @@ class TFSegformerModelTester:
 
 
 @require_tf
-class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFSegformerModel, TFSegformerForImageClassification, TFSegformerForSemanticSegmentation)
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFSegformerModel, "image-classification": TFSegformerForImageClassification}
+        if is_tf_available()
+        else {}
     )
 
     test_head_masking = False

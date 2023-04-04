@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -33,16 +33,18 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
+    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
     require_tf,
     require_torch,
+    require_torch_gpu,
     require_torchaudio,
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -53,12 +55,12 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = {
-        k: v
-        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+@is_pipeline_test
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
+    model_mapping = dict(
+        (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
-    }
+    )
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
@@ -536,7 +538,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.94),
+                        "timestamp": (5.5, 11.95),
                     },
                     {
                         "text": (
@@ -544,15 +546,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.94, 19.6),
+                        "timestamp": (11.95, 19.61),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 26.66),
+                        "timestamp": (19.61, 25.0),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (26.66, 31.06),
+                        "timestamp": (25.0, 29.4),
                     },
                 ],
                 "text": (
@@ -1156,6 +1158,36 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # 2nd arange
         output = speech_recognizer({"raw": waveform, "stride": (1000, 8000), "sampling_rate": 16_000})
         self.assertEqual(output, {"text": "XB"})
+
+    @slow
+    @require_torch_gpu
+    def test_slow_unfinished_sequence(self):
+        from transformers import GenerationConfig
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="vasista22/whisper-hindi-large-v2",
+            device="cuda:0",
+        )
+        # Original model wasn't trained with timestamps and has incorrect generation config
+        pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        out = pipe(
+            audio,
+            return_timestamps=True,
+        )
+        self.assertEqual(
+            out,
+            {
+                "chunks": [
+                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
+                ],
+                "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+            },
+        )
 
 
 def require_ffmpeg(test_case):

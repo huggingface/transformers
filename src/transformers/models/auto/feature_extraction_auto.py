@@ -82,6 +82,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
         ("timesformer", "VideoMAEFeatureExtractor"),
+        ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
@@ -302,7 +303,7 @@ class AutoFeatureExtractor:
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
+        >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)

@@ -49,6 +49,8 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("opt", "FlaxOPTModel"),
         ("pegasus", "FlaxPegasusModel"),
+        ("regnet", "FlaxRegNetModel"),
+        ("resnet", "FlaxResNetModel"),
         ("roberta", "FlaxRobertaModel"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormModel"),
         ("roformer", "FlaxRoFormerModel"),
@@ -121,6 +123,8 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("beit", "FlaxBeitForImageClassification"),
         ("convnext", "FlaxConvNextForImageClassification"),
+        ("regnet", "FlaxRegNetForImageClassification"),
+        ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
     ]
 )

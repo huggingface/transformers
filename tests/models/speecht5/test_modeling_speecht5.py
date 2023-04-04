@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -102,6 +103,7 @@ class SpeechT5ModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
+        vocab_size=81,
         hidden_size=24,
         num_hidden_layers=4,
         num_attention_heads=2,
@@ -111,6 +113,7 @@ class SpeechT5ModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -139,6 +142,7 @@ class SpeechT5ModelTester:
 
     def get_config(self):
         return SpeechT5Config(
+            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -160,8 +164,13 @@ class SpeechT5ModelTester:
 
 
 @require_torch
-class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False

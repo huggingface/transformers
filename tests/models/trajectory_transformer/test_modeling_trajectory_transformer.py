@@ -26,6 +26,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,9 +36,6 @@ if is_torch_available():
     from transformers.models.trajectory_transformer.modeling_trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
 
 
 class TrajectoryTransformerModelTester:
@@ -94,8 +92,9 @@ class TrajectoryTransformerModelTester:
 
 
 @require_torch
-class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrajectoryTransformerModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TrajectoryTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
@@ -197,7 +196,6 @@ class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, un
         ).loss
         loss.backward()
 
-    @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for TrajectoryTransformerModel when torch < 1.9")
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
             return
