@@ -14,8 +14,8 @@
 # limitations under the License.
 
 import unittest
-from threading import Thread
 from queue import Empty
+from threading import Thread
 
 from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
