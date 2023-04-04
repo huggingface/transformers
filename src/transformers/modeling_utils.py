@@ -336,7 +336,7 @@ def shard_checkpoint(
     return shards, index
 
 
-def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
+def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     """
     This is the same as
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
@@ -365,16 +365,15 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=False):
 
     index_present = os.path.isfile(index_file)
     safe_index_present = os.path.isfile(safe_index_file)
-    safetensors_installed = is_safetensors_available()
 
-    if not index_present and not (safe_index_present and safetensors_installed):
-        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if safetensors_installed else (WEIGHTS_INDEX_NAME,)
+    if not index_present and not (safe_index_present and is_safetensors_available()):
+        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if is_safetensors_available() else (WEIGHTS_INDEX_NAME,)
         raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
 
     load_safe = False
     if safe_index_present:
         if prefer_safe:
-            if safetensors_installed:
+            if is_safetensors_available():
                 load_safe = True  # load safe due to preference
             else:
                 logger.warning(
