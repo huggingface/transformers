@@ -29,7 +29,6 @@ import sys
 import time
 import warnings
 from collections.abc import Mapping
-from distutils.util import strtobool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -152,6 +151,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
+    strtobool,
 )
 from .utils.generic import ContextManagers
 
@@ -369,6 +369,19 @@ class Trainer:
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
+
+        if (
+            getattr(model, "hf_device_map", None) is not None
+            and len([device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]) > 1
+            and not self.is_model_parallel
+        ):
+            self.is_model_parallel = True
+
+            # warn users
+            logger.info(
+                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
+                " to `True` to avoid any unexpected behavior such as device placement mismatching."
+            )
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
@@ -2230,12 +2243,14 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             if isinstance(self.eval_dataset, dict):
+                metrics = {}
                 for eval_dataset_name, eval_dataset in self.eval_dataset.items():
-                    metrics = self.evaluate(
+                    dataset_metrics = self.evaluate(
                         eval_dataset=eval_dataset,
                         ignore_keys=ignore_keys_for_eval,
                         metric_key_prefix=f"eval_{eval_dataset_name}",
                     )
+                    metrics.update(dataset_metrics)
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
