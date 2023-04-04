@@ -34,6 +34,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
+        ("blip", "TFBlipModel"),
         ("camembert", "TFCamembertModel"),
         ("clip", "TFCLIPModel"),
         ("convbert", "TFConvBertModel"),
@@ -213,6 +214,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
+        ("blip", "TFBlipModel"),
         ("clip", "TFCLIPModel"),
     ]
 )
