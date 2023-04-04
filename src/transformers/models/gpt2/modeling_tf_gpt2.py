@@ -1051,7 +1051,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
-        if output_hidden_states:
+        if return_dict and output_hidden_states:
             # We do this to match the slightly odd PT behaviour - the final hidden state is reshaped to rank 4 when the
             # input is rank 3, but all other hidden states remain at rank-3 (with the first 2 dims merged)
             all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
