@@ -2725,6 +2725,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         model.is_loaded_in_8bit = load_in_8bit
+        model.torch_dtype = torch_dtype
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
