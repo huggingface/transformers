@@ -387,6 +387,89 @@ def normalize(
     return image
 
 
+def crop(
+    image: np.ndarray,
+    top: int,
+    left: int,
+    height: int,
+    width: int,
+    padding: Optional[float] = None,
+    data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> np.ndarray:
+    """
+    Crops `image` to the specified area. If the area is outside the image boundaries, and `padding` is specified, the
+    image is padded with the specified value.
+
+    Args:
+        image (`np.ndarray`):
+            The image to crop.
+        top (`int`):
+            The top coordinate of the crop area.
+        left (`int`):
+            The left coordinate of the crop area.
+        height (`int`):
+            The height of the crop area.
+        width (`int`):
+            The width of the crop area.
+        padding (`float`, *optional*):
+            The value to use for padding the image if the crop area is outside the image boundaries.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
+    """
+    input_data_format = infer_channel_dimension_format(image)
+    output_data_format = data_format if data_format is not None else input_data_format
+
+    # We perform the crop in (C, H, W) format and then convert to the output format
+    image = to_channel_dimension_format(image, ChannelDimension.FIRST)
+
+    n_channels, orig_height, orig_width = image.shape
+    bottom = top + height
+    right = left + width
+
+    # Check if cropped area is within image boundaries
+    if top >= 0 and bottom <= orig_height and left >= 0 and right <= orig_width:
+        image = image[..., top:bottom, left:right]
+        image = to_channel_dimension_format(image, output_data_format)
+        return image
+
+    if padding is None:
+        raise ValueError("padding must be set if the cropped area is outside the image boundaries")
+
+    # If the cropped area is outside the image boundaries, we need to pad the image with the specified value
+    new_image = np.full_like(image, fill_value=padding, shape=(n_channels, height, width))
+
+    # If the crop box is fully outside the image boundaries, we can return the padded image
+    if (bottom <= 0 or top >= orig_height) and (right <= 0 or left >= orig_width):
+        image = to_channel_dimension_format(new_image, output_data_format)
+        return image
+
+    new_height, new_width = height, width
+
+    # If the top and left coordinates are negative, we need to shift the cropped image to the right and down.
+    # We then need to update the top and left coordinates to 0, and the new height and width to account for the
+    # shift.
+    shift_x, shift_y = 0, 0
+    if top < 0:
+        shift_y = abs(top)
+        new_height -= shift_y
+        top = 0
+
+    if left < 0:
+        shift_x = abs(left)
+        new_width -= shift_x
+        left = 0
+
+    new_height = min(max(new_height, 0), max(orig_height - top, 0))
+    new_width = min(max(new_width, 0), max(orig_width - left, 0))
+
+    new_image[:, shift_y : shift_y + new_height, shift_x : shift_x + new_width] = image[
+        :, top : top + new_height, left : left + new_width
+    ]
+    new_image = to_channel_dimension_format(new_image, output_data_format)
+
+    return new_image
+
+
 def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
@@ -434,49 +517,18 @@ def center_crop(
     if not isinstance(size, Iterable) or len(size) != 2:
         raise ValueError("size must have 2 elements representing the height and width of the output image")
 
-    input_data_format = infer_channel_dimension_format(image)
-    output_data_format = data_format if data_format is not None else input_data_format
-
-    # We perform the crop in (C, H, W) format and then convert to the output format
-    image = to_channel_dimension_format(image, ChannelDimension.FIRST)
-
     orig_height, orig_width = get_image_size(image)
     crop_height, crop_width = size
     crop_height, crop_width = int(crop_height), int(crop_width)
 
     # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
     top = (orig_height - crop_height) // 2
-    bottom = top + crop_height
     # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
     left = (orig_width - crop_width) // 2
-    right = left + crop_width
 
-    # Check if cropped area is within image boundaries
-    if top >= 0 and bottom <= orig_height and left >= 0 and right <= orig_width:
-        image = image[..., top:bottom, left:right]
-        image = to_channel_dimension_format(image, output_data_format)
-        return image
-
-    # Otherwise, we may need to pad if the image is too small. Oh joy...
-    new_height = max(crop_height, orig_height)
-    new_width = max(crop_width, orig_width)
-    new_shape = image.shape[:-2] + (new_height, new_width)
-    new_image = np.zeros_like(image, shape=new_shape)
-
-    # If the image is too small, pad it with zeros
-    top_pad = (new_height - orig_height) // 2
-    bottom_pad = top_pad + orig_height
-    left_pad = (new_width - orig_width) // 2
-    right_pad = left_pad + orig_width
-    new_image[..., top_pad:bottom_pad, left_pad:right_pad] = image
-
-    top += top_pad
-    bottom += top_pad
-    left += left_pad
-    right += left_pad
-
-    new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
-    new_image = to_channel_dimension_format(new_image, output_data_format)
+    new_image = crop(
+        image, top=top, left=left, height=crop_height, width=crop_width, padding=0, data_format=data_format
+    )
 
     if not return_numpy:
         new_image = to_pil_image(new_image)
