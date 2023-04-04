@@ -349,11 +349,12 @@ def main():
         # Set the validation transforms
         dataset["validation"] = dataset["validation"].map(val_transforms, batched=True, batch_size=training_args.per_device_eval_batch_size)
 
-    opt_model = torch.compile(model)
+    if torch.__version__ >= '2.0':
+        model = torch.compile(model)
 
     # Initalize our trainer
     trainer = Trainer(
-        model=opt_model,
+        model=model,
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
