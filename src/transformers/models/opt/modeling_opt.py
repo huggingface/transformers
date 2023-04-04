@@ -1195,10 +1195,14 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
 
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> answer_offset = len(tokenizer(question)[0])
+
+        >>> predict_answer_tokens = inputs.input_ids[
+        ...     0, answer_offset + answer_start_index : answer_offset + answer_end_index + 1
+        ... ]
         >>> predicted = tokenizer.decode(predict_answer_tokens)
         >>> predicted
-        ' Henson?'
+        ' a nice puppet'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
