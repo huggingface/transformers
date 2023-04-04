@@ -339,11 +339,14 @@ class AutoFeatureExtractor:
                         "code to ensure no malicious code has been contributed in a newer revision."
                     )
 
+                if "--" in feature_extractor_auto_map:
+                    repo_id, feature_extractor_auto_map = feature_extractor_auto_map.split("--")
+                else:
+                    repo_id = pretrained_model_name_or_path
                 module_file, class_name = feature_extractor_auto_map.split(".")
                 feature_extractor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                    repo_id, module_file + ".py", class_name, **kwargs
                 )
-                feature_extractor_class.register_for_auto_class()
             else:
                 feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 
