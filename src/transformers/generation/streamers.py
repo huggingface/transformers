@@ -71,8 +71,7 @@ class TextStreamer(BaseStreamer):
         # variables used in the streaming process
         self.token_cache = []
         self.print_len = 0
-        self.skipt_prompt = skip_prompt
-        self.decode_kwargs = decode_kwargs
+        self.next_tokens_are_prompt = True
 
     def put(self, value):
         """
