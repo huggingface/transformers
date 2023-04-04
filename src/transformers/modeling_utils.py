@@ -2606,7 +2606,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
                     raise ValueError(
                         "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                        "`load_in_8bit_fp32_cpu_offload=True`. Note that these modules will not be "
+                        "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
                         " converted to 8-bit but kept in 32-bit."
                     )
 
