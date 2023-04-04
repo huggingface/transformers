@@ -32,19 +32,6 @@ class AttentionType(IntEnum):
     MULTI_QUERY_2 = 3
 
 
-class InferenceRunnerType(IntEnum):
-    NO_RUNNER = 0
-    # Use the inference runner without cuda graphs.
-    BASE_RUNNER = 1
-    # Use cuda graphs in the inference runner. Leave out the attention which has a variable shape.
-    # This significantly lowers the cpu time and prevent a cpu bottleneck for smaller batches and models.
-    PARTIAL_GRAPH = 2
-    # Turn the whole model into a cuda graph. One graph for each sequence length.
-    # Note: only useful for small batches and models, graphs take some time to generate, flaky.
-    # Crashes with jit on A100 but seems to work without jit (PYTORCH_JIT=0) and on V100.
-    FULL_GRAPH = 3
-
-
 class GPTBigCodeConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPTBigCodeModel`] or a [`TFGPTBigCodeModel`]. It is used to
@@ -208,10 +195,6 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         self.attention_type = AttentionType(attention_type)
-
-        self.inference_runner = InferenceRunnerType(inference_runner)
-        # Set to False to disable input validation of safe inputs, for a small speedup.
-        self.validate_runner_input = validate_runner_input
 
         self.pre_allocate_kv_cache = pre_allocate_kv_cache
         # The max sequence length for the pre-allocated KV cache (`n_positions` if not provided).

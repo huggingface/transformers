@@ -46,7 +46,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_gpt_bigcode import AttentionType, GPTBigCodeConfig, InferenceRunnerType
+from .configuration_gpt_bigcode import AttentionType, GPTBigCodeConfig
 
 
 logger = logging.get_logger(__name__)
@@ -686,15 +686,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.pre_allocate_kv_cache = config.pre_allocate_kv_cache
         self.pad_key_length = config.pad_key_length and self.pre_allocate_kv_cache
 
-        self.inference_runner_type = InferenceRunnerType(config.inference_runner)
-
-        if self.inference_runner_type == InferenceRunnerType.NO_RUNNER:
-            self.inference_runner = None
-        else:
-            from .inference_runner import GPTBigCodeInferenceRunner
-
-            self.inference_runner = GPTBigCodeInferenceRunner(config, self)
-
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
@@ -787,30 +778,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        if self.inference_runner is not None and past_key_values is not None:
-            if self.config.validate_runner_input:
-                assert input_ids is not None
-                assert past_key_values is not None
-                assert attention_mask is not None
-                assert token_type_ids is None
-                assert position_ids is not None
-                assert head_mask is None
-                assert inputs_embeds is None
-                assert encoder_hidden_states is None
-                assert encoder_attention_mask is None
-                use_cache = use_cache if use_cache is not None else self.config.use_cache
-                assert use_cache is True
-                output_attentions = (
-                    output_attentions if output_attentions is not None else self.config.output_attentions
-                )
-                assert output_attentions is False
-                output_hidden_states = (
-                    output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-                )
-                assert output_hidden_states is False
-                return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-                assert return_dict is True
-            return self.inference_runner.forward(input_ids, attention_mask, position_ids, past_key_values)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
