@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blip model. """
+""" Testing suite for the TensorFlow Blip model. """
 import unittest
 
 import numpy as np
 
 from transformers import BlipTextConfig
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.testing_utils import require_tf, slow
+from transformers.utils import is_tf_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
 
 
-if is_torch_available():
-    import torch
+if is_tf_available():
+    import tensorflow as tf
 
-    from transformers import BlipTextModel
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import TFBlipTextModel
+    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BlipTextModelTester:
@@ -81,6 +81,7 @@ class BlipTextModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         if input_mask is not None:
+            input_mask = input_mask.numpy()
             batch_size, seq_length = input_mask.shape
             rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
             for batch_idx, start_index in enumerate(rnd_start_indices):
@@ -89,7 +90,7 @@ class BlipTextModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, input_mask
+        return config, input_ids, tf.convert_to_tensor(input_mask)
 
     def get_config(self):
         return BlipTextConfig(
@@ -107,12 +108,9 @@ class BlipTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = BlipTextModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
+        model = TFBlipTextModel(config=config)
+        result = model(input_ids, attention_mask=input_mask, training=False)
+        result = model(input_ids, training=False)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
@@ -123,10 +121,10 @@ class BlipTextModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (BlipTextModel,) if is_torch_available() else ()
-    fx_compatible = False
+@require_tf
+class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBlipTextModel,) if is_tf_available() else ()
+    test_onnx = False
     test_pruning = False
     test_head_masking = False
 
@@ -161,9 +159,12 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipTextModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            try:
+                model = TFBlipTextModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)

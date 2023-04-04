@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blip model. """
+""" Testing suite for the TensorFlow Blip model. """
 
 
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -24,33 +23,26 @@ import numpy as np
 import requests
 
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+if is_tf_available():
+    import tensorflow as tf
 
     from transformers import (
-        BlipForConditionalGeneration,
-        BlipForImageTextRetrieval,
-        BlipForQuestionAnswering,
-        BlipModel,
-        BlipTextModel,
-        BlipVisionModel,
+        TFBlipForConditionalGeneration,
+        TFBlipForImageTextRetrieval,
+        TFBlipForQuestionAnswering,
+        TFBlipModel,
+        TFBlipTextModel,
+        TFBlipVisionModel,
     )
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -59,7 +51,7 @@ if is_vision_available():
     from transformers import BlipProcessor
 
 
-class BlipVisionModelTester:
+class TFBlipVisionModelTester:
     def __init__(
         self,
         parent,
@@ -120,11 +112,8 @@ class BlipVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = BlipVisionModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
+        model = TFBlipVisionModel(config=config)
+        result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
@@ -139,21 +128,22 @@ class BlipVisionModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
+@require_tf
+class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Blip does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (BlipVisionModel,) if is_torch_available() else ()
+    all_model_classes = (TFBlipVisionModel,) if is_tf_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = BlipVisionModelTester(self)
+        self.model_tester = TFBlipVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
@@ -163,36 +153,30 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
 
     @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
@@ -204,12 +188,15 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipVisionModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            try:
+                model = TFBlipVisionModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipVisionModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
-class BlipTextModelTester:
+class TFBlipTextModelTester:
     def __init__(
         self,
         parent,
@@ -258,11 +245,13 @@ class BlipTextModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         if input_mask is not None:
+            input_mask = input_mask.numpy()
             batch_size, seq_length = input_mask.shape
             rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
             for batch_idx, start_index in enumerate(rnd_start_indices):
                 input_mask[batch_idx, :start_index] = 1
                 input_mask[batch_idx, start_index:] = 0
+            input_mask = tf.convert_to_tensor(input_mask)
 
         config = self.get_config()
 
@@ -284,12 +273,9 @@ class BlipTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = BlipTextModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
+        model = TFBlipTextModel(config=config)
+        result = model(input_ids, attention_mask=input_mask, training=False)
+        result = model(input_ids, training=False)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
@@ -300,15 +286,16 @@ class BlipTextModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (BlipTextModel,) if is_torch_available() else ()
+@require_tf
+class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBlipTextModel,) if is_tf_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = BlipTextModelTester(self)
+        self.model_tester = TFBlipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
 
     def test_config(self):
@@ -317,12 +304,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
 
     @unittest.skip(reason="Blip does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -338,15 +319,18 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipTextModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            try:
+                model = TFBlipTextModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
-class BlipModelTester:
+class TFBlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -354,8 +338,8 @@ class BlipModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = TFBlipTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = TFBlipVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -372,9 +356,8 @@ class BlipModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = BlipModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+        model = TFBlipModel(config)
+        result = model(input_ids, pixel_values, attention_mask, training=False)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -394,22 +377,22 @@ class BlipModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (BlipModel,) if is_torch_available() else ()
+@require_tf
+class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBlipModel,) if is_tf_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
-        if is_torch_available()
+        {"feature-extraction": TFBlipModel, "image-to-text": TFBlipForConditionalGeneration}
+        if is_tf_available()
         else {}
     )
-    fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_onnx = False
 
     def setUp(self):
-        self.model_tester = BlipModelTester(self)
+        self.model_tester = TFBlipModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -431,81 +414,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Blip
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Blip needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -523,12 +431,12 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
 class BlipTextRetrievalModelTester:
@@ -539,8 +447,8 @@ class BlipTextRetrievalModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = TFBlipTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = TFBlipVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -557,9 +465,8 @@ class BlipTextRetrievalModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = BlipModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+        model = TFBlipModel(config)
+        result = model(input_ids, pixel_values, attention_mask, training=False)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -586,8 +493,8 @@ class BlipTextImageModelsModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = TFBlipTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = TFBlipVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -604,9 +511,8 @@ class BlipTextImageModelsModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = BlipModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+        model = TFBlipModel(config)
+        result = model(input_ids, pixel_values, attention_mask, training=False)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -626,13 +532,13 @@ class BlipTextImageModelsModelTester:
         return config, inputs_dict
 
 
-@require_torch
+@require_tf
 @require_vision
 class BlipVQAModelTest(unittest.TestCase):
-    all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
+    all_model_classes = (TFBlipForQuestionAnswering,) if is_tf_available() else ()
 
     def setUp(self):
-        self.model_tester = BlipModelTester(self)
+        self.model_tester = TFBlipModelTester(self)
 
     def _prepare_inputs_for_vqa(self):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -656,47 +562,20 @@ class BlipVQAModelTest(unittest.TestCase):
         Tests that all VQA models can be trained on a single batch
         """
         for model_class in self.all_model_classes:
-            model = model_class(self.model_tester.get_config()).to(torch_device)
-            model.train()
-            loss = model(**self._prepare_inputs_for_vqa()).loss
-            loss.backward()
-
-            # verify the gradients are not None
-            for name, param in model.named_parameters():
-                self.assertIsNotNone(param.grad, f"Gradients should not be None - got {param.grad} for {name}")
-
-    def test_forward_signature(self):
-        """
-        Test if the forward function has the expected arguments.
-        """
-        for model_class in self.all_model_classes:
             model = model_class(self.model_tester.get_config())
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so args are the first n entries
-            args = list(signature.parameters.keys())
-            expected_args = [
-                "input_ids",
-                "attention_mask",
-                "labels",
-                "decoder_input_ids",
-                "decoder_attention_mask",
-            ]
-            for arg in expected_args:
-                self.assertTrue(
-                    arg in args,
-                    f"Argument {arg} of forward function signature should include {arg}. Found {args}.",
-                )
+            loss = model(**self._prepare_inputs_for_vqa(), training=True).loss
+
+            self.assertIsNotNone(loss, "Loss should not be None")
 
 
-@require_torch
-class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (BlipForImageTextRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
+@require_tf
+class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBlipForImageTextRetrieval,) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = BlipTextRetrievalModelTester(self)
@@ -721,32 +600,6 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            if model.config.is_encoder_decoder:
-                expected_arg_names = [
-                    "input_ids",
-                    "attention_mask",
-                    "decoder_input_ids",
-                    "decoder_attention_mask",
-                ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -756,111 +609,13 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             config.return_dict = True
 
             model = model_class(config)
-            model.to(torch_device)
-            model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
 
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            # hardcode labels to be the same as input_ids
-            inputs["labels"] = inputs["input_ids"]
-
-            loss = model(**inputs).loss
-            loss.backward()
-
-    # override as the `logit_scale` parameter initilization is different for Blip
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Blip needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
+            loss = model(**inputs, training=True).loss
+            self.assertTrue(loss is not None)
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -879,27 +634,27 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Tested in individual model tests")
+    def test_compile_tf_model(self):
+        pass
 
-@require_torch
-class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BlipForConditionalGeneration,
-            BlipForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    fx_compatible = False
+    @unittest.skip("Model doesn't have a clean loss output.")
+    def test_keras_fit(self):
+        pass
+
+
+@require_tf
+class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFBlipForConditionalGeneration, TFBlipForQuestionAnswering) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)
@@ -916,20 +671,12 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Retain_grad is tested in individual model tests")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -947,8 +694,26 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
+                expected_arg_names = (
+                    ["input_ids"] if model_class != TFBlipForConditionalGeneration else ["pixel_values"]
+                )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    @unittest.skip(reason="Tested in individual model tests")
+    def test_compile_tf_model(self):
+        pass
+
+    @unittest.skip("Has some odd input names!")
+    def test_keras_fit(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="BlipModel does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -959,111 +724,13 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             config.return_dict = True
 
             model = model_class(config)
-            model.to(torch_device)
-            model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
 
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            # hardcode labels to be the same as input_ids
-            inputs["labels"] = inputs["input_ids"]
-
-            loss = model(**inputs).loss
-            loss.backward()
-
-    # override as the `logit_scale` parameter initilization is different for Blip
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Blip needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
+            loss = model(**inputs, training=True).loss
+            self.assertIsNotNone(loss)
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1082,8 +749,11 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
+        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            try:
+                model = TFBlipModel.from_pretrained(model_name)
+            except OSError:
+                model = TFBlipModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -1095,88 +765,60 @@ def prepare_img():
 
 
 @require_vision
-@require_torch
+@require_tf
 @slow
-class BlipModelIntegrationTest(unittest.TestCase):
+class TFBlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()
 
         # image only
-        inputs = processor(images=image, return_tensors="pt").to(torch_device)
-
-        predictions = model.generate(**inputs)
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
-
-        # image and context
-        context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, return_tensors="tf")
 
         predictions = model.generate(**inputs)
 
         # Test output
         self.assertEqual(
-            predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            predictions[0].numpy().tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
         )
 
-    @require_torch_gpu
-    def test_inference_image_captioning_fp16(self):
-        model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
-        ).to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        image = prepare_img()
-
-        # image only
-        inputs = processor(images=image, return_tensors="pt").to(torch_device, torch.float16)
-
-        predictions = model.generate(**inputs)
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
-
         # image and context
         context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=image, text=context, return_tensors="tf")
 
         predictions = model.generate(**inputs)
 
         # Test output
         self.assertEqual(
-            predictions[0].tolist(),
+            predictions[0].numpy().tolist(),
             [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
     def test_inference_vqa(self):
-        model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
+        model = TFBlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         image = prepare_img()
         text = "how many dogs are in the picture?"
-
-        inputs = processor(image, text=text, return_tensors="pt").to(torch_device)
+        inputs = processor(image, text=text, return_tensors="tf")
         out = model.generate(**inputs)
 
         # Test output
-        self.assertEqual(out[0].tolist(), [30522, 1015, 102])
+        self.assertEqual(out[0].numpy().tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco").to(torch_device)
+        model = TFBlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco", from_pt=True)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
 
-        inputs = processor(image, text, return_tensors="pt").to(torch_device)
+        inputs = processor(image, text, return_tensors="tf")
 
         out_itm = model(**inputs)
-        out = model(**inputs, use_itm_head=False)
+        out = model(**inputs, use_itm_head=False, training=False)
 
-        expected_scores = torch.Tensor([[0.9798, 0.0202]])
-
-        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        expected_scores = tf.convert_to_tensor([[0.9798, 0.0202]])
+        self.assertTrue(np.allclose(tf.nn.softmax(out_itm[0]).numpy(), expected_scores, rtol=1e-3, atol=1e-3))
+        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
