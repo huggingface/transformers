@@ -84,7 +84,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", current_key_name=None):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, current_key_name=None):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
@@ -105,14 +105,15 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
         threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
-        modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
-            Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
+        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
         current_key_name (`List[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
@@ -132,6 +133,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
                         has_fp16_weights=False,
                         threshold=threshold,
                     )
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model
@@ -153,7 +156,12 @@ def get_keys_to_not_convert(model):
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
 
-    tied_keys = list(find_tied_parameters(tied_model).values())
+    tied_params = find_tied_parameters(tied_model)
+    # For compatibility with Accelerate < 0.18
+    if isinstance(tied_params, dict):
+        tied_keys = list(tied_params.values())
+    else:
+        tied_keys = sum([x[1:] for x in tied_params], [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model

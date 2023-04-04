@@ -50,6 +50,7 @@ The following table summarizes the recommended way to setup padding and truncati
 |                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                        |
 |                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length')`                                     |
 |                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                      |
+|                                      | padding to a multiple of a value  | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                        |
 | truncation to max model input length | no padding                        | `tokenizer(batch_sentences, truncation=True)` or                                       |
 |                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                      |
 |                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True)` or                         |

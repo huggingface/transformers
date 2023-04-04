@@ -347,7 +347,7 @@ class NeighborhoodAttention(nn.Module):
         query_layer = query_layer / math.sqrt(self.attention_head_size)
 
         # Compute NA between "query" and "key" to get the raw attention scores, and add relative positional biases.
-        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.dilation)
+        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.kernel_size, self.dilation)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -356,7 +356,7 @@ class NeighborhoodAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = natten2dav(attention_probs, value_layer, self.dilation)
+        context_layer = natten2dav(attention_probs, value_layer, self.kernel_size, self.dilation)
         context_layer = context_layer.permute(0, 2, 3, 1, 4).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
@@ -891,12 +891,11 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         self.encoder = DinatEncoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.out_feature_channels = {}
-        self.out_feature_channels["stem"] = config.embed_dim
-        for i, stage in enumerate(self.stage_names[1:]):
-            self.out_feature_channels[stage] = num_features[i]
+        if config.out_indices is not None:
+            self.out_indices = config.out_indices
+        else:
+            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
+        self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
@@ -909,10 +908,6 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
