@@ -17,15 +17,15 @@
 import copy
 import inspect
 import math
-import unittest
 import os
 import tempfile
+import unittest
 
 import numpy as np
 import pytest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_soundfile, require_tf, slow, is_pt_tf_cross_test
+from transformers.testing_utils import is_pt_tf_cross_test, require_soundfile, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -339,8 +339,9 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         # We override the base test here to skip loss calculation for Hubert models because the loss is massive with
         # the default labels and frequently overflows to inf or exceeds numerical tolerances between TF/PT
-        import transformers
         import torch
+
+        import transformers
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -389,6 +390,7 @@ class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+
 
 @require_tf
 class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -518,8 +520,9 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         # We override the base test here to skip loss calculation for Hubert models because the loss is massive with
         # the default labels and frequently overflows to inf or exceeds numerical tolerances between TF/PT
-        import transformers
         import torch
+
+        import transformers
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

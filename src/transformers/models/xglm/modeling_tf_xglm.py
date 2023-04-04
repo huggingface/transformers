@@ -953,7 +953,10 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         loss = None
         if labels is not None:
             # shift labels to the left and cut last logit token
-            labels = tf.concat([labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(self.config.pad_token_id, labels.dtype))], axis=-1)
+            labels = tf.concat(
+                [labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(self.config.pad_token_id, labels.dtype))],
+                axis=-1,
+            )
             loss = self.hf_compute_loss(labels, lm_logits)
 
         if not return_dict:
