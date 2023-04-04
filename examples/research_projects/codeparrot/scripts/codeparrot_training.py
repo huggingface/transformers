@@ -6,7 +6,7 @@ from pathlib import Path
 
 import datasets
 import torch
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator
 from arguments import TrainingArguments
 from datasets import load_dataset
 from huggingface_hub import Repository
@@ -195,7 +195,11 @@ parser = HfArgumentParser(TrainingArguments)
 args = parser.parse_args()
 
 # Accelerator
-accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, log_with=["wandb", "tensorboard"], logging_dir=f"{args.save_dir}/log")
+accelerator = Accelerator(
+    gradient_accumulation_steps=args.gradient_accumulation_steps,
+    log_with=["wandb", "tensorboard"],
+    logging_dir=f"{args.save_dir}/log",
+)
 acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 args = Namespace(**vars(args), **acc_state)
@@ -267,12 +271,11 @@ for step, batch in enumerate(train_dataloader, start=1):
     with accelerator.accumulate(model):
         if args.resume_from_checkpoint and step < resume_step:
             continue  # we need to skip steps until we reach the resumed step
-        lr = get_lr()   
+        lr = get_lr()
         loss = model(batch, labels=batch, use_cache=False).loss
         avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
         loss_tracking += avg_loss.item() / args.gradient_accumulation_steps
-        log_metrics(step, {"samples": step * samples_per_step,
-                        "loss_per_step/train": loss.item()})
+        log_metrics(step, {"samples": step * samples_per_step, "loss_per_step/train": loss.item()})
         accelerator.clip_grad_norm_(model.parameters(), 1.0)
         accelerator.backward(loss)
         optimizer.step()
