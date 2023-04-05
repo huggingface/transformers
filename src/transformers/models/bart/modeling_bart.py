@@ -1398,6 +1398,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
+            labels = labels.to(lm_logits.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
@@ -1553,6 +1554,7 @@ class BartForSequenceClassification(BartPretrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1896,6 +1898,7 @@ class BartForCausalLM(BartPretrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
