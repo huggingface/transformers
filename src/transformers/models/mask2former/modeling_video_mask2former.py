@@ -2112,7 +2112,9 @@ class VideoMask2FormerTransformerModule(nn.Module):
 
         self.decoder = VideoMask2FormerMaskedAttentionDecoder(config=config)
         self.level_embed = nn.Embedding(self.num_feature_levels, hidden_dim)
-        self.num_frames = config.num_frames
+
+        # During training, each video clip is composed of 2 frames in order to make the training much more efficient
+        self.num_frames = 2
 
     def forward(
         self,
@@ -2127,13 +2129,13 @@ class VideoMask2FormerTransformerModule(nn.Module):
 
         m_batch_size, m_channels, m_height, m_width = mask_features.shape
         batch_size = (m_batch_size // self.num_frames) if self.training else 1
-        t = m_batch_size // batch_size
-        mask_features = mask_features.view(batch_size, t, m_channels, m_height, m_width)
+        frames = m_batch_size // batch_size
+        mask_features = mask_features.view(batch_size, frames, m_channels, m_height, m_width)
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
             position_embeddings_3d = self.position_embedder(
-                multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None
+                multi_scale_features[i].view(batch_size, frames, -1, size_list[-1][0], size_list[-1][1]), None
             ).flatten(3)
             multi_stage_positional_embeddings.append(position_embeddings_3d)
 
@@ -2145,12 +2147,12 @@ class VideoMask2FormerTransformerModule(nn.Module):
 
             multi_stage_positional_embeddings[-1] = (
                 multi_stage_positional_embeddings[-1]
-                .view(batch_size, t, channels, height_width)
+                .view(batch_size, frames, channels, height_width)
                 .permute(1, 3, 0, 2)
                 .flatten(0, 1)
             )
             multi_stage_features[-1] = (
-                multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
+                multi_stage_features[-1].view(batch_size, frames, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
             )
 
         # [num_queries, batch_size, num_channels]
@@ -2473,7 +2475,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         >>> import torchvision
         >>> from huggingface_hub import hf_hub_download
 
-        >>> # Load Mask2Former trained on YouTubeVIS 2021 dataset
+        >>> # Load Video Mask2Former trained on YouTubeVIS 2021 dataset
         >>> image_processor = AutoImageProcessor.from_pretrained(
         ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
         ... )
@@ -2484,7 +2486,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         >>> file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
         >>> video = torchvision.io.read_video(file_path)[0]
 
-        >>> video_input = image_processor(video, return_tensors="pt")
+        >>> video_input = image_processor(list(video[:5]), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**video_input)
@@ -2495,7 +2497,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # Perform post-processing to get video instance segmentation map
-        >>> pred_video_instance_map = image_processor.post_process_video_instance_segmentation(
+        >>> pred_video_instance_map = image_processor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[tuple(video.shape[1:3])]
         ... )[0]["segmentation"]
         >>> print(pred_video_instance_map.shape)
@@ -2525,10 +2527,11 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         masks_queries_logits = outputs.masks_queries_logits
 
         auxiliary_logits = self.get_auxiliary_logits(class_queries_logits, masks_queries_logits)
-        
         class_logits = class_queries_logits[-1]
-        mask_logits = masks_queries_logits[-1][0]
-
+        
+        # [batch_size, num_queries, num_frames, height, width]
+        mask_logits = masks_queries_logits[-1]
+        
         if mask_labels is not None and class_labels is not None:
             loss_dict = self.get_loss_dict(
                 masks_queries_logits=mask_logits,
@@ -2553,6 +2556,12 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None
+        
+        # [batch_size, num_queries, num_frames, height, width] -> [num_queries, num_frames, height, width]
+        mask_logits = mask_logits[0]
+
+        # [num_queries, num_frames, height, width] -> [num_frames, num_queries, height, width]
+        #mask_logits = mask_logits.transpose(1, 0)
 
         output = VideoMask2FormerForSegmentationOutput(
             loss=loss,

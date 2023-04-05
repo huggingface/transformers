@@ -42,7 +42,7 @@ if is_torch_available():
     from transformers import VideoMask2FormerForSegmentation, VideoMask2FormerModel
 
     if is_vision_available():
-        from transformers import Mask2FormerImageProcessor
+        from transformers import VideoMask2FormerImageProcessor
 
 if is_torchvision_available():
     import torchvision
@@ -134,8 +134,9 @@ class VideoVideoMask2FormerModelTester:
 
         self.parent.assertEqual(
             output.transformer_decoder_last_hidden_state.shape,
-            (self.batch_size, self.num_queries, self.hidden_dim),
-        )
+            (1, self.num_queries, self.hidden_dim),
+        ) 
+
         # let's ensure the other two hidden state exists
         self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
         self.parent.assertTrue(output.encoder_last_hidden_state is not None)
@@ -159,11 +160,11 @@ class VideoVideoMask2FormerModelTester:
             # due to the encoder compression, masks have a //4 spatial size
             self.parent.assertEqual(
                 result.masks_queries_logits.shape,
-                (self.batch_size, self.num_queries, self.min_size // 4, self.max_size // 4),
+                (self.num_queries, self.batch_size, self.min_size // 4, self.max_size // 4),
             )
             # + 1 for null class
             self.parent.assertEqual(
-                result.class_queries_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1)
+                result.class_queries_logits.shape, (1, self.num_queries, self.num_labels + 1)
             )
 
         with torch.no_grad():
@@ -244,7 +245,7 @@ class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"]:
+        for model_name in ["shivi/video-mask2former-swin-tiny-youtubevis-2021-instance"]:
             model = VideoMask2FormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -333,11 +334,11 @@ def prepare_video():
 class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        return "shivi/video-mask2former-swin-tiny-youtubevis-2021-instance"
 
     @cached_property
     def default_image_processor(self):
-        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return VideoMask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
     
 
     def test_video_mask2former_inference_no_head(self):
@@ -346,20 +347,15 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
 
         video = prepare_video()
-        video_frames = [
-            image_processor(images=frame, return_tensors="pt").pixel_values
-            for frame in video[:5]
-        ]
-        video_frame_shape = video_frames[0].shape
-
+        video_input = image_processor(images=list(video[:5]), return_tensors="pt").pixel_values
+        
+        video_shape = video_input.shape
+        
         # check size is divisible by 32
-        self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
-        # check frame size
-        self.assertEqual(video_frame_shape, (1, 3, 480, 640))
-
-        video_input = torch.cat(video_frames)
+        self.assertTrue((video_shape[-1] % 32) == 0 and (video_shape[-2] % 32) == 0)
+    
         # check video size
-        self.assertEqual(video_input.shape, (5, 3, 480, 640))
+        self.assertEqual(video_shape, (5, 3, 480, 640))
 
         with torch.no_grad():
             outputs = model(video_input)
@@ -392,26 +388,20 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def test_video_mask2former_universal_segmentation_head_model(self):
+    def test_video_mask2former_segmentation_head_model(self):
         # load model and processor
         model = VideoMask2FormerForSegmentation.from_pretrained(self.model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
 
         video = prepare_video()
-        video_frames = [
-            image_processor(images=frame, return_tensors="pt").pixel_values
-            for frame in video[:5]
-        ]
-        video_frame_shape = video_frames[0].shape
-
-        # check size is divisible by 32
-        self.assertTrue((video_frame_shape[-1] % 32) == 0 and (video_frame_shape[-2] % 32) == 0)
-        # check frame size
-        self.assertEqual(video_frame_shape, (1, 3, 480, 640))
-
-        video_input = torch.cat(video_frames)
-        # check video size
+        video_input = image_processor(images=list(video[:5]), return_tensors="pt").pixel_values
+        
         video_shape = video_input.shape
+        
+        # check size is divisible by 32
+        self.assertTrue((video_shape[-1] % 32) == 0 and (video_shape[-2] % 32) == 0)
+    
+        # check video size
         self.assertEqual(video_shape, (5, 3, 480, 640))
 
         with torch.no_grad():
@@ -450,17 +440,17 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
         model = VideoMask2FormerForSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         image_processor = self.default_image_processor
 
-        inputs = image_processor(
+        video_inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
-            segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
+            segmentation_maps=[np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32)],
             return_tensors="pt",
         )
 
-        inputs["pixel_values"] = inputs["pixel_values"].to(torch_device)
-        inputs["mask_labels"] = [el.to(torch_device) for el in inputs["mask_labels"]]
-        inputs["class_labels"] = [el.to(torch_device) for el in inputs["class_labels"]]
+        video_inputs["pixel_values"] = video_inputs["pixel_values"].to(torch_device)
+        video_inputs["mask_labels"] = [el.to(torch_device) for el in video_inputs["mask_labels"]]
+        video_inputs["class_labels"] = [el.to(torch_device) for el in video_inputs["class_labels"]]
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(**video_inputs)
 
         self.assertTrue(outputs.loss is not None)

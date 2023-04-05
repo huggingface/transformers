@@ -35,7 +35,7 @@ from torch import Tensor, nn
 from transformers import (
     Mask2FormerConfig,
     VideoMask2FormerForSegmentation,
-    Mask2FormerImageProcessor,
+    VideoMask2FormerImageProcessor,
     VideoMask2FormerModel,
     SwinConfig,
 )
@@ -291,11 +291,11 @@ class OriginalVideoMask2FormerConfigToOursConverter:
 
 
 class OriginalVideoMask2FormerConfigToImageProcessorConverter:
-    def __call__(self, original_config: object) -> Mask2FormerImageProcessor:
+    def __call__(self, original_config: object) -> VideoMask2FormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
 
-        return Mask2FormerImageProcessor(
+        return VideoMask2FormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -943,7 +943,7 @@ class OriginalVideoMask2FormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: VideoMask2FormerForSegmentation,
-    image_processor: Mask2FormerImageProcessor,
+    image_processor: VideoMask2FormerImageProcessor,
     tolerance: float,
 ):
     with torch.no_grad():
