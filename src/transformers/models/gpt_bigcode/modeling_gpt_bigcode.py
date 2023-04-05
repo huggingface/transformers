@@ -39,7 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_gpt_bigcode import AttentionType, GPTBigCodeConfig
+from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
 logger = logging.get_logger(__name__)
@@ -87,21 +87,12 @@ class GPTBigCodeAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
         self.mask_value = None
-        self.kv_cache = None
-        self.kv_cache_max_batch_size = config.max_batch_size or 0
-        self.kv_cache_max_sequence_length = config.max_sequence_length or config.n_positions
 
-        self.attention_type = AttentionType(config.attention_type)
-        self.is_mqa = self.attention_type != AttentionType.MULTI_HEAD
-
-        self.pre_allocate_kv_cache = config.pre_allocate_kv_cache
-        self.pad_key_length = config.pad_key_length and config.pre_allocate_kv_cache
-        self._frozen_kv_cache = False
-
+        self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.kv_heads = 1 if self.is_mqa else self.num_heads
+        self.kv_heads = 1 if self.multi_query else self.num_heads
         self.kv_dim = self.kv_heads * self.head_dim
         self.split_size = self.embed_dim
         if self.head_dim * self.num_heads != self.embed_dim:
@@ -120,18 +111,13 @@ class GPTBigCodeAttention(nn.Module):
         )
 
         if self.is_cross_attention:
-            if self.is_mqa:
-                raise NotImplementedError(f"attention_type {self.attention_type}  for cross_attention")
+            if self.multi_query:
+                raise NotImplementedError("Multi-Query Attention not supported for cross_attention")
 
             self.c_attn = Linear(self.embed_dim, 2 * self.embed_dim)
             self.q_attn = Linear(self.embed_dim, self.embed_dim)
         else:
-            if self.attention_type == AttentionType.MULTI_QUERY_2:
-                self.q_attn = Linear(self.embed_dim, self.embed_dim)
-                # Keys and values are shared across heads
-                self.kv_attn = Linear(self.embed_dim, 2 * self.head_dim)
-            else:
-                self.c_attn = Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
+            self.c_attn = Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
 
         self.c_proj = Linear(self.embed_dim, self.embed_dim)
 
@@ -159,7 +145,7 @@ class GPTBigCodeAttention(nn.Module):
         query_shape = query.shape
         batch_size = query_shape[0]
         key_length = key.size(-1)
-        if self.is_mqa:
+        if self.multi_query:
             # (b, sq, nh, hs) x (b, hs, sk) -> (b, sq, nh, sk)
             query_length = query_shape[1]
             attn_shape = (batch_size, query_length, self.num_heads, key_length)
@@ -200,41 +186,12 @@ class GPTBigCodeAttention(nn.Module):
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
-        if self.is_mqa:
+        if self.multi_query:
             attn_output = torch.bmm(attn_weights.view(attn_view), value).view(query_shape)
         else:
             attn_output = torch.matmul(attn_weights, value)
 
         return attn_output, attn_weights
-
-    def freeze_kv_cache(self, enable=True):
-        if self.kv_cache is None:
-            raise RuntimeError("KV cache not found.")
-        # Prevent re-allocation of the KV cache.
-        self._frozen_kv_cache = enable
-
-    def get_kv_cache(self, batch_size, sequence_length, device, dtype, allocate=True):
-        if (
-            self.kv_cache is None
-            or self.kv_cache.dtype != dtype
-            or self.kv_cache.device != device
-            or batch_size > self.kv_cache_max_batch_size
-            or sequence_length > self.kv_cache_max_sequence_length
-        ):
-            if self._frozen_kv_cache or not allocate:
-                # TODO: Improve error message
-                raise RuntimeError("KV cache not found." if self.kv_cache is None else "Invalid KV cache.")
-            # Free memory first.
-            self.kv_cache = None
-            self.kv_cache_max_sequence_length = max(sequence_length, self.kv_cache_max_sequence_length)
-            self.kv_cache_max_batch_size = max(batch_size, self.kv_cache_max_batch_size)
-            kv_cache_size = 2 * self.kv_cache_max_batch_size * self.kv_cache_max_sequence_length * self.kv_dim
-            self.kv_cache = torch.empty([kv_cache_size], device=device, dtype=dtype)
-        # This view ensures the cache is contiguous for all batch sizes.
-        kv_cache = self.kv_cache[: 2 * batch_size * self.kv_cache_max_sequence_length * self.kv_dim].view(
-            batch_size, self.kv_heads, self.kv_cache_max_sequence_length, 2 * self.head_dim
-        )
-        return kv_cache[:, 0, :sequence_length, :] if self.is_mqa else kv_cache[:, :, :sequence_length, :]
 
     def forward(
         self,
@@ -257,10 +214,7 @@ class GPTBigCodeAttention(nn.Module):
             query = self.q_attn(hidden_states)
             key_value = self.c_attn(encoder_hidden_states)
             attention_mask = encoder_attention_mask
-        elif self.attention_type == AttentionType.MULTI_QUERY_2:
-            query = self.q_attn(hidden_states)
-            key_value = self.kv_attn(hidden_states)
-        elif self.attention_type == AttentionType.MULTI_QUERY_1:
+        elif self.multi_query:
             query, key_value = self.c_attn(hidden_states).split((self.embed_dim, 2 * self.kv_dim), dim=2)
         else:
             # Note: We split as (self.num_heads, 3, self.head_dim) instead of (3, self.num_heads, self.head_dim),
@@ -276,30 +230,14 @@ class GPTBigCodeAttention(nn.Module):
         present = None
         past_key, past_value = None, None
 
-        if self.pre_allocate_kv_cache:
-            if use_cache or layer_past is not None:
-                last_key_length = layer_past or 0
-                batch_size = key_value.size(0)
-                key_length = last_key_length + key_value.size(-2)
-                padded_key_length = key_length + -key_length % (8 if self.pad_key_length else 1)
-                kv_cache = self.get_kv_cache(
-                    batch_size, padded_key_length, key_value.device, key_value.dtype, allocate=last_key_length == 0
-                )
-                if self.is_mqa:
-                    kv_cache[:, last_key_length:key_length, :].copy_(key_value)
-                key_value = kv_cache
-                # TODO: discuss this
-                # if use_cache:
-                #    present = key_length
-        else:
-            if layer_past is not None:
-                # TODO: discuss this
-                # key_value = torch.cat((layer_past, key_value), dim=-2)
-                past_key, past_value = layer_past
-
+        if layer_past is not None:
             # TODO: discuss this
-            # if use_cache:
-            #    present = key_value
+            # key_value = torch.cat((layer_past, key_value), dim=-2)
+            past_key, past_value = layer_past
+
+        # TODO: discuss this
+        # if use_cache:
+        #    present = key_value
 
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
 
@@ -312,7 +250,7 @@ class GPTBigCodeAttention(nn.Module):
 
         attn_output, attn_weights = self._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
 
-        if not self.is_mqa:
+        if not self.multi_query:
             attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
@@ -354,7 +292,7 @@ class GPTBigCodeBlock(nn.Module):
         self.ln_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            if config.attention_type != AttentionType.MULTI_HEAD:
+            if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
             self.crossattention = GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
@@ -609,8 +547,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.attention_type = AttentionType(config.attention_type)
-        self.is_mqa = self.attention_type != AttentionType.MULTI_HEAD
+        self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -619,9 +556,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.drop = Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTBigCodeBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-
-        self.pre_allocate_kv_cache = config.pre_allocate_kv_cache
-        self.pad_key_length = config.pad_key_length and self.pre_allocate_kv_cache
 
         max_positions = config.max_position_embeddings
         self.register_buffer(
@@ -693,8 +627,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * len(self.h))
-        elif self.pre_allocate_kv_cache:
-            past_length = past_key_values[0]
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
@@ -712,12 +644,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             )
         # MQA: (b, sq, nh, sk)
         # MHA: (b, nh, sq, sk)
-        attention_mask = self_attention_mask.unsqueeze(2 if self.is_mqa else 1)
-
-        if self.pad_key_length:
-            pad = -key_length % 8
-            if pad > 0:
-                attention_mask = torch.nn.functional.pad(attention_mask, (0, pad), mode="constant", value=False)
+        attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -729,7 +656,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             if encoder_attention_mask.dim() == 2:
                 encoder_attention_mask.unsqueeze(1)
             assert encoder_attention_mask.dim() == 3
-            encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.is_mqa else 1)
+            encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
         else:
             encoder_attention_mask = None
 

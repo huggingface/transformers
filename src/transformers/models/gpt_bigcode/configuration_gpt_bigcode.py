@@ -14,8 +14,6 @@
 # limitations under the License.
 """ GPTBigCode configuration"""
 
-from enum import IntEnum
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,23 +23,6 @@ logger = logging.get_logger(__name__)
 GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigcode/santacoder-fast-inference": "https://huggingface.co/bigcode/santacoder-fast-inference/resolve/main/config.json",
 }
-
-
-class AttentionType(IntEnum):
-    r"""
-    Enum class to store the different attention types.
-
-    Attributes:
-        MULTI_HEAD (`int`, defaults to 1):
-            Multi-head attention.
-        MULTI_QUERY_1 (`int`, defaults to 2):
-            Multi-query attention with the first query.
-        MULTI_QUERY_2 (`int`, defaults to 3):
-            Multi-query attention with the second query.
-    """
-    MULTI_HEAD = 1
-    MULTI_QUERY_1 = 2
-    MULTI_QUERY_2 = 3
 
 
 class GPTBigCodeConfig(PretrainedConfig):
@@ -178,11 +159,7 @@ class GPTBigCodeConfig(PretrainedConfig):
         eos_token_id=50256,
         attention_softmax_in_fp32=True,
         scale_attention_softmax_in_fp32=True,
-        attention_type=AttentionType.MULTI_HEAD,
-        pre_allocate_kv_cache=False,
-        max_sequence_length=None,
-        max_batch_size=None,
-        pad_key_length=True,
+        multi_query=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -206,18 +183,9 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.scale_attention_softmax_in_fp32 = scale_attention_softmax_in_fp32
+        self.multi_query = multi_query
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-        self.attention_type = AttentionType(attention_type)
-
-        self.pre_allocate_kv_cache = pre_allocate_kv_cache
-        # The max sequence length for the pre-allocated KV cache (`n_positions` if not provided).
-        self.max_sequence_length = max_sequence_length
-        # The max batch size for the pre-allocated KV cache, (deduce from input if not provided).
-        self.max_batch_size = max_batch_size
-        # Pad key length to a multiple of 8 (requires pre_allocate_kv_cache).
-        self.pad_key_length = pad_key_length
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
