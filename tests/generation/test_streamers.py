@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import unittest
+from queue import Empty
 from threading import Thread
 
 from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
@@ -102,3 +103,20 @@ class StreamerTester(unittest.TestCase):
         streamer_text = cs.out[:-1]  # Remove the final "\n"
         streamer_text_tokenized = tokenizer(streamer_text, return_tensors="pt")
         self.assertEqual(streamer_text_tokenized.input_ids.shape, (1, 1))
+
+    def test_iterator_streamer_timeout(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        streamer = TextIteratorStreamer(tokenizer, timeout=0.001)
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        thread.start()
+
+        # The streamer will timeout after 0.001 seconds, so an exception will be raised
+        with self.assertRaises(Empty):
+            streamer_text = ""
+            for new_text in streamer:
+                streamer_text += new_text
