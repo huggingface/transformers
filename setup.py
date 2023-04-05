@@ -406,9 +406,14 @@ install_requires = [
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
+# default variable to be overwritten by the version.py file
+version = "unknown"
+# load and overwrite version and release info from version.py
+exec(open(os.path.join("src", "transformers", "version.py")).read())
+
 setup(
-    name="transformers",
-    version="4.23.1",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    name="nm-transformers",
+    version=version,  # major.minor.patch to match NM repos, fourth entry is either transformers base version or nightly date
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -416,7 +421,7 @@ setup(
     long_description_content_type="text/markdown",
     keywords="NLP vision speech deep learning transformer pytorch tensorflow BERT GPT-2 Wav2Vec2 ViT",
     license="Apache",
-    url="https://github.com/huggingface/transformers",
+    url="https://github.com/neuralmagic/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
     package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h"]},
