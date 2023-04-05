@@ -33,9 +33,9 @@ if is_torch_available():
         GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2TokenizerFast,
         GPTBigCodeDoubleHeadsModel,
+        GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
-        GPTBigCodeForCausalLM,
         GPTBigCodeModel,
     )
     from transformers.models.gpt_bigcode.configuration_gpt_bigcode import AttentionType

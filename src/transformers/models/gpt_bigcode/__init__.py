@@ -53,9 +53,9 @@ if TYPE_CHECKING:
         from .modeling_gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTBigCodeDoubleHeadsModel,
+            GPTBigCodeForCausalLM,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,
-            GPTBigCodeForCausalLM,
             GPTBigCodeModel,
             GPTBigCodePreTrainedModel,
         )

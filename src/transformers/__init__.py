@@ -1645,9 +1645,9 @@ else:
         [
             "GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTBigCodeDoubleHeadsModel",
+            "GPTBigCodeForCausalLM",
             "GPTBigCodeForSequenceClassification",
             "GPTBigCodeForTokenClassification",
-            "GPTBigCodeForCausalLM",
             "GPTBigCodeModel",
             "GPTBigCodePreTrainedModel",
         ]
@@ -5147,9 +5147,9 @@ if TYPE_CHECKING:
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTBigCodeDoubleHeadsModel,
+            GPTBigCodeForCausalLM,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,
-            GPTBigCodeForCausalLM,
             GPTBigCodeModel,
             GPTBigCodePreTrainedModel,
         )
