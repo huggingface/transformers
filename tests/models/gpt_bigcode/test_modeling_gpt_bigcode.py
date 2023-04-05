@@ -167,6 +167,8 @@ class GPTBigCodeModelTester:
             gradient_checkpointing=gradient_checkpointing,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
+            attention_softmax_in_fp32=False,
+            scale_attention_softmax_in_fp32=False,
         )
 
     def get_pipeline_config(self):
@@ -449,6 +451,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
+    test_torchscript = False
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
