@@ -45,8 +45,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             contains everything needed to load the tokenizer.
 
         clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
-            Wether to cleanup spaces after decoding, cleanup consists in removing
-            potential artifacts like extra spaces.
+            Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
+            spaces.
 
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
