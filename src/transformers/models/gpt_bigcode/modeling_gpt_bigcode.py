@@ -1,8 +1,7 @@
 # coding=utf-8
-# TODO: Update???
-# Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright 2023 The Bigcode team and HuggingFace Inc. team.
+# Copyright 2023 The OpenAI Team Authors.
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -16,14 +15,13 @@
 # limitations under the License.
 """PyTorch GPTBigCode model."""
 import math
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, Dropout, LayerNorm, Linear, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -42,7 +40,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt_bigcode import AttentionType, GPTBigCodeConfig
 
 
@@ -53,15 +50,14 @@ _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
 GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigcode/santacoder-fast-inference",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
+    # See all GPTBigCode models at https://huggingface.co/models?filter=santacoder-
 ]
+
 
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling, dropout and head mask.
 #  Is it doable without writing 32 functions?
-
-
 @torch.jit.script
 def upcast_masked_softmax(
     x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
@@ -128,20 +124,20 @@ class GPTBigCodeAttention(nn.Module):
             if self.is_mqa:
                 raise NotImplementedError(f"attention_type {self.attention_type}  for cross_attention")
 
-            self.c_attn = torch.nn.Linear(self.embed_dim, 2 * self.embed_dim)
-            self.q_attn = torch.nn.Linear(self.embed_dim, self.embed_dim)
+            self.c_attn = Linear(self.embed_dim, 2 * self.embed_dim)
+            self.q_attn = Linear(self.embed_dim, self.embed_dim)
         else:
             if self.attention_type == AttentionType.MULTI_QUERY_2:
-                self.q_attn = torch.nn.Linear(self.embed_dim, self.embed_dim)
+                self.q_attn = Linear(self.embed_dim, self.embed_dim)
                 # Keys and values are shared across heads
-                self.kv_attn = torch.nn.Linear(self.embed_dim, 2 * self.head_dim)
+                self.kv_attn = Linear(self.embed_dim, 2 * self.head_dim)
             else:
-                self.c_attn = torch.nn.Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
+                self.c_attn = Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
 
-        self.c_proj = torch.nn.Linear(self.embed_dim, self.embed_dim)
+        self.c_proj = Linear(self.embed_dim, self.embed_dim)
 
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.attn_dropout = Dropout(config.attn_pdrop)
+        self.resid_dropout = Dropout(config.resid_pdrop)
 
         self.pruned_heads = set()
 
@@ -341,11 +337,12 @@ class GPTBigCodeMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = torch.nn.Linear(embed_dim, intermediate_size)
-        self.c_proj = torch.nn.Linear(intermediate_size, embed_dim)
+        self.c_fc = Linear(embed_dim, intermediate_size)
+        self.c_proj = Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
-        self.dropout = nn.Dropout(config.resid_pdrop)
+        self.dropout = Dropout(config.resid_pdrop)
 
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
@@ -360,29 +357,30 @@ class GPTBigCodeBlock(nn.Module):
         hidden_size = config.hidden_size
         self.inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTBigCodeAttention(config, layer_idx=layer_idx)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             if config.attention_type != AttentionType.MULTI_HEAD:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
             self.crossattention = GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_cross_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = GPTBigCodeMLP(self.inner_dim, config)
 
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block.forward
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[torch.Tensor] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -442,7 +440,6 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
     config_class = GPTBigCodeConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTBigCodeBlock"]
 
@@ -461,7 +458,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -476,6 +473,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._set_gradient_checkpointing with GPT2->GPTBigCode
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTBigCodeModel):
             module.gradient_checkpointing = value
@@ -608,56 +606,6 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the gpt_bigcode models have
-            the following number of attention modules:
-
-                - gpt_bigcode: 12
-                - gpt_bigcode-medium: 24
-                - gpt_bigcode-large: 36
-                - gpt_bigcode-xl: 48
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using gpt_bigcode-xl, which has a total of 48 attention modules:
-    model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode-xl")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-        1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-        2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-        3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with gpt_bigcode-large:
-    model = GPTBigCodeLMHeadModel.from_pretrained("gpt_bigcode-large")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6, 7],
-        1: [8, 9, 10, 11, 12, 13, 14, 15],
-        2: [16, 17, 18, 19, 20, 21, 22, 23],
-        3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
 
 
 @add_start_docstrings(
@@ -676,9 +624,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
-        self.drop = nn.Dropout(config.embd_pdrop)
+        self.drop = Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTBigCodeBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.pre_allocate_kv_cache = config.pre_allocate_kv_cache
         self.pad_key_length = config.pad_key_length and self.pre_allocate_kv_cache
@@ -688,57 +636,10 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
         )
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        warnings.warn(
-            "`GPTBigCodeModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
-            " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
-            " ...}",
-            FutureWarning,
-        )
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        self.wpe = self.wpe.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        self.wpe = self.wpe.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -871,17 +772,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if layer_past is not None:
-                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -924,12 +814,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
@@ -954,7 +838,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
 
 # TODO: Fix type hints?
-# TODO: Add copy comment?
 @add_start_docstrings(
     """
     The GPT_BIGCODE Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -970,43 +853,8 @@ class GPTBigCodeLMHeadModel(GPTBigCodePreTrainedModel):
         self.transformer = GPTBigCodeModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`GPTBigCodeLMHeadModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
-            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
-            " 0, 'transformer.h.1': 1, ...}",
-            FutureWarning,
-        )
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1099,11 +947,6 @@ class GPTBigCodeLMHeadModel(GPTBigCodePreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
-
         lm_logits = self.lm_head(hidden_states)
 
         loss = None
@@ -1164,45 +1007,8 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`GPTBigCodeDoubleHeadsModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should"
-            " load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your"
-            " own `device_map` but it needs to be a dictionary module_name to device, so for instance"
-            " {'transformer.h.0': 0, 'transformer.h.1': 1, ...}",
-            FutureWarning,
-        )
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.multiple_choice_head = self.multiple_choice_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.multiple_choice_head = self.multiple_choice_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1316,11 +1122,6 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
 
         hidden_states = transformer_outputs[0]
 
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
-
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
 
@@ -1391,10 +1192,6 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1522,12 +1319,8 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
+        self.dropout = Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()

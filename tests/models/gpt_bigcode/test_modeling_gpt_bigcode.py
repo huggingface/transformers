@@ -447,12 +447,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else ()
     )
     all_generative_model_classes = (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (
-        (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
-    )
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
