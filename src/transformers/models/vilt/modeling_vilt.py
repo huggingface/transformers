@@ -150,16 +150,16 @@ class ViltEmbeddings(nn.Module):
         patch_index = patch_index.flatten(1, 3)
         x_mask = x_mask.flatten(1)
 
-        if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
-            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
-            # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
-            # if self.patch_size = 32, 25 * 41 = 1025
-            # if res is 384 x 640, 12 * 20 = 240
-            effective_resolution = x_h * x_w
-            max_image_length = effective_resolution.max()
-        else:
-            effective_resolution = x_h * x_w
-            max_image_length = min(effective_resolution.max(), max_image_length)
+        # if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
+        #     # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
+        #     # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
+        #     # if self.patch_size = 32, 25 * 41 = 1025
+        #     # if res is 384 x 640, 12 * 20 = 240
+        #     effective_resolution = x_h * x_w
+        #     max_image_length = effective_resolution.max()
+        # else:
+        #     effective_resolution = x_h * x_w
+        #     max_image_length = min(effective_resolution.max(), max_image_length)
 
         valid_idx = x_mask.nonzero(as_tuple=False)
         non_valid_idx = (1 - x_mask).nonzero(as_tuple=False)
@@ -177,8 +177,9 @@ class ViltEmbeddings(nn.Module):
                 valid_choice = torch.multinomial(torch.ones(v).float(), max_image_length)
                 select.append(valid_row_idx[i][valid_choice])
             else:
-                pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
-                select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
+                # pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
+                # select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
+                select.append(valid_row_idx[i])
 
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
