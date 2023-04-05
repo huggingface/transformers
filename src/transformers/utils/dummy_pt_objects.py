@@ -3163,6 +3163,13 @@ class GPTBigCodeDoubleHeadsModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTBigCodeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTBigCodeForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3171,13 +3178,6 @@ class GPTBigCodeForSequenceClassification(metaclass=DummyObject):
 
 
 class GPTBigCodeForTokenClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class GPTBigCodeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
