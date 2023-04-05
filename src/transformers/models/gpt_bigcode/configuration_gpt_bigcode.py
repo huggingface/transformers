@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2023 The BigCode team and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,9 +46,9 @@ class AttentionType(IntEnum):
 
 class GPTBigCodeConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GPTBigCodeModel`] or a [`TFGPTBigCodeModel`]. It
-    is used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT-2
+    This is the configuration class to store the configuration of a [`GPTBigCodeModel`]. It is used to instantiate a
+    GPTBigCode model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GPTBigCode
     [gpt_bigcode](https://huggingface.co/gpt_bigcode) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

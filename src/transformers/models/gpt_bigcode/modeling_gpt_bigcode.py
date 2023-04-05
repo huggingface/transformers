@@ -295,6 +295,7 @@ class GPTBigCodeAttention(nn.Module):
             )
 
         present = None
+        past_key, past_value = None, None
 
         if self.pre_allocate_kv_cache:
             if use_cache or layer_past is not None:
@@ -308,15 +309,24 @@ class GPTBigCodeAttention(nn.Module):
                 if self.is_mqa:
                     kv_cache[:, last_key_length:key_length, :].copy_(key_value)
                 key_value = kv_cache
-                if use_cache:
-                    present = key_length
+                # if use_cache:
+                #    present = key_length
         else:
             if layer_past is not None:
-                key_value = torch.cat((layer_past, key_value), dim=-2)
-            if use_cache:
-                present = key_value
+                # key_value = torch.cat((layer_past, key_value), dim=-2)
+                past_key, past_value = layer_past
+
+            # if use_cache:
+            #    present = key_value
 
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
+
+        if past_key is not None:
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+
+        if use_cache:
+            present = (key, value)
 
         attn_output, attn_weights = self._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
 
@@ -448,7 +458,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -647,6 +657,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    # Remove it ?
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -711,7 +722,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         elif self.pre_allocate_kv_cache:
             past_length = past_key_values[0]
         else:
-            past_length = past_key_values[0].size(-2)
+            past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
@@ -851,7 +862,7 @@ class GPTBigCodeLMHeadModel(GPTBigCodePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTBigCodeModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -986,8 +997,6 @@ class GPTBigCodeLMHeadModel(GPTBigCodePreTrainedModel):
         )
 
 
-# TODO: Fix type hints?
-# TODO: Add copy comment?
 @add_start_docstrings(
     """
 The GPTBigCode Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
@@ -1004,7 +1013,7 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         super().__init__(config)
         config.num_labels = 1
         self.transformer = GPTBigCodeModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         # Initialize weights and apply final processing
@@ -1167,11 +1176,9 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         )
 
 
-# TODO: Fix type hints?
-# TODO: Add copy comment?
 @add_start_docstrings(
     """
-    The GPT_BIGCODE Model transformer with a sequence classification head on top (linear layer).
+    The GPTBigCode Model transformer with a sequence classification head on top (linear layer).
 
     [`GPTBigCodeForSequenceClassification`] uses the last token in order to do the classification, as other causal
     models (e.g. GPT-1) do.
@@ -1191,17 +1198,13 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
-        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+        self.score = Linear(config.n_embd, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint="microsoft/DialogRPT-updown",
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2ForSequenceClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1299,7 +1302,6 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
 
 # TODO: Fix type hints?
-# TODO: Add copy comment?
 @add_start_docstrings(
     """
     GPT_BIGCODE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
@@ -1320,21 +1322,12 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
         else:
             classifier_dropout = 0.1
         self.dropout = Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
-    # fmt: off
-    @add_code_sample_docstrings(
-        checkpoint="brad1141/gpt_bigcode-finetuned-comp2",
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
-    )
-    # fmt: on
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
