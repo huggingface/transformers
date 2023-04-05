@@ -138,8 +138,6 @@ class GPTBigCodeAttention(nn.Module):
         self.attn_dropout = Dropout(config.attn_pdrop)
         self.resid_dropout = Dropout(config.resid_pdrop)
 
-        self.pruned_heads = set()
-
     def _get_mask_value(self, device, dtype):
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
         if self.mask_value is None or self.mask_value.dtype != dtype or self.mask_value.device != device:
@@ -640,14 +638,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
-
-    # Remove it ?
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
