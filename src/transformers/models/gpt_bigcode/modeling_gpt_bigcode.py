@@ -707,8 +707,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self_attention_mask = self.bias[None, key_length - query_length : key_length, :key_length]
 
         if attention_mask is not None:
-            self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).bool().to(
-                self_attention_mask.device
+            self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).to(
+                dtype=torch.bool, device=self_attention_mask.device
             )
         # MQA: (b, sq, nh, sk)
         # MHA: (b, nh, sq, sk)
