@@ -129,7 +129,7 @@ Next up, you will derive the set of labels present in the dataset. Also, create 
 ```py 
 >>> from pathlib import Path
 
->>> base_path = Path("/path/to/UCF101_subset")
+>>> base_path = Path(file_path)
 >>> all_video_file_paths = list(base_path.glob("**/*.avi")) 
 
 >>> class_labels = sorted({str(path).split("/")[-2] for path in all_video_file_paths})
