@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ GPTBigCode configuration"""
+
 from enum import IntEnum
 
 from ...configuration_utils import PretrainedConfig
@@ -28,6 +29,17 @@ GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class AttentionType(IntEnum):
+    r"""
+    Enum class to store the different attention types.
+
+    Attributes:
+        MULTI_HEAD (`int`, defaults to 1):
+            Multi-head attention.
+        MULTI_QUERY_1 (`int`, defaults to 2):
+            Multi-query attention with the first query.
+        MULTI_QUERY_2 (`int`, defaults to 3):
+            Multi-query attention with the second query.
+    """
     MULTI_HEAD = 1
     MULTI_QUERY_1 = 2
     MULTI_QUERY_2 = 3

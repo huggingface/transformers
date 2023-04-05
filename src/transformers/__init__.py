@@ -5152,7 +5152,6 @@ if TYPE_CHECKING:
             GPTBigCodeLMHeadModel,
             GPTBigCodeModel,
             GPTBigCodePreTrainedModel,
-            load_tf_weights_in_gpt_bigcode,
         )
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,

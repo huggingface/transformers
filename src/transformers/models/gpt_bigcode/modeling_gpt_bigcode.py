@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch GPTBigCode model."""
-
 import math
 import warnings
 from dataclasses import dataclass
@@ -822,7 +821,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self_attention_mask = self.bias[None, key_length - query_length : key_length, :key_length]
 
         if attention_mask is not None:
-            self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).bool()
+            self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).bool().to(
+                self_attention_mask.device
+            )
         # MQA: (b, sq, nh, sk)
         # MHA: (b, nh, sq, sk)
         attention_mask = self_attention_mask.unsqueeze(2 if self.is_mqa else 1)
