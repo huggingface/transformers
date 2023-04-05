@@ -42,7 +42,7 @@ def pytest_configure(config):
         "markers", "is_pipeline_test: mark test to run only when pipelines are tested"
     )
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
-    config.addinivalue_line("markers", "accelerate_tests: mark tests that require accelerate")
+    config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
 
 
 def pytest_addoption(parser):
