@@ -574,6 +574,8 @@
         title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
       - local: model_doc/flava
@@ -594,6 +596,8 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/oneformer
