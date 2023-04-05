@@ -310,13 +310,16 @@ class GPTBigCodeAttention(nn.Module):
                 if self.is_mqa:
                     kv_cache[:, last_key_length:key_length, :].copy_(key_value)
                 key_value = kv_cache
+                # TODO: discuss this
                 # if use_cache:
                 #    present = key_length
         else:
             if layer_past is not None:
+                # TODO: discuss this
                 # key_value = torch.cat((layer_past, key_value), dim=-2)
                 past_key, past_value = layer_past
 
+            # TODO: discuss this
             # if use_cache:
             #    present = key_value
 
@@ -857,7 +860,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
-class GPTBigCodeLMHeadModel(GPTBigCodePreTrainedModel):
+class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):

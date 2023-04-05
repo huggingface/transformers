@@ -35,7 +35,7 @@ if is_torch_available():
         GPTBigCodeDoubleHeadsModel,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
-        GPTBigCodeLMHeadModel,
+        GPTBigCodeForCausalLM,
         GPTBigCodeModel,
     )
     from transformers.models.gpt_bigcode.configuration_gpt_bigcode import AttentionType
@@ -332,7 +332,7 @@ class GPTBigCodeModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = GPTBigCodeLMHeadModel(config)
+        model = GPTBigCodeForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
@@ -343,7 +343,7 @@ class GPTBigCodeModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
-        model = GPTBigCodeLMHeadModel(config)
+        model = GPTBigCodeForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -437,7 +437,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_model_classes = (
         (
             GPTBigCodeModel,
-            GPTBigCodeLMHeadModel,
+            GPTBigCodeForCausalLM,
             GPTBigCodeDoubleHeadsModel,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,
@@ -445,7 +445,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTBigCodeLMHeadModel, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
+    all_generative_model_classes = (GPTBigCodeForCausalLM, GPTBigCodeDoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
@@ -453,7 +453,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         {
             "feature-extraction": GPTBigCodeModel,
             "text-classification": GPTBigCodeForSequenceClassification,
-            "text-generation": GPTBigCodeLMHeadModel,
+            "text-generation": GPTBigCodeForCausalLM,
             "token-classification": GPTBigCodeForTokenClassification,
             "zero-shot": GPTBigCodeForSequenceClassification,
         }
@@ -545,7 +545,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @slow
     def test_batch_generation(self):
-        model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
 
@@ -681,7 +681,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 #         scale_attn_by_inverse_layer_idx=False,
 #         verify_outputs=True,
 #     ):
-#         model = GPTBigCodeLMHeadModel.from_pretrained(
+#         model = GPTBigCodeForCausalLM.from_pretrained(
 #             "bigcode/santacoder-fast-inference",
 #             reorder_and_upcast_attn=reorder_and_upcast_attn,
 #             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
@@ -724,7 +724,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 #     @slow
 #     def test_gpt_bigcode_sample(self):
 #         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
-#         model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
+#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
 #         model.to(torch_device)
 
 #         torch.manual_seed(0)
@@ -752,7 +752,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 #     @slow
 #     def test_gpt_bigcode_sample_max_time(self):
 #         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
-#         model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
+#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
 #         model.to(torch_device)
 
 #         torch.manual_seed(0)

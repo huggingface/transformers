@@ -1647,7 +1647,7 @@ else:
             "GPTBigCodeDoubleHeadsModel",
             "GPTBigCodeForSequenceClassification",
             "GPTBigCodeForTokenClassification",
-            "GPTBigCodeLMHeadModel",
+            "GPTBigCodeForCausalLM",
             "GPTBigCodeModel",
             "GPTBigCodePreTrainedModel",
         ]
@@ -5149,7 +5149,7 @@ if TYPE_CHECKING:
             GPTBigCodeDoubleHeadsModel,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,
-            GPTBigCodeLMHeadModel,
+            GPTBigCodeForCausalLM,
             GPTBigCodeModel,
             GPTBigCodePreTrainedModel,
         )

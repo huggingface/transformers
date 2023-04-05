@@ -3177,7 +3177,7 @@ class GPTBigCodeForTokenClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class GPTBigCodeLMHeadModel(metaclass=DummyObject):
+class GPTBigCodeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
