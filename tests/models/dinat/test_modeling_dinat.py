@@ -171,6 +171,9 @@ class DinatModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
 
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
         # verify backbone works with out_features=None
         config.out_features = None
         model = DinatBackbone(config=config)
@@ -181,6 +184,9 @@ class DinatModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -387,6 +393,7 @@ class DinatModelIntegrationTest(unittest.TestCase):
 @require_natten
 class DinatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (DinatBackbone,) if is_torch_available() else ()
+    config_class = DinatConfig
 
     def setUp(self):
         self.model_tester = DinatModelTester(self)

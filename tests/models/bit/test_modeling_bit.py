@@ -326,6 +326,7 @@ class BitModelIntegrationTest(unittest.TestCase):
 @require_torch
 class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (BitBackbone,) if is_torch_available() else ()
+    config_class = BitConfig
 
     has_attentions = False
 

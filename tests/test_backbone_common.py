@@ -28,6 +28,41 @@ class BackboneTesterMixin:
     test_resize_embeddings = False
     test_head_masking = False
 
+    def test_config(self):
+        config_class = self.config_class
+
+        # test default config
+        config = config_class()
+        self.assertIsNotNone(config)
+        expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(config.depths) + 1)]
+        self.assertEqual(config.stage_names, expected_stage_names)
+        self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
+
+        # Test out_features and out_indices are correctly set
+        # out_features and out_indices both None
+        config = config_class(out_features=None, out_indices=None)
+        self.assertEqual(config.out_features, [config.stage_names[-1]])
+        self.assertEqual(config.out_indices, [len(config.stage_names) - 1])
+
+        # out_features and out_indices both set
+        config = config_class(out_features=["stem", "stage1"], out_indices=[0, 1])
+        self.assertEqual(config.out_features, ["stem", "stage1"])
+        self.assertEqual(config.out_indices, [0, 1])
+
+        # Only out_features set
+        config = config_class(out_features=["stage1", "stage3"])
+        self.assertEqual(config.out_features, ["stage1", "stage3"])
+        self.assertEqual(config.out_indices, [1, 3])
+
+        # Only out_indices set
+        config = config_class(out_indices=[0, 2])
+        self.assertEqual(config.out_features, [config.stage_names[0], config.stage_names[2]])
+        self.assertEqual(config.out_indices, [0, 2])
+
+        # Error raised when out_indices do not correspond to out_features
+        with self.assertRaises(ValueError):
+            config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 2])
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

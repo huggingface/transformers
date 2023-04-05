@@ -390,6 +390,7 @@ class NatModelIntegrationTest(unittest.TestCase):
 @require_natten
 class NatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (NatBackbone,) if is_torch_available() else ()
+    config_class = NatConfig
 
     def setUp(self):
         self.model_tester = NatModelTester(self)

@@ -333,6 +333,7 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 class ResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (ResNetBackbone,) if is_torch_available() else ()
     has_attentions = False
+    config_class = ResNetConfig
 
     def setUp(self):
         self.model_tester = ResNetModelTester(self)

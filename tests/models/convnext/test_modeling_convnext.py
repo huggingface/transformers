@@ -312,6 +312,7 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
 @require_torch
 class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (ConvNextBackbone,) if is_torch_available() else ()
+    config_class = ConvNextConfig
 
     has_attentions = False
 

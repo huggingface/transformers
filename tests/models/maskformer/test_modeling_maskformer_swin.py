@@ -404,6 +404,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 @require_torch
 class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (MaskFormerSwinBackbone,) if is_torch_available() else ()
+    config_class = MaskFormerSwinConfig
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
