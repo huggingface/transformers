@@ -21,6 +21,7 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 """
 
 
+import argparse
 import copy
 import json
 import multiprocessing
@@ -198,6 +199,10 @@ def update_tiny_model_summary_file(report_path):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
+    args = parser.parse_args()
+
     # This has to be `spawn` to avoid hanging forever!
     multiprocessing.set_start_method("spawn")
 
@@ -218,6 +223,7 @@ if __name__ == "__main__":
         upload,
         organization,
         token=os.environ.get("TOKEN", None),
+        num_workers=args.num_workers,
     )
 
     update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))

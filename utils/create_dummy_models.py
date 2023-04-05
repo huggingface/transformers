@@ -1338,7 +1338,7 @@ def create_tiny_models(
     upload,
     organization,
     token,
-    num_workers=None,
+    num_workers=1,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -1375,9 +1375,6 @@ def create_tiny_models(
             to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
 
     results = {}
-
-    if num_workers is None:
-        num_workers = int(os.environ.get("NUM_WORKERS", 1))
     if num_workers <= 1:
         for c, models_to_create in list(to_create.items()):
             print(f"Create models for {c.__name__} ...")

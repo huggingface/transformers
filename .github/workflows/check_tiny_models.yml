@@ -63,7 +63,7 @@ jobs:
 
       - name: Create + Upload tiny models for new model architecture(s)
         run: | 
-          NUM_WORKERS=2 python utils/update_tiny_models.py
+          python utils/update_tiny_models.py --num_workers 2
 
       - name: Full report
         run: cat tiny_models/reports/tiny_model_creation_report.json
