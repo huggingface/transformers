@@ -141,6 +141,7 @@ class GPTBigCodeAttention(nn.Module):
 
         self.pruned_heads = set()
 
+    # TODO: let's remove this
     def prune_heads(self, heads):
         # TODO: Does this work????
         if self.is_mqa:
