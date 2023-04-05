@@ -21,7 +21,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, Dropout, LayerNorm, Linear, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -114,15 +114,15 @@ class GPTBigCodeAttention(nn.Module):
             if self.multi_query:
                 raise NotImplementedError("Multi-Query Attention not supported for cross_attention")
 
-            self.c_attn = Linear(self.embed_dim, 2 * self.embed_dim)
-            self.q_attn = Linear(self.embed_dim, self.embed_dim)
+            self.c_attn = nn.Linear(self.embed_dim, 2 * self.embed_dim)
+            self.q_attn = nn.Linear(self.embed_dim, self.embed_dim)
         else:
-            self.c_attn = Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
+            self.c_attn = nn.Linear(self.embed_dim, self.embed_dim + 2 * self.kv_dim)
 
-        self.c_proj = Linear(self.embed_dim, self.embed_dim)
+        self.c_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-        self.attn_dropout = Dropout(config.attn_pdrop)
-        self.resid_dropout = Dropout(config.resid_pdrop)
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def _get_mask_value(self, device, dtype):
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
@@ -267,10 +267,10 @@ class GPTBigCodeMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = Linear(embed_dim, intermediate_size)
-        self.c_proj = Linear(intermediate_size, embed_dim)
+        self.c_fc = nn.Linear(embed_dim, intermediate_size)
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
-        self.dropout = Dropout(config.resid_pdrop)
+        self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
@@ -287,15 +287,15 @@ class GPTBigCodeBlock(nn.Module):
         hidden_size = config.hidden_size
         self.inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTBigCodeAttention(config, layer_idx=layer_idx)
-        self.ln_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
             self.crossattention = GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = GPTBigCodeMLP(self.inner_dim, config)
 
@@ -378,7 +378,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, Linear):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -388,7 +388,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -553,9 +553,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
-        self.drop = Dropout(config.embd_pdrop)
+        self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTBigCodeBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         max_positions = config.max_position_embeddings
         self.register_buffer(
@@ -750,6 +750,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
 
 # TODO: Fix type hints?
+# TODO: Add copy comment?
+# TODO: Does this work?
 @add_start_docstrings(
     """
     The GPT_BIGCODE Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -763,7 +765,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTBigCodeModel(config)
-        self.lm_head = Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -898,6 +900,9 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         )
 
 
+# TODO: Fix type hints?
+# TODO: Add copy comment?
+# TODO: Does this work?
 @add_start_docstrings(
     """
 The GPTBigCode Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
@@ -914,7 +919,7 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         super().__init__(config)
         config.num_labels = 1
         self.transformer = GPTBigCodeModel(config)
-        self.lm_head = Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         # Initialize weights and apply final processing
@@ -1077,6 +1082,9 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         )
 
 
+# TODO: Fix type hints?
+# TODO: Add copy comment?
+# TODO: Does this work?
 @add_start_docstrings(
     """
     The GPTBigCode Model transformer with a sequence classification head on top (linear layer).
@@ -1099,7 +1107,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
-        self.score = Linear(config.n_embd, self.num_labels, bias=False)
+        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1203,6 +1211,8 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
 
 # TODO: Fix type hints?
+# TODO: Add copy comment?
+# TODO: Does this work?
 @add_start_docstrings(
     """
     GPT_BIGCODE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
@@ -1222,8 +1232,8 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
-        self.dropout = Dropout(classifier_dropout)
-        self.classifier = Linear(config.hidden_size, config.num_labels)
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
