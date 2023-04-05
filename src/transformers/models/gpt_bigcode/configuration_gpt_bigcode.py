@@ -58,7 +58,7 @@ class GPTBigCodeConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPTBigCodeModel`] or [`TFGPTBigCodeModel`].
+            `inputs_ids` passed when calling [`GPTBigCodeModel`].
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -70,8 +70,9 @@ class GPTBigCodeConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*, defaults to None):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
+        activation_function (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new",
+            "gelu_pytorch_tanh"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (`float`, *optional*, defaults to 0.1):
@@ -83,8 +84,7 @@ class GPTBigCodeConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`] and
-            [`TFGPTBigCodeDoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`].
 
             Has to be one of the following options:
 
@@ -94,8 +94,7 @@ class GPTBigCodeConfig(PretrainedConfig):
                 - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
                 - `"attn"`: Not implemented now, use multi-head attention.
         summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`] and
-            [`TFGPTBigCodeDoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`].
 
             Whether or not to add a projection after the vector extraction.
         summary_activation (`str`, *optional*):
@@ -104,25 +103,32 @@ class GPTBigCodeConfig(PretrainedConfig):
 
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
         summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`] and
-            [`TFGPTBigCodeDoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`].
 
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
         summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`] and
-            [`TFGPTBigCodeDoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTBigCodeDoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
-            dot-product/softmax to float() when training with mixed precision.
-
+        attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
+            Whether to call the fused softmax in float32.
+        scale_attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
+            Whether to scale the attention softmax in float32.
+        attention_type (`AttentionType`, *optional*, defaults to `AttentionType.MULTI_HEAD`):
+            Attention type, to be selected in the list of supported attention types in
+            `configuration_gpt_bigcode.AttentionType`.
+        preallocate_kv_cache (`bool`, *optional*, defaults to `False`):
+            Whether to pre-allocate the key and value cache for the multi-query attention.
+        max_sequence_length (`int`, *optional*):
+            The max sequence length for the pre-allocated KV cache (`n_positions` if not provided).
+        max_batch_size (`int`, *optional*):
+            The max batch size for the pre-allocated KV cache, (deduce from input if not provided).
+        pad_key_legth (`bool`, *optional*, defaults to `True`):
+            Pad key length to a multiple of 8 (requires pre_allocate_kv_cache)
     Example:
 
     ```python
