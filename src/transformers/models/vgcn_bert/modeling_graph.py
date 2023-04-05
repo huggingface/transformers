@@ -61,6 +61,7 @@ class WordGraph:
                 self.vocab_indices,
                 self.wgraph_id_to_tokenizer_id_map,
                 self.tokenizer_id_to_wgraph_id_map,
+                self.tokenizer_id_to_wgraph_id_array,
             ) = _build_predefined_graph(rows, tokenizer)
         else:
             (
@@ -69,6 +70,7 @@ class WordGraph:
                 self.vocab_indices,
                 self.wgraph_id_to_tokenizer_id_map,
                 self.tokenizer_id_to_wgraph_id_map,
+                self.tokenizer_id_to_wgraph_id_array,
             ) = _build_pmi_graph(rows, tokenizer, window_size, algorithm, threshold)
 
     def normalized(self):
@@ -98,6 +100,10 @@ def _sparse_scipy2torch(coo_sparse):
     return torch.sparse.FloatTensor(i, v, torch.Size(coo_sparse.shape))
 
 
+def _delete_special_terms(words: list, terms: list):
+    return [w for w in words if w not in terms]
+
+
 def _build_pmi_graph(
     texts: List[str], tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
 ):  # -> Tuple[sp.csr_matrix, list, dict]:
@@ -120,19 +126,22 @@ def _build_pmi_graph(
 
     # Tokenize the text samples, the tokenizer should be same as that in the combined Bert-like model.
     # Get vocabulary and the word frequency
-    vocab_counter = Counter()
+    vocab_counter = Counter({"[PAD]": 0})
     new_texts = []
     for t in texts:
         words = tokenizer.tokenize(t)
+        words = _delete_special_terms(words, ["[CLS]", "[SEP]"])
         if len(words) > 0:
             vocab_counter.update(Counter(words))
             new_texts.append(" ".join(words).strip())
 
     # TODO: question, sort vocab_counter?
-    # TODO: question, remove word with freq<n and re generate texts
+    # TODO: delete stopwords
+    # TODO: remove word with freq<n and re generate texts
     texts = new_texts
     vocab_size = len(vocab_counter)
     vocab = list(vocab_counter.keys())
+    assert vocab[0] == "[PAD]"
     vocab_indices = {k: i for i, k in enumerate(vocab)}
 
     # Get the pieces from sliding windows
@@ -196,6 +205,8 @@ def _build_pmi_graph(
         dtype=np.float32,
     )
     vocab_adj.setdiag(1.0)
+    assert vocab_adj[0, :].sum() == 1
+    assert vocab_adj[:, 0].sum() == 1
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
     wgraph_id_to_tokenizer_id_map = dict(sorted(wgraph_id_to_tokenizer_id_map.items()))
@@ -203,17 +214,30 @@ def _build_pmi_graph(
     tokenizer_id_to_wgraph_id_map = dict(sorted(tokenizer_id_to_wgraph_id_map.items()))
     assert len(wgraph_id_to_tokenizer_id_map) == len(tokenizer_id_to_wgraph_id_map)
 
-    return vocab_adj, vocab, vocab_indices, wgraph_id_to_tokenizer_id_map, tokenizer_id_to_wgraph_id_map
+    tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
+    for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
+        tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
+
+    return (
+        vocab_adj,
+        vocab,
+        vocab_indices,
+        wgraph_id_to_tokenizer_id_map,
+        tokenizer_id_to_wgraph_id_map,
+        tokenizer_id_to_wgraph_id_array,
+    )
 
 
 def _build_predefined_graph(
     words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase
 ):  # -> Tuple[sp.csr_matrix, list, dict]:
-    vocab_counter = Counter()
+    vocab_counter = Counter({"[PAD]": 0})
     word_pairs = {}
     for w1, w2, v in words_relations:
         w1_subwords = tokenizer.tokenize(w1)
+        w1_subwords = _delete_special_terms(w1_subwords, ["[CLS]", "[SEP]"])
         w2_subwords = tokenizer.tokenize(w2)
+        w2_subwords = _delete_special_terms(w2_subwords, ["[CLS]", "[SEP]"])
         vocab_counter.update(Counter(w1_subwords))
         vocab_counter.update(Counter(w2_subwords))
         for sw1 in w1_subwords:
@@ -223,6 +247,7 @@ def _build_predefined_graph(
 
     vocab_size = len(vocab_counter)
     vocab = list(vocab_counter.keys())
+    assert vocab[0] == "[PAD]"
     vocab_indices = {k: i for i, k in enumerate(vocab)}
 
     # bulid adjacency matrix
@@ -245,11 +270,24 @@ def _build_predefined_graph(
         dtype=np.float32,
     )
     vocab_adj.setdiag(1.0)
+    assert vocab_adj[0, :].sum() == 1
+    assert vocab_adj[:, 0].sum() == 1
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
     tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
 
-    return vocab_adj, vocab, vocab_indices, wgraph_id_to_tokenizer_id_map, tokenizer_id_to_wgraph_id_map
+    tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
+    for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
+        tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
+
+    return (
+        vocab_adj,
+        vocab,
+        vocab_indices,
+        wgraph_id_to_tokenizer_id_map,
+        tokenizer_id_to_wgraph_id_map,
+        tokenizer_id_to_wgraph_id_array,
+    )
 
 
 def build_knowledge_graph(rdf_list: List[str], tokenizer: PreTrainedTokenizerBase) -> Tuple[sp.csr_matrix, List, dict]:
@@ -288,6 +326,7 @@ if __name__ == "__main__":
     wgraph = WordGraph(words_relations, tokenizer)
     vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
     print(len(vocab))
+    print(wgraph.tokenizer_id_to_wgraph_id_array)
     print_matrix(vocab_adj.todense())
 
     # texts = [" I am here", "He is here", "here i am, gobefbef"]
@@ -296,6 +335,7 @@ if __name__ == "__main__":
     vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
 
     print(len(vocab))
+    print(wgraph.tokenizer_id_to_wgraph_id_array)
     print_matrix(vocab_adj.todense())
     print()
     norm_adj = _normalize_adj(vocab_adj)
