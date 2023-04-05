@@ -751,9 +751,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         if return_dict and output_hidden_states:
             # We do this to match the slightly odd PT behaviour - the final hidden state is reshaped to rank 4 when the
             # input is rank 3, but all other hidden states remain at rank-3 (with the first 2 dims merged)
-            transformer_outputs.hidden_states[:-1] + (hidden_states,)
+            all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
         else:
-            pass
+            all_hidden_states = None
         lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
@@ -764,7 +764,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         return TFOpenAIGPTDoubleHeadsModelOutput(
             logits=lm_logits,
             mc_logits=mc_logits,
-            hidden_states=transformer_outputs.hidden_states,
+            hidden_states=all_hidden_states,
             attentions=transformer_outputs.attentions,
         )
 
