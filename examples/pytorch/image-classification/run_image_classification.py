@@ -337,7 +337,7 @@ def main():
                 dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
             )
         # Set the training transforms
-        dataset["train"] = dataset["train"].map(train_transforms, batched=True, batch_size=training_args.per_device_train_batch_size)
+        dataset["train"].set_transform(train_transforms)
 
     if training_args.do_eval:
         if "validation" not in dataset:
@@ -347,13 +347,14 @@ def main():
                 dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
             )
         # Set the validation transforms
-        dataset["validation"] = dataset["validation"].map(val_transforms, batched=True, batch_size=training_args.per_device_eval_batch_size)
+        dataset["validation"].set_transform(val_transforms)
 
-    opt_model = torch.compile(model)
+    if torch.__version__ >= '2.0.0':
+        model = torch.compile(model)
 
     # Initalize our trainer
     trainer = Trainer(
-        model=opt_model,
+        model=model,
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
