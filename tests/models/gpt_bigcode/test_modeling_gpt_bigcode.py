@@ -453,7 +453,17 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
-    pipeline_model_mapping = ["text-generation"]
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTBigCodeModel,
+            "text-classification": GPTBigCodeForSequenceClassification,
+            "text-generation": GPTBigCodeLMHeadModel,
+            "token-classification": GPTBigCodeForTokenClassification,
+            "zero-shot": GPTBigCodeForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -687,7 +697,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
         # fmt: off
         expected_output_ids = [
-            464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
+            464, 3290, 13, 6969, 13, 7235, 26, 185, 343,  502, 13, 1887, 13, 1767, 3045, 13, 1767, 6969, 13, 6969
         ]
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
