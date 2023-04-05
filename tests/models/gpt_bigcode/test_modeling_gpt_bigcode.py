@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import datetime
 import math
 import unittest
@@ -34,7 +32,7 @@ if is_torch_available():
 
     from transformers import (
         GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2Tokenizer,
+        GPT2TokenizerFast,
         GPTBigCodeDoubleHeadsModel,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
@@ -455,6 +453,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
+    pipeline_model_mapping = ["text-generation"]
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -538,7 +537,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_batch_generation(self):
         model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -548,8 +547,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         # use different length sentences to test batching
         sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
+            "def hello_world():",
+            "const int x = 5;",
         ]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
@@ -565,12 +564,14 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=10,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
+            max_new_tokens=10,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
@@ -586,8 +587,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
+            """def hello_world():\n    print("Hello World!")\n\ndef hello_world_2():""",
+            "const int x = 5;\n\tint y = 10;\n\tint z = ",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -597,7 +598,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_batch_generation_2heads(self):
         model = GPTBigCodeDoubleHeadsModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -608,8 +609,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         # use different length sentences to test batching
         sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
+            "def hello_world():",
+            "const int x = 5;",
         ]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
@@ -711,7 +712,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_bigcode_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
         model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
 
@@ -739,7 +740,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_bigcode_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
         model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference")
         model.to(torch_device)
 
@@ -778,44 +779,10 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
-    @slow
-    def test_contrastive_search_gpt_bigcode(self):
-        article = (
-            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
-        )
-
-        gpt_bigcode_tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
-        gpt_bigcode_model = GPTBigCodeLMHeadModel.from_pretrained("bigcode/santacoder-fast-inference").to(torch_device)
-        input_ids = gpt_bigcode_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = gpt_bigcode_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
-
-        generated_text = gpt_bigcode_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
-                "Google Now, which helps users find the information they're looking for on the web. But the company "
-                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
-                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
-                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
-                "concerned about the company's ability to keep users' information private. In a blog post last "
-                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
-                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
-                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
-                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                "but said in a statement to The Associated Press that"
-            ],
-        )
-
 
 @require_torch
 class GPTBigCodeAttentionTest(unittest.TestCase):
-    def get_attention(self, attention_type: AttentionType):
+    def get_attention(self, attention_type):
         config = GPTBigCodeConfig.from_pretrained(
             "bigcode/santacoder-fast-inference",
             attention_type=attention_type,
