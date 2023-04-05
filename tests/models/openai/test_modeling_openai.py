@@ -274,10 +274,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = OpenAIGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip("Fix me Matt")
-    def test_pt_tf_model_equivalence(self):
-        pass
-
 
 @require_torch
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
