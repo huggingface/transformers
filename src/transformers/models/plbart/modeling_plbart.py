@@ -1499,6 +1499,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1713,6 +1714,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
