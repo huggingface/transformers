@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "EfficientFormerConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "snap-research/efficientformer-l1-300"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 49, 448]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
@@ -224,7 +224,7 @@ class EfficientFormerConvMlp(nn.Module):
         hidden_features = hidden_features or in_features
 
         self.convolution1 = nn.Conv2d(in_features, hidden_features, 1)
-        self.actvation = ACT2FN[config.hidden_act]
+        self.activation = ACT2FN[config.hidden_act]
         self.convolution2 = nn.Conv2d(hidden_features, out_features, 1)
         self.dropout = nn.Dropout(drop)
 
@@ -235,13 +235,13 @@ class EfficientFormerConvMlp(nn.Module):
         hidden_state = self.convolution1(hidden_state)
         hidden_state = self.batchnorm_before(hidden_state)
 
-        hidden_state = self.actvation(hidden_state)
+        hidden_state = self.activation(hidden_state)
         hidden_state = self.dropout(hidden_state)
         hidden_state = self.convolution2(hidden_state)
 
         hidden_state = self.batchnorm_after(hidden_state)
-
         hidden_state = self.dropout(hidden_state)
+
         return hidden_state
 
 
@@ -266,7 +266,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Bit
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->EfficientFormer
 class EfficientFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -349,6 +349,7 @@ class EfficientFormerMeta3DLayers(nn.Module):
         for layer_module in self.blocks:
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
+
             hidden_states = layer_module(hidden_states, output_attentions)
             if output_attentions:
                 all_attention_outputs = all_attention_outputs + (hidden_states[1],)
@@ -379,6 +380,7 @@ class EfficientFormerMeta4D(nn.Module):
 
         if self.use_layer_scale:
             layer_output = hidden_states + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs)
+
             layer_output = layer_output + self.drop_path(
                 self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(layer_output)
             )
@@ -398,6 +400,7 @@ class EfficientFormerMeta4DLayers(nn.Module):
         drop_paths = [
             config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx])) for block_idx in range(num_layers)
         ]
+
         self.blocks = nn.ModuleList(
             [
                 EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
@@ -446,6 +449,7 @@ class EfficientFormerEncoder(nn.Module):
             for i in range(num_intermediate_stages)
         ]
         intermediate_stages = []
+
         for i in range(num_intermediate_stages):
             intermediate_stages.append(EfficientFormerIntermediateStage(config, i))
             if downsamples[i]:
