@@ -1464,7 +1464,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        initial_prompt_ids: Optional[List[int]] = None,
+        prompt_ids: Optional[List[int]] = None,
         **kwargs,
     ):
         """
@@ -1522,9 +1522,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
-            initial_prompt_ids (`List[int]`, *optional*):
-                Optional list of token IDs created by passing text to `processor.create_initial_prompt_ids` that is
-                provided as a prompt for the first window. This can be used to provide or "prompt-engineer" a context
+            prompt_ids (`List[int]`, *optional*):
+                Optional list of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
+                provided as a prompt for the first chunk. This can be used to provide or "prompt-engineer" a context
                 for transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those
                 word correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this
                 value.
@@ -1621,17 +1621,18 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        if initial_prompt_ids is not None:
+        if prompt_ids is not None:
             if kwargs.get("decoder_start_token_id") is not None:
                 raise ValueError(
-                    "When specifying `initial_prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
+                    "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
             # Set <|startofprev|> to the decoder_start_token_id
-            kwargs.update({"decoder_start_token_id": initial_prompt_ids.pop(0)})
-            initial_prompt_ids.append(generation_config.decoder_start_token_id)
-            initial_prompt_ids.extend([id for _, id in generation_config.forced_decoder_ids])
-            indexed_initial_prompt_ids = [[idx + 1, id] for idx, id in enumerate(initial_prompt_ids)]
-            kwargs.update({"forced_decoder_ids": indexed_initial_prompt_ids})
+            kwargs.update({"decoder_start_token_id": prompt_ids.pop(0)})
+            forced_decoder_ids = [*prompt_ids, generation_config.decoder_start_token_id]
+            additional_decoder_ids = kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
+            forced_decoder_ids.extend([id for _, id in additional_decoder_ids])
+            forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
+            kwargs.update({"forced_decoder_ids": forced_decoder_ids})
 
         return super().generate(
             inputs,

@@ -89,6 +89,14 @@ def prepare_whisper_inputs_dict(
     }
 
 
+def load_datasamples(num_samples):
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    # automatic decoding with librispeech
+    speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+    return [x["array"] for x in speech_samples]
+
+
 @require_torch
 class WhisperModelTester:
     def __init__(
@@ -1013,6 +1021,27 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
+    @slow
+    def test_generate_with_prompt(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        input_speech = load_datasamples(4)
+        input_features = processor(input_speech, return_tensors="pt").input_features
+
+        # Generate without initial prompt
+        output_without_prompt_ids = model.generate(input_features, max_new_tokens=128)
+        decoded_without_prompt = processor.decode(output_without_prompt_ids[0], skip_special_tokens=False)
+
+        # Generate with initial prompt
+        prompt = "Sir Frederick Leighton"
+        prompt_ids = processor.get_prompt_ids(prompt)
+        output_with_prompt_ids = model.generate(input_features, prompt_ids=prompt_ids, max_new_tokens=128)
+        decoded_with_prompt = processor.decode(output_with_prompt_ids[0], skip_special_tokens=False)
+
+        self.assertTrue(prompt not in decoded_without_prompt)
+        self.assertTrue(prompt in decoded_with_prompt)
+
 
 @require_torch
 @require_torchaudio
@@ -1021,20 +1050,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def default_processor(self):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
-    def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
-
     @slow
     def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
         set_seed(0)
         model = WhisperModel.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
         feature_extractor = WhisperFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
 
@@ -1081,7 +1103,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperModel.from_pretrained("openai/whisper-small.en")
         model.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
 
         feaure_extractor = WhisperFeatureExtractor()
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features.to(torch_device)
@@ -1117,7 +1139,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperModel.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         processed_inputs = processor(
@@ -1158,7 +1180,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
         model.config.decoder_start_token_id = 50257
 
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
@@ -1180,7 +1202,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
@@ -1202,7 +1224,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
@@ -1260,7 +1282,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
-        input_speech = self._load_datasamples(4)
+        input_speech = load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
         generated_ids = model.generate(input_features, max_length=20, task="translate")
 
@@ -1296,7 +1318,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
 
-        input_speech = self._load_datasamples(4)
+        input_speech = load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
@@ -1335,7 +1357,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
 
-        input_speech = np.concatenate(self._load_datasamples(4))
+        input_speech = np.concatenate(load_datasamples(4))
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
@@ -1403,7 +1425,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # Set model to training mode to enable SpecAugment
         model.train()
         model.to(torch_device)
-        input_speech = self._load_datasamples(1)
+        input_speech = load_datasamples(1)
         feature_extractor = WhisperFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
 
@@ -1428,28 +1450,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
-
-    @slow
-    def test_generate_with_intial_prompt(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-base")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(7)[-1]
-        input_features = processor(input_speech, return_tensors="pt").input_features
-
-        # Generate without initial prompt
-        output_without_initial_prompt = model.generate(input_features, max_new_tokens=128)
-        actual_without_initial_prompt = processor.decode(output_without_initial_prompt[0], skip_special_tokens=True)
-
-        # Generate with initial prompt
-        intial_prompt_ids = processor.create_initial_prompt_ids("Mr. Quilter")
-        output_with_initial_prompt = model.generate(
-            input_features, initial_prompt_ids=intial_prompt_ids, max_new_tokens=128
-        )
-        actual_with_initial_prompt = processor.decode(output_with_initial_prompt[0], skip_special_tokens=True)
-
-        self.assertTrue("Mr. Quilter" not in actual_without_initial_prompt)
-        self.assertTrue("Mr. Quilter" in actual_with_initial_prompt)
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):

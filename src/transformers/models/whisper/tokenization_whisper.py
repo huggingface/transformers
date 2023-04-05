@@ -21,7 +21,7 @@ import numpy as np
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...utils import logging, to_py_obj
 from .english_normalizer import EnglishTextNormalizer
 
 
@@ -309,6 +309,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
+        self.tok = self._convert_token_to_id_with_added_voc("<|startofprev|>")
+        self.tok2 = self._convert_token_to_id("<|startofprev|>")
+        print("tok2 = ", self.tok2)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -586,15 +589,17 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
-        initial_prompt_start_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_initial_prompt = len(token_ids) > 0 and (token_ids[0] == initial_prompt_start_id)
+        token_ids = to_py_obj(token_ids)
+        prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+        has_prompt = len(token_ids) > 0 and (token_ids[0] == prompt_token_id)
         # If an initial prompt was used, we need to remove it when skipping special tokens
-        if has_initial_prompt and skip_special_tokens:
+        if has_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
                 initial_prompt_end_idx = i
                 if token_ids[i] in self.all_special_ids:
                     break
             token_ids = token_ids[initial_prompt_end_idx:]
+
         text = super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -722,12 +727,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             return_language=return_language,
             time_precision=time_precision,
         )
-
-    def create_initial_prompt_ids(self, text):
-        """Creates an initial prompt for generating text."""
-        intial_prompt_start_id = self.convert_tokens_to_ids("<|startofprev|>")
-        tokenized_text = self(" " + text.strip(), add_special_tokens=False)
-        return [intial_prompt_start_id, *tokenized_text["input_ids"]]
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
