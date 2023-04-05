@@ -42,8 +42,8 @@ class SentencePieceExtractor:
 
     def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
         """
-        By default will return vocab and merges with respect to their order, by sending `vocab_scores` 
-        we're going to order the merges with respect to the piece scores instead.
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
         """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
