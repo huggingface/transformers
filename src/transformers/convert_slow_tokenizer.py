@@ -40,21 +40,28 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        if vocab_scores is not None:
+            vocab_scores, reverse = dict(vocab_scores), True
+        else:
+            vocab_scores, reverse = vocab, False
 
         # Merges
         merges = []
         for piece_l in vocab.keys():
             for piece_r in vocab.keys():
                 merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
-                if piece_id:
-                    merges += [(piece_l, piece_r, piece_id)]
-        merges = sorted(merges, key=lambda val: val[2])
+                piece_score = vocab_scores.get(merge, None)
+                if piece_score:
+                    merges += [(piece_l, piece_r, piece_score)]
+        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
         merges = [(val[0], val[1]) for val in merges]
-
         return vocab, merges
 
 
@@ -458,14 +465,14 @@ class SpmConverter(Converter):
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
-        vocab = self.vocab(proto)
+        vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab, unk_id))
+            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,
@@ -496,16 +503,24 @@ class SpmConverter(Converter):
     def post_processor(self):
         return None
 
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
         # Tokenizer assemble
-        tokenizer.normalizer = self.normalizer(self.proto)
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
 
         replacement = "▁"
         add_prefix_space = True
-        tokenizer.pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
-        tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
         post_processor = self.post_processor()
         if post_processor:
             tokenizer.post_processor = post_processor
