@@ -14,16 +14,16 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-모델을 학습하려면 데이터셋을 모델에 맞는 입력 형식으로 전처리 해야 합니다. 데이터가 텍스트, 이미지 또는 오디오인지 여부에 관계없이 이러한 데이터를 텐서 배치로 변환하고 조립해야 합니다. 🤗 Transformers는 모델에 대한 데이터를 준비하는 데 도움이 되는 일련의 전처리 클래스를 제공합니다. 이 튜토리얼에서는 다음 내용을 배울 수 있습니다:
+모델을 학습하려면 데이터셋을 모델에 맞는 입력 형식으로 전처리 해야 합니다. 데이터가 텍스트, 이미지 또는 오디오인지 여부에 관계없이 데이터를 텐서 배치로 변환하고 조립할 필요가 있습니다. 🤗 Transformers는 모델에 대한 데이터를 준비하는 데 도움이 되는 일련의 전처리 클래스를 제공합니다. 이 튜토리얼에서는 다음 내용을 배울 수 있습니다:
 
 * 텍스트는 [Tokenizer](./main_classes/tokenizer)를 사용하여 텍스트를 토큰 시퀀스로 변환하고 토큰의 숫자 표현을 만든 후 텐서로 조립합니다.
 * 음성 및 오디오는 [Feature extractor](./main_classes/feature_extractor)를 사용하여 오디오 파형에서 시퀀스 특성을 파악하여 텐서로 변환합니다.
 * 이미지 입력은 [ImageProcessor](./main_classes/image)을 사용하여 이미지를 텐서로 변환합니다.
-* 멀티모달 입력은  [Processor](./main_classes/processors)을 사용하여 토크나이저와 특성 추출기 또는 이미지 처리기를 결합합니다.
+* 멀티모달 입력은 [Processor](./main_classes/processors)을 사용하여 토크나이저와 특성 추출기 또는 이미지 프로세서를 결합합니다.
 
 <Tip>
 
-`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 처리기, 특성 추출기 또는 처리기 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
+`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 프로세서, 특성 추출기 또는 프로세서 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
 
 </Tip>
 
@@ -37,11 +37,11 @@ pip install datasets
 
 <Youtube id="Yffk5aydLzg"/>
 
-텍스트 데이터를 전처리하기 위한 기본 도구는 [tokenizer](main_classes/tokenizer)입니다. 토크나이저는 규칙 집합에 따라 텍스트를 *토큰*으로 나눕니다. 토큰은 숫자로 변환되고 텐서는 모델 입력이 됩니다. 모델에 필요한 추가 입력은 토크나이저에 의해 추가됩니다.
+텍스트 데이터를 전처리하기 위한 기본 도구는 [tokenizer](main_classes/tokenizer)입니다. 토크나이저는 일련의 규칙에 따라 텍스트를 *토큰*으로 나눕니다. 토큰은 숫자로 변환되고 텐서는 모델 입력이 됩니다. 모델에 필요한 추가 입력은 토크나이저에 의해 추가됩니다.
 
 <Tip>
 
-사전 훈련된 모델을 사용할 계획이라면 모델과 함께 사전 훈련된 토크나이저를 사용하는 것이 중요합니다. 이렇게 하면 텍스트가 사전 훈련 말뭉치와 동일한 방식으로 분할되고 사전 훈련 중에 동일한 해당 토큰 대 인덱스(일반적으로 *vocab*이라고 함)를 사용합니다.
+사전 훈련된 모델을 사용할 계획이라면 모델과 함께 사전 훈련된 토크나이저를 사용하는 것이 중요합니다. 이렇게 하면 텍스트가 사전 훈련 말뭉치와 동일한 방식으로 분할되고 사전 훈련 중에 동일한 해당 토큰-인덱스 쌍(일반적으로 *vocab*이라고 함)을 사용합니다.
 
 </Tip>
 
@@ -53,7 +53,7 @@ pip install datasets
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 ```
 
-그 다음으로 텍스트를 토크나이저에 전달합니다:
+그 다음으로 텍스트를 토크나이저에 넣어주세요:
 
 ```py
 >>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
@@ -76,8 +76,8 @@ pip install datasets
 '[CLS] Do not meddle in the affairs of wizards, for they are subtle and quick to anger. [SEP]'
 ```
 
-보시다시피 토크나이저는 두 개의 특수한 토큰 - `CLS`와 `SEP` (분류토큰과 구분토큰) - 을 문장에 추가했습니다. 모든 모델에 특수한 토큰이
-필요한 것은 아니지만, 필요한 경우 토크나이저가 자동으로 추가합니다.
+보시다시피 토크나이저는 두 개의 특수한 토큰 - `CLS`와 `SEP` (분류토큰과 구분토큰) - 을 문장에 추가했습니다. 
+모든 모델에 특수한 토큰이 필요한 것은 아니지만, 필요한 경우 토크나이저가 자동으로 추가합니다.
 
 전처리할 문장이 여러 개 있는 경우 이를 리스트로 토크나이저에 전달합니다:
 
@@ -100,11 +100,11 @@ pip install datasets
                     [1, 1, 1, 1, 1, 1, 1]]}
 ```
 
-### 패드[[pad]]
+### 패딩[[pad]]
 
-Sentences aren't always the same length which can be an issue because tensors, the model inputs, need to have a uniform shape. Padding is a strategy for ensuring tensors are rectangular by adding a special *padding token* to shorter sentences.
+모델 입력인 텐서는 균일한 모양을 가져야 하는데, 문장의 길이가 항상 같지 않아서 문제가 될 수 있습니다. 패딩은 짧은 문장에 특수한 *패딩 토큰*을 추가하여 텐서가 직사각형 모양이 되도록 하는 전략입니다.
 
-Set the `padding` parameter to `True` to pad the shorter sequences in the batch to match the longest sequence:
+`padding` 매개변수를 `True`로 설정하여 배치의 짧은 시퀀스를 가장 긴 시퀀스와 일치하도록 패딩합니다.
 
 ```py
 >>> batch_sentences = [
@@ -125,13 +125,13 @@ Set the `padding` parameter to `True` to pad the shorter sequences in the batch 
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
-The first and third sentences are now padded with `0`'s because they are shorter.
+길이가 짧은 첫 문장과 세 번째 문장은 이제 `0`으로 채워집니다.
 
 ### 생략[[truncation]]
 
-On the other end of the spectrum, sometimes a sequence may be too long for a model to handle. In this case, you'll need to truncate the sequence to a shorter length.
+한편, 때로는 시퀀스가 모델에서 처리하기에 너무 길 수도 있습니다. 이 경우, 시퀀스를 더 짧은 길이로 줄일 필요가 있습니다.
 
-Set the `truncation` parameter to `True` to truncate a sequence to the maximum length accepted by the model:
+모델에서 허용하는 최대 길이로 시퀀스를 자르려면 `truncation` 매개변수를 `True`로 설정하세요:
 
 ```py
 >>> batch_sentences = [
@@ -154,7 +154,7 @@ Set the `truncation` parameter to `True` to truncate a sequence to the maximum l
 
 <Tip>
 
-Check out the [Padding and truncation](./pad_truncation) concept guide to learn more different padding and truncation arguments.
+다양한 패딩 및 생략 인수에 대해 더 알아보려면 [Padding and truncation](./pad_truncation) 개념 가이드를 확인해보세요.
 
 </Tip>
 
@@ -212,7 +212,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 </tf>
 </frameworkcontent>
 
-## 음성[[audio]]
+## 오디오[[audio]]
 
 For audio tasks, you'll need a [feature extractor](main_classes/feature_extractor) to prepare your dataset for the model. The feature extractor is designed to extract features from raw audio data, and convert them into tensors.
 
