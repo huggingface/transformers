@@ -32,11 +32,39 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     tokenizer.encode("Hello this is a test")
     >>> [1, 15043, 445, 338, 263, 1243]
     ```
+
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (`str`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        tokenizer_file (`str`):
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
+
+        clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
+            Wether to cleanup spaces after decoding, cleanup consists in removing
+            potential artifacts like extra spaces.
+
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
     """
+
+    padding_side = "left"
 
     def __init__(
         self,
-        *args,
+        vocab_file=None,
+        tokenizer_file=None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
@@ -44,7 +72,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         super().__init__(
-            *args,
+            vocab_file=vocab_file,
+            tokenizer_file=tokenizer_file,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
