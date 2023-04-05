@@ -141,25 +141,6 @@ class GPTBigCodeAttention(nn.Module):
 
         self.pruned_heads = set()
 
-    # TODO: let's remove this
-    def prune_heads(self, heads):
-        # TODO: Does this work????
-        if self.is_mqa:
-            raise NotImplementedError("prune_heads not implemented for MQA")
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
-
-        # Prune linear layers
-        self.c_attn = prune_linear_layer(self.c_attn, index_attn, dim=1)
-        self.c_proj = prune_linear_layer(self.c_proj, index, dim=0)
-
-        # Update hyper params
-        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
-        self.num_heads = self.num_heads - len(heads)
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def _get_mask_value(self, device, dtype):
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
         if self.mask_value is None or self.mask_value.dtype != dtype or self.mask_value.device != device:
