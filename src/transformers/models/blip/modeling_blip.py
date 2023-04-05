@@ -42,13 +42,13 @@ _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Salesforce/blip-vqa-base",
-    "Salesforce/blip-vqa-capfit-large",
+    "Salesforce/blip-vqa-capfilt-large",
     "Salesforce/blip-image-captioning-base",
     "Salesforce/blip-image-captioning-large",
     "Salesforce/blip-itm-base-coco",
     "Salesforce/blip-itm-large-coco",
-    "Salesforce/blip-itm-base-flikr",
-    "Salesforce/blip-itm-large-flikr",
+    "Salesforce/blip-itm-base-flickr",
+    "Salesforce/blip-itm-large-flickr",
     # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
 
