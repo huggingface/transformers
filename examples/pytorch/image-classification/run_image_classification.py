@@ -160,7 +160,7 @@ class ModelArguments:
 
 
 def collate_fn(examples):
-    pixel_values = torch.stack([torch.Tensor(example["pixel_values"]) for example in examples])
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
     labels = torch.tensor([example["labels"] for example in examples])
     return {"pixel_values": pixel_values, "labels": labels}
 
