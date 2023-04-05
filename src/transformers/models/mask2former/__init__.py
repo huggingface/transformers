@@ -31,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_mask2former"] = ["Mask2FormerImageProcessor"]
+    _import_structure["image_processing_video_mask2former"] = ["VideoMask2FormerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_mask2former import Mask2FormerImageProcessor
+        from .image_processing_video_mask2former import VideoMask2FormerImageProcessor
 
     try:
         if not is_torch_available():
