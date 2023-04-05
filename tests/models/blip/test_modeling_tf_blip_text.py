@@ -160,10 +160,7 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            try:
-                model = TFBlipTextModel.from_pretrained(model_name)
-            except OSError:
-                model = TFBlipTextModel.from_pretrained(model_name, from_pt=True)
+            model = TFBlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
