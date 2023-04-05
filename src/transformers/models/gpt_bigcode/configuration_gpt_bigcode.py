@@ -99,17 +99,8 @@ class GPTBigCodeConfig(PretrainedConfig):
             Whether to call the fused softmax in float32.
         scale_attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether to scale the attention softmax in float32.
-        attention_type (`AttentionType`, *optional*, defaults to `AttentionType.MULTI_HEAD`):
-            Attention type, to be selected in the list of supported attention types in
-            `configuration_gpt_bigcode.AttentionType`.
-        preallocate_kv_cache (`bool`, *optional*, defaults to `False`):
-            Whether to pre-allocate the key and value cache for the multi-query attention.
-        max_sequence_length (`int`, *optional*):
-            The max sequence length for the pre-allocated KV cache (`n_positions` if not provided).
-        max_batch_size (`int`, *optional*):
-            The max batch size for the pre-allocated KV cache, (deduce from input if not provided).
-        pad_key_legth (`bool`, *optional*, defaults to `True`):
-            Pad key length to a multiple of 8 (requires pre_allocate_kv_cache)
+        attention_type (`bool`, *optional*, defaults to `True`):
+            Whether to use Multi-Query Attion (`True`) or Multi-Head Attention (`False`).
     Example:
 
     ```python
