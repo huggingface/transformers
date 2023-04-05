@@ -96,11 +96,11 @@ for task, task_info in pipeline_test_mapping.items():
 # The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
 # For debugging purpose, we can specify a local path which is the `output_path` argument of a previous run of
 # `utils/create_dummy_models.py`.
-TINY_MODEL_HUB_ORG = os.environ.get("TINY_MODEL_HUB_ORG", "hf-internal-testing")
-if TINY_MODEL_HUB_ORG == "hf-internal-testing":
+TRANSFORMERS_TINY_MODEL_PATH = os.environ.get("TRANSFORMERS_TINY_MODEL_PATH", "hf-internal-testing")
+if TRANSFORMERS_TINY_MODEL_PATH == "hf-internal-testing":
     TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
 else:
-    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(TINY_MODEL_HUB_ORG, "reports", "tiny_model_summary.json")
+    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, "reports", "tiny_model_summary.json")
 with open(TINY_MODEL_SUMMARY_FILE_PATH) as fp:
     tiny_model_summary = json.load(fp)
 
@@ -160,7 +160,7 @@ class PipelineTesterMixin:
             processor_names = [None] if len(processor_names) == 0 else processor_names
 
             repo_name = f"tiny-random-{model_arch_name}"
-            if TINY_MODEL_HUB_ORG != "hf-internal-testing":
+            if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
                 repo_name = model_arch_name
 
             self.run_model_pipeline_tests(
@@ -220,10 +220,10 @@ class PipelineTesterMixin:
             processor_name (`str`):
                 The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
         """
-        repo_id = f"{TINY_MODEL_HUB_ORG}/{repo_name}"
-        if TINY_MODEL_HUB_ORG != "hf-internal-testing":
+        repo_id = f"{TRANSFORMERS_TINY_MODEL_PATH}/{repo_name}"
+        if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
             model_type = model_architecture.config_class.model_type
-            repo_id = os.path.join(TINY_MODEL_HUB_ORG, model_type, repo_name)
+            repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
 
         tokenizer = None
         if tokenizer_name is not None:

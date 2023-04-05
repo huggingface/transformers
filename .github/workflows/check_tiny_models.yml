@@ -52,7 +52,7 @@ jobs:
       # GitHub-hosted runners have 2-core CPUs
       - name: Run pipeline tests against all new (local) tiny models
         run: |
-          OMP_NUM_THREADS=1 TINY_MODEL_HUB_ORG=tiny_local_models python -m pytest --max-worker-restart=0 -n 2 --dist=loadfile -s -rA --make-reports=tests_pipelines tests/models -m is_pipeline_test -k "test_pipeline_" | tee tests_output.txt
+          OMP_NUM_THREADS=1 TRANSFORMERS_TINY_MODEL_PATH=tiny_local_models python -m pytest --max-worker-restart=0 -n 2 --dist=loadfile -s -rA --make-reports=tests_pipelines tests/models -m is_pipeline_test -k "test_pipeline_" | tee tests_output.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
