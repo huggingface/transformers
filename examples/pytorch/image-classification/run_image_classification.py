@@ -349,9 +349,6 @@ def main():
         # Set the validation transforms
         dataset["validation"].set_transform(val_transforms)
 
-    if torch.__version__ >= '2.0.0':
-        model = torch.compile(model)
-
     # Initalize our trainer
     trainer = Trainer(
         model=model,
