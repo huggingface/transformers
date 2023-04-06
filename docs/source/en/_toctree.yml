@@ -101,6 +101,10 @@
       title: Training on one GPU
     - local: perf_train_gpu_many
       title: Training on many GPUs
+    - local: perf_train_xpu_one
+      title: Training on one XPU
+    - local: perf_train_xpu_many
+      title: Training on many XPUs
     - local: perf_train_cpu
       title: Training on CPU
     - local: perf_train_cpu_many
@@ -113,6 +117,8 @@
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
       title: Inference on CPU
+    - local: perf_infer_xpu_one
+      title: Inference on one XPU      
     - local: perf_infer_gpu_one
       title: Inference on one GPU
     - local: perf_infer_gpu_many

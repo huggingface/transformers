@@ -1,0 +1,69 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+-->
+
+# Efficient Training on XPU
+
+This guide focuses on training large models efficiently on XPU.
+
+## Channels Last
+
+Compared with the default NCHW memory format, using channels_last (NHWC) memory format can further accelerate convolutional neural networks. In Intel® Extension for PyTorch\*, NHWC memory format has been enabled for most key CPU and GPU operators. More detailed information is available at `Channels Last <features/nhwc.md>`_.
+
+Intel® Extension for PyTorch* automatically converts a model to channels last memory format when users optimize the model with `ipex.optimize(model)`. With this feature users won't need to manually apply `model=model.to(memory_format=torch.channels_last)` any more. More detailed information is available at `Auto Channels Last <features/auto_channels_last.md>`_.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   features/nhwc
+   features/auto_channels_last
+
+
+## Auto Mixed Precision (AMP)
+
+Benefiting from less memory usage and computation, low precision data types typically speed up both training and inference workloads. Furthermore, accelerated by Intel® native hardware instructions, including Intel® Deep Learning Boost (Intel® DL Boost) on the 3rd Generation Xeon® Scalable Processors (aka Cooper Lake), as well as the Intel® Advanced Matrix Extensions (Intel® AMX) instruction set on the 4th next generation of Intel® Xeon® Scalable Processors (aka Sapphire Rapids), low precision data type, bfloat 16 and float16, provide further boosted performance. We recommend to use AMP for accelerating convolutional and matmul based neural networks.
+
+The support of Auto Mixed Precision (AMP) with `BFloat16 on CPU <https://www.intel.com/content/www/us/en/developer/articles/technical/intel-deep-learning-boost-new-instruction-bfloat16.html>`_ and BFloat16 optimization of operators has been enabled in Intel® Extension for PyTorch\*, and partially upstreamed to PyTorch master branch. These optimizations will be landed in PyTorch master through PRs that are being submitted and reviewed. On GPU side, support of BFloat16 and Float16 are both available in Intel® Extension for PyTorch\*. BFloat16 is the default low precision floating data type when AMP is enabled.
+
+Detailed information of AMP for GPU and CPU are available at `Auto Mixed Precision (AMP) on GPU <features/amp_gpu.md>`_ and `Auto Mixed Precision (AMP) on CPU <features/amp_cpu.md>`_ respectively.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   features/amp_cpu
+   features/amp_gpu
+
+## Installation
+
+To build Intel® Extension for PyTorch*, please check [Installation Guide](https://intel.github.io/intel-extension-for-pytorch/xpu/latest/tutorials/installation.html) for detailed information. Source code is available at the [xpu-master branch](https://github.com/intel/intel-extension-for-pytorch/tree/xpu-master).
+
+
+### Usage in Trainer
+To enable auto mixed precision with IPEX in Trainer, users should add `use_xpu`, `bf16` and `no_cuda` in training command arguments.
+
+Take an example of the use cases on [Transformers question-answering](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
+
+- Training with IPEX using BF16 auto mixed precision on XPU:
+<pre> python run_qa.py \
+--model_name_or_path bert-base-uncased \
+--dataset_name squad \
+--do_train \
+--do_eval \
+--per_device_train_batch_size 12 \
+--learning_rate 3e-5 \
+--num_train_epochs 2 \
+--max_seq_length 384 \
+--doc_stride 128 \
+--output_dir /tmp/debug_squad/ \
+<b>--use_xpu \</b>
+<b>--bf16 --no_cuda</b></pre> 
+

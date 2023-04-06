@@ -73,7 +73,12 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_11
+from .pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_10,
+    is_torch_greater_or_equal_than_1_13,
+    is_torch_less_than_1_11,
+)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -153,6 +158,7 @@ from .utils import (
     is_torch_compile_available,
     is_torch_neuroncore_available,
     is_torch_tpu_available,
+    is_xpu_available,
     logging,
     strtobool,
 )
@@ -160,6 +166,7 @@ from .utils.generic import ContextManagers
 
 
 _is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
+_is_native_xpu_amp_available = is_torch_greater_or_equal_than_1_13
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -582,7 +589,7 @@ class Trainer:
         self.use_apex = False
         self.use_cuda_amp = False
         self.use_cpu_amp = False
-
+        self.use_xpu_amp = False
         # Mixed precision setup for SageMaker Model Parallel
         if is_sagemaker_mp_enabled():
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
@@ -610,11 +617,18 @@ class Trainer:
             if args.half_precision_backend == "auto":
                 if args.device == torch.device("cpu"):
                     if args.fp16:
-                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                        raise ValueError("Tried to use `fp16` for training but it is not supported on cpu")
                     elif _is_native_cpu_amp_available:
                         args.half_precision_backend = "cpu_amp"
                     else:
                         raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                elif args.device.type == "xpu":
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` for training but it is not supported on xpu")
+                    if _is_native_xpu_amp_available:
+                        args.half_precision_backend = "xpu_amp"
+                    else:
+                        raise ValueError("Tried to use xpu amp but native xpu amp is not available")
                 else:
                     args.half_precision_backend = "cuda_amp"
 
@@ -645,6 +659,9 @@ class Trainer:
                         self.scaler = torch.cuda.amp.GradScaler()
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
+                self.amp_dtype = torch.bfloat16
+            elif args.half_precision_backend == "xpu_amp":
+                self.use_xpu_amp = True
                 self.amp_dtype = torch.bfloat16
             else:
                 if not is_apex_available():
@@ -1354,32 +1371,51 @@ class Trainer:
                     jit_model(**example_batch)
                 model = jit_model
                 self.use_cpu_amp = False
+                self.use_xpu_amp = False
                 self.use_cuda_amp = False
             except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
 
-    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
+    def ipex_optimize_model(self, model, training=False, dtype=torch.float32, use_xpu=False):
         if not is_ipex_available():
             raise ImportError(
                 "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
+        if use_xpu:
+            if not is_xpu_available():
+                raise EnvironmentError("Using XPU plugin but XPU is not available")
 
         import intel_extension_for_pytorch as ipex
 
-        if not training:
-            model.eval()
-            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
-            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
+        if use_xpu:
+            model.to(self.args.device)
+            if not training:
+                model.eval()
+                dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
+                dtype = torch.float16 if not self.is_in_train and self.args.fp16_full_eval else dtype
+                model = ipex.optimize(model, dtype=dtype, level="O1")
+            else:
+                if not model.training:
+                    model.train()
+                model, self.optimizer = ipex.optimize(model=model, optimizer=self.optimizer, level="O1", dtype=dtype)
+
         else:
-            if not model.training:
-                model.train()
-            model, self.optimizer = ipex.optimize(
-                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
-            )
+            if not training:
+                model.eval()
+                dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
+                # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
+                model = ipex.optimize(
+                    model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train
+                )
+            else:
+                if not model.training:
+                    model.train()
+                model, self.optimizer = ipex.optimize(
+                    model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+                )
 
         return model
 
@@ -1387,6 +1423,10 @@ class Trainer:
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
+
+        if self.args.use_xpu:
+            dtype = torch.bfloat16 if self.use_xpu_amp else torch.float32
+            model = self.ipex_optimize_model(model, training, dtype=dtype, use_xpu=True)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -2326,6 +2366,18 @@ class Trainer:
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
+        if is_xpu_available():
+            if self.args.local_rank != -1:
+                torch.xpu.random.set_rng_state(checkpoint_rng_state["xpu"])
+            else:
+                try:
+                    torch.xpu.random.set_rng_state_all(checkpoint_rng_state["xpu"])
+                except Exception as e:
+                    logger.info(
+                        f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
+
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
 
@@ -2415,6 +2467,12 @@ class Trainer:
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
                 rng_states["cuda"] = torch.cuda.random.get_rng_state()
+        if is_xpu_available():
+            if self.args.local_rank == -1:
+                # In non distributed, we save the global XPU RNG state (will take care of DataParallel)
+                rng_states["xpu"] = torch.xpu.random.get_rng_state_all()
+            else:
+                rng_states["xpu"] = torch.xpu.random.get_rng_state()
 
         if is_torch_tpu_available():
             rng_states["xla"] = xm.get_rng_state()
@@ -2653,13 +2711,15 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if self.use_cuda_amp or self.use_cpu_amp:
-            if is_torch_greater_or_equal_than_1_10:
+        if self.use_cuda_amp or self.use_cpu_amp or self.use_xpu_amp:
+            if not self.use_xpu_amp and is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
                     torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                     if self.use_cpu_amp
                     else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                 )
+            if self.use_xpu_amp and is_torch_greater_or_equal_than_1_13:
+                ctx_manager = torch.xpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
             else:
                 ctx_manager = torch.cuda.amp.autocast()
         else:

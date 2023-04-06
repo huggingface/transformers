@@ -120,6 +120,7 @@ from .utils import (
     is_torchaudio_available,
     is_training_run_on_sagemaker,
     is_vision_available,
+    is_xpu_available,
     replace_return_docstrings,
     requires_backends,
     to_numpy,

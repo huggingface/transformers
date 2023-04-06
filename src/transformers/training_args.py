@@ -48,9 +48,11 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_bf16_xpu_available,
     is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_xpu_available,
     logging,
     requires_backends,
 )
@@ -108,7 +110,7 @@ def get_int_from_env(env_keys, default):
 
 def get_xla_device_type(device: "torch.device") -> Optional[str]:
     """
-    Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
+    Returns the xla device type (CPU|XPU|GPU|TPU) or None if the device is a non-xla device.
     """
     if is_torch_tpu_available():
         return xm.xla_real_devices([device])[0].split(":")[0]
@@ -285,9 +287,12 @@ class TrainingArguments:
         use_ipex (`bool`, *optional*, defaults to `False`):
             Use Intel extension for PyTorch when it is available. [IPEX
             installation](https://github.com/intel/intel-extension-for-pytorch).
+        use_xpu (`bool`, *optional*, defaults to `False`):
+            Use Intel extension for PyTorch on XPU when it is available. [IPEX
+            installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (no_cuda). This is an experimental API and it may change.
+            NVIDIA architecture or using XPU/CPU (no_cuda). This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -296,9 +301,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
-            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
-            will force the requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "xpu_amp",
+            "cpu_amp"`. `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the
+            other choices will force the requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -757,12 +762,21 @@ class TrainingArguments:
             )
         },
     )
+    use_xpu: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Use Intel extension for PyTorch on XPU when it is available, installation:"
+                " 'https://github.com/intel/intel-extension-for-pytorch'"
+            )
+        },
+    )
     bf16: bool = field(
         default=False,
         metadata={
             "help": (
                 "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture or using CPU (no_cuda). This is an experimental API and it may change."
+                " architecture or using GPU/XPU/CPU (no_cuda). This is an experimental API and it may change."
             )
         },
     )
@@ -783,7 +797,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "The backend to be used for half precision.",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "cuda_amp", "apex", "xpu_amp", "cpu_amp"],
         },
     )
     bf16_full_eval: bool = field(
@@ -1033,7 +1047,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "Deprecated. Use half_precision_backend instead",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "cuda_amp", "apex", "xpu_amp", "cpu_amp"],
         },
     )
     push_to_hub_model_id: Optional[str] = field(
@@ -1203,9 +1217,17 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-                if self.no_cuda and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
+                if (
+                    self.no_cuda
+                    and not self.use_xpu
+                    and not is_torch_bf16_cpu_available()
+                    and not is_torch_tpu_available()
+                ):
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
+                elif self.use_xpu and is_xpu_available() and not is_torch_bf16_xpu_available():
+                    # xpu
+                    raise ValueError("Your setup doesn't support bf16/xpu. You need torch>=1.13")
                 elif not self.no_cuda and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
                     # gpu
                     raise ValueError(
@@ -1246,13 +1268,18 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
-            raise ValueError(
-                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA devices."
-            )
+            if self.fp16:
+                raise ValueError(
+                    "FP16 Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices."
+                )
+            else:
+                raise ValueError(
+                    "FP16 half precision evaluation(`--fp16_full_eval`) can only be used on CUDA or XPU devices."
+                )
 
         if (
             self.framework == "pt"
@@ -1261,11 +1288,12 @@ class TrainingArguments:
             and (get_xla_device_type(self.device) != "GPU")
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
+            and (self.device.type != "xpu")
             and (self.bf16 or self.bf16_full_eval)
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA or CPU/XPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1282,11 +1310,18 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
-                    logger.info(
-                        "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
-                        " otherwise."
-                    )
-                    torch.backends.cuda.matmul.allow_tf32 = True
+                    if is_xpu_available():
+                        logger.info(
+                            "Setting TF32 in XPU backends to speedup torch compile, you won't see any improvement"
+                            " otherwise."
+                        )
+                        torch.xpu.set_fp32_math_mode(torch.xpu.FP32MathMode.TF32)
+                    else:
+                        logger.info(
+                            "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
+                            " otherwise."
+                        )
+                        torch.backends.cuda.matmul.allow_tf32 = True
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come wih GPU Ampere or higher and which is not detected here."
@@ -1294,12 +1329,18 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = True
+                    if is_xpu_available():
+                        torch.xpu.set_fp32_math_mode(torch.xpu.FP32MathMode.TF32)
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = True
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = False
+                    if is_xpu_available():
+                        logger.info("Default configure won't trigger TF32 in XPU backends.")
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = False
                 # no need to assert on else
 
         if self.report_to is None:
@@ -1529,7 +1570,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
-        if self.no_cuda:
+        if self.no_cuda and not self.use_xpu:
             device = torch.device("cpu")
             self._n_gpu = 0
             self.local_rank = get_int_from_env(
@@ -1590,6 +1631,42 @@ class TrainingArguments:
                 torch.distributed.init_process_group(
                     backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.ddp_timeout_delta
                 )
+        elif self.use_xpu and is_xpu_available():
+            self._n_gpu = 1
+            self.local_rank = get_int_from_env(
+                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"],
+                self.local_rank,
+            )
+            device_id = "xpu:{}".format(self.local_rank) if self.local_rank != -1 else "xpu:0"
+            device = torch.device(device_id)
+            if self.local_rank != -1 and not torch.distributed.is_initialized():
+                requires_backends(self, "oneccl_bind_pt")
+                if ccl_version >= "1.12":
+                    import oneccl_bindings_for_pytorch  # noqa: F401
+                else:
+                    import torch_ccl  # noqa: F401
+                # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
+                rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
+                size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
+                local_size = get_int_from_env(
+                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                )
+                os.environ["RANK"] = str(rank)
+                os.environ["WORLD_SIZE"] = str(size)
+                os.environ["LOCAL_RANK"] = str(self.local_rank)
+                if not os.environ.get("MASTER_PORT", None):
+                    os.environ["MASTER_PORT"] = "29500"
+                if not os.environ.get("MASTER_ADDR", None):
+                    if local_size != size:
+                        raise ValueError(
+                            "Looks like distributed multinode run but MASTER_ADDR env not set, "
+                            "please try exporting rank 0's hostname as MASTER_ADDR"
+                        )
+                local_rank = self.local_rank
+                torch.xpu.set_device(local_rank)
+                device = torch.device("xpu:{}".format(local_rank))
+                # Initialize the process group with ccl backend
+                dist.init_process_group(backend="ccl", rank=rank, world_size=size, timeout=self.ddp_timeout_delta)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
@@ -1671,6 +1748,8 @@ class TrainingArguments:
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
+        elif device.type == "xpu":
+            torch.xpu.set_device(device)
 
         return device
 
