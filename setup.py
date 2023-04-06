@@ -78,7 +78,7 @@ import re
 import shutil
 from pathlib import Path
 
-from setuptools import setup, Command
+from setuptools import Command, setup
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
@@ -250,6 +250,7 @@ class DepsTableUpdateCommand(Command):
         print(f"updating {target}")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
+
 
 extras = {}
 

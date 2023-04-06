@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +24,10 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     LlamaTokenizer,
+    LlamaTokenizerFast,
     is_torch_available,
 )
+from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -287,13 +290,11 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class LlamaIntegrationTest(unittest.TestCase):
-    checkpoint_name = "hf-internal-testing/llama-tokenizer"
-
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(cls.checkpoint_name)
-        cls.rust_tokenizer = cls.tokenizer  # TODO @narsil replace with the rust one
-        cls.pad_token_id = 1
+        checkpoint_name = "hf-internal-testing/llama-tokenizer"
+        cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(checkpoint_name)
+        cls.rust_tokenizer = LlamaTokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch
@@ -313,6 +314,27 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
         )
+
+    @slow
+    def test_conversion(self):
+        # This is excruciatingly slow since it has to recreate the entire merge
+        # list from the original vocabulary in spm
+        self.rust_tokenizer.save_pretrained("./out")
+        with tempfile.TemporaryDirectory() as dirname:
+            self.rust_tokenizer.save_pretrained(dirname)
+
+            with open(os.path.join(dirname, "tokenizer.json"), "r") as f:
+                old_serialized = f.read()
+
+        new_tokenizer = convert_slow_tokenizer(self.tokenizer)
+        with tempfile.NamedTemporaryFile() as f:
+            new_tokenizer.save(f.name)
+            # Re-opening since `f` is in bytes.
+            new_serialized = open(f.name, "r").read()
+            with open("out_tokenizer.json", "w") as g:
+                g.write(new_serialized)
+
+            self.assertEqual(old_serialized, new_serialized)
 
     def test_simple_encode_decode(self):
         pyth_tokenizer = self.tokenizer
@@ -362,17 +384,42 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
         self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
 
+    def test_no_differences_showcase(self):
+        pyth_tokenizer = self.tokenizer
+        rust_tokenizer = self.rust_tokenizer
+        self.assertEqual(pyth_tokenizer.encode(""), [1])
+        self.assertEqual(rust_tokenizer.encode(""), [1])
+
+        self.assertEqual(pyth_tokenizer.encode(" "), [1, 259])
+        self.assertEqual(rust_tokenizer.encode(" "), [1, 259])
+
+        self.assertEqual(pyth_tokenizer.encode("  "), [1, 1678])
+        self.assertEqual(rust_tokenizer.encode("  "), [1, 1678])
+
+        self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
+
         self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
         self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
 
-        self.assertEqual(pyth_tokenizer.encode(""), [1])
-        self.assertEqual(rust_tokenizer.encode(""), [1])
+    def test_no_differences_decode(self):
+        pyth_tokenizer = self.tokenizer
+        rust_tokenizer = self.rust_tokenizer
 
         self.assertEqual(pyth_tokenizer.decode([869]), ".")
         self.assertEqual(rust_tokenizer.decode([869]), ".")
 
         self.assertEqual(pyth_tokenizer.decode([30112, 869]), "ا .")
         self.assertEqual(rust_tokenizer.decode([30112, 869]), "ا .")
+
+    def test_no_differences_special_tokens(self):
+        pyth_tokenizer = self.tokenizer
+        rust_tokenizer = self.rust_tokenizer
+        self.assertEqual(pyth_tokenizer.encode(""), [1])
+        self.assertEqual(rust_tokenizer.encode(""), [1])
+
+        self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
+        self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
 
     @unittest.skipIf(
         os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
@@ -392,8 +439,8 @@ class LlamaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(encoded1, encoded2)
 
-            decoded1 = pyth_tokenizer.decode(encoded1)
-            decoded2 = rust_tokenizer.decode(encoded2)
+            decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
+            decoded2 = rust_tokenizer.decode(encoded2, skip_special_tokens=True)
 
             self.assertEqual(decoded1, decoded2)
 
@@ -406,7 +453,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
                 self.assertEqual(encoded1, encoded2)
 
-                decoded1 = pyth_tokenizer.decode(encoded1)
-                decoded2 = rust_tokenizer.decode(encoded2)
+                decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
+                decoded2 = rust_tokenizer.decode(encoded2, skip_special_tokens=True)
 
                 self.assertEqual(decoded1, decoded2)

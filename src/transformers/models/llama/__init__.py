@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -32,6 +33,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["tokenization_llama"] = ["LlamaTokenizer"]
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_llama_fast"] = ["LlamaTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -57,6 +66,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_llama import LlamaTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_llama_fast import LlamaTokenizerFast
 
     try:
         if not is_torch_available():
