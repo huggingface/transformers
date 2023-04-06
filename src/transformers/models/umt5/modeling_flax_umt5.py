@@ -709,8 +709,8 @@ class FlaxUMT5BlockCollection(nn.Module):
             # (cross-attention position bias), (cross-attention weights)
             # position_bias = layer_outputs[1]
 
-            if self.causal and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
+            # if self.causal and encoder_hidden_states is not None:
+            #    encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
