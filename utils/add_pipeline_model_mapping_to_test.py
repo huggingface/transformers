@@ -30,15 +30,11 @@ import glob
 import inspect
 import os
 import re
-import sys
 import unittest
 
+from get_test_info import get_test_classes
 
-# This is required to make the module import works (when the python process is running from the root of the repo)
-sys.path.append(".")
-
-from get_test_info import get_test_classes  # noqa E402
-from tests.test_pipeline_mixin import pipeline_test_mapping  # noqa E402
+from tests.test_pipeline_mixin import pipeline_test_mapping
 
 
 PIPELINE_TEST_MAPPING = {}
