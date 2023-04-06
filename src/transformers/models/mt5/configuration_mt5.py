@@ -80,6 +80,7 @@ class MT5Config(PretrainedConfig):
         num_heads=6,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
+        share_relative_attention_bias=True,
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
@@ -113,6 +114,7 @@ class MT5Config(PretrainedConfig):
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
+        self.share_relative_attention_bias = share_relative_attention_bias
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor

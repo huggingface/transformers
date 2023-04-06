@@ -652,7 +652,7 @@ class FlaxT5BlockCollection(nn.Module):
             self.blocks = [
                 FlaxT5CheckpointLayer(
                     self.config,
-                    has_relative_attention_bias=(i == 0),
+                    has_relative_attention_bias=(i == 0) or not self.config.share_relative_attention_bias,
                     dtype=self.dtype,
                     name=str(i),
                 )
@@ -662,7 +662,7 @@ class FlaxT5BlockCollection(nn.Module):
             self.blocks = [
                 FlaxT5LayerCollection(
                     self.config,
-                    has_relative_attention_bias=(i == 0),
+                    has_relative_attention_bias=(i == 0) or not self.config.share_relative_attention_bias,
                     dtype=self.dtype,
                     name=str(i),
                 )
