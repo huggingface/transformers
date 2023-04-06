@@ -40,6 +40,8 @@ if is_torch_available():
     )
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
+    torch.backends.cuda.matmul.allow_tf32 = False
+
 
 class GPTBigCodeModelTester:
     # TODO: Update the tests to use valid pretrained models.
@@ -58,7 +60,7 @@ class GPTBigCodeModelTester:
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
-        hidden_act="gelu",
+        hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -93,8 +95,8 @@ class GPTBigCodeModelTester:
         self.num_choices = num_choices
         self.scope = None
         self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+        self.eos_token_id = vocab_size - 2
+        self.pad_token_id = vocab_size - 3
 
     def get_large_model_config(self):
         return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
@@ -168,6 +170,7 @@ class GPTBigCodeModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             attention_softmax_in_fp32=False,
             scale_attention_softmax_in_fp32=False,
+            multi_query=False,
         )
 
     def get_pipeline_config(self):
@@ -489,6 +492,11 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def setUp(self):
         self.model_tester = GPTBigCodeModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
+
+    def tearDown(self):
+        import gc
+
+        gc.collect()
 
     def test_config(self):
         self.config_tester.run_common_tests()

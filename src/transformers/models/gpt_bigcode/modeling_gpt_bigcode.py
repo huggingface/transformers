@@ -184,12 +184,17 @@ class GPTBigCodeAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
+            if self.multi_query:
+                head_mask = head_mask.permute(0, 2, 1, 3)
             attn_weights = attn_weights * head_mask
 
         if self.multi_query:
             attn_output = torch.bmm(attn_weights.view(attn_view), value).view(query_shape)
         else:
             attn_output = torch.matmul(attn_weights, value)
+
+        if self.multi_query:
+            attn_weights = attn_weights.permute(0, 2, 1, 3)
 
         return attn_output, attn_weights
 
@@ -887,10 +892,11 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
-        )
+        # return tuple(
+        #    tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+        #    for layer_past in past_key_values
+        # )
+        return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
 
 
 # TODO: Fix type hints?
@@ -1069,10 +1075,11 @@ class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
-        )
+        # return tuple(
+        #    tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+        #    for layer_past in past_key_values
+        # )
+        return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
 
 
 # TODO: Fix type hints?
