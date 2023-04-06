@@ -1,3 +1,68 @@
+# Package ######################################################################
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transformers"
+description = "State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow"
+readme = "README.md"
+requires-python = ">= 3.7"
+authors = [
+    { name = "The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)", email = "transformers@huggingface.co" },
+]
+license = { text = "Apache 2.0 License" }
+keywords = [
+    "NLP",
+    "vision",
+    "speech",
+    "deep learning",
+    "transformer",
+    "pytorch",
+    "tensorflow",
+    "jax",
+    "BERT",
+    "GPT-2",
+    "Wav2Vec2",
+    "ViT",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["dependencies", "optional-dependencies", "version"]
+
+[project.scripts]
+transformers-cli = "transformers.commands.transformers_cli:main"
+
+[project.urls]
+Homepage = "https://huggingface.co"
+Repository = "https://github.com/huggingface/transformers"
+Documentation = "https://huggingface.co/docs/transformers"
+"Bug Report" = "https://github.com/huggingface/transformers/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+transformers = ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]
+
+# Linter tools #################################################################
+
 [tool.black]
 line-length = 119
 target-version = ['py37']
@@ -17,3 +82,7 @@ line-length = 119
 [tool.ruff.isort]
 lines-after-imports = 2
 known-first-party = ["transformers"]
+
+# This is ignored, maybe because of the header? If someone finds a fix, we can uncomment and remove setup.cfg
+# [tool.pytest]
+# doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
