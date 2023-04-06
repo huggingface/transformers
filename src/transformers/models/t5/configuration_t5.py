@@ -138,6 +138,7 @@ class T5Config(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            share_relative_attention_bias=share_relative_attention_bias,
             **kwargs,
         )
 

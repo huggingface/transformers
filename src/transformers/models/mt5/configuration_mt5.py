@@ -101,6 +101,7 @@ class MT5Config(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
+            share_relative_attention_bias=share_relative_attention_bias,
             **kwargs,
         )
         self.vocab_size = vocab_size
