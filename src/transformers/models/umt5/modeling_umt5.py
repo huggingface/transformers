@@ -1404,7 +1404,7 @@ class UMT5Model(UMT5PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(UMT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
     def forward(
