@@ -122,13 +122,18 @@ class EfficientNetModelTester:
 
 
 @require_torch
-class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
+class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as EfficientNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False

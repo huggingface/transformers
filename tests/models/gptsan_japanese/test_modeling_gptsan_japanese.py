@@ -127,8 +127,19 @@ class GPTSanJapaneseTester:
 
 
 @require_torch
-class GPTSanJapaneseTest(ModelTesterMixin, unittest.TestCase):
+class GPTSanJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTSanJapaneseModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": GPTSanJapaneseForConditionalGeneration,
+            "feature-extraction": GPTSanJapaneseForConditionalGeneration,
+            "summarization": GPTSanJapaneseForConditionalGeneration,
+            "text2text-generation": GPTSanJapaneseForConditionalGeneration,
+            "translation": GPTSanJapaneseForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     is_encoder_decoder = False
     test_pruning = False

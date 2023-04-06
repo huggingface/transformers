@@ -282,8 +282,9 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "feature-extraction": LEDModel,
             "question-answering": LEDForQuestionAnswering,
             "summarization": LEDForConditionalGeneration,
-            "text2text-generation": LEDForConditionalGeneration,
             "text-classification": LEDForSequenceClassification,
+            "text2text-generation": LEDForConditionalGeneration,
+            "translation": LEDForConditionalGeneration,
             "zero-shot": LEDForSequenceClassification,
         }
         if is_torch_available()
