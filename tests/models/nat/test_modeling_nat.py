@@ -22,6 +22,7 @@ from transformers import NatConfig
 from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -66,6 +67,7 @@ class NatModelTester:
         use_labels=True,
         num_labels=10,
         out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,6 +92,7 @@ class NatModelTester:
         self.use_labels = use_labels
         self.num_labels = num_labels
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -122,6 +125,7 @@ class NatModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -380,3 +384,13 @@ class NatModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([0.3805, -0.8676, -0.3912]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+@require_natten
+class NatBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (NatBackbone,) if is_torch_available() else ()
+    config_class = NatConfig
+
+    def setUp(self):
+        self.model_tester = NatModelTester(self)
