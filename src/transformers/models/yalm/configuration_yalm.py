@@ -42,6 +42,8 @@ class YalmConfig(PretrainedConfig):
         padded_vocab_size (`int`, *optional*, defaults to 128000):
             Vocabulary size of the YaLM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`YalmModel`]
+        embedding_size (`int`, *optional*, defaults to 2048):
+            Token embeding dimension
         hidden_size (`int`, *optional*, defaults to 10240):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 27308):
@@ -83,6 +85,7 @@ class YalmConfig(PretrainedConfig):
     def __init__(
         self,
         padded_vocab_size=128000,
+        embedding_size=2048,
         hidden_size=10240,
         intermediate_size=27308,
         num_layers=80,
@@ -98,6 +101,7 @@ class YalmConfig(PretrainedConfig):
         **kwargs,
     ):
         self.padded_vocab_size = padded_vocab_size
+        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_layers = num_layers
