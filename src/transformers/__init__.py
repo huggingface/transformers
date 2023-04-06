@@ -413,6 +413,13 @@ _import_structure = {
         "Pix2StructVisionConfig",
     ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
+    "models.ponet": [
+        "PONET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "PoNetConfig",
+        "PoNetTokenizer",
+        "WordpieceTokenizer",
+    ],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -752,6 +759,7 @@ else:
     _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.ponet"].append("PoNetTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
@@ -809,6 +817,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
+    _import_structure["models.ponet"].append("TFPoNetTokenizer")
 
 # keras-nlp-specific objects
 try:
@@ -2152,6 +2161,23 @@ else:
             "PLBartForSequenceClassification",
             "PLBartModel",
             "PLBartPreTrainedModel",
+        ]
+    )
+    _import_structure["models.ponet"].extend(
+        [
+            "PONET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PoNetForMaskedLM",
+            "PoNetForMultipleChoice",
+            "PoNetForNextSentencePrediction",
+            "PoNetForPreTraining",
+            "PoNetForQuestionAnswering",
+            "PoNetForSequenceClassification",
+            "PoNetForTokenClassification",
+            "PoNetLayer",
+            "PoNetLMHeadModel",
+            "PoNetModel",
+            "PoNetPreTrainedModel",
+            "load_tf_weights_in_ponet",
         ]
     )
     _import_structure["models.poolformer"].extend(
@@ -4085,6 +4111,13 @@ if TYPE_CHECKING:
         Pix2StructVisionConfig,
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
+    from .models.ponet import (
+        PONET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        PoNetConfig,
+        PoNetTokenizer,
+        WordpieceTokenizer,
+    )
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -4400,6 +4433,7 @@ if TYPE_CHECKING:
         from .models.nllb import NllbTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
+        from .models.ponet import PoNetTokenizerFast
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
@@ -4442,6 +4476,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tensorflow_text_objects import *
     else:
         from .models.bert import TFBertTokenizer
+        from .models.ponet import TFPoNetTokenizer
 
     try:
         if not is_keras_nlp_available():
@@ -5540,6 +5575,21 @@ if TYPE_CHECKING:
             PLBartForSequenceClassification,
             PLBartModel,
             PLBartPreTrainedModel,
+        )
+        from .models.ponet import (
+            PONET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PoNetForMaskedLM,
+            PoNetForMultipleChoice,
+            PoNetForNextSentencePrediction,
+            PoNetForPreTraining,
+            PoNetForQuestionAnswering,
+            PoNetForSequenceClassification,
+            PoNetForTokenClassification,
+            PoNetLayer,
+            PoNetLMHeadModel,
+            PoNetModel,
+            PoNetPreTrainedModel,
+            load_tf_weights_in_ponet,
         )
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

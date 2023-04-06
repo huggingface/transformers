@@ -7,3 +7,10 @@ class TFBertTokenizer(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tensorflow_text"])
+
+
+class TFPoNetTokenizer(metaclass=DummyObject):
+    _backends = ["tensorflow_text"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tensorflow_text"])

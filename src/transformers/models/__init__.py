@@ -144,6 +144,7 @@ from . import (
     phobert,
     pix2struct,
     plbart,
+    ponet,
     poolformer,
     prophetnet,
     qdqbert,
