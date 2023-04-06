@@ -221,7 +221,6 @@ class FlaxUMT5Attention(nn.Module):
             dtype=self.dtype,
         )
 
-
         self.relative_attention_bias = nn.Embed(
             self.relative_attention_num_buckets,
             self.n_heads,
@@ -328,12 +327,15 @@ class FlaxUMT5Attention(nn.Module):
         key_length = key_states.shape[1]
         query_length = key_length if cache_is_filled else query_states.shape[1]
 
+        '''
         if self.has_relative_attention_bias:
             position_bias = self.compute_bias(query_length, key_length)
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
             position_bias = jnp.zeros((1, self.n_heads, query_length, key_length), dtype=self.dtype)
+        '''
+        position_bias = self.compute_bias(query_length, key_length)
 
         # if key and values are already calculated, only the last query position bias should be taken
         if cache_is_filled:
@@ -607,13 +609,11 @@ class FlaxUMT5Block(nn.Module):
 
 class FlaxUMT5LayerCollection(nn.Module):
     config: UMT5Config
-    has_relative_attention_bias: bool
+    has_relative_attention_bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layer = FlaxUMT5Block(
-            self.config, has_relative_attention_bias=True, dtype=self.dtype
-        )
+        self.layer = FlaxUMT5Block(self.config, has_relative_attention_bias=True, dtype=self.dtype)
 
     def __call__(
         self,
