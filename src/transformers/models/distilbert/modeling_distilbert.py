@@ -808,7 +808,7 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         """
         Returns the position embeddings
         """
-        return self.distilbert.get_position_embeddings
+        return self.distilbert.get_position_embeddings()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         return self.distilbert.resize_position_embeddings(new_num_position_embeddings)
