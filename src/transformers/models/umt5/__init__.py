@@ -30,14 +30,14 @@ if is_sentencepiece_available():
 else:
     from ...utils.dummy_sentencepiece_objects import T5Tokenizer
 
-MT5Tokenizer = T5Tokenizer
+UMT5Tokenizer = T5Tokenizer
 
 if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
 else:
     from ...utils.dummy_tokenizers_objects import T5TokenizerFast
 
-MT5TokenizerFast = T5TokenizerFast
+UMT5TokenizerFast = T5TokenizerFast
 
 _import_structure = {"configuration_umt5": ["UMT5Config", "UMT5OnnxConfig"]}
 
