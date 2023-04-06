@@ -839,6 +839,27 @@ class FlaxMT5Model(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxUMT5EncoderModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxUMT5ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxUMT5Model(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxOPTForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 

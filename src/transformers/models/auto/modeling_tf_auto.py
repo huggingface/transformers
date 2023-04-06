@@ -67,6 +67,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "TFMobileViTModel"),
         ("mpnet", "TFMPNetModel"),
         ("mt5", "TFMT5Model"),
+        ("umt5", "TFUMT5Model"),
         ("openai-gpt", "TFOpenAIGPTModel"),
         ("opt", "TFOPTModel"),
         ("pegasus", "TFPegasusModel"),
@@ -274,6 +275,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("marian", "TFMarianMTModel"),
         ("mbart", "TFMBartForConditionalGeneration"),
         ("mt5", "TFMT5ForConditionalGeneration"),
+        ("umt5", "TFUMT5ForConditionalGeneration"),
         ("pegasus", "TFPegasusForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
     ]

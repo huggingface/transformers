@@ -46,6 +46,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "FlaxMarianModel"),
         ("mbart", "FlaxMBartModel"),
         ("mt5", "FlaxMT5Model"),
+        ("umt5", "FlaxUMT5Model"),
         ("opt", "FlaxOPTModel"),
         ("pegasus", "FlaxPegasusModel"),
         ("regnet", "FlaxRegNetModel"),
@@ -74,6 +75,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("longt5", "FlaxLongT5ForConditionalGeneration"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
+        ("umt5", "FlaxUMT5ForConditionalGeneration"),
         ("roberta", "FlaxRobertaForMaskedLM"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForMaskedLM"),
         ("roformer", "FlaxRoFormerForMaskedLM"),
@@ -112,6 +114,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("marian", "FlaxMarianMTModel"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
+        ("umt5", "FlaxUMT5ForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
     ]

@@ -382,6 +382,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.umt5": ["UMT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
@@ -684,6 +685,7 @@ else:
     _import_structure["models.mbart50"].append("MBart50Tokenizer")
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
+    _import_structure["models.umt5"].append("UMT5Tokenizer")
     _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
@@ -749,6 +751,7 @@ else:
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
+    _import_structure["models.umt5"].append("UMT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
@@ -2014,6 +2017,9 @@ else:
     _import_structure["models.mt5"].extend(
         ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model", "MT5PreTrainedModel"]
     )
+    _import_structure["models.umt5"].extend(
+        ["UMT5EncoderModel", "UMT5ForConditionalGeneration", "UMT5Model", "UMT5PreTrainedModel"]
+    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3216,6 +3222,7 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["TFMT5EncoderModel", "TFMT5ForConditionalGeneration", "TFMT5Model"])
+    _import_structure["models.umt5"].extend(["TFUMT5EncoderModel", "TFUMT5ForConditionalGeneration", "TFUMT5Model"])
     _import_structure["models.openai"].extend(
         [
             "TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3648,6 +3655,9 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.umt5"].extend(
+        ["FlaxUMT5EncoderModel", "FlaxUMT5ForConditionalGeneration", "FlaxUMT5Model"]
+    )
     _import_structure["models.opt"].extend(
         [
             "FlaxOPTForCausalLM",
@@ -4059,6 +4069,7 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.umt5 import UMT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
@@ -4340,6 +4351,7 @@ if TYPE_CHECKING:
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
+        from .models.umt5 import UMT5Tokenizer
         from .models.nllb import NllbTokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.plbart import PLBartTokenizer
@@ -4398,6 +4410,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.umt5 import UMT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
@@ -5425,6 +5438,7 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
+        from .models.umt5 import UMT5EncoderModel, UMT5ForConditionalGeneration, UMT5Model, UMT5PreTrainedModel
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
@@ -6412,6 +6426,7 @@ if TYPE_CHECKING:
             TFMPNetPreTrainedModel,
         )
         from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+        from .models.umt5 import TFUMT5EncoderModel, TFUMT5ForConditionalGeneration, TFUMT5Model
         from .models.openai import (
             TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,
@@ -6742,6 +6757,7 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.umt5 import FlaxUMT5EncoderModel, FlaxUMT5ForConditionalGeneration, FlaxUMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.regnet import FlaxRegNetForImageClassification, FlaxRegNetModel, FlaxRegNetPreTrainedModel
