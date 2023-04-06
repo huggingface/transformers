@@ -185,6 +185,7 @@ class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             "feature-extraction": TFPegasusModel,
             "summarization": TFPegasusForConditionalGeneration,
             "text2text-generation": TFPegasusForConditionalGeneration,
+            "translation": TFPegasusForConditionalGeneration,
         }
         if is_tf_available()
         else {}

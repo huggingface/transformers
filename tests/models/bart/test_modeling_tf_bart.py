@@ -199,8 +199,9 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             "conversational": TFBartForConditionalGeneration,
             "feature-extraction": TFBartModel,
             "summarization": TFBartForConditionalGeneration,
-            "text2text-generation": TFBartForConditionalGeneration,
             "text-classification": TFBartForSequenceClassification,
+            "text2text-generation": TFBartForConditionalGeneration,
+            "translation": TFBartForConditionalGeneration,
             "zero-shot": TFBartForSequenceClassification,
         }
         if is_tf_available()

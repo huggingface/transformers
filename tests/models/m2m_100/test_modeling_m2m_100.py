@@ -237,6 +237,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "feature-extraction": M2M100Model,
             "summarization": M2M100ForConditionalGeneration,
             "text2text-generation": M2M100ForConditionalGeneration,
+            "translation": M2M100ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

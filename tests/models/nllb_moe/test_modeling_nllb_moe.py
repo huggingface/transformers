@@ -255,6 +255,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "feature-extraction": NllbMoeModel,
             "summarization": NllbMoeForConditionalGeneration,
             "text2text-generation": NllbMoeForConditionalGeneration,
+            "translation": NllbMoeForConditionalGeneration,
         }
         if is_torch_available()
         else {}

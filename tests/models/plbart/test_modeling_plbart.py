@@ -224,9 +224,10 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "conversational": PLBartForConditionalGeneration,
             "feature-extraction": PLBartModel,
             "summarization": PLBartForConditionalGeneration,
-            "text2text-generation": PLBartForConditionalGeneration,
             "text-classification": PLBartForSequenceClassification,
             "text-generation": PLBartForCausalLM,
+            "text2text-generation": PLBartForConditionalGeneration,
+            "translation": PLBartForConditionalGeneration,
             "zero-shot": PLBartForSequenceClassification,
         }
         if is_torch_available()

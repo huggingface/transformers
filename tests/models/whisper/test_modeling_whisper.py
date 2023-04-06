@@ -277,7 +277,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": WhisperForConditionalGeneration, "feature-extraction": WhisperModel}
+        {
+            "audio-classification": WhisperForAudioClassification,
+            "automatic-speech-recognition": WhisperForConditionalGeneration,
+            "feature-extraction": WhisperModel,
+        }
         if is_torch_available()
         else {}
     )

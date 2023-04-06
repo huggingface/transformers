@@ -429,9 +429,10 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "fill-mask": BartForConditionalGeneration,
             "question-answering": BartForQuestionAnswering,
             "summarization": BartForConditionalGeneration,
-            "text2text-generation": BartForConditionalGeneration,
             "text-classification": BartForSequenceClassification,
             "text-generation": BartForCausalLM,
+            "text2text-generation": BartForConditionalGeneration,
+            "translation": BartForConditionalGeneration,
             "zero-shot": BartForSequenceClassification,
         }
         if is_torch_available()

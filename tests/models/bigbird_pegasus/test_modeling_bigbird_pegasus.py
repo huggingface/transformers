@@ -251,9 +251,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
-            "text2text-generation": BigBirdPegasusForConditionalGeneration,
             "text-classification": BigBirdPegasusForSequenceClassification,
             "text-generation": BigBirdPegasusForCausalLM,
+            "text2text-generation": BigBirdPegasusForConditionalGeneration,
+            "translation": BigBirdPegasusForConditionalGeneration,
             "zero-shot": BigBirdPegasusForSequenceClassification,
         }
         if is_torch_available()

@@ -199,6 +199,7 @@ class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             "feature-extraction": TFLEDModel,
             "summarization": TFLEDForConditionalGeneration,
             "text2text-generation": TFLEDForConditionalGeneration,
+            "translation": TFLEDForConditionalGeneration,
         }
         if is_tf_available()
         else {}

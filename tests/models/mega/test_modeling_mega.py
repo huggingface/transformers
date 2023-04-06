@@ -471,9 +471,11 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": MegaModel,
+            "fill-mask": MegaForMaskedLM,
             "question-answering": MegaForQuestionAnswering,
             "text-classification": MegaForSequenceClassification,
             "text-generation": MegaForCausalLM,
+            "token-classification": MegaForTokenClassification,
             "zero-shot": MegaForSequenceClassification,
         }
         if is_torch_available()

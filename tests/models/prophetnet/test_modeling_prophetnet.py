@@ -894,8 +894,9 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "conversational": ProphetNetForConditionalGeneration,
             "feature-extraction": ProphetNetModel,
             "summarization": ProphetNetForConditionalGeneration,
-            "text2text-generation": ProphetNetForConditionalGeneration,
             "text-generation": ProphetNetForCausalLM,
+            "text2text-generation": ProphetNetForConditionalGeneration,
+            "translation": ProphetNetForConditionalGeneration,
         }
         if is_torch_available()
         else {}

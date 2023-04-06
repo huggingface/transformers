@@ -231,6 +231,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("blip", "TFBlipForConditionalGeneration"),
         ("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),
     ]
 )

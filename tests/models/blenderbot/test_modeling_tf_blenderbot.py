@@ -185,6 +185,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             "feature-extraction": TFBlenderbotModel,
             "summarization": TFBlenderbotForConditionalGeneration,
             "text2text-generation": TFBlenderbotForConditionalGeneration,
+            "translation": TFBlenderbotForConditionalGeneration,
         }
         if is_tf_available()
         else {}
