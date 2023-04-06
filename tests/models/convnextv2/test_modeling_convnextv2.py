@@ -58,6 +58,7 @@ class ConvNextV2ModelTester:
         num_labels=10,
         initializer_range=0.02,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         scope=None,
     ):
         self.parent = parent
@@ -74,6 +75,7 @@ class ConvNextV2ModelTester:
         self.num_labels = num_labels
         self.initializer_range = initializer_range
         self.out_features = out_features
+        self.out_indices = out_indices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -97,6 +99,7 @@ class ConvNextV2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_labels=self.num_labels,
         )
 
