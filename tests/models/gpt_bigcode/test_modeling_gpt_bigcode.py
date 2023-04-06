@@ -690,6 +690,97 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             self.assertIsNotNone(model)
 
 
+@slow
+@require_torch
+class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
+    def test_generate_simple(self):
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder").to(torch_device)
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
+
+        input_ids = tokenizer("def print_hello_world():", return_tensors="pt").input_ids.to(torch_device)
+
+        output_sequence = model.generate(input_ids)
+        output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
+
+        expected_output = """def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_"""
+        self.assertEqual(output_sentence, expected_output)
+
+    def test_generate_batched(self):
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder").to(torch_device)
+
+        inputs = tokenizer(["def print_hello_world():", "def say_hello():"], return_tensors="pt", padding=True).to(
+            torch_device
+        )
+        outputs = model.generate(**inputs)
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        expected_output = [
+            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_',
+            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()',
+        ]
+        self.assertListEqual(outputs, expected_output)
+
+
+@require_torch
+class GPTBigCodeMQATest(unittest.TestCase):
+    def get_attention(self, multi_query):
+        config = GPTBigCodeConfig.from_pretrained(
+            "bigcode/gpt_bigcode-santacoder",
+            multi_query=multi_query,
+            attn_pdrop=0,
+            resid_pdrop=0,
+        )
+        return GPTBigCodeAttention(config)
+
+    @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])
+    def test_mqa_reduces_to_mha(self, seed, is_train_mode=True):
+        torch.manual_seed(seed)
+
+        # CREATE MQA AND MHA ATTENTIONS
+        attention_mqa = self.get_attention(True)
+        attention_mh = self.get_attention(False)
+
+        # ENFORCE MATCHING WEIGHTS
+        num_heads = attention_mqa.num_heads
+        embed_dim = attention_mqa.embed_dim
+        head_dim = attention_mqa.head_dim
+
+        with torch.no_grad():
+            mqa_q_weight = attention_mqa.c_attn.weight[:embed_dim, :].view(num_heads, 1, head_dim, embed_dim)
+            mqa_kv_weight = attention_mqa.c_attn.weight[embed_dim:, :].view(1, 2, head_dim, embed_dim)
+            mha_c_weight = torch.cat(
+                [mqa_q_weight, mqa_kv_weight.expand(num_heads, 2, head_dim, embed_dim)], dim=1
+            ).view(3 * num_heads * head_dim, embed_dim)
+
+            mqa_q_bias = attention_mqa.c_attn.bias[:embed_dim].view(num_heads, 1, head_dim)
+            mqa_kv_bias = attention_mqa.c_attn.bias[embed_dim:].view(1, 2, head_dim)
+            mha_c_bias = torch.cat([mqa_q_bias, mqa_kv_bias.expand(num_heads, 2, head_dim)], dim=1).view(
+                3 * num_heads * head_dim
+            )
+
+            attention_mh.c_attn.weight.copy_(mha_c_weight)
+            attention_mh.c_attn.bias.copy_(mha_c_bias)
+            attention_mh.c_proj.weight.copy_(attention_mqa.c_proj.weight)
+            attention_mh.c_proj.bias.copy_(attention_mqa.c_proj.bias)
+
+        # PUT THE MODEL INTO THE CORRECT MODE
+        attention_mh.train(is_train_mode)
+        attention_mqa.train(is_train_mode)
+
+        # RUN AN INPUT THROUGH THE MODELS
+        num_tokens = 5
+        hidden_states = torch.randn(1, num_tokens, embed_dim)
+        attention_mh_result = attention_mh(hidden_states)[0]
+        attention_mq_result = attention_mqa(hidden_states)[0]
+
+        # CHECK THAT ALL OUTPUTS ARE THE SAME
+        self.assertTrue(torch.allclose(attention_mh_result, attention_mq_result, atol=1e-5))
+
+
 # Skip these as the model does not support scale_attn_by_inverse_layer_idx - irrelevant
 # @require_torch
 # class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
@@ -808,59 +899,3 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 #         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
 #         duration = datetime.datetime.now() - start
 #         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-
-@require_torch
-class GPTBigCodeMQATest(unittest.TestCase):
-    def get_attention(self, multi_query):
-        config = GPTBigCodeConfig.from_pretrained(
-            "bigcode/gpt_bigcode-santacoder",
-            multi_query=multi_query,
-            attn_pdrop=0,
-            resid_pdrop=0,
-        )
-        return GPTBigCodeAttention(config)
-
-    @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])
-    def test_mqa_reduces_to_mha(self, seed, is_train_mode=True):
-        torch.manual_seed(seed)
-
-        # CREATE MQA AND MHA ATTENTIONS
-        attention_mqa = self.get_attention(True)
-        attention_mh = self.get_attention(False)
-
-        # ENFORCE MATCHING WEIGHTS
-        num_heads = attention_mqa.num_heads
-        embed_dim = attention_mqa.embed_dim
-        head_dim = attention_mqa.head_dim
-
-        with torch.no_grad():
-            mqa_q_weight = attention_mqa.c_attn.weight[:embed_dim, :].view(num_heads, 1, head_dim, embed_dim)
-            mqa_kv_weight = attention_mqa.c_attn.weight[embed_dim:, :].view(1, 2, head_dim, embed_dim)
-            mha_c_weight = torch.cat(
-                [mqa_q_weight, mqa_kv_weight.expand(num_heads, 2, head_dim, embed_dim)], dim=1
-            ).view(3 * num_heads * head_dim, embed_dim)
-
-            mqa_q_bias = attention_mqa.c_attn.bias[:embed_dim].view(num_heads, 1, head_dim)
-            mqa_kv_bias = attention_mqa.c_attn.bias[embed_dim:].view(1, 2, head_dim)
-            mha_c_bias = torch.cat([mqa_q_bias, mqa_kv_bias.expand(num_heads, 2, head_dim)], dim=1).view(
-                3 * num_heads * head_dim
-            )
-
-            attention_mh.c_attn.weight.copy_(mha_c_weight)
-            attention_mh.c_attn.bias.copy_(mha_c_bias)
-            attention_mh.c_proj.weight.copy_(attention_mqa.c_proj.weight)
-            attention_mh.c_proj.bias.copy_(attention_mqa.c_proj.bias)
-
-        # PUT THE MODEL INTO THE CORRECT MODE
-        attention_mh.train(is_train_mode)
-        attention_mqa.train(is_train_mode)
-
-        # RUN AN INPUT THROUGH THE MODELS
-        num_tokens = 5
-        hidden_states = torch.randn(1, num_tokens, embed_dim)
-        attention_mh_result = attention_mh(hidden_states)[0]
-        attention_mq_result = attention_mqa(hidden_states)[0]
-
-        # CHECK THAT ALL OUTPUTS ARE THE SAME
-        self.assertTrue(torch.allclose(attention_mh_result, attention_mq_result, atol=1e-5))

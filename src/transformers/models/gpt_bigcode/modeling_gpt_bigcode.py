@@ -137,19 +137,20 @@ class GPTBigCodeAttention(nn.Module):
         if self.scale_attn_weights:
             scale_factor /= self.head_dim**0.5
 
-        # MQA: (b, sq, nh * hs)
-        # MHA: (b, nh, sq, hs)
+        # MQA models: (batch_size, query_length, num_heads * head_dim)
+        # MHA models: (batch_size, num_heads, query_length, head_dim)
         query_shape = query.shape
         batch_size = query_shape[0]
         key_length = key.size(-1)
         if self.multi_query:
-            # (b, sq, nh, hs) x (b, hs, sk) -> (b, sq, nh, sk)
+            # (batch_size, query_length, num_heads, head_dim) x (batch_size, head_dim, key_length) -> (batch_size, query_length, num_heads, key_length)
             query_length = query_shape[1]
             attn_shape = (batch_size, query_length, self.num_heads, key_length)
             attn_view = (batch_size, query_length * self.num_heads, key_length)
             # No copy needed for MQA 2, or when layer_past is provided.
             query = query.reshape(batch_size, query_length * self.num_heads, self.head_dim)
         else:
+            # (batch_size, num_heads, query_length, head_dim) x (batch_size, num_heads, head_dim, key_length) -> (batch_size, num_heads, query_length, key_length)
             # (b, nh, sq, hs) x (b, nh, hs, sk) -> (b, nh, sq, sk)
             query_length = query_shape[2]
             attn_shape = (batch_size, self.num_heads, query_length, key_length)
@@ -431,7 +432,7 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
+        past_key_values (`Tuple[torch.Tensor]` of length `config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
             their past given to this model should not be passed as `input_ids` as they have already been computed.
@@ -597,8 +598,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).to(
                 dtype=torch.bool, device=self_attention_mask.device
             )
-        # MQA: (b, sq, nh, sk)
-        # MHA: (b, nh, sq, sk)
+
+        # MQA models: (batch_size, query_length, n_heads, key_length)
+        # MHA models: (batch_size, n_heads, query_length, key_length)
         attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
@@ -704,9 +706,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         )
 
 
-# TODO: Fix type hints?
-# TODO: Add copy comment?
-# TODO: Does this work?
 @add_start_docstrings(
     """
     The GPT_BIGCODE Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -849,16 +848,9 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        # return tuple(
-        #    tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-        #    for layer_past in past_key_values
-        # )
         return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
 
 
-# TODO: Fix type hints?
-# TODO: Add copy comment?
-# TODO: Does this work?
 @add_start_docstrings(
     """
     The GPTBigCode Model transformer with a sequence classification head on top (linear layer).
@@ -983,9 +975,6 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         )
 
 
-# TODO: Fix type hints?
-# TODO: Add copy comment?
-# TODO: Does this work?
 @add_start_docstrings(
     """
     GPT_BIGCODE Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
