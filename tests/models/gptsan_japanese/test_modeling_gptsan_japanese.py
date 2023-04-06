@@ -96,7 +96,7 @@ class GPTSanJapaneseTester:
 
     def get_config(self):
         return GPTSanJapaneseConfig(
-            vocab_size=36000,
+            vocab_size=self.vocab_size,
             num_contexts=self.seq_length,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
