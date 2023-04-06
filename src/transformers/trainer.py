@@ -1406,8 +1406,8 @@ class Trainer:
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
+        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
