@@ -1790,8 +1790,8 @@ FLAX_UMT5_CONDITIONAL_GENERATION_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxT5ForConditionalGeneration, UMT5_INPUTS_DOCSTRING + FLAX_UMT5_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxUMT5ForConditionalGeneration, UMT5_INPUTS_DOCSTRING + FLAX_UMT5_CONDITIONAL_GENERATION_DOCSTRING
 )
 append_replace_return_docstrings(
-    FlaxT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    FlaxUMT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
