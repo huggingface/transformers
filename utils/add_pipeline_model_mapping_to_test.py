@@ -246,10 +246,29 @@ def add_pipeline_model_mapping(test_class, overwrite=False):
     else:
         # `pipeline_model_mapping` is defined. The target index is set to be one **BEFORE** its start index.
         target_idx = start_idx - 1
-        # Remark the lines of the currently existing `pipeline_model_mapping` to be removed.
+        # mark the lines of the currently existing `pipeline_model_mapping` to be removed.
         for idx in range(start_idx, end_idx + 1):
             # These lines are going to be removed before writing to the test file.
             class_lines[idx] = None  # noqa
+
+    # Make sure the test class is a subclass of `PipelineTesterMixin`.
+    parent_classes = [x.__name__ for x in test_class.__bases__]
+    if "PipelineTesterMixin" not in parent_classes:
+        # Put `PipelineTesterMixin` just before `unittest.TestCase`
+        _parent_classes = [x for x in parent_classes if x != "TestCase"] + ["PipelineTesterMixin"]
+        if "TestCase" in parent_classes:
+            # Here we **assume** the original string is always with `unittest.TestCase`.
+            _parent_classes.append("unittest.TestCase")
+        parent_classes = ", ".join(_parent_classes)
+        for idx, line in enumerate(class_lines):
+            # Find the ending of the declaration of `test_class`
+            if line.strip().endswith("):"):
+                # mark the lines of the declaration of `test_class` to be removed
+                for _idx in range(idx + 1):
+                    class_lines[_idx] = None  # noqa
+                break
+        # Add the new, one-line, class declaration for `test_class`
+        class_lines[0] = f"class {test_class.__name__}({parent_classes}):\n"
 
     # Add indentation
     line_to_add = " " * indent_level + line_to_add
