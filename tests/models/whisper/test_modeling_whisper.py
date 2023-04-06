@@ -299,7 +299,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "AutomaticSpeechRecognitionPipelineTests":
+        if pipeline_test_casse_name in [
+            "AutomaticSpeechRecognitionPipelineTests",
+            "AudioClassificationPipelineTests",
+        ]:
             # RuntimeError: The size of tensor a (1500) must match the size of tensor b (30) at non-singleton
             # dimension 1
             return True

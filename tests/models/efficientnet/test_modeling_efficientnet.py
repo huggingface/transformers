@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import EfficientNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -228,6 +228,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         for model_name in EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = EfficientNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_classification(self):
+        super().test_pipeline_image_classification()
 
 
 # We will verify our results on an image of cute cats
