@@ -89,7 +89,7 @@ class Identity(nn.Module):
     """Identity function."""
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, **kwargs):
         return x
 
 
