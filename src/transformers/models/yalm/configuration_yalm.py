@@ -52,6 +52,8 @@ class YalmConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 128):
             Number of attention heads for each attention layer in the Transformer encoder.
+        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to True):
+            Whether to scale attention output by inverse layer depth
         activation_type (`str` or `function`, *optional*, defaults to `"geglu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
@@ -61,7 +63,7 @@ class YalmConfig(PretrainedConfig):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layernorm_epsilon (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -90,11 +92,14 @@ class YalmConfig(PretrainedConfig):
         intermediate_size=27308,
         num_layers=80,
         num_attention_heads=128,
+        scale_attn_by_inverse_layer_idx=True,
         activation_type="silu",
         max_position_embeddings=1024,
         apply_residual_connection_post_layernorm=False,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layernorm_epsilon=1e-5,
+        attention_dropout=0.1,
+        hidden_dropout=0.1,
         use_cache=True,
         bos_token_id=1,
         eos_token_id=2,
@@ -106,11 +111,14 @@ class YalmConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_layers = num_layers
         self.num_attention_heads = num_attention_heads
+        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.activation_type = activation_type
         self.max_position_embeddings = max_position_embeddings
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        self.layernorm_epsilon = layernorm_epsilon
+        self.attention_dropout = attention_dropout
+        self.hidden_dropout = hidden_dropout
         self.use_cache = use_cache
         super().__init__(
             bos_token_id=bos_token_id,

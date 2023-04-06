@@ -38,22 +38,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "YalmConfig"
 
 
-class YalmScaleMaskSoftmax(nn.Module):
-    def __init__(self, mask_func, scale):
-        super().__init__()
-        self.mask_func = mask_func
-        self.scale = scale
-
-    def forward(self, input, mask):
-        # [b, np, s, s]
-        assert input.dim() == 4
-
-        if self.scale is not None:
-            input = input * self.scale
-        mask_output = self.mask_func(input, mask)
-        probs = torch.nn.Softmax(dim=-1)(mask_output)
-
-        return probs
+def _yalm_attention_mask_func(attention_scores, ltor_mask):
+    attention_scores.masked_fill_(ltor_mask, -10000.0)
+    return attention_scores
 
 
 class YalmRotaryPositionEncoding(nn.Module):
@@ -102,8 +89,7 @@ class YalmSelfAttention(nn.Module):
 
         self.attention_mask_func = None
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
-        self.layer_idx = max(1, layer_idx)
-        self.pos_encoding_type = "rotary"
+        self.layer_idx = layer_idx
 
         # Per attention head and per partition values.
         self.hidden_size_per_partition = config.hidden_size
@@ -120,13 +106,11 @@ class YalmSelfAttention(nn.Module):
 
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
 
-        coeff = None
+        self.coeff = None
         self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
         if self.scale_attn_by_inverse_layer_idx:
-            coeff = self.layer_idx + 1
-            self.norm_factor *= coeff
-
-        self.scale_mask_softmax = YalmScaleMaskSoftmax(self.attention_mask_func, coeff)
+            self.coeff = self.layer_idx + 1
+            self.norm_factor *= self.coeff
 
         # Dropout. Note that for a single iteration, this layer will generate
         # different outputs on different number of parallel partitions but
@@ -200,7 +184,7 @@ class YalmSelfAttention(nn.Module):
         mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
         # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
-        (query_layer, key_layer, value_layer) = torch.split(mixed_x_layer, self.hidden_size_per_partition, dim=-1)
+        (query_layer, key_layer, value_layer) = torch.split(mixed_x_layer, self.hidden_size_per_attention_head, dim=-1)
 
         context_position = 0 if layer_past is None else layer_past[2]
         query_layer = self.rotary_position_encoding(query_layer, context_position)
@@ -237,7 +221,7 @@ class YalmSelfAttention(nn.Module):
             output_size[2],
             output_size[3],
             dtype=query_layer.dtype,
-            device=torch.cuda.current_device(),
+            device=query_layer.device,
         )
 
         # Raw attention scores. [b * np, sq, sk]
@@ -256,17 +240,24 @@ class YalmSelfAttention(nn.Module):
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
 
-        if layer_past is not None:
-            attention_mask = attention_mask[..., attention_scores.size(3) - 1, : attention_scores.size(3)].unsqueeze(2)
-        else:
-            attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
+        if attention_mask is not None:
+            if layer_past is not None:
+                attention_mask = attention_mask[
+                    ..., attention_scores.size(3) - 1, : attention_scores.size(3)
+                ].unsqueeze(2)
+            else:
+                attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
 
         # ===========================
         # Attention probs and dropout
         # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+        if self.coeff is not None:
+            attention_scores = attention_scores * self.coeff
+        if attention_mask is not None:
+            attention_scores = _yalm_attention_mask_func(attention_scores, attention_mask)
+        attention_probs = torch.nn.Softmax(dim=-1)(attention_scores)
 
         attention_probs = self.attention_dropout(attention_probs)
 
@@ -345,9 +336,9 @@ class YalmMLP(nn.Module):
         )
 
     def forward(self, hidden_states):
-        intermediate_parallel, bias_parallel = self.dense_ffn_hidden(hidden_states)
+        intermediate_parallel = self.dense_ffn_hidden(hidden_states)
 
-        intermediate_parallel = self.activation_func(intermediate_parallel + bias_parallel)
+        intermediate_parallel = self.activation_func(intermediate_parallel)
 
         if self.is_gated:
             gate = self.dense_ffn_gate(hidden_states)[0]
@@ -355,8 +346,8 @@ class YalmMLP(nn.Module):
         else:
             intermediate_gated = intermediate_parallel
 
-        output, output_bias = self.dense_ffn_output(intermediate_gated)
-        return output, output_bias
+        output = self.dense_ffn_output(intermediate_gated)
+        return output
 
 
 class YalmTransformerLayer(nn.Module):
@@ -374,17 +365,17 @@ class YalmTransformerLayer(nn.Module):
 
         # Layernorm on the input data.
         if self.layer_idx > 0:
-            self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_epsilon)
 
         # Self attention.
-        self.attention = YalmSelfAttention(layer_idx)
+        self.attention = YalmSelfAttention(config, layer_idx)
         self.hidden_dropout = config.hidden_dropout
 
         # Layernorm on the input data.
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_epsilon)
 
         # MLP
-        self.mlp = YalmMLP()
+        self.mlp = YalmMLP(config)
 
     def forward(
         self,
@@ -449,7 +440,7 @@ class YalmTransformer(nn.Module):
         # Number of layers:
         self.num_layers = config.num_layers
 
-        self.layers = torch.nn.ModuleList([YalmTransformerLayer(layer_idx=i) for i in range(self.num_layers)])
+        self.layers = torch.nn.ModuleList([YalmTransformerLayer(config, layer_idx=i) for i in range(self.num_layers)])
 
     def forward(
         self,
@@ -459,6 +450,7 @@ class YalmTransformer(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        gradient_checkpointing: bool = False,
     ):
         # data format change to avoid explicit tranposes : [b s h] --> [s b h]
         hidden_states = hidden_states.transpose(0, 1).contiguous()
@@ -470,7 +462,7 @@ class YalmTransformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
+            if gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -560,8 +552,9 @@ YALM_START_DOCSTRING = r"""
 )
 class YalmPreTrainedModel(PreTrainedModel):
     config_class = YalmConfig
-    base_model_prefix = "model"
+    base_model_prefix = "yalm"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["YalmTransformerLayer"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -655,7 +648,7 @@ class YalmModel(YalmPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.padded_vocab_size = config.padded_vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.embedding_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.padded_vocab_size, config.embedding_size, self.padding_idx)
         self.projector = YalmProjector(config)
         self.transformer = YalmTransformer(config)
 
@@ -663,6 +656,12 @@ class YalmModel(YalmPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(YALM_INPUTS_DOCSTRING)
     def forward(
@@ -694,6 +693,9 @@ class YalmModel(YalmPreTrainedModel):
 
         batch_size, seq_length = input_shape
 
+        if past_key_values is None:
+            past_key_values = tuple([None] * self.config.num_layers)
+
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
@@ -713,13 +715,6 @@ class YalmModel(YalmPreTrainedModel):
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -732,6 +727,7 @@ class YalmModel(YalmPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
         if not return_dict:
@@ -752,7 +748,7 @@ class YalmModel(YalmPreTrainedModel):
     """,
     YALM_START_DOCSTRING,
 )
-class YalmCausalLM(YalmPreTrainedModel):
+class YalmForCausalLM(YalmPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config: YalmConfig):
@@ -770,10 +766,10 @@ class YalmCausalLM(YalmPreTrainedModel):
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.embed_out
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.embed_out = new_embeddings
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(YALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -782,7 +778,6 @@ class YalmCausalLM(YalmPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -834,7 +829,6 @@ class YalmCausalLM(YalmPreTrainedModel):
         outputs = self.yalm(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -844,7 +838,7 @@ class YalmCausalLM(YalmPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        lm_logits = self.embed_out(hidden_states) + self.out_bias
+        lm_logits = self.lm_head(hidden_states) + self.out_bias
 
         lm_loss = None
         if labels is not None:

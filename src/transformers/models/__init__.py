@@ -208,6 +208,7 @@ from . import (
     xlm_roberta_xl,
     xlnet,
     xmod,
+    yalm,
     yolos,
     yoso,
 )
