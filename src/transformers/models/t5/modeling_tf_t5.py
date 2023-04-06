@@ -636,7 +636,11 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.num_layers
 
         self.block = [
-            TFT5Block(config, has_relative_attention_bias=bool(i == 0) or not config.share_relative_attention_bias, name=f"block_._{i}")
+            TFT5Block(
+                config,
+                has_relative_attention_bias=bool(i == 0) or not config.share_relative_attention_bias,
+                name=f"block_._{i}",
+            )
             for i in range(config.num_layers)
         ]
         self.final_layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="final_layer_norm")
