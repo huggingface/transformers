@@ -18,6 +18,7 @@ import collections.abc
 import copy
 import inspect
 import json
+import multiprocessing
 import os
 import shutil
 import tempfile
@@ -679,12 +680,22 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
     if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
         if fast_tokenizer is not None:
-            if fast_tokenizer.__class__.__name__ in ["RobertaTokenizerFast", "XLMRobertaTokenizerFast"]:
+            if fast_tokenizer.__class__.__name__ in [
+                "RobertaTokenizerFast",
+                "XLMRobertaTokenizerFast",
+                "LongformerTokenizerFast",
+                "MPNetTokenizerFast",
+            ]:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings
         if slow_tokenizer is not None:
-            if slow_tokenizer.__class__.__name__ in ["RobertaTokenizer", "XLMRobertaTokenizer"]:
+            if slow_tokenizer.__class__.__name__ in [
+                "RobertaTokenizer",
+                "XLMRobertaTokenizer",
+                "LongformerTokenizer",
+                "MPNetTokenizer",
+            ]:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings
@@ -1047,6 +1058,10 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
+    if data["training_ds"] is None or data["testing_ds"] is None:
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+        data["training_ds"] = ds["train"]
+        data["testing_ds"] = ds["test"]
 
     if config_class.model_type in [
         "encoder-decoder",
@@ -1323,6 +1338,7 @@ def create_tiny_models(
     upload,
     organization,
     token,
+    num_workers=1,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -1343,10 +1359,6 @@ def create_tiny_models(
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
     tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    data["training_ds"] = ds["train"]
-    data["testing_ds"] = ds["test"]
-
     config_classes = CONFIG_MAPPING.values()
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
@@ -1363,11 +1375,19 @@ def create_tiny_models(
             to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
 
     results = {}
-    for c, models_to_create in list(to_create.items()):
-        print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
-        results[c.__name__] = result
-        print("=" * 40)
+    if num_workers <= 1:
+        for c, models_to_create in list(to_create.items()):
+            print(f"Create models for {c.__name__} ...")
+            result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
+            results[c.__name__] = result
+            print("=" * 40)
+    else:
+        all_build_args = []
+        for c, models_to_create in list(to_create.items()):
+            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(build, all_build_args)
+            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:
@@ -1426,9 +1446,8 @@ def create_tiny_models(
 
 
 if __name__ == "__main__":
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    training_ds = ds["train"]
-    testing_ds = ds["test"]
+    # This has to be `spawn` to avoid hanging forever!
+    multiprocessing.set_start_method("spawn")
 
     def list_str(values):
         return values.split(",")
@@ -1465,6 +1484,7 @@ if __name__ == "__main__":
         "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
     )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
+    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
 
     args = parser.parse_args()
 
@@ -1480,4 +1500,5 @@ if __name__ == "__main__":
         args.upload,
         args.organization,
         args.token,
+        args.num_workers,
     )

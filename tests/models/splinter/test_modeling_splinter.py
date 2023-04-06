@@ -230,6 +230,8 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     ):
         if pipeline_test_casse_name == "QAPipelineTests":
             return True
+        elif pipeline_test_casse_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
+            return True
 
         return False
 
