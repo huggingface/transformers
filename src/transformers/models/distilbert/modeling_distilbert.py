@@ -82,7 +82,8 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim)
+                            for j in range(dim)] for pos in range(n_pos)])
     out.requires_grad = False
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
@@ -92,8 +93,10 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 class Embeddings(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.dim, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.dim)
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
                 n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
@@ -118,7 +121,8 @@ class Embeddings(nn.Module):
         embeddings)
         """
         if input_ids is not None:
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+            input_embeds = self.word_embeddings(
+                input_ids)  # (bs, max_seq_length, dim)
 
         seq_length = input_embeds.size(1)
 
@@ -128,13 +132,18 @@ class Embeddings(nn.Module):
         if hasattr(self, "position_ids"):
             position_ids = self.position_ids[:, :seq_length]
         else:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
-            position_ids = position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = torch.arange(
+                seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
+            position_ids = position_ids.unsqueeze(
+                0).expand_as(input_ids)  # (bs, max_seq_length)
+            position_ids = position_ids[:,
+                                        past_key_values_length: seq_length + past_key_values_length]
 
-        position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
+        position_embeddings = self.position_embeddings(
+            position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+        # (bs, max_seq_length, dim)
+        embeddings = input_embeds + position_embeddings
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -151,12 +160,14 @@ class MultiHeadSelfAttention(nn.Module):
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
             # Raise value errors for even multi-head attention nodes
-            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
+            raise ValueError(
+                f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
-        self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
+        self.out_lin = nn.Linear(
+            in_features=config.dim, out_features=config.dim)
 
         self.is_decoder = config.is_decoder
 
@@ -222,7 +233,7 @@ class MultiHeadSelfAttention(nn.Module):
             """group heads"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
-                # If this is instantiated as a cross-attention module, the keys
+            # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         if is_cross_attention and past_key_values is not None:
@@ -231,17 +242,23 @@ class MultiHeadSelfAttention(nn.Module):
             value = past_key_values[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            key = shape(self.k_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
-            value = shape(self.v_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            # (bs, n_heads, k_length, dim_per_head)
+            key = shape(self.k_lin(encoder_hidden_states))
+            # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(encoder_hidden_states))
             attention_mask = encoder_attention_mask
         elif past_key_values is not None:
-            key = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-            value = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            # (bs, n_heads, k_length, dim_per_head)
+            key = shape(self.k_lin(key))
+            # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(value))
             key = torch.cat([past_key_values[0], key], dim=2)
             value = torch.cat([past_key_values[1], value], dim=2)
         else:
-            key = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-            value = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            # (bs, n_heads, k_length, dim_per_head)
+            key = shape(self.k_lin(key))
+            # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(value))
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -252,23 +269,28 @@ class MultiHeadSelfAttention(nn.Module):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_values = (key, value)
-        query = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
+        # (bs, n_heads, q_length, dim_per_head)
+        query = shape(self.q_lin(query))
 
-        query = query / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
-        scores = torch.matmul(query, key.transpose(-1, -2))  # (bs, n_heads, q_length, k_length)
+        # (bs, n_heads, q_length, dim_per_head)
+        query = query / math.sqrt(dim_per_head)
+        # (bs, n_heads, q_length, k_length)
+        scores = torch.matmul(query, key.transpose(-1, -2))
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in DistilBertModel forward() function)
             scores += attention_mask
 
-        weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
+        # (bs, n_heads, q_length, k_length)
+        weights = nn.Softmax(dim=-1)(scores)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, value)  # (bs, n_heads, q_length, dim_per_head)
+        # (bs, n_heads, q_length, dim_per_head)
+        context = torch.matmul(weights, value)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
@@ -288,8 +310,10 @@ class FFN(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
-        self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
+        self.lin1 = nn.Linear(in_features=config.dim,
+                              out_features=config.hidden_dim)
+        self.lin2 = nn.Linear(
+            in_features=config.hidden_dim, out_features=config.dim)
         self.activation = get_activation(config.activation)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -309,7 +333,8 @@ class TransformerBlock(nn.Module):
 
         # Have an even number of Configure multi-heads
         if config.dim % config.n_heads != 0:
-            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
+            raise ValueError(
+                f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
         self.is_decoder = config.is_decoder
@@ -317,10 +342,12 @@ class TransformerBlock(nn.Module):
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
             self.crossattention = MultiHeadSelfAttention(config)
-        self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
+        self.sa_layer_norm = nn.LayerNorm(
+            normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
-        self.output_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
+        self.output_layer_norm = nn.LayerNorm(
+            normalized_shape=config.dim, eps=1e-12)
 
     def forward(
         self,
@@ -342,7 +369,8 @@ class TransformerBlock(nn.Module):
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_value = past_key_values[:
+                                                   2] if past_key_values is not None else None
         # Self-Attention
         self_attention_outputs = self.attention(
             query=hidden_states,
@@ -360,7 +388,8 @@ class TransformerBlock(nn.Module):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            # add self attentions if we output attention weights
+            outputs = self_attention_outputs[1:]
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -369,7 +398,8 @@ class TransformerBlock(nn.Module):
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attn_past_key_value = past_key_values[-2:
+                                                        ] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 query=sa_output,
                 key=sa_output,
@@ -382,17 +412,20 @@ class TransformerBlock(nn.Module):
                 output_attentions=output_attentions,
             )
             sa_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            # add cross attentions if we output attention weights
+            outputs = outputs + cross_attention_outputs[1:-1]
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        sa_output = self.sa_layer_norm(sa_output + hidden_states)  # (bs, seq_length, dim)
+        sa_output = self.sa_layer_norm(
+            sa_output + hidden_states)  # (bs, seq_length, dim)
 
         # Feed Forward Network
         ffn_output = self.ffn(sa_output)  # (bs, seq_length, dim)
-        ffn_output: torch.Tensor = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
+        ffn_output: torch.Tensor = self.output_layer_norm(
+            ffn_output + sa_output)  # (bs, seq_length, dim)
 
         outputs = (ffn_output,) + outputs
 
@@ -408,7 +441,8 @@ class Transformer(nn.Module):
         super().__init__()
         self.config = config
         self.n_layers = config.n_layers
-        self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
+        self.layer = nn.ModuleList([TransformerBlock(config)
+                                   for _ in range(config.n_layers)])
 
     def forward(
         self,
@@ -463,7 +497,8 @@ class Transformer(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+                    all_cross_attentions = all_cross_attentions + \
+                        (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -496,7 +531,8 @@ class DistilBertPredictionHeadTransform(nn.Module):
             self.transform_act_fn = ACT2FN[config.activation]
         else:
             self.transform_act_fn = config.activation
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -512,7 +548,8 @@ class DistilBertLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(
+            config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
@@ -551,11 +588,13 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(
+                mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(
+                mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -649,18 +688,21 @@ class DistilBertModel(DistilBertPreTrainedModel):
                 size will add correct vectors at the end following the position encoding algorithm, whereas reducing
                 the size will remove vectors from the end.
         """
-        num_position_embeds_diff = new_num_position_embeddings - self.config.max_position_embeddings
+        num_position_embeds_diff = new_num_position_embeddings - \
+            self.config.max_position_embeddings
 
         # no resizing needs to be done if the length stays the same
         if num_position_embeds_diff == 0:
             return
 
-        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
+        logger.info(
+            f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
         old_position_embeddings_weight = self.embeddings.position_embeddings.weight.clone()
 
-        self.embeddings.position_embeddings = nn.Embedding(self.config.max_position_embeddings, self.config.dim)
+        self.embeddings.position_embeddings = nn.Embedding(
+            self.config.max_position_embeddings, self.config.dim)
 
         if self.config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
@@ -721,7 +763,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
             batch_size, seq_length = input_shape
@@ -729,7 +772,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
             batch_size, seq_length = input_shape
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            raise ValueError(
+                "You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -737,27 +781,34 @@ class DistilBertModel(DistilBertPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(
+                ((batch_size, seq_length + past_key_values_length)), device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape, device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            encoder_hidden_shape = (
+                encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_attention_mask = torch.ones(
+                    encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(
+                encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_head_mask(
+            head_mask, self.config.num_hidden_layers)
 
-        embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
+        embeddings = self.embeddings(
+            input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
         return self.transformer(
             hidden_states=embeddings,
@@ -785,7 +836,8 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `DistilBertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `DistilBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.distilbert = DistilBertModel(config)
         self.cls = DistilBertOnlyMLMHead(config)
@@ -872,10 +924,12 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         lm_loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            shifted_prediction_scores = prediction_scores[:,
+                                                          :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = loss_fct(
+                shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
@@ -988,14 +1042,19 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = dlbrt_output[0]  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
-        prediction_logits = self.activation(prediction_logits)  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
+        prediction_logits = self.vocab_transform(
+            hidden_states)  # (bs, seq_length, dim)
+        prediction_logits = self.activation(
+            prediction_logits)  # (bs, seq_length, dim)
+        prediction_logits = self.vocab_layer_norm(
+            prediction_logits)  # (bs, seq_length, dim)
+        prediction_logits = self.vocab_projector(
+            prediction_logits)  # (bs, seq_length, vocab_size)
 
         mlm_loss = None
         if labels is not None:
-            mlm_loss = self.mlm_loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1))
+            mlm_loss = self.mlm_loss_fct(
+                prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1))
 
         if not return_dict:
             output = (prediction_logits,) + dlbrt_output[1:]
@@ -1111,7 +1170,8 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
@@ -1142,7 +1202,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
-            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
+            raise ValueError(
+                f"config.num_labels should be 2, but it is {config.num_labels}")
 
         self.dropout = nn.Dropout(config.qa_dropout)
 
@@ -1215,7 +1276,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         hidden_states = self.dropout(hidden_states)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
+        # (bs, max_query_len)
+        start_logits = start_logits.squeeze(-1).contiguous()
         end_logits = end_logits.squeeze(-1).contiguous()  # (bs, max_query_len)
 
         total_loss = None
@@ -1384,7 +1446,8 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
     @add_start_docstrings_to_model_forward(
-        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+        DISTILBERT_INPUTS_DOCSTRING.format(
+            "batch_size, num_choices, sequence_length")
     )
     @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1431,10 +1494,13 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        input_ids = input_ids.view(-1, input_ids.size(-1)
+                                   ) if input_ids is not None else None
+        attention_mask = attention_mask.view(
+            -1, attention_mask.size(-1)) if attention_mask is not None else None
         inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            inputs_embeds.view(-1, inputs_embeds.size(-2),
+                               inputs_embeds.size(-1))
             if inputs_embeds is not None
             else None
         )
@@ -1452,7 +1518,8 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
         hidden_state = outputs[0]  # (bs * num_choices, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs * num_choices, dim)
-        pooled_output = self.pre_classifier(pooled_output)  # (bs * num_choices, dim)
+        pooled_output = self.pre_classifier(
+            pooled_output)  # (bs * num_choices, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs * num_choices, dim)
         pooled_output = self.dropout(pooled_output)  # (bs * num_choices, dim)
         logits = self.classifier(pooled_output)  # (bs * num_choices, 1)
