@@ -771,7 +771,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UMT5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (MT5Model, MT5ForConditionalGeneration, MT5EncoderModel)):
+        elif isinstance(module, (UMT5Model, UMT5ForConditionalGeneration, UMT5EncoderModel)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
