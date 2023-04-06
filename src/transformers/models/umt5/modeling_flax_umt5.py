@@ -1600,7 +1600,7 @@ class FlaxUMT5ForConditionalGenerationModule(nn.Module):
         )
 
 
-class FlaxT5ForConditionalGeneration(FlaxUMT5PreTrainedModel):
+class FlaxUMT5ForConditionalGeneration(FlaxUMT5PreTrainedModel):
     module_class = FlaxUMT5ForConditionalGenerationModule
 
     @add_start_docstrings(UMT5_DECODE_INPUTS_DOCSTRING)
