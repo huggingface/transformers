@@ -24,6 +24,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
@@ -45,7 +46,7 @@ class YalmScaleMaskSoftmax(nn.Module):
 
     def forward(self, input, mask):
         # [b, np, s, s]
-        assert input.dim() == 4 
+        assert input.dim() == 4
 
         if self.scale is not None:
             input = input * self.scale
@@ -78,7 +79,7 @@ class YalmRotaryPositionEncoding(nn.Module):
         angles = positions.unsqueeze(-1) * inv_freqs
 
         return torch.cos(angles), torch.sin(angles)
-    
+
     @staticmethod
     def apply_rotary_position_encoding(hidden_state, cos_cached, sin_cached):
         sq, b, np, hn = hidden_state.shape
@@ -125,10 +126,7 @@ class YalmSelfAttention(nn.Module):
             coeff = self.layer_idx + 1
             self.norm_factor *= coeff
 
-        self.scale_mask_softmax = YalmScaleMaskSoftmax(
-            self.attention_mask_func,
-            coeff
-        )
+        self.scale_mask_softmax = YalmScaleMaskSoftmax(self.attention_mask_func, coeff)
 
         # Dropout. Note that for a single iteration, this layer will generate
         # different outputs on different number of parallel partitions but
@@ -137,40 +135,44 @@ class YalmSelfAttention(nn.Module):
 
         # Output.
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        
+
         self.rotary_position_encoding = YalmRotaryPositionEncoding(
             config.max_position_embeddings,
             self.hidden_size_per_attention_head,
         )
 
     def _transpose_last_dim(self, mixed_layer, num_splits, num_splits_first):
-        input_shape = mixed_layer.size();
+        input_shape = mixed_layer.size()
         if num_splits_first:
-            """[s, b, num_splits * np * hn] 
-            -->(view) [s, b, num_splits, np, hn] 
-            -->(tranpose) [s, b, np, num_splits, hn] 
-            -->(view) [s, b, np * num_splits * hn] """
+            """[s, b, num_splits * np * hn]
+            -->(view) [s, b, num_splits, np, hn]
+            -->(tranpose) [s, b, np, num_splits, hn]
+            -->(view) [s, b, np * num_splits * hn]"""
 
-            intermediate_shape = input_shape[:-1] +\
-                (num_splits, self.num_attention_heads_per_partition,
-                 self.hidden_size_per_attention_head)
+            intermediate_shape = input_shape[:-1] + (
+                num_splits,
+                self.num_attention_heads_per_partition,
+                self.hidden_size_per_attention_head,
+            )
 
             mixed_layer = mixed_layer.view(*intermediate_shape)
             mixed_layer = mixed_layer.transpose(-2, -3).contiguous()
         else:
-            """[s, b, np * hn * num_splits] 
-            -->(view) [s, b, np, hn, num_splits] 
-            -->(tranpose) [s, b, np, num_splits, hn] 
-            -->(view) [s, b, np * num_splits * hn] """
+            """[s, b, np * hn * num_splits]
+            -->(view) [s, b, np, hn, num_splits]
+            -->(tranpose) [s, b, np, num_splits, hn]
+            -->(view) [s, b, np * num_splits * hn]"""
 
-            intermediate_shape = input_shape[:-1] +\
-                (self.num_attention_heads_per_partition,
-                 self.hidden_size_per_attention_head, num_splits)
+            intermediate_shape = input_shape[:-1] + (
+                self.num_attention_heads_per_partition,
+                self.hidden_size_per_attention_head,
+                num_splits,
+            )
 
             mixed_layer = mixed_layer.view(*intermediate_shape)
             mixed_layer = mixed_layer.transpose(-1, -2).contiguous()
         mixed_layer = mixed_layer.view(*input_shape)
-        
+
         return mixed_layer
 
     def forward(
@@ -190,18 +192,16 @@ class YalmSelfAttention(nn.Module):
         # Attention heads [sq, b, h] --> [sq, b, (np * 3 * hn)]
         mixed_x_layer = self.query_key_value(hidden_states)
 
-
         # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
-        new_tensor_shape = mixed_x_layer.size()[:-1] + \
-            (self.num_attention_heads_per_partition,
-             3 * self.hidden_size_per_attention_head)
+        new_tensor_shape = mixed_x_layer.size()[:-1] + (
+            self.num_attention_heads_per_partition,
+            3 * self.hidden_size_per_attention_head,
+        )
         mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
         # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
-        (query_layer,
-         key_layer,
-         value_layer) = torch.split(mixed_x_layer, self.hidden_size_per_partition, dim=-1)
-        
+        (query_layer, key_layer, value_layer) = torch.split(mixed_x_layer, self.hidden_size_per_partition, dim=-1)
+
         context_position = 0 if layer_past is None else layer_past[2]
         query_layer = self.rotary_position_encoding(query_layer, context_position)
         key_layer = self.rotary_position_encoding(key_layer, context_position)
@@ -212,78 +212,63 @@ class YalmSelfAttention(nn.Module):
 
         if layer_past is not None:
             past_key, past_value, sq_length = layer_past
-            key_layer = torch.cat((past_key.type_as(key_layer),
-                                   key_layer), dim=0)
-            value_layer = torch.cat((past_value.type_as(value_layer),
-                                     value_layer), dim=0)
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=0)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=0)
             sq_length += 1
         else:
             sq_length = key_layer.size()[0]
 
         present = (key_layer, value_layer, sq_length) if use_cache else None
 
-
         # ===================================
         # Raw attention scores. [b, np, s, s]
         # ===================================
-        
+
         # [b, np, sq, sk]
-        output_size = (query_layer.size(1), 
-                       query_layer.size(2), 
-                       query_layer.size(0), 
-                       key_layer.size(0))
-        
+        output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
+
         # [sq, b, np, hn] -> [sq, b * np, hn]
-        query_layer = query_layer.view(output_size[2],
-                                       output_size[0] * output_size[1], -1)
-        key_layer = key_layer.view(output_size[3],
-                                   output_size[0] * output_size[1], -1)
+        query_layer = query_layer.view(output_size[2], output_size[0] * output_size[1], -1)
+        key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
 
         # preallocting result tensor: [b * np, sq, sk]
         matmul_result = torch.empty(
-            output_size[0]*output_size[1], 
-            output_size[2], 
+            output_size[0] * output_size[1],
+            output_size[2],
             output_size[3],
-            dtype=query_layer.dtype, 
-            device=torch.cuda.current_device())
+            dtype=query_layer.dtype,
+            device=torch.cuda.current_device(),
+        )
 
         # Raw attention scores. [b * np, sq, sk]
-        matmul_result = torch.baddbmm(matmul_result, 
-            query_layer.transpose(0, 1),   # [b * np, sq, hn]
-            key_layer.transpose(0,1).transpose(1, 2),  #[b * np, hn, sk]
-            beta=0.0, alpha=(1.0/self.norm_factor))
+        matmul_result = torch.baddbmm(
+            matmul_result,
+            query_layer.transpose(0, 1),  # [b * np, sq, hn]
+            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            beta=0.0,
+            alpha=(1.0 / self.norm_factor),
+        )
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
-
 
         # ==================================================
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
 
-
         if layer_past is not None:
-            attention_mask = attention_mask[
-                ...,
-                attention_scores.size(3) - 1,
-                :attention_scores.size(3)].unsqueeze(2)
+            attention_mask = attention_mask[..., attention_scores.size(3) - 1, : attention_scores.size(3)].unsqueeze(2)
         else:
-            attention_mask = attention_mask[
-                ...,
-                :attention_scores.size(3),
-                :attention_scores.size(3)]
-
+            attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
 
         # ===========================
         # Attention probs and dropout
         # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
-        attention_probs = self.scale_mask_softmax(attention_scores,
-                                                  attention_mask)
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
 
         attention_probs = self.attention_dropout(attention_probs)
-
 
         # =========================
         # Context layer. [sq, b, hp]
@@ -293,21 +278,16 @@ class YalmSelfAttention(nn.Module):
         # [sk, b, np, hn] --> [b, np, sq, hn]
 
         # context layer shape: [b, np, sq, hn]
-        output_size = (value_layer.size(1), 
-                       value_layer.size(2), 
-                       query_layer.size(0), 
-                       value_layer.size(3)) 
+        output_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
-        # change view [sk, b * np, hn] 
-        value_layer = value_layer.view(value_layer.size(0),
-                                       output_size[0] * output_size[1], -1)
-        
+        # change view [sk, b * np, hn]
+        value_layer = value_layer.view(value_layer.size(0), output_size[0] * output_size[1], -1)
+
         # change view [b * np, sq, sk]
-        attention_probs = attention_probs.view(output_size[0] * output_size[1],
-                                               output_size[2], -1)
-        
+        attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
+
         # matmul: [b * np, sq, hn]
-        context_layer = torch.bmm(attention_probs, value_layer.transpose(0,1))
+        context_layer = torch.bmm(attention_probs, value_layer.transpose(0, 1))
 
         # change view [b, np, sq, hn]
         context_layer = context_layer.view(*output_size)
@@ -316,10 +296,8 @@ class YalmSelfAttention(nn.Module):
         context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
 
         # [sq, b, np, hn] --> [sq, b, hp]
-        new_context_layer_shape = context_layer.size()[:-2] + \
-            (self.hidden_size_per_partition,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.view(*new_context_layer_shape)
-
 
         # =================
         # Output. [sq, b, h]
@@ -345,14 +323,13 @@ class YalmMLP(nn.Module):
     def __init__(self, config: YalmConfig):
         super().__init__()
 
-
         self.dense_ffn_hidden = nn.Linear(
             config.hidden_size,
             config.intermediate_size,
         )
 
         self.activation_type = config.activation_type
-        self.is_gated = config.activation_type in ['geglu']
+        self.is_gated = config.activation_type in ["geglu"]
 
         self.activation_func = torch.nn.functional.gelu
 
@@ -366,7 +343,7 @@ class YalmMLP(nn.Module):
             config.intermediate_size,
             config.hidden_size,
         )
-         
+
     def forward(self, hidden_states):
         intermediate_parallel, bias_parallel = self.dense_ffn_hidden(hidden_states)
 
@@ -377,7 +354,7 @@ class YalmMLP(nn.Module):
             intermediate_gated = intermediate_parallel * gate
         else:
             intermediate_gated = intermediate_parallel
-        
+
         output, output_bias = self.dense_ffn_output(intermediate_gated)
         return output, output_bias
 
@@ -397,23 +374,17 @@ class YalmTransformerLayer(nn.Module):
 
         # Layernorm on the input data.
         if self.layer_idx > 0:
-            self.input_layernorm = nn.LayerNorm(
-                config.hidden_size,
-                eps=config.layer_norm_eps
-            )
+            self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Self attention.
         self.attention = YalmSelfAttention(layer_idx)
         self.hidden_dropout = config.hidden_dropout
 
         # Layernorm on the input data.
-        self.post_attention_layernorm = nn.LayerNorm(
-            config.hidden_size,
-            eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # MLP
         self.mlp = YalmMLP()
-
 
     def forward(
         self,
@@ -437,7 +408,7 @@ class YalmTransformerLayer(nn.Module):
             attention_mask,
             layer_past=layer_past,
             use_cache=use_cache,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         attention_output = attention_layer_outputs[0]  # output_attn: attention_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
@@ -448,7 +419,9 @@ class YalmTransformerLayer(nn.Module):
         else:
             residual = hidden_states
 
-        layernorm_input = torch.nn.functional.dropout(attention_output, p=self.hidden_dropout, training=self.training) + residual
+        layernorm_input = (
+            torch.nn.functional.dropout(attention_output, p=self.hidden_dropout, training=self.training) + residual
+        )
 
         # Layer norm post the self attention.
         layernorm_output = self.post_attention_layernorm(layernorm_input)
@@ -476,10 +449,7 @@ class YalmTransformer(nn.Module):
         # Number of layers:
         self.num_layers = config.num_layers
 
-        self.layers = torch.nn.ModuleList(
-            [YalmTransformerLayer(layer_idx=i) for i in range(self.num_layers)]
-        )
-
+        self.layers = torch.nn.ModuleList([YalmTransformerLayer(layer_idx=i) for i in range(self.num_layers)])
 
     def forward(
         self,
@@ -527,13 +497,13 @@ class YalmTransformer(nn.Module):
                 presents = presents + (outputs[1],)
             if output_attentions:
                 all_attentions = all_attentions + (outputs[2 if use_cache else 1],)
-        
+
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-        
+
         # reverting data format change [s b h] --> [b s h]
         output = hidden_states.transpose(0, 1).contiguous()
-        
+
         return output, presents, all_hidden_states, all_attentions
 
 
@@ -546,10 +516,7 @@ class YalmProjector(nn.Module):
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
 
         if not self.apply_residual_connection_post_layernorm:
-            self.input_layernorm = nn.LayerNorm(
-                config.embedding_size,
-                eps=config.layernorm_epsilon
-            )
+            self.input_layernorm = nn.LayerNorm(config.embedding_size, eps=config.layernorm_epsilon)
 
         if config.embedding_size != config.hidden_size:
             self.register_buffer(
@@ -642,11 +609,6 @@ YALM_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -693,7 +655,7 @@ class YalmModel(YalmPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.padded_vocab_size = config.padded_vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.embedding_size, self.padding_idx)
         self.projector = YalmProjector(config)
         self.transformer = YalmTransformer(config)
 
@@ -760,16 +722,16 @@ class YalmModel(YalmPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        
+
         hidden_states = self.projector(inputs_embeds)
 
         hidden_states, presents, all_hidden_states, all_attentions = self.transformer(
             hidden_states,
-            attention_mask = attention_mask,
-            past_key_values = past_key_values,
-            use_cache = use_cache,
-            output_attentions = output_attentions,
-            output_hidden_states = output_hidden_states,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         if not return_dict:
@@ -781,3 +743,150 @@ class YalmModel(YalmPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+
+@add_start_docstrings(
+    """
+    YaLM Model with a `language modeling` head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    YALM_START_DOCSTRING,
+)
+class YalmCausalLM(YalmPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+
+    def __init__(self, config: YalmConfig):
+        super().__init__(config)
+
+        self.yalm = YalmModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.padded_vocab_size, bias=False)
+        self.out_bias = torch.nn.Parameter(
+            torch.zeros(
+                config.padded_vocab_size,
+            )
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_output_embeddings(self):
+        return self.embed_out
+
+    def set_output_embeddings(self, new_embeddings):
+        self.embed_out = new_embeddings
+
+    @add_start_docstrings_to_model_forward(YALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are
+            only required when the model is used as a decoder in a Sequence to Sequence model.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
+            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, YalmForCausalLM, YalmConfig
+        >>> import torch
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("TODO")
+        >>> config = YalmConfig.from_pretrained("TODO")
+        >>> config.is_decoder = True
+        >>> model = YalmForCausalLM.from_pretrained("TODO", config=config)
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.yalm(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        lm_logits = self.embed_out(hidden_states) + self.out_bias
+
+        lm_loss = None
+        if labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            shift_logits = lm_logits[:, :-1, :].contiguous()
+            labels = labels[:, 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((lm_loss,) + output) if lm_loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=lm_loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+        input_shape = input_ids.shape
+
+        # cut decoder_input_ids if past is used
+        if past_key_values and past_key_values[0] is not None:
+            input_ids = input_ids[:, -1:]
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+        }
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
