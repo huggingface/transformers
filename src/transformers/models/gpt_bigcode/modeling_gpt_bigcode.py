@@ -1106,7 +1106,6 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2ForSequenceClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
