@@ -1075,12 +1075,13 @@ class UMT5Stack(UMT5PreTrainedModel):
 
             hidden_states, present_key_value_state = layer_outputs[:2]
 
+            # In UMT5 we should not share position biases across layers
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+            # position_bias = layer_outputs[2]
+            # if self.is_decoder and encoder_hidden_states is not None:
+            #     encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)

@@ -221,12 +221,13 @@ class FlaxUMT5Attention(nn.Module):
             dtype=self.dtype,
         )
 
-        self.relative_attention_bias = nn.Embed(
-            self.relative_attention_num_buckets,
-            self.n_heads,
-            embedding_init=jax.nn.initializers.normal(kv_init_std),
-            dtype=self.dtype,
-        )
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = nn.Embed(
+                self.relative_attention_num_buckets,
+                self.n_heads,
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
+                dtype=self.dtype,
+            )
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -702,10 +703,11 @@ class FlaxUMT5BlockCollection(nn.Module):
 
             hidden_states = layer_outputs[0]
 
+            # In UMT5 we don't share position biases across layers
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[1]
+            # position_bias = layer_outputs[1]
 
             if self.causal and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
