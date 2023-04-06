@@ -218,6 +218,13 @@ else:
                     "MT5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "umt5",
+                (
+                    "UMT5Tokenizer" if is_sentencepiece_available() else None,
+                    "UMT5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
