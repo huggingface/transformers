@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigcode/santacoder-fast-inference": "https://huggingface.co/bigcode/santacoder-fast-inference/resolve/main/config.json",
+    "bigcode/gpt_bigcode-santacoder": "https://huggingface.co/bigcode/gpt_bigcode-santacoder/resolve/main/config.json",
 }
 
 

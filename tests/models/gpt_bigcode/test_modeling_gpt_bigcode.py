@@ -98,7 +98,7 @@ class GPTBigCodeModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPTBigCodeConfig.from_pretrained("bigcode/santacoder-fast-inference")
+        return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -548,9 +548,9 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @slow
     def test_batch_generation(self):
-        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder")
         model.to(torch_device)
-        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -609,9 +609,9 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GPTBigCodeDoubleHeadsModel.from_pretrained("bigcode/santacoder-fast-inference")
+        model = GPTBigCodeDoubleHeadsModel.from_pretrained("bigcode/gpt_bigcode-santacoder")
         model.to(torch_device)
-        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
+        tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
         tokenizer.padding_side = "left"
 
@@ -685,7 +685,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 #         verify_outputs=True,
 #     ):
 #         model = GPTBigCodeForCausalLM.from_pretrained(
-#             "bigcode/santacoder-fast-inference",
+#             "bigcode/gpt_bigcode-santacoder",
 #             reorder_and_upcast_attn=reorder_and_upcast_attn,
 #             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
 #         )
@@ -726,8 +726,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 #     @slow
 #     def test_gpt_bigcode_sample(self):
-#         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
-#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
+#         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
+#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder")
 #         model.to(torch_device)
 
 #         torch.manual_seed(0)
@@ -754,8 +754,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 #     @slow
 #     def test_gpt_bigcode_sample_max_time(self):
-#         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/santacoder")
-#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/santacoder-fast-inference")
+#         tokenizer = GPT2TokenizerFast.from_pretrained("bigcode/gpt_bigcode-santacoder")
+#         model = GPTBigCodeForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder")
 #         model.to(torch_device)
 
 #         torch.manual_seed(0)
@@ -799,7 +799,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 class GPTBigCodeAttentionTest(unittest.TestCase):
     def get_attention(self, attention_type):
         config = GPTBigCodeConfig.from_pretrained(
-            "bigcode/santacoder-fast-inference",
+            "bigcode/gpt_bigcode-santacoder",
             attention_type=attention_type,
             attn_pdrop=0,
             resid_pdrop=0,
