@@ -960,7 +960,7 @@ class FlaxUMT5PreTrainedModel(FlaxPreTrainedModel):
 
         attention_mask = jnp.ones_like(input_ids)
         args = [input_ids, attention_mask]
-        if self.module_class not in [FlaxT5EncoderModule]:
+        if self.module_class not in [FlaxUMT5EncoderModule]:
             decoder_input_ids = jnp.ones_like(input_ids)
             decoder_attention_mask = jnp.ones_like(input_ids)
             args.extend([decoder_input_ids, decoder_attention_mask])
