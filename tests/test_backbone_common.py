@@ -103,6 +103,8 @@ class BackboneTesterMixin:
             model.eval()
             result = model(**inputs_dict)
 
+            self.assertEqual(len(result.feature_maps), len(config.out_features))
+            self.assertEqual(len(model.channels), len(config.out_features))
             self.assertEqual(len(result.feature_maps), len(config.out_indices))
             self.assertEqual(len(model.channels), len(config.out_indices))
 
