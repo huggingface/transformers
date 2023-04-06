@@ -1284,7 +1284,7 @@ num_heads)`.
 
 @add_start_docstrings(
     "The bare UMT5 Model transformer outputting raw hidden-states without any specific head on top.",
-    MT5_START_DOCSTRING,
+    UMT5_START_DOCSTRING,
 )
 class UMT5Model(UMT5PreTrainedModel):
     r"""
