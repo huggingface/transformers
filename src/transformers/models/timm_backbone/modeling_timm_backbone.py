@@ -58,7 +58,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             raise ValueError("use_pretrained_backbone is not set in the config. Please set it to True or False.")
 
         # We just take the final layer by default. This matches the default for the transformers models.
-        out_indices = config.out_indices if config.out_indices is not None else (-1,)
+        out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
 
         self._backbone = timm.create_model(
             config.backbone,
@@ -69,7 +69,8 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             out_indices=out_indices,
             **kwargs,
         )
-        # These are used to control the output of the model.
+        # These are used to control the output of the model when called. If output_hidden_states is True, then
+        # return_layers is modified to include all layers.
         self._return_layers = self._backbone.return_layers
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
