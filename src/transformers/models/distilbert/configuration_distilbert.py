@@ -118,6 +118,7 @@ class DistilBertConfig(PretrainedConfig):
         attention_dropout=0.1,
         activation="gelu",
         initializer_range=0.02,
+        layer_norm_eps=1e-12,
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
@@ -134,6 +135,7 @@ class DistilBertConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation = activation
         self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
         super().__init__(**kwargs, pad_token_id=pad_token_id)

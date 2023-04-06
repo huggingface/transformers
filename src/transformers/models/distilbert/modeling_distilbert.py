@@ -27,11 +27,12 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import get_activation
+from ...activations import ACT2FN, get_activation
 from ...configuration_utils import PretrainedConfig
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
-    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -104,7 +105,7 @@ class Embeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None, past_key_values_length: int = 0) -> torch.Tensor:
         """
         Parameters:
             input_ids (torch.Tensor):
@@ -129,6 +130,7 @@ class Embeddings(nn.Module):
         else:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+            position_ids = position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
@@ -156,6 +158,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
+        self.is_decoder = config.is_decoder
+
         self.pruned_heads: Set[int] = set()
         self.attention_head_size = self.dim // self.n_heads
 
@@ -180,8 +184,11 @@ class MultiHeadSelfAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        mask: torch.Tensor,
+        attention_mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, ...]:
         """
@@ -189,20 +196,23 @@ class MultiHeadSelfAttention(nn.Module):
             query: torch.tensor(bs, seq_length, dim)
             key: torch.tensor(bs, seq_length, dim)
             value: torch.tensor(bs, seq_length, dim)
-            mask: torch.tensor(bs, seq_length)
+            attention_mask: torch.tensor(bs, seq_length)
 
         Returns:
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+        is_cross_attention = encoder_hidden_states is not None
+
         bs, q_length, dim = query.size()
-        k_length = key.size(1)
+        if is_cross_attention:
+            k_length = encoder_hidden_states.size(1)
+        else:
+            k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
 
         dim_per_head = self.dim // self.n_heads
-
-        mask_reshp = (bs, 1, 1, k_length)
 
         def shape(x: torch.Tensor) -> torch.Tensor:
             """separate heads"""
@@ -212,32 +222,64 @@ class MultiHeadSelfAttention(nn.Module):
             """group heads"""
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
-        q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
-        k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-        v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+                # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        if is_cross_attention and past_key_values is not None:
+            # reuse key,value, cross_attentions
+            key = past_key_values[0]
+            value = past_key_values[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key = shape(self.k_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(encoder_hidden_states))  # (bs, n_heads, k_length, dim_per_head)
+            attention_mask = encoder_attention_mask
+        elif past_key_values is not None:
+            key = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            key = torch.cat([past_key_values[0], key], dim=2)
+            value = torch.cat([past_key_values[1], value], dim=2)
+        else:
+            key = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+            value = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
-        scores = scores.masked_fill(
-            mask, torch.tensor(torch.finfo(scores.dtype).min)
-        )  # (bs, n_heads, q_length, k_length)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_values = (key, value)
+        query = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
 
-        weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
+        query = query / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        scores = torch.matmul(query, key.transpose(-1, -2))  # (bs, n_heads, q_length, k_length)
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in DistilBertModel forward() function)
+            scores += attention_mask
+
+        weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
+        context = torch.matmul(weights, value)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
         if output_attentions:
-            return (context, weights)
+            context = (context, weights)
         else:
-            return (context,)
+            context = (context,)
+
+        if self.is_decoder:
+            context = context + (past_key_values,)
+        return context
 
 
 class FFN(nn.Module):
@@ -270,6 +312,11 @@ class TransformerBlock(nn.Module):
             raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            self.crossattention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -277,9 +324,12 @@ class TransformerBlock(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, ...]:
         """
@@ -291,49 +341,89 @@ class TransformerBlock(nn.Module):
             sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         # Self-Attention
-        sa_output = self.attention(
-            query=x,
-            key=x,
-            value=x,
-            mask=attn_mask,
+        self_attention_outputs = self.attention(
+            query=hidden_states,
+            key=hidden_states,
+            value=hidden_states,
+            attention_mask=attn_mask,
             head_mask=head_mask,
+            past_key_values=self_attn_past_key_value,
             output_attentions=output_attentions,
         )
-        if output_attentions:
-            sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
-        else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            if type(sa_output) != tuple:
-                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
+        sa_output = self_attention_outputs[0]
 
-            sa_output = sa_output[0]
-        sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            assert hasattr(
+                self, "crossattention"
+            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attention_outputs = self.crossattention(
+                query=sa_output,
+                key=sa_output,
+                value=sa_output,
+                attention_mask=attn_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+            )
+            sa_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+        sa_output = self.sa_layer_norm(sa_output + hidden_states)  # (bs, seq_length, dim)
 
         # Feed Forward Network
         ffn_output = self.ffn(sa_output)  # (bs, seq_length, dim)
         ffn_output: torch.Tensor = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
 
-        output = (ffn_output,)
-        if output_attentions:
-            output = (sa_weights,) + output
-        return output
+        outputs = (ffn_output,) + outputs
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
+
+        return outputs
 
 
 class Transformer(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
+        self.config = config
         self.n_layers = config.n_layers
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
 
     def forward(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+    ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -350,36 +440,99 @@ class Transformer(nn.Module):
         """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        hidden_state = x
+        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_state,)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                x=hidden_state, attn_mask=attn_mask, head_mask=head_mask[i], output_attentions=output_attentions
+                hidden_states=hidden_states,
+                attn_mask=attn_mask,
+                head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values[i] if past_key_values is not None else None,
+                output_attentions=output_attentions,
             )
-            hidden_state = layer_outputs[-1]
 
+            hidden_states = layer_outputs[0]
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
-                if len(layer_outputs) != 2:
-                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
+                all_attentions = all_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-                attentions = layer_outputs[0]
-                all_attentions = all_attentions + (attentions,)
-            else:
-                if len(layer_outputs) != 1:
-                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
-
-        # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_state,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
+
+
+class DistilBertPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.activation, str):
+            self.transform_act_fn = ACT2FN[config.activation]
+        else:
+            self.transform_act_fn = config.activation
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class DistilBertLMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = DistilBertPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
+class DistilBertOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = DistilBertLMPredictionHead(config)
+
+    def forward(self, sequence_output):
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
@@ -470,6 +623,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 class DistilBertModel(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
+        self.config = config
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
@@ -542,19 +696,24 @@ class DistilBertModel(DistilBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple[torch.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -565,15 +724,35 @@ class DistilBertModel(DistilBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
@@ -581,13 +760,147 @@ class DistilBertModel(DistilBertPreTrainedModel):
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
         return self.transformer(
-            x=embeddings,
-            attn_mask=attention_mask,
+            hidden_states=embeddings,
+            attn_mask=extended_attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+@add_start_docstrings(
+    """DistilBERT Model with a `language modeling` head on top for CLM fine-tuning.""", DISTILBERT_START_DOCSTRING
+)
+class DistilBertForCausalLM(DistilBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        if not config.is_decoder:
+            logger.warning("If you want to use `DistilBertLMHeadModel` as a standalone, add `is_decoder=True.`")
+
+        self.distilbert = DistilBertModel(config)
+        self.cls = DistilBertOnlyMLMHead(config)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.cls.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        position_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        encoder_hidden_states  (:
+            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
+            configured as a decoder.
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
+            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import DistilBertTokenizer, DistilBertLMHeadModel, DistilBertConfig
+        >>> import torch
+
+        >>> tokenizer = DistilBertTokenizer.from_pretrained("bert-base-cased")
+        >>> config = DistilBertConfig.from_pretrained("bert-base-cased")
+        >>> config.is_decoder = True
+        >>> model = DistilBertLMHeadModel.from_pretrained("bert-base-cased", config=config, return_dict=True)
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        outputs = self.distilbert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
+
+        lm_loss = None
+        if labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            labels = labels[:, 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[1:]
+            return ((lm_loss,) + output) if lm_loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=lm_loss,
+            logits=prediction_scores,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
 
 @add_start_docstrings(
@@ -648,6 +961,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -666,6 +980,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -745,6 +1060,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -763,6 +1079,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -862,6 +1179,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
@@ -885,6 +1203,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -978,6 +1297,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -994,6 +1314,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1070,6 +1391,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids=None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1120,6 +1442,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
