@@ -157,10 +157,10 @@ class GPTSanJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         if pipeline_test_casse_name == "SummarizationPipelineTests":
-            # `_reorder_cache` is not implemented for this model
+            # TODO: fix `_reorder_cache` is not implemented for this model
             return True
         elif pipeline_test_casse_name == "Text2TextGenerationPipelineTests":
-            # ...
+            # TODO: check this.
             return True
 
         return False

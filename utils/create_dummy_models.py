@@ -1347,7 +1347,7 @@ def update_tiny_model_summary_file(report_path):
             for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
                 # we might get duplication here. We will remove them below when creating `updated_data`.
                 data[key][attr].extend(value[attr])
-            new_sha = value["sha"]
+            new_sha = value.get("sha", None)
             if new_sha is not None:
                 data[key]["sha"] = new_sha
 
