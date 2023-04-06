@@ -23,10 +23,6 @@ from transformers.testing_utils import require_torch, torch_device
 class BackboneTesterMixin:
     all_model_classes = ()
     has_attentions = True
-    is_training = False
-    test_pruning = False
-    test_resize_embeddings = False
-    test_head_masking = False
 
     def test_config(self):
         config_class = self.config_class

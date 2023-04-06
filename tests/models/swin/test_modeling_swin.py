@@ -515,4 +515,3 @@ class SwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)

@@ -337,4 +337,3 @@ class ResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ResNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)

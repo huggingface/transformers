@@ -318,4 +318,3 @@ class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)

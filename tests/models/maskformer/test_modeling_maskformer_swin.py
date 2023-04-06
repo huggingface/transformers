@@ -408,8 +408,8 @@ class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)
 
+    # Overriding as returned hidden states are tuples of tensors instead of a single tensor
     def test_backbone_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         batch_size = inputs_dict["pixel_values"].shape[0]

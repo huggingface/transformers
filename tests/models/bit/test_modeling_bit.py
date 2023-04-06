@@ -332,4 +332,3 @@ class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BitConfig, has_text_modality=False)

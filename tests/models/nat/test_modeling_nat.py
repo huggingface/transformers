@@ -394,4 +394,3 @@ class NatBackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = NatModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NatConfig, embed_dim=37)
