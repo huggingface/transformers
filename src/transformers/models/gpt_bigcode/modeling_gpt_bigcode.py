@@ -161,9 +161,9 @@ class GPTBigCodeAttention(nn.Module):
             query = query.reshape(batch_size * self.num_heads, query_length, self.head_dim)
             # No copy when layer_past is provided.
             key = key.reshape(batch_size * self.num_heads, self.head_dim, key_length)
-        attn_weights = torch.baddbmm(
-            torch.empty(attn_view, dtype=query.dtype, device=query.device), query, key, beta=0, alpha=scale_factor
-        ).view(attn_shape)
+
+        zeros = torch.zeros(attn_view, dtype=query.dtype, device=query.device)
+        attn_weights = torch.baddbmm(zeros, query, key, beta=1, alpha=scale_factor).view(attn_shape)
 
         if upcast:
             # Use a fused kernel to prevent a large overhead from casting and scaling.
@@ -176,8 +176,10 @@ class GPTBigCodeAttention(nn.Module):
         else:
             if attention_mask is not None:
                 mask_value = self._get_mask_value(attn_weights.device, softmax_dtype)
+
                 # The fused kernel is very slow when the key length is not a multiple of 8, so we skip fusion.
                 attn_weights = torch.where(attention_mask, attn_weights, mask_value)
+
             attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1)
 
         attn_weights = self.attn_dropout(attn_weights)

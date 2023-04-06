@@ -501,6 +501,14 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Skip contrastive search")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Skip contrastive search")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
     @unittest.skip("CPU offload seems to be broken for some reason")
     def test_cpu_offload():
         pass
