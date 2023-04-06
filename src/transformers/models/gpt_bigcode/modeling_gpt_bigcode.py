@@ -143,15 +143,16 @@ class GPTBigCodeAttention(nn.Module):
         batch_size = query_shape[0]
         key_length = key.size(-1)
         if self.multi_query:
-            # (batch_size, query_length, num_heads, head_dim) x (batch_size, head_dim, key_length) -> (batch_size, query_length, num_heads, key_length)
+            # (batch_size, query_length, num_heads, head_dim) x (batch_size, head_dim, key_length)
+            # -> (batch_size, query_length, num_heads, key_length)
             query_length = query_shape[1]
             attn_shape = (batch_size, query_length, self.num_heads, key_length)
             attn_view = (batch_size, query_length * self.num_heads, key_length)
             # No copy needed for MQA 2, or when layer_past is provided.
             query = query.reshape(batch_size, query_length * self.num_heads, self.head_dim)
         else:
-            # (batch_size, num_heads, query_length, head_dim) x (batch_size, num_heads, head_dim, key_length) -> (batch_size, num_heads, query_length, key_length)
-            # (b, nh, sq, hs) x (b, nh, hs, sk) -> (b, nh, sq, sk)
+            # (batch_size, num_heads, query_length, head_dim) x (batch_size, num_heads, head_dim, key_length)
+            # -> (batch_size, num_heads, query_length, key_length)
             query_length = query_shape[2]
             attn_shape = (batch_size, self.num_heads, query_length, key_length)
             attn_view = (batch_size * self.num_heads, query_length, key_length)
