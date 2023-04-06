@@ -469,7 +469,7 @@ class FlaxUMT5LayerSelfAttention(nn.Module):
     def setup(self):
         self.SelfAttention = FlaxUMT5Attention(
             self.config,
-            has_relative_attention_bias=self.has_relative_attention_bias,
+            has_relative_attention_bias=True,
             causal=self.config.causal,
             dtype=self.dtype,
         )
@@ -542,7 +542,7 @@ class FlaxUMT5Block(nn.Module):
         self.layer = (
             FlaxUMT5LayerSelfAttention(
                 self.config,
-                has_relative_attention_bias=self.has_relative_attention_bias,
+                has_relative_attention_bias=True,
                 name=str(0),
                 dtype=self.dtype,
             ),
@@ -612,7 +612,7 @@ class FlaxUMT5LayerCollection(nn.Module):
 
     def setup(self):
         self.layer = FlaxUMT5Block(
-            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+            self.config, has_relative_attention_bias=True, dtype=self.dtype
         )
 
     def __call__(
