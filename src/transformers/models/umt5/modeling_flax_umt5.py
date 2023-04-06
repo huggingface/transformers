@@ -221,13 +221,13 @@ class FlaxUMT5Attention(nn.Module):
             dtype=self.dtype,
         )
 
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embed(
-                self.relative_attention_num_buckets,
-                self.n_heads,
-                embedding_init=jax.nn.initializers.normal(kv_init_std),
-                dtype=self.dtype,
-            )
+
+        self.relative_attention_bias = nn.Embed(
+            self.relative_attention_num_buckets,
+            self.n_heads,
+            embedding_init=jax.nn.initializers.normal(kv_init_std),
+            dtype=self.dtype,
+        )
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
