@@ -43,7 +43,6 @@ if is_torch_available():
 
 
 class GPTBigCodeModelTester:
-    # TODO: Update the tests to use valid pretrained models.
     def __init__(
         self,
         parent,
@@ -68,6 +67,7 @@ class GPTBigCodeModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        multi_query=False,
         scope=None,
     ):
         self.parent = parent
@@ -96,6 +96,7 @@ class GPTBigCodeModelTester:
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 2
         self.pad_token_id = vocab_size - 3
+        self.multi_query = multi_query
 
     def get_large_model_config(self):
         return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
@@ -169,7 +170,7 @@ class GPTBigCodeModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             attention_softmax_in_fp32=False,
             scale_attention_softmax_in_fp32=False,
-            multi_query=False,
+            multi_query=self.multi_query,
         )
 
     def get_pipeline_config(self):
@@ -409,6 +410,115 @@ class GPTBigCodeModelTester:
 
 
 @require_torch
+class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    # TODO: Update the tests to use valid pretrained models.
+    all_model_classes = (
+        (
+            GPTBigCodeModel,
+            GPTBigCodeForCausalLM,
+            GPTBigCodeForSequenceClassification,
+            GPTBigCodeForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    all_generative_model_classes = (GPTBigCodeForCausalLM,) if is_torch_available() else ()
+    fx_compatible = False
+    test_missing_keys = False
+    test_pruning = False
+    test_torchscript = False
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTBigCodeModel,
+            "text-classification": GPTBigCodeForSequenceClassification,
+            "text-generation": GPTBigCodeForCausalLM,
+            "token-classification": GPTBigCodeForTokenClassification,
+            "zero-shot": GPTBigCodeForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # special case for DoubleHeads model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        return inputs_dict
+
+    def setUp(self):
+        self.model_tester = GPTBigCodeModelTester(self, multi_query=True)
+        self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
+
+    def tearDown(self):
+        import gc
+
+        gc.collect()
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip("MQA models does not support retain_grad")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Skip contrastive search due to new caching mechanism due to new caching mechanism")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Skip contrastive search due to new caching mechanism")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("CPU offload seems to be broken for some reason")
+    def test_cpu_offload():
+        pass
+
+    def test_gpt_bigcode_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_model(*config_and_inputs)
+
+    def test_gpt_bigcode_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_model_past(*config_and_inputs)
+
+    def test_gpt_bigcode_model_att_mask_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_model_attention_mask_past(*config_and_inputs)
+
+    def test_gpt_bigcode_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_model_past_large_inputs(*config_and_inputs)
+
+    def test_gpt_bigcode_lm_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_gpt_bigcode_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_for_sequence_classification(*config_and_inputs)
+
+    def test_gpt_bigcode_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_for_token_classification(*config_and_inputs)
+
+    def test_gpt_bigcode_gradient_checkpointing(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+
+    def test_gpt_bigcode_scale_attn_by_inverse_layer_idx(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+
+    def test_gpt_bigcode_reorder_and_upcast_attn(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(reorder_and_upcast_attn=True)
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+
+    def test_gpt_bigcode_weight_initialization(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_bigcode_weight_initialization(*config_and_inputs)
+
+
+@require_torch
 class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # TODO: Update the tests to use valid pretrained models.
     all_model_classes = (
@@ -456,11 +566,11 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Skip contrastive search")
+    @unittest.skip("Skip contrastive search due to new caching mechanism")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("Skip contrastive search")
+    @unittest.skip("Skip contrastive search due to new caching mechanism")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
