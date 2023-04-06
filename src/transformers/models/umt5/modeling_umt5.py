@@ -1857,7 +1857,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
 
 @add_start_docstrings(
     "The bare MT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
-    MT5_START_DOCSTRING,
+    UMT5_START_DOCSTRING,
 )
 class UMT5EncoderModel(UMT5PreTrainedModel):
     r"""
