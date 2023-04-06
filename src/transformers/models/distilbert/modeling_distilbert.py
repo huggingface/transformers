@@ -207,11 +207,7 @@ class MultiHeadSelfAttention(nn.Module):
         """
         is_cross_attention = encoder_hidden_states is not None
 
-        bs, q_length, dim = query.size()
-        if is_cross_attention:
-            k_length = encoder_hidden_states.size(1)
-        else:
-            k_length = key.size(1)
+        bs, _, _ = query.size()
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
 
