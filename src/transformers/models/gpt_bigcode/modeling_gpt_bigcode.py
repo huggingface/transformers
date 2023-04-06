@@ -202,8 +202,8 @@ class GPTBigCodeAttention(nn.Module):
         else:
             attn_output = torch.matmul(attn_weights, value)
 
-        if self.multi_query:
-            attn_weights = attn_weights.permute(0, 2, 1, 3)
+        # if self.multi_query:
+        #    attn_weights = attn_weights.permute(0, 2, 1, 3)
 
         return attn_output, attn_weights
 
@@ -698,6 +698,12 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if self.config.multi_query and output_attentions:
+            all_permuted_self_attentions = ()
+            for attentions in all_self_attentions:
+                all_permuted_self_attentions += (attentions.permute(0, 2, 1, 3),)
+            all_self_attentions = all_permuted_self_attentions
 
         if not return_dict:
             return tuple(
