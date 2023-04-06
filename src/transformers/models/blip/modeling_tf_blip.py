@@ -1020,7 +1020,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         )
 
         pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        text_features = self.blip.text_projection(pooled_output)
 
         return text_features
 
@@ -1057,7 +1057,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         vision_outputs = self.blip.vision_model(pixel_values=pixel_values, return_dict=return_dict)
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.blip.visual_projection(pooled_output)
 
         return image_features
 
@@ -1410,7 +1410,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
-        >>> loss.backward()
 
         >>> # inference
         >>> text = "How many cats are in the picture?"
