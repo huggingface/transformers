@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch GPTBigCode model."""
 import math
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -30,14 +29,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_gpt_bigcode import GPTBigCodeConfig
 
@@ -402,48 +399,6 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTBigCodeModel):
             module.gradient_checkpointing = value
-
-
-@dataclass
-class GPTBigCodeDoubleHeadsModelOutput(ModelOutput):
-    """
-    Base class for outputs of models predicting if two sentences are consecutive or not.
-
-    Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        mc_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
-            Multiple choice classification loss.
-        logits (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mc_logits (`torch.Tensor` of shape `(batch_size, num_choices)`):
-            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        past_key_values (`Tuple[torch.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of length `config.n_layers`, containing tuples of tensors of shape `(batch_size, num_heads,
-            sequence_length, embed_size_per_head)`).
-
-            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            GPTBigCodeAttentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-    """
-
-    loss: Optional[torch.Tensor] = None
-    mc_loss: Optional[torch.Tensor] = None
-    logits: torch.Tensor = None
-    mc_logits: torch.Tensor = None
-    past_key_values: Optional[Tuple[torch.Tensor]] = None
-    hidden_states: Optional[Tuple[torch.Tensor]] = None
-    attentions: Optional[Tuple[torch.Tensor]] = None
 
 
 GPT_BIGCODE_START_DOCSTRING = r"""
@@ -883,189 +838,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
             cross_attentions=transformer_outputs.cross_attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        # return tuple(
-        #    tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-        #    for layer_past in past_key_values
-        # )
-        return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
-
-
-# TODO: Fix type hints?
-# TODO: Add copy comment?
-# TODO: Does this work?
-@add_start_docstrings(
-    """
-The GPTBigCode Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-input embeddings, the classification head takes as input the input of a specified classification token index in the
-input sequence).
-""",
-    GPT_BIGCODE_START_DOCSTRING,
-)
-class GPTBigCodeDoubleHeadsModel(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        config.num_labels = 1
-        self.transformer = GPTBigCodeModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.multiple_choice_head = SequenceSummary(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-
-    @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GPTBigCodeDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        mc_token_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        mc_labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[Tuple, GPTBigCodeDoubleHeadsModelOutput]:
-        r"""
-        mc_token_ids (`torch.Tensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
-            Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
-            1]`.
-        labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids`. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to
-            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`
-        mc_labels (`torch.Tensor` of shape `(batch_size)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
-            where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
-
-        Return:
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import AutoTokenizer, GPTBigCodeDoubleHeadsModel
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt_bigcode")
-        >>> model = GPTBigCodeDoubleHeadsModel.from_pretrained("gpt_bigcode")
-
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
-        >>> # Update the model embeddings with the new vocabulary size
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))
-
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
-        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
-
-        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
-
-        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_logits = outputs.logits
-        >>> mc_logits = outputs.mc_logits
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.transformer(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = transformer_outputs[0]
-
-        lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
-
-        mc_loss = None
-        if mc_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
-        lm_loss = None
-        if labels is not None:
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits, mc_logits) + transformer_outputs[1:]
-            if mc_loss is not None:
-                output = (mc_loss,) + output
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return GPTBigCodeDoubleHeadsModelOutput(
-            loss=lm_loss,
-            mc_loss=mc_loss,
-            logits=lm_logits,
-            mc_logits=mc_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
         )
 
     @staticmethod

@@ -33,7 +33,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_gpt_bigcode"] = [
         "GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTBigCodeDoubleHeadsModel",
         "GPTBigCodeForSequenceClassification",
         "GPTBigCodeForTokenClassification",
         "GPTBigCodeForCausalLM",
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTBigCodeDoubleHeadsModel,
             GPTBigCodeForCausalLM,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,

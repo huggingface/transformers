@@ -3156,13 +3156,6 @@ def load_tf_weights_in_gpt2(*args, **kwargs):
 GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GPTBigCodeDoubleHeadsModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class GPTBigCodeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
