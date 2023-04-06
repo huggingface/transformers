@@ -327,15 +327,12 @@ class FlaxUMT5Attention(nn.Module):
         key_length = key_states.shape[1]
         query_length = key_length if cache_is_filled else query_states.shape[1]
 
-        '''
         if self.has_relative_attention_bias:
             position_bias = self.compute_bias(query_length, key_length)
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
             position_bias = jnp.zeros((1, self.n_heads, query_length, key_length), dtype=self.dtype)
-        '''
-        position_bias = self.compute_bias(query_length, key_length)
 
         # if key and values are already calculated, only the last query position bias should be taken
         if cache_is_filled:
