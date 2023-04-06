@@ -38,7 +38,6 @@ if is_torch_available():
         GPTBigCodeForTokenClassification,
         GPTBigCodeModel,
     )
-    from transformers.models.gpt_bigcode.configuration_gpt_bigcode import AttentionType
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
 
@@ -795,80 +794,56 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 
 @require_torch
-@unittest.skip("Skip these tests for now")
-class GPTBigCodeAttentionTest(unittest.TestCase):
-    def get_attention(self, attention_type):
+class GPTBigCodeMQATest(unittest.TestCase):
+    def get_attention(self, multi_query):
         config = GPTBigCodeConfig.from_pretrained(
             "bigcode/gpt_bigcode-santacoder",
-            attention_type=attention_type,
+            multi_query=multi_query,
             attn_pdrop=0,
             resid_pdrop=0,
         )
         return GPTBigCodeAttention(config)
 
     @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])
-    def test_mqa_correctness(self, seed, is_train_mode=True):
+    def test_mqa_reduces_to_mha(self, seed, is_train_mode=True):
         torch.manual_seed(seed)
-        embed_dim = 2048
-        head_dim = 128
 
-        # GET THE WEIGHTS FROM MULTI-QUERY ATTENTION 1
-        attention_mq1 = self.get_attention(AttentionType.MULTI_QUERY_1)
-        state_dict_mq1 = attention_mq1.state_dict()
-        # attn_weight, attn_k_weight, attn_v_weight = torch.split(
-        #     state_dict_mq1["c_attn.weight"], [embed_dim, head_dim, head_dim], dim=1
-        # )
-        attn_weight = state_dict_mq1["c_attn.weight"][:embed_dim, :].T
-        attn_k_weight = state_dict_mq1["c_attn.weight"][embed_dim : embed_dim + head_dim, :].T
-        attn_v_weight = state_dict_mq1["c_attn.weight"][embed_dim + head_dim :, :].T
+        # CREATE MQA AND MHA ATTENTIONS
+        attention_mqa = self.get_attention(True)
+        attention_mh = self.get_attention(False)
 
-        # attn_bias, attn_k_bias, attn_v_bias = torch.split(
-        #     state_dict_mq1["c_attn.bias"], [embed_dim, head_dim, head_dim], dim=0
-        # )
-        attn_bias = state_dict_mq1["c_attn.bias"][:embed_dim].T
-        attn_k_bias = state_dict_mq1["c_attn.bias"][embed_dim : embed_dim + head_dim].T
-        attn_v_bias = state_dict_mq1["c_attn.bias"][embed_dim + head_dim :].T
+        # ENFORCE MATCHING WEIGHTS
+        num_heads = attention_mqa.num_heads
+        embed_dim = attention_mqa.embed_dim
+        head_dim = attention_mqa.head_dim
 
-        proj = state_dict_mq1["c_proj.weight"]
-        proj_bias = state_dict_mq1["c_proj.bias"]
+        with torch.no_grad():
+            mqa_q_weight = attention_mqa.c_attn.weight[:embed_dim, :].view(num_heads, 1, head_dim, embed_dim)
+            mqa_kv_weight = attention_mqa.c_attn.weight[embed_dim:, :].view(1, 2, head_dim, embed_dim)
+            mha_c_weight = torch.cat(
+                [mqa_q_weight, mqa_kv_weight.expand(num_heads, 2, head_dim, embed_dim)], dim=1
+            ).view(3 * num_heads * head_dim, embed_dim)
 
-        # PUT THEM INTO THE MULTI-HEAD ATTENTION
-        num_heads = 16
-        c_attn_weight = torch.hstack([attn_weight] + num_heads * [attn_k_weight] + num_heads * [attn_v_weight])
-        c_attn_bias = torch.hstack([attn_bias] + num_heads * [attn_k_bias] + num_heads * [attn_v_bias])
-        attention_mh = self.get_attention(AttentionType.MULTI_HEAD)
-        state_dict = attention_mh.state_dict()
-        state_dict["c_attn.weight"] = c_attn_weight.T
-        state_dict["c_attn.bias"] = c_attn_bias.T
-        state_dict["c_proj.weight"] = proj.T
-        state_dict["c_proj.bias"] = proj_bias.T
-        attention_mh.load_state_dict(state_dict)
+            mqa_q_bias = attention_mqa.c_attn.bias[:embed_dim].view(num_heads, 1, head_dim)
+            mqa_kv_bias = attention_mqa.c_attn.bias[embed_dim:].view(1, 2, head_dim)
+            mha_c_bias = torch.cat([mqa_q_bias, mqa_kv_bias.expand(num_heads, 2, head_dim)], dim=1).view(
+                3 * num_heads * head_dim
+            )
 
-        # PUT THEM INTO THE MULTI-QUERY ATTENTION 2
-        attention_mq2 = self.get_attention(AttentionType.MULTI_QUERY_2)
-        state_dict_mq2 = attention_mq2.state_dict()
-        state_dict_mq2["q_attn.weight"] = attn_weight.T
-        state_dict_mq2["q_attn.bias"] = attn_bias.T
-        state_dict_mq2["kv_attn.weight"] = torch.hstack([attn_k_weight, attn_v_weight]).T
-        state_dict_mq2["kv_attn.bias"] = torch.hstack([attn_k_bias, attn_v_bias]).T
-        state_dict_mq2["c_proj.weight"] = proj.T
-        state_dict_mq2["c_proj.bias"] = proj_bias.T
-        attention_mq2.load_state_dict(state_dict_mq2)
+            attention_mh.c_attn.weight.copy_(mha_c_weight)
+            attention_mh.c_attn.bias.copy_(mha_c_bias)
+            attention_mh.c_proj.weight.copy_(attention_mqa.c_proj.weight)
+            attention_mh.c_proj.bias.copy_(attention_mqa.c_proj.bias)
 
         # PUT THE MODEL INTO THE CORRECT MODE
         attention_mh.train(is_train_mode)
-        attention_mq1.train(is_train_mode)
-        attention_mq2.train(is_train_mode)
+        attention_mqa.train(is_train_mode)
 
         # RUN AN INPUT THROUGH THE MODELS
         num_tokens = 5
         hidden_states = torch.randn(1, num_tokens, embed_dim)
         attention_mh_result = attention_mh(hidden_states)[0]
-        attention_mq1_result = attention_mq1(hidden_states)[0]
-        attention_mq2_result = attention_mq2(hidden_states)[0]
+        attention_mq_result = attention_mqa(hidden_states)[0]
 
         # CHECK THAT ALL OUTPUTS ARE THE SAME
-        tolerance = 1e-5
-        self.assertTrue(torch.allclose(attention_mh_result, attention_mq1_result, atol=tolerance))
-        self.assertTrue(torch.allclose(attention_mh_result, attention_mq2_result, atol=tolerance))
-        self.assertTrue(torch.allclose(attention_mq1_result, attention_mq2_result, atol=tolerance))
+        self.assertTrue(torch.allclose(attention_mh_result, attention_mq_result, atol=1e-5))
