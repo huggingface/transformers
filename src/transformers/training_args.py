@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -59,6 +60,9 @@ from .utils import (
 if is_torch_available():
     import torch
     import torch.distributed as dist
+
+if is_torch_npu_available():
+    import torch_npu
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
@@ -316,6 +320,8 @@ class TrainingArguments:
             The backend to use for xpu distributed training. Must be one of `"mpi"` or `"ccl"` or `"gloo"`.
         tpu_num_cores (`int`, *optional*):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
+        device_id (`int`, *optional*, defaults to 0):
+            The specific device to be used for single card training on Ascend NPUs.
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -819,6 +825,10 @@ class TrainingArguments:
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
+    device_id: Optional[int] = field(
+        default=0,
+        metadata={"help": ("The specific device to be used for single card training on Ascend NPUs")},
+    )
     tpu_metrics_debug: bool = field(
         default=False,
         metadata={
@@ -1245,13 +1255,13 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
-            and (self.device.type != "cuda")
+            and (self.device.type != "cuda" and self.device.type != "npu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or Ascend NPU devices."
             )
 
         if (
@@ -1648,16 +1658,20 @@ class TrainingArguments:
                     self._n_gpu = 1
 
             else:
-                # if n_gpu is > 1 we'll use nn.DataParallel.
-                # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
-                # Explicitly set CUDA to the first (index 0) CUDA device, otherwise `set_device` will
-                # trigger an error that a device index is missing. Index 0 takes into account the
-                # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
-                # will use the first GPU in that env, i.e. GPU#1
-                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-                # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
-                # the default value.
-                self._n_gpu = torch.cuda.device_count()
+                if is_torch_npu_available():
+                    device = torch.device("npu:{}".format(self.device_id))
+                    self._n_gpu = 1
+                else:
+                    # if n_gpu is > 1 we'll use nn.DataParallel.
+                    # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
+                    # Explicitly set CUDA to the first (index 0) CUDA device, otherwise `set_device` will
+                    # trigger an error that a device index is missing. Index 0 takes into account the
+                    # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
+                    # will use the first GPU in that env, i.e. GPU#1
+                    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                    # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
+                    # the default value.
+                    self._n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
@@ -1665,12 +1679,16 @@ class TrainingArguments:
                 if self.xpu_backend and self.xpu_backend in ("mpi", "gloo"):
                     torch.distributed.init_process_group(backend=self.xpu_backend, timeout=self.ddp_timeout_delta)
                 else:
-                    torch.distributed.init_process_group(backend="nccl", timeout=self.ddp_timeout_delta)
-            device = torch.device("cuda", self.local_rank)
+                    torch.distributed.init_process_group(
+                        backend=("hccl" if is_torch_npu_available() else "nccl"), timeout=self.ddp_timeout_delta
+                    )
+            device = torch.device("npu" if is_torch_npu_available() else "cuda", self.local_rank)
             self._n_gpu = 1
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
+        elif device.type == "npu":
+            torch.npu.set_device(device)
 
         return device
 

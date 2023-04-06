@@ -448,6 +448,26 @@ def is_torch_tpu_available(check_device=True):
 
 
 @lru_cache()
+def is_torch_npu_available(check_device=True):
+    """Checks if `torch_npu` is installed and potentially if a Ascend NPU is in the environment"""
+    if not _torch_available:
+        return False
+    if importlib.util.find_spec("torch_npu") is not None:
+        if check_device:
+            # We need to check if `torch.device("npu")` can be found, will raise a RuntimeError if not
+            try:
+                import torch
+                import torch_npu
+
+                device = torch.device("npu")
+                return device.type == "npu"
+            except RuntimeError:
+                return False
+        return True
+    return False
+
+
+@lru_cache()
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_tpu_available(check_device)
