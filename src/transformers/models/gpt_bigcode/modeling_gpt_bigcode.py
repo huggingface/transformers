@@ -1,7 +1,5 @@
 # coding=utf-8
 # Copyright 2023 The Bigcode team and HuggingFace Inc. team.
-# Copyright 2023 The OpenAI Team Authors.
-# Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -168,9 +166,9 @@ class GPTBigCodeAttention(nn.Module):
             attn_weights = torch.baddbmm(zeros, query, key, beta=1, alpha=scale_factor).view(attn_shape)
         else:
             # We do the standard operation on GPU for faster inference
-            attn_weights = torch.baddbmm(torch.empty(attn_view), query, key, beta=0, alpha=scale_factor).view(
-                attn_shape
-            )
+            attn_weights = torch.baddbmm(
+                torch.empty(attn_view, device=query.device, dtype=query.dtype), query, key, beta=0, alpha=scale_factor
+            ).view(attn_shape)
 
         if upcast:
             # Use a fused kernel to prevent a large overhead from casting and scaling.
@@ -836,7 +834,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            shift_labels = labels[..., 1:].contiguous().to(shift_logits.device)
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
@@ -957,6 +955,8 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1060,7 +1060,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1).to(logits.device))
 
         if not return_dict:
             output = (logits,) + transformer_outputs[2:]
