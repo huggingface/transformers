@@ -224,13 +224,13 @@ def add_pipeline_model_mapping(test_class, overwrite=False):
 
     if start_idx is None:
         return "", -1
+    # Find the ending index (inclusive) of the above found block.
     end_idx = find_block_ending(class_lines, start_idx, indent_level)
 
     # Extract `is_xxx_available()` from existing blocks: some models require specific libraries like `timm` and use
     # `is_timm_available()` instead of `is_torch_available()`.
     # Keep leading and trailing whitespaces
     r = re.compile(r"\s(is_\S+?_available\(\))\s")
-    backend_condition = None
     for line in class_lines[start_idx : end_idx + 1]:
         backend_condition = r.search(line)
         if backend_condition is not None:
@@ -240,18 +240,20 @@ def add_pipeline_model_mapping(test_class, overwrite=False):
             break
 
     if def_line is None:
+        # `pipeline_model_mapping` is not defined. The target index is set to the ending index (inclusive) of
+        # `all_model_classes` or `all_generative_model_classes`.
         target_idx = end_idx
     else:
+        # `pipeline_model_mapping` is defined. The target index is set to be one **BEFORE** its start index.
         target_idx = start_idx - 1
-        # Remove existing `pipeline_model_mapping`
-        # `target_idx + 1` is the index for the line defining `target_idx + 1`
+        # Remark the lines of the currently existing `pipeline_model_mapping` to be removed.
         for idx in range(start_idx, end_idx + 1):
             # These lines are going to be removed before writing to the test file.
             class_lines[idx] = None  # noqa
 
     # Add indentation
     line_to_add = " " * indent_level + line_to_add
-    # Insert `pipeline_model_mapping` to `class_lines`
+    # Insert `pipeline_model_mapping` to `class_lines`.
     # (The line at `target_idx` should be kept by definition!)
     class_lines = class_lines[: target_idx + 1] + [line_to_add] + class_lines[target_idx + 1 :]
     # Remove the lines that are marked to be removed
