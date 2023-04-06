@@ -179,7 +179,7 @@ class FlaxUMT5LayerFF(nn.Module):
 
 class FlaxUMT5Attention(nn.Module):
     config: UMT5Config
-    has_relative_attention_bias: bool = False
+    has_relative_attention_bias: bool = True
     causal: bool = False
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -463,7 +463,7 @@ class FlaxUMT5Attention(nn.Module):
 
 class FlaxUMT5LayerSelfAttention(nn.Module):
     config: UMT5Config
-    has_relative_attention_bias: bool = False
+    has_relative_attention_bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -505,7 +505,7 @@ class FlaxUMT5LayerCrossAttention(nn.Module):
 
     def setup(self):
         self.EncDecAttention = FlaxUMT5Attention(
-            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
+            self.config, has_relative_attention_bias=True, causal=False, dtype=self.dtype
         )
         self.layer_norm = FlaxUMT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -534,7 +534,7 @@ class FlaxUMT5LayerCrossAttention(nn.Module):
 
 class FlaxUMT5Block(nn.Module):
     config: UMT5Config
-    has_relative_attention_bias: bool = False
+    has_relative_attention_bias: bool = True
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):

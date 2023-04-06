@@ -206,7 +206,7 @@ class UMT5LayerFF(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
 class UMT5Attention(nn.Module):
-    def __init__(self, config: UMT5Config, has_relative_attention_bias=False):
+    def __init__(self, config: UMT5Config, has_relative_attention_bias=True):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -441,7 +441,7 @@ class UMT5Attention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MT5
 class UMT5LayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config, has_relative_attention_bias=True):
         super().__init__()
         self.SelfAttention = UMT5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -476,7 +476,7 @@ class UMT5LayerSelfAttention(nn.Module):
 class UMT5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=False)
+        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=True)
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -511,7 +511,7 @@ class UMT5LayerCrossAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->MT5
 class UMT5Block(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config, has_relative_attention_bias=True):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
