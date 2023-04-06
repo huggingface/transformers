@@ -790,8 +790,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """DistilBERT Model with a `language modeling` head on top for CLM fine-tuning.""", DISTILBERT_START_DOCSTRING
 )
 class DistilBertForCausalLM(DistilBertPreTrainedModel):
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"cls.predictions.decoder.weight", r"cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -802,7 +801,7 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.cls = DistilBertOnlyMLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
