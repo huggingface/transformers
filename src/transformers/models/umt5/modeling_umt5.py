@@ -1520,7 +1520,7 @@ class UMT5Model(UMT5PreTrainedModel):
         )
 
 
-@add_start_docstrings("""MT5 Model with a `language modeling` head on top.""", MT5_START_DOCSTRING)
+@add_start_docstrings("""UMT5 Model with a `language modeling` head on top.""", UMT5_START_DOCSTRING)
 class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
     r"""
     Examples:
