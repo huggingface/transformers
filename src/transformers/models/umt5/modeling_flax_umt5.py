@@ -1362,11 +1362,11 @@ class FlaxUMT5Module(nn.Module):
         )
 
 
-class FlaxT5Model(FlaxUMT5PreTrainedModel):
+class FlaxUMT5Model(FlaxUMT5PreTrainedModel):
     module_class = FlaxUMT5Module
 
 
-append_call_sample_docstring(FlaxT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(FlaxUMT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 FLAX_UMT5_MODEL_DOCSTRING = """
     Returns:
@@ -1395,8 +1395,8 @@ FLAX_UMT5_MODEL_DOCSTRING = """
 """
 
 
-overwrite_call_docstring(FlaxT5Model, UMT5_INPUTS_DOCSTRING + FLAX_UMT5_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+overwrite_call_docstring(FlaxUMT5Model, UMT5_INPUTS_DOCSTRING + FLAX_UMT5_MODEL_DOCSTRING)
+append_replace_return_docstrings(FlaxUMT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
 
 
 @add_start_docstrings(
@@ -1420,7 +1420,7 @@ class FlaxUMT5EncoderModule(nn.Module):
         encoder_config.is_decoder = False
         encoder_config.is_encoder_decoder = False
         encoder_config.causal = False
-        self.encoder = FlaxT5Stack(
+        self.encoder = FlaxUMT5Stack(
             encoder_config,
             embed_tokens=self.shared,
             dtype=self.dtype,
