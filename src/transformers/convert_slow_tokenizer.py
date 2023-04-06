@@ -19,6 +19,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import warnings
 from typing import Dict, List, Tuple
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -450,7 +451,7 @@ class SpmConverter(Converter):
 
         if self.proto.trainer_spec.byte_fallback:
             if not getattr(self, "handle_byte_fallback", None):
-                raise RuntimeError(
+                warnings.warn(
                     "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
                     " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
                     " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
