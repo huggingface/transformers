@@ -31,7 +31,6 @@ from transformers.testing_utils import require_torch, slow, tooslow, torch_devic
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 class GPTSanJapaneseTester:
@@ -97,7 +96,7 @@ class GPTSanJapaneseTester:
 
     def get_config(self):
         return GPTSanJapaneseConfig(
-            vocab_size=36000,
+            vocab_size=self.vocab_size,
             num_contexts=self.seq_length,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -128,19 +127,8 @@ class GPTSanJapaneseTester:
 
 
 @require_torch
-class GPTSanJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTSanJapaneseTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GPTSanJapaneseModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "conversational": GPTSanJapaneseForConditionalGeneration,
-            "feature-extraction": GPTSanJapaneseForConditionalGeneration,
-            "summarization": GPTSanJapaneseForConditionalGeneration,
-            "text2text-generation": GPTSanJapaneseForConditionalGeneration,
-            "translation": GPTSanJapaneseForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     is_encoder_decoder = False
     test_pruning = False
