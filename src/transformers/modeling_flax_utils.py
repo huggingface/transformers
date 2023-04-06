@@ -14,13 +14,15 @@
 # limitations under the License.
 
 
+import dataclasses
 import gc
 import json
 import os
 import re
+import typing
 from functools import partial
 from pickle import UnpicklingError
-from typing import Any, Dict, Set, Tuple, Union
+from typing import Any, ClassVar, Dict, Mapping, Optional, Set, Tuple, Type, Union
 
 import flax.linen as nn
 import jax
@@ -154,7 +156,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     return shards, index
 
 
-class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
+class FlaxPreTrainedModel(nn.Module, PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
@@ -170,46 +172,57 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
-    config_class = None
-    base_model_prefix = ""
-    main_input_name = "input_ids"
+    # class attributes
+    # Ideally we could just use ClassVars here to indicate the types, but src/transformers/utils/import_utils.py
+    # seems to dislike it. To go around this we add the correct type annotations under TYPE_CHECKING, so
+    # static analyzers pick this up, and fall back to untyped class variables at runtime.
+    if typing.TYPE_CHECKING:
+        config_class: ClassVar[Type[PretrainedConfig]]
+        base_model_prefix: ClassVar[str]
+        main_input_name: ClassVar[str] = "input_ids"
+    else:
+        config_class = None
+        base_model_prefix = None
+        main_input_name = "input_ids"
     _auto_class = None
     _missing_keys = set()
+    # dataclass attributes
+    _config: PretrainedConfig
+    _module: nn.Module
+    input_shape: Tuple[int, ...] = (1, 1)
+    seed: int = 0
+    dtype: jnp.dtype = jnp.float32
+    _do_init: bool = True
+    # derived fields
+    key: jax.random.KeyArray = dataclasses.field(init=False)
+    generation_config: Optional[GenerationConfig] = dataclasses.field(init=False)
+    _is_initialized: bool = dataclasses.field(init=False)
+    _params_shape_tree: Any = dataclasses.field(init=False)
+    _required_params: Set[Any] = dataclasses.field(init=False)
+    _params: Optional[Dict] = dataclasses.field(init=False)
 
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        module: nn.Module,
-        input_shape: Tuple = (1, 1),
-        seed: int = 0,
-        dtype: jnp.dtype = jnp.float32,
-        _do_init: bool = True,
-    ):
-        if config is None:
+    def __post_init__(self):
+        if self._config is None:
             raise ValueError("config cannot be None")
 
-        if module is None:
+        if self._module is None:
             raise ValueError("module cannot be None")
 
-        # Those are private to be exposed as typed property on derived classes.
-        self._config = config
-        self._module = module
-
         # Those are public as their type is generic to every derived classes.
-        self.key = PRNGKey(seed)
-        self.dtype = dtype
-        self.input_shape = input_shape
-        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
+        self.key = PRNGKey(self.seed)
+        
+        
+        self.generation_config = GenerationConfig.from_model_config(self._config) if self.can_generate() else None
 
         # To check if the model was intialized automatically.
-        self._is_initialized = _do_init
+        self._is_initialized = self._do_init
 
-        if _do_init:
+        if self._do_init:
             # randomly initialized parameters
-            random_params = self.init_weights(self.key, input_shape)
+            random_params = self.init_weights(self.key, self.input_shape)
             params_shape_tree = jax.eval_shape(lambda params: params, random_params)
         else:
-            init_fn = partial(self.init_weights, input_shape=input_shape)
+            init_fn = partial(self.init_weights, input_shape=self.input_shape)
             params_shape_tree = jax.eval_shape(init_fn, self.key)
 
             logger.info(
@@ -224,8 +237,21 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
 
         # initialize the parameters
-        if _do_init:
+        if self._do_init:
             self.params = random_params
+
+        # must call super().__post_init__() to setup the flax module
+        super().__post_init__()
+
+    def __init_subclass__(cls, **kwargs):
+        if "__init__" not in cls.__dict__:
+
+            def __init__(self, *args, **kwargs):
+                super(cls, self).__init__(*args, **kwargs)
+
+            cls.__init__ = __init__
+
+        super().__init_subclass__(**kwargs)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")

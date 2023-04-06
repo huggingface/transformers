@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+import dataclasses
+import typing
+from typing import Any, Callable, ClassVar, Optional, Tuple, Type
 
 import flax
 import flax.linen as nn
@@ -764,29 +766,46 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = BertConfig
     base_model_prefix = "bert"
-    module_class: nn.Module = None
+    if typing.TYPE_CHECKING:
+        module_class: ClassVar[Type[nn.Module]]
+    else:
+        module_class = None
 
     def __init__(
         self,
-        config: BertConfig,
+        _config: BertConfig,
+        _module: Any = dataclasses.MISSING,  # unused, defined to comply with dataclass signature
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
+        *,
+        parent=None,
+        name=None,
         **kwargs,
     ):
         module = self.module_class(
-            config=config,
+            config=_config,
             dtype=dtype,
             gradient_checkpointing=gradient_checkpointing,
             **kwargs,
         )
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            _config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+            parent=parent,
+            name=name,
+        )
 
+    @nn.nowrap
     def enable_gradient_checkpointing(self):
         self._module = self.module_class(
-            config=self.config,
+            self.config,
             dtype=self.dtype,
             gradient_checkpointing=True,
         )
@@ -890,63 +909,115 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         if head_mask is None:
             head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
+        if self.scope is None:
+            if not self._do_init and params is None:
+                raise ValueError(
+                    f"{self.__class__.__name__} was initialized with `_do_init=False` but `params` was provided."
+                )
 
-        inputs = {"params": params or self.params}
+            # Handle any PRNG if needed
+            rngs = {}
 
-        if self.config.add_cross_attention:
-            # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
-            # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
-            # changed by FlaxBertAttention module
-            if past_key_values:
-                inputs["cache"] = past_key_values
-                mutable = ["cache"]
+            if dropout_rng is not None:
+                rngs["dropout"] = dropout_rng
+
+            params = params or self.params
+
+            if "_module" in params:
+                params = params["_module"]
+
+            variables = {"params": params}
+
+            if self.config.add_cross_attention:
+                # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
+                # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
+                # changed by FlaxBertAttention module
+                if past_key_values is not None:
+                    variables["cache"] = past_key_values
+                    mutable = ["cache"]
+                else:
+                    mutable = False
+
+                outputs = self.module.apply(
+                    variables,
+                    jnp.array(input_ids, dtype="i4"),
+                    jnp.array(attention_mask, dtype="i4"),
+                    token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                    position_ids=jnp.array(position_ids, dtype="i4"),
+                    head_mask=jnp.array(head_mask, dtype="i4"),
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    deterministic=not train,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                    rngs=rngs,
+                    mutable=mutable,
+                )
+
             else:
-                mutable = False
-
-            outputs = self.module.apply(
-                inputs,
-                jnp.array(input_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                position_ids=jnp.array(position_ids, dtype="i4"),
-                head_mask=jnp.array(head_mask, dtype="i4"),
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                deterministic=not train,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                rngs=rngs,
-                mutable=mutable,
-            )
-
+                outputs = self.module.apply(
+                    variables,
+                    jnp.array(input_ids, dtype="i4"),
+                    jnp.array(attention_mask, dtype="i4"),
+                    token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                    position_ids=jnp.array(position_ids, dtype="i4"),
+                    head_mask=jnp.array(head_mask, dtype="i4"),
+                    deterministic=not train,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                    rngs=rngs,
+                )
+            
             # add updated cache to model output
             if past_key_values is not None and return_dict:
                 outputs, past_key_values = outputs
                 outputs["past_key_values"] = unfreeze(past_key_values["cache"])
-                return outputs
             elif past_key_values is not None and not return_dict:
                 outputs, past_key_values = outputs
                 outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
-
         else:
-            outputs = self.module.apply(
-                inputs,
-                jnp.array(input_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                position_ids=jnp.array(position_ids, dtype="i4"),
-                head_mask=jnp.array(head_mask, dtype="i4"),
-                deterministic=not train,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                rngs=rngs,
-            )
+            if params is not None:
+                raise ValueError(
+                    f"`params` should be passed when {self.__class__.__name__} is bounded to a scope "
+                    "(i.e. when calling this module with `apply`)"
+                )
+            if past_key_values is not None:
+                raise ValueError(
+                    f"`past_key_values` should passed when {self.__class__.__name__} is bounded to a scope."
+                    f"`Instead pass `past_key_values` to `apply` through the `cache` collection."
+                )
+            if self.config.add_cross_attention:
+                outputs = self.module(
+                    jnp.array(input_ids, dtype="i4"),
+                    jnp.array(attention_mask, dtype="i4"),
+                    token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                    position_ids=jnp.array(position_ids, dtype="i4"),
+                    head_mask=jnp.array(head_mask, dtype="i4"),
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    deterministic=not train,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+            else:
+                outputs = self.module(
+                    jnp.array(input_ids, dtype="i4"),
+                    jnp.array(attention_mask, dtype="i4"),
+                    token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                    position_ids=jnp.array(position_ids, dtype="i4"),
+                    head_mask=jnp.array(head_mask, dtype="i4"),
+                    deterministic=not train,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+
+            # remove the cache from the output, the user should retrieve it from the cache collection
+            if self.is_mutable_collection("cache"):
+                outputs, past_key_values = outputs
 
         return outputs
 
