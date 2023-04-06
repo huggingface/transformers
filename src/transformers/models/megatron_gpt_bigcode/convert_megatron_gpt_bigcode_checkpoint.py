@@ -38,7 +38,7 @@ import re
 
 import torch
 
-from transformers import GPTBigCodeConfig, GPTBigCodeLMHeadModel, GPTBigCodeModel
+from transformers import GPTBigCodeConfig, GPTBigCodeForCausalLM, GPTBigCodeModel
 
 
 ####################################################################################################
@@ -94,11 +94,11 @@ def convert_megatron_checkpoint(input_state_dict, merge_qkv):
         # in the very early days this used to be "gelu_new"
         activation_function = "gelu_new"
 
-    if ds_args.attention_head_type == "multihead":
-        attention_type = 1
+    if ds_args.attention_head_type == "multiquery":
+        multi_query=True
     else:
-        assert ds_args.attention_head_type == "multiquery"
-        attention_type = 2 if merge_qkv else 3
+        assert ds_args.attention_head_type == "multihead"
+        multi_query=False
 
     attention_softmax_in_fp32 = ds_args.attention_softmax_in_fp32 or ds_args.apply_query_key_layer_scaling
 
@@ -112,7 +112,7 @@ def convert_megatron_checkpoint(input_state_dict, merge_qkv):
         n_head=ds_args.num_attention_heads,
         n_inner=ds_args.ffn_hidden_size,
         activation_function=activation_function,
-        attention_type=attention_type,
+        multi_query=multi_query,
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
@@ -219,17 +219,6 @@ def main(argv=None):
         help="Path to the checkpoint file (.zip archive or direct .pt file)",
     )
     parser.add_argument(
-        "--no_merge_qkv",
-        dest="merge_qkv",
-        action="store_false",
-        help="Do not merge the query and key_value tensors (MQA).",
-    )
-    parser.add_argument(
-        "--custom_model",
-        action="store_true",
-        help="Save as custom model so it can be used with huggingface transformers.",
-    )
-    parser.add_argument(
         "--save_dir", help="Path where the converted model is saved. Will use the checkpoint directory if not provided"
     )
     args = parser.parse_args(argv)
@@ -243,29 +232,20 @@ def main(argv=None):
 
     # Convert.
     print("Converting")
-    config, output_state_dict = convert_megatron_checkpoint(input_state_dict, args.merge_qkv)
+    config, output_state_dict = convert_megatron_checkpoint(input_state_dict)
 
     # Print the structure of converted state dict.
     if args.print_checkpoint_structure:
         recursive_print(None, output_state_dict)
 
-    if args.custom_model:
-        # Save custom model
-        GPTBigCodeConfig.register_for_auto_class()
-        GPTBigCodeModel.register_for_auto_class("AutoModelForCausalLM")
-        hf_model = GPTBigCodeLMHeadModel(config)
-        hf_model.load_state_dict(output_state_dict)
-        hf_model.save_pretrained(basename)
+    # Store the config to file.
+    print("Saving config")
+    config.save_pretrained(basename)
 
-    else:
-        # Store the config to file.
-        print("Saving config")
-        config.save_pretrained(basename)
-
-        # Store the state_dict to file.
-        output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
-        print(f'Saving checkpoint to "{output_checkpoint_file}"')
-        torch.save(output_state_dict, output_checkpoint_file)
+    # Store the state_dict to file.
+    output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
+    print(f'Saving checkpoint to "{output_checkpoint_file}"')
+    torch.save(output_state_dict, output_checkpoint_file)
 
 
 ####################################################################################################
