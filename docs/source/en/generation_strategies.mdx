@@ -145,6 +145,12 @@ The `generate()` supports streaming, through its `streamer` input. The `streamer
 from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
 `end()` is used to flag the end of text generation.
 
+<Tip warning={true}>
+
+The API for the streamer classes is still under development and may change in the future.
+
+</Tip>
+
 In practice, you can craft your own streaming class for all sorts of purposes! We also have basic streaming classes
 ready for you to use. For example, you can use the [`TextStreamer`] class to stream the output of `generate()` into
 your screen, one word at a time:
