@@ -189,7 +189,6 @@ AutoModel.from_pretrained(mname, trust_remote_code=True)
 print("success")
         """
 
-
         # baseline - just load from_pretrained with normal network
         cmd = [sys.executable, "-c", "\n".join([load, run])]
 
