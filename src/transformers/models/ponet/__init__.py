@@ -56,8 +56,6 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
-else:
-    _import_structure["tokenization_ponet_tf"] = ["TFPoNetTokenizer"]
 
 if TYPE_CHECKING:
     from .configuration_ponet import PONET_PRETRAINED_CONFIG_ARCHIVE_MAP, PoNetConfig, PoNetOnnxConfig

@@ -817,7 +817,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
-    _import_structure["models.ponet"].append("TFPoNetTokenizer")
 
 # keras-nlp-specific objects
 try:
@@ -2166,18 +2165,11 @@ else:
     _import_structure["models.ponet"].extend(
         [
             "PONET_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PoNetForMaskedLM",
-            "PoNetForMultipleChoice",
-            "PoNetForNextSentencePrediction",
             "PoNetForPreTraining",
-            "PoNetForQuestionAnswering",
             "PoNetForSequenceClassification",
-            "PoNetForTokenClassification",
             "PoNetLayer",
-            "PoNetLMHeadModel",
             "PoNetModel",
             "PoNetPreTrainedModel",
-            "load_tf_weights_in_ponet",
         ]
     )
     _import_structure["models.poolformer"].extend(
@@ -4476,7 +4468,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tensorflow_text_objects import *
     else:
         from .models.bert import TFBertTokenizer
-        from .models.ponet import TFPoNetTokenizer
 
     try:
         if not is_keras_nlp_available():
@@ -5578,18 +5569,11 @@ if TYPE_CHECKING:
         )
         from .models.ponet import (
             PONET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PoNetForMaskedLM,
-            PoNetForMultipleChoice,
-            PoNetForNextSentencePrediction,
             PoNetForPreTraining,
-            PoNetForQuestionAnswering,
             PoNetForSequenceClassification,
-            PoNetForTokenClassification,
             PoNetLayer,
-            PoNetLMHeadModel,
             PoNetModel,
             PoNetPreTrainedModel,
-            load_tf_weights_in_ponet,
         )
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
