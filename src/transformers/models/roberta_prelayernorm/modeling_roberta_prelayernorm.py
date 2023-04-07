@@ -1000,6 +1000,8 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
 
         lm_loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(prediction_scores.device)
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
@@ -1124,6 +1126,8 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(prediction_scores.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
@@ -1236,6 +1240,8 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1349,6 +1355,8 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(reshaped_logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
@@ -1434,6 +1442,8 @@ class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedMod
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
