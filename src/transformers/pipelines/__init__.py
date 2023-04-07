@@ -788,7 +788,6 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
@@ -871,7 +870,8 @@ def pipeline(
                 tokenizer_kwargs = tokenizer[1]
             else:
                 tokenizer_identifier = tokenizer
-                tokenizer_kwargs = model_kwargs
+                tokenizer_kwargs = model_kwargs.copy()
+                tokenizer_kwargs.pop("torch_dtype", None)
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
