@@ -505,7 +505,7 @@ class FlaxUMT5LayerCrossAttention(nn.Module):
 
     def setup(self):
         self.EncDecAttention = FlaxUMT5Attention(
-            self.config, has_relative_attention_bias=True, causal=False, dtype=self.dtype
+            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
         )
         self.layer_norm = FlaxUMT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)

@@ -476,7 +476,7 @@ class UMT5LayerSelfAttention(nn.Module):
 class UMT5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=True)
+        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=False)
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
