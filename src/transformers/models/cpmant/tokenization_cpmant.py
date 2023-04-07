@@ -45,8 +45,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "openbmb/cpm-ant-10b": 1024,
 }
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -120,6 +118,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
+    add_prefix_space = False
 
     def __init__(
         self,
@@ -132,6 +131,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         line_token="</n>",
         space_token="</_>",
+        padding_side="left",
         **kwargs,
     ):
         requires_backends(self, ["jieba"])
@@ -144,7 +144,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             line_token=line_token,
             space_token=space_token,
-            padding_side="left",
+            padding_side=padding_side,
             **kwargs,
         )
         self.bod_token = bod_token
@@ -156,84 +156,58 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         del self.encoder[space_token]
         del self.encoder[line_token]
 
+        self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=self.unk_token)
 
-    # always add special tokens
-    def __call__(self, text, *args, **kwargs):
-        if "add_special_tokens" in kwargs:
-            kwargs["add_special_tokens"] = True
-        ret = super().__call__(text, *args, **kwargs)
-        return ret
-
     @property
-    def vocab_size(self):
-        return len(self.encoder)
-
-    @property
-    def bod_id(self):
+    def bod_token_id(self):
         return self.encoder[self.bod_token]
 
     @property
-    def eod_id(self):
+    def eod_token_id(self):
         return self.encoder[self.eod_token]
-
-    @property
-    def eos_id(self):
-        return self.encoder[self.eos_token]
-
-    @property
-    def bos_id(self):
-        return self.encoder[self.bos_token]
-
-    @property
-    def pad_token_id(self):
-        return self.encoder[self.pad_token]
-
-    @property
-    def unk_id(self):
-        return self.encoder[self.unk_token]
 
     @property
     def newline_id(self):
         return self.encoder["\n"]
 
-    def __len__(self):
+    @property
+    def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def tokenize(self, text):
+    def get_vocab(self):
+        return dict(self.encoder, **self.added_tokens_encoder)
+
+    def _tokenize(self, text):
         """Tokenize a string."""
         output_tokens = []
         for x in jieba.cut(text, cut_all=False):
             output_tokens.extend(self.wordpiece_tokenizer.tokenize(x))
         return output_tokens
 
-    def encode(self, text, **kwargs):
-        """Encode a string into ids."""
-        return [self.encoder[x] for x in self.tokenize(text)]
-
-    def decode(self, tokens, **kwargs):
+    def _decode(self, token_ids, **kwargs):
         """Decode ids into a string."""
-        if isinstance(tokens, torch.Tensor):
-            tokens = tokens.detach().tolist()
-        if isinstance(tokens[0], list):
-            tokens = tokens[0]
-        tokens = [i for i in tokens if i >= 0]
-        tokens = [x for x in tokens if x != self.pad_token_id and x != self.eos_id and x != self.bos_id]
-        text = "".join([self.decoder[x] for x in tokens])
-        return text
+        token_ids = [i for i in token_ids if i >= 0]
+        token_ids = [
+            x for x in token_ids if x != self.pad_token_id and x != self.eos_token_id and x != self.bos_token_id
+        ]
+        return super()._decode(token_ids, **kwargs)
 
     def check(self, token):
         return token in self.encoder
 
-    def convert_tokens_to_ids(self, tokens):
-        ret_ids = [self.encoder.get(x, self.encoder[self.unk_token]) for x in tokens]
-        ret_ids = [j for j in ret_ids if j != self.unk_id]
-        return ret_ids
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        return "".join(tokens)
 
-    def convert_ids_to_tokens(self, ids):
-        return [self.decoder[x] if x >= 0 else self.unk_token for x in ids]
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        return self.encoder.get(token, self.encoder.get(self.unk_token))
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.decoder.get(index, self.unk_token)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -243,10 +217,17 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         index = 0
+        if " " in self.encoder:
+            self.encoder["</_>"] = self.encoder[" "]
+            del self.encoder[" "]
+        if "\n" in self.encoder:
+            self.encoder["</n>"] = self.encoder["\n"]
+            del self.encoder["\n"]
+        self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in self.encoder.items():
                 if index != token_index:
-                    logging.warning(
+                    logger.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )
@@ -264,9 +245,37 @@ class CpmAntTokenizer(PreTrainedTokenizer):
 
         Args:
             token_ids_0 (`List[int]`): The first tokenized sequence that special tokens will be added.
-            token_ids_1 (`List[int]`): Dummy param in CpmAntTokenizer.
+            token_ids_1 (`List[int]`): The optional second tokenized sequence that special tokens will be added.
 
         Returns:
             `List[int]`: The model input with special tokens.
         """
-        return [self.bos_id] + token_ids_0
+        if token_ids_1 is None:
+            return [self.bos_token_id] + token_ids_0
+        return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
+            token_ids_0 (`List[int]`): List of IDs.
+            token_ids_1 (`List[int]`, *optional*): Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
+        if token_ids_1 is not None:
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+        return [1] + ([0] * len(token_ids_0))

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 
 from transformers.testing_utils import is_torch_available, require_jieba
@@ -21,12 +22,39 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
-    from transformers.models.cpmant import CpmAntTokenizer
+    from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
 
 
-# @unittest.skip("CPMAntTokenizer process vocab in list format, so we skip the common test.")
 @require_jieba
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = CpmAntTokenizer
+    test_rust_tokenizer = False
+
+    def setUp(self):
+        super().setUp()
+
+        vocab_tokens = [
+            "<d>",
+            "</d>",
+            "<s>",
+            "</s>",
+            "</_>",
+            "<unk>",
+            "<pad>",
+            "</n>",
+            "我",
+            "是",
+            "C",
+            "P",
+            "M",
+            "A",
+            "n",
+            "t",
+        ]
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
     def test_pre_tokenization(self):
         tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
