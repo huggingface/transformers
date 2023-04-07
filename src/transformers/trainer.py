@@ -3190,8 +3190,8 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-            if self.preprocess_logits_for_metrics is not None and logits is not None:
-                logits = self.preprocess_logits_for_metrics(logits, labels)
+                if self.preprocess_logits_for_metrics is not None:
+                    logits = self.preprocess_logits_for_metrics(logits, labels)
             if labels is not None:
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
