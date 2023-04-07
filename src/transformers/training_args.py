@@ -24,6 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from accelerate import PartialState
 from packaging import version
 
 from .debug_utils import DebugOption
@@ -38,10 +39,8 @@ from .trainer_utils import (
 from .utils import (
     ExplicitEnum,
     cached_property,
-    ccl_version,
     get_full_repo_name,
     is_accelerate_available,
-    is_psutil_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -63,7 +62,6 @@ trainer_log_levels = dict(**log_levels, passive=-1)
 
 if is_torch_available():
     import torch
-    import torch.distributed as dist
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
@@ -1539,125 +1537,27 @@ class TrainingArguments:
             logger.warning(
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+                " or `accelerate launch`"
             )
         if self.no_cuda:
-            device = torch.device("cpu")
-            self._n_gpu = 0
-            self.local_rank = get_int_from_env(
-                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"],
-                self.local_rank,
-            )
-            if self.local_rank != -1 and not torch.distributed.is_initialized():
-                # Initializes distributed backend for cpu
-                if self.xpu_backend not in ("mpi", "ccl", "gloo"):
-                    raise ValueError(
-                        "CPU distributed training backend is not properly set. "
-                        "Please set '--xpu_backend' to either 'mpi' or 'ccl' or 'gloo'."
-                    )
-                if self.xpu_backend == "ccl":
-                    requires_backends(self, "oneccl_bind_pt")
-                    if ccl_version >= "1.12":
-                        import oneccl_bindings_for_pytorch  # noqa: F401
-                    else:
-                        import torch_ccl  # noqa: F401
-                    if int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
-                        raise ValueError(
-                            "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
-                            "Please use like 'export CCL_WORKER_COUNT = 1' to set."
-                        )
-
-                # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
-                rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
-                size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
-                local_size = get_int_from_env(
-                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
-                )
-                os.environ["RANK"] = str(rank)
-                os.environ["WORLD_SIZE"] = str(size)
-                os.environ["LOCAL_RANK"] = str(self.local_rank)
-                if not os.environ.get("MASTER_PORT", None):
-                    os.environ["MASTER_PORT"] = "29500"
-                if not os.environ.get("MASTER_ADDR", None):
-                    if local_size != size or self.xpu_backend != "mpi":
-                        raise ValueError(
-                            "Looks like distributed multinode run but MASTER_ADDR env not set, "
-                            "please try exporting rank 0's hostname as MASTER_ADDR"
-                        )
-                if (
-                    torch.get_num_threads() == 1
-                    and get_int_from_env(["OMP_NUM_THREADS", "MKL_NUM_THREADS"], 0) == 0
-                    and is_psutil_available()
-                ):
-                    import psutil
-
-                    num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
-                    if num_cpu_threads_per_process == 0:
-                        num_cpu_threads_per_process = 1
-                    torch.set_num_threads(num_cpu_threads_per_process)
-                    logger.info(
-                        f"num_cpu_threads_per_process unset, we set it at {num_cpu_threads_per_process} to improve oob"
-                        " performance."
-                    )
-                torch.distributed.init_process_group(
-                    backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.ddp_timeout_delta
-                )
-        elif is_torch_tpu_available():
-            device = xm.xla_device()
-            self._n_gpu = 0
+            self.distributed_state = PartialState(cpu=True)
+            self.local_rank = self.distributed_state.local_process_index
         elif is_sagemaker_mp_enabled():
-            local_rank = smp.local_rank()
-            device = torch.device("cuda", local_rank)
-            self._n_gpu = 1
-        elif is_sagemaker_dp_enabled():
-            import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
-
-            dist.init_process_group(backend="smddp", timeout=self.ddp_timeout_delta)
-            self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
+            self.local_rank = smp.local_rank()
             device = torch.device("cuda", self.local_rank)
+            torch.cuda.set_device(device)
             self._n_gpu = 1
-        elif self.deepspeed:
-            # deepspeed inits torch.distributed internally
-            from .deepspeed import is_deepspeed_available
-
-            if not is_deepspeed_available():
-                raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
-            import deepspeed
-
-            deepspeed.init_distributed(timeout=timedelta(seconds=self.ddp_timeout))
-
-            # workaround for setups like notebooks where the launcher can't be used,
-            # but deepspeed requires a dist env.
-            # env LOCAL_RANK could be set manually by the user, or via init_distributed if mpi4py is installed
-            self.local_rank = int(os.environ.get("LOCAL_RANK", "-1"))
-
-            device = torch.device("cuda", self.local_rank)
+        else:
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
+            self.local_rank = self.distributed_state.local_process_index
+        if self.no_cuda or is_torch_tpu_available():
+            self._n_gpu = 0
+        # Check on `SMDATAPARALLEL_LOCAL_RANK`
+        elif is_sagemaker_dp_enabled() or self.deepspeed:
             self._n_gpu = 1
         elif self.local_rank == -1:
             if self.use_mps_device:
-                if not torch.backends.mps.is_available():
-                    if not torch.backends.mps.is_built():
-                        raise AssertionError(
-                            "MPS not available because the current PyTorch install was not "
-                            "built with MPS enabled. Please install torch version >=1.12.0 on "
-                            "your Apple silicon Mac running macOS 12.3 or later with a native "
-                            "version (arm64) of Python"
-                        )
-                    else:
-                        raise AssertionError(
-                            "MPS not available because the current MacOS version is not 12.3+ "
-                            "and/or you do not have an MPS-enabled device on this machine."
-                        )
-                else:
-                    if not version.parse(version.parse(torch.__version__).base_version) > version.parse("1.12.0"):
-                        warnings.warn(
-                            "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing)"
-                            " on your MacOS machine. It has major fixes related to model correctness and performance"
-                            " improvements for transformer based models. Please refer to"
-                            " https://github.com/pytorch/pytorch/issues/82707 for more details."
-                        )
-                    device = torch.device("mps")
-                    self._n_gpu = 1
-
+                self._n_gpu = 1
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -1670,18 +1570,7 @@ class TrainingArguments:
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
         else:
-            # Here, we'll use torch.distributed.
-            # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            if not torch.distributed.is_initialized():
-                if self.xpu_backend and self.xpu_backend in ("mpi", "gloo"):
-                    torch.distributed.init_process_group(backend=self.xpu_backend, timeout=self.ddp_timeout_delta)
-                else:
-                    torch.distributed.init_process_group(backend="nccl", timeout=self.ddp_timeout_delta)
-            device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
-
-        if device.type == "cuda":
-            torch.cuda.set_device(device)
 
         return device
 
@@ -1738,16 +1627,10 @@ class TrainingArguments:
         The number of processes used in parallel.
         """
         requires_backends(self, ["torch"])
-
-        if is_torch_tpu_available():
-            return xm.xrt_world_size()
-        elif is_sagemaker_mp_enabled():
+        if is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_world_size()
-        elif self.local_rank != -1:
-            return torch.distributed.get_world_size()
-        return 1
+        else:
+            return self.distributed_state.num_processes
 
     @property
     def process_index(self):
@@ -1755,15 +1638,10 @@ class TrainingArguments:
         The index of the current process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_ordinal()
-        elif is_sagemaker_mp_enabled():
+        if is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.local_rank != -1:
-            return torch.distributed.get_rank()
-        return 0
+        else:
+            return self.distributed_state.process_index
 
     @property
     def local_process_index(self):
@@ -1771,15 +1649,10 @@ class TrainingArguments:
         The index of the local process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_local_ordinal()
-        elif is_sagemaker_mp_enabled():
+        if is_sagemaker_mp_enabled():
             return smp.local_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.local_rank != -1:
-            return self.local_rank
-        return 0
+        else:
+            return self.distributed_state.local_process_index
 
     @property
     def should_log(self):
@@ -1868,35 +1741,37 @@ class TrainingArguments:
         """
         if is_torch_available() and self.world_size > 1:
             main_process_desc = "main process"
+            process_context = self.distributed_state.main_process_first
             if local:
-                is_main_process = self.local_process_index == 0
                 main_process_desc = "main local process"
-            elif is_sagemaker_mp_enabled():
+                process_context = self.distributed_state.local_main_process_first
+            if is_sagemaker_mp_enabled():
                 is_main_process = smp.rank() == 0
+                try:
+                    if not is_main_process:
+                        # tell all replicas to wait
+                        logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
+                        torch.distributed.barrier()
+                    yield
+                finally:
+                    if is_main_process:
+                        # the wait is over
+                        logger.debug(
+                            f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas"
+                        )
+                        torch.distributed.barrier()
             else:
-                is_main_process = self.process_index == 0
+                with process_context():
+                    if not self.distributed_state.is_main_process:
+                        # tell all replicas to wait
+                        logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
+                    yield
+                    if self.distributed_state.is_main_process:
+                        # the wait is over
+                        logger.debug(
+                            f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas"
+                        )
 
-            try:
-                if not is_main_process:
-                    # tell all replicas to wait
-                    logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
-                    if is_torch_tpu_available():
-                        xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
-                    else:
-                        torch.distributed.barrier()
-                yield
-            finally:
-                if is_main_process:
-                    # the wait is over
-                    logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
-                    if is_torch_tpu_available():
-                        xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
-                    else:
-                        torch.distributed.barrier()
         else:
             yield
 
