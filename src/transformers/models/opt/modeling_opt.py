@@ -634,13 +634,11 @@ class OPTDecoder(OPTPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-            
         batch_size, seq_length = input_shape
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values_length + seq_length
 
-                
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
@@ -648,8 +646,6 @@ class OPTDecoder(OPTPreTrainedModel):
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
-
-
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
