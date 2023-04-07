@@ -387,6 +387,8 @@ class MegaModelTester:
         config.use_chunking = True
         config.chunk_size = input_ids.size(1) + 25
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -400,6 +402,8 @@ class MegaModelTester:
         # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
         config.chunk_size = input_ids.size(1) * 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(
             input_ids.repeat(1, 8),
@@ -412,6 +416,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "laplace"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -422,6 +428,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "relu2"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -432,6 +440,8 @@ class MegaModelTester:
     ):
         config.max_positions = self.seq_length - 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
