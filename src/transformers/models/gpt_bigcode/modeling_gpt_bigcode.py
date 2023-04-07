@@ -159,16 +159,13 @@ class GPTBigCodeAttention(nn.Module):
             # No copy when layer_past is provided.
             key = key.reshape(batch_size * self.num_heads, self.head_dim, key_length)
 
-        # check if CPU:
-        if query.device == torch.device("cpu"):
-            # this seemed to be needed - on CPU only: check https://github.com/huggingface/transformers/pull/22575/files#r1159858870
-            zeros = torch.zeros(attn_view, dtype=query.dtype, device=query.device)
-            attn_weights = torch.baddbmm(zeros, query, key, beta=1, alpha=scale_factor).view(attn_shape)
-        else:
-            # We do the standard operation on GPU for faster inference
-            attn_weights = torch.baddbmm(
-                torch.empty(attn_view, device=query.device, dtype=query.dtype), query, key, beta=0, alpha=scale_factor
-            ).view(attn_shape)
+        attn_weights = torch.empty(attn_view, device=query.device, dtype=query.dtype)
+        if query.device.type == "cpu":
+            # This is needed because of a bug in pytorch https://github.com/pytorch/pytorch/issues/80588.
+            # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
+            # but the fix has not been released as of pytorch version 2.0.0.
+            attn_weights.zero_()
+        attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor).view(attn_shape)
 
         if upcast:
             # Use a fused kernel to prevent a large overhead from casting and scaling.
