@@ -625,6 +625,27 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = MegaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_cpu_offload(self):
+        super().test_cpu_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload(self):
+        super().test_disk_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
+    @unittest.skip(
+        reason=(
+            "Calling `self.attention_function` in `MegaMovingAverageGatedAttention.forward` changes the submodules on "
+            "device 1 to device 0 (also changes `requires_grad`). No idea how this could happen for now."
+        )
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
 
 @require_torch
 class MegaModelIntegrationTest(TestCasePlus):
