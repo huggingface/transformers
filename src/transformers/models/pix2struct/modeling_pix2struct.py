@@ -1658,6 +1658,30 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
         Example:
 
+        Inference:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
+
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> # autoregressive generation
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_text)
+        A stop sign is on a street corner.
+        ```
+
+        Training:
+
         ```python
         >>> from PIL import Image
         >>> import requests
