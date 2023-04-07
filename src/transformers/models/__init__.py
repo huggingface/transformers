@@ -34,6 +34,7 @@ from . import (
     blenderbot_small,
     blip,
     blip_2,
+    sam,
     bloom,
     bort,
     bridgetower,

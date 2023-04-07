@@ -196,6 +196,13 @@ _import_structure = {
         "Blip2QFormerConfig",
         "Blip2VisionConfig",
     ],
+    "models.sam": [
+        "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SamConfig",
+        "SamProcessor",
+        "SamQFormerConfig",
+        "SamVisionConfig",
+    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
     "models.bridgetower": [
@@ -1184,6 +1191,16 @@ else:
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
             "Blip2VisionModel",
+        ]
+    )
+    _import_structure["models.sam"].extend(
+        [
+            "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SamForConditionalGeneration",
+            "SamModel",
+            "SamPreTrainedModel",
+            "SamQFormerModel",
+            "SamVisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -3884,6 +3901,13 @@ if TYPE_CHECKING:
         Blip2QFormerConfig,
         Blip2VisionConfig,
     )
+    from .models.sam import (
+        SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SamConfig,
+        SamProcessor,
+        SamQFormerConfig,
+        SamVisionConfig,
+    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4763,6 +4787,14 @@ if TYPE_CHECKING:
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2VisionModel,
+        )
+        from .models.sam import (
+            SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SamForConditionalGeneration,
+            SamModel,
+            SamPreTrainedModel,
+            SamQFormerModel,
+            SamVisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
