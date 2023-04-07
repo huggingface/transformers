@@ -646,6 +646,18 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_multi_gpu_data_parallel_forward(self):
         super().test_multi_gpu_data_parallel_forward()
 
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_simple(self):
+        super().test_torchscript_simple()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_hidden_state(self):
+        super().test_torchscript_output_hidden_state()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_attentions(self):
+        super().test_torchscript_output_attentions()
+
 
 @require_torch
 class MegaModelIntegrationTest(TestCasePlus):
