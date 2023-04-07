@@ -7,6 +7,8 @@
     title: 설치방법
   title: 시작하기
 - sections:
+  - local: pipeline_tutorial
+    title: 추론을 위한 Pipeline
   - local: in_translation
     title: (번역중) Pipelines for inference
   - local: autoclass_tutorial
