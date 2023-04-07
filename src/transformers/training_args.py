@@ -1547,6 +1547,7 @@ class TrainingArguments:
             device = torch.device("cuda", self.local_rank)
             torch.cuda.set_device(device)
             self._n_gpu = 1
+            return device
         else:
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self.local_rank = self.distributed_state.local_process_index
@@ -1569,10 +1570,13 @@ class TrainingArguments:
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
+                if device.type == "cuda":
+                    torch.cuda.set_device(device)
+                return device
         else:
             self._n_gpu = 1
 
-        return device
+        return self.distributed_state.device
 
     @property
     def device(self) -> "torch.device":
