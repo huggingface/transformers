@@ -9,8 +9,8 @@
 - sections:
   - local: in_translation
     title: (번역중) Pipelines for inference
-  - local: in_translation
-    title: (번역중) Load pretrained instances with an AutoClass
+  - local: autoclass_tutorial
+    title: 자동 클래스로 사전 학습된 인스턴스 로드하기
   - local: in_translation
     title: (번역중) Preprocess
   - local: in_translation
