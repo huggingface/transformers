@@ -1138,6 +1138,7 @@ class BlipTextModel(BlipPreTrainedModel):
     config_class = BlipTextConfig
     base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    supports_gradient_checkpointing = False
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1374,6 +1375,7 @@ class BlipTextLMHeadModel(BlipPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
     config_class = BlipTextConfig
     base_model_prefix = "bert"
+    supports_gradient_checkpointing = False
 
     def __init__(self, config):
         super().__init__(config)
