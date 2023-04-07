@@ -214,7 +214,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
         expected_output = "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的"
         model_inputs = tokenizer(texts, return_tensors="pt")
         token_ids = model.generate(**model_inputs)
-        output_texts = tokenizer.decode(token_ids)
+        output_texts = tokenizer.batch_decode(token_ids)
         self.assertEqual(expected_output, output_texts)
 
     @unittest.skip("skip this test as the model is very large for our daily runner")

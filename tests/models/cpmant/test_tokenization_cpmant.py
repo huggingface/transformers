@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available
+from transformers.testing_utils import is_torch_available, require_jieba
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -24,7 +24,8 @@ if is_torch_available():
     from transformers.models.cpmant import CpmAntTokenizer
 
 
-@unittest.skip("CPMAntTokenizer process vocab in list format, so we skip the common test.")
+# @unittest.skip("CPMAntTokenizer process vocab in list format, so we skip the common test.")
+@require_jieba
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pre_tokenization(self):
         tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")

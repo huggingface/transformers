@@ -404,7 +404,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("convbert", "ConvBERT"),
         ("convnext", "ConvNeXT"),
         ("cpm", "CPM"),
-        ("cpmant", "CpmAnt"),
+        ("cpmant", "CPM-Ant"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
         ("data2vec-audio", "Data2VecAudio"),

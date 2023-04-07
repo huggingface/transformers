@@ -1007,6 +1007,11 @@ CYTHON_IMPORT_ERROR = """
 Cython`. Please note that you may need to restart your runtime after installation.
 """
 
+JIEBA_IMPORT_ERROR = """
+{0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
+jieba`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1039,6 +1044,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
+        ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
     ]
 )
 
