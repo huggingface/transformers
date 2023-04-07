@@ -871,7 +871,7 @@ def pipeline(
             else:
                 tokenizer_identifier = tokenizer
                 tokenizer_kwargs = model_kwargs.copy()
-                tokenizer_kwargs.pop("torch_dtype")
+                tokenizer_kwargs.pop("torch_dtype", None)
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
