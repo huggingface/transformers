@@ -272,8 +272,6 @@ def get_cached_module_file(
     else:
         # Get the commit hash
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
-        # TODO: we will get this info in the etag soon, so retrieve it from there and not here.
-        # commit_hash = model_info(pretrained_model_name_or_path, revision=revision, token=use_auth_token).sha
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
         # benefit of versioning.
