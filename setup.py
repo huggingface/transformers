@@ -412,7 +412,7 @@ version = "unknown"
 exec(open(os.path.join("src", "transformers", "version.py")).read())
 
 setup(
-    name="nm-transformers",
+    name="nm-transformers" if is_release else "nm-transformers-nightly",
     version=version,  # major.minor.patch to match NM repos, fourth entry is either transformers base version or nightly date
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
