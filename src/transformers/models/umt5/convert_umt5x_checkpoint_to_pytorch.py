@@ -52,8 +52,8 @@ def t5x_attention_lookup(params, i, prefix, layer_name="attention"):
     """Returns the KOQV parameters of (self-)attention. Does not transpose."""
     k_tmp = params[f"{prefix}/{prefix}/{layer_name}/key/kernel"].transpose(1, 0, 2, 3)[i]
     k = k_tmp.reshape(k_tmp.shape[0], k_tmp.shape[1] * k_tmp.shape[2])
-    o_tmp = params[f"{prefix}/{prefix}/{layer_name}/out/kernel"].transpose(1, 3, 0, 2)[i]
-    o = o_tmp.reshape(o_tmp.shape[1] * o_tmp.shape[2], o_tmp.shape[0])
+    o_tmp = params[f"{prefix}/{prefix}/{layer_name}/out/kernel"].transpose(1, 0, 2, 3)[i]
+    o = o_tmp.reshape(o_tmp.shape[0] * o_tmp.shape[1], o_tmp.shape[2])
     q_tmp = params[f"{prefix}/{prefix}/{layer_name}/query/kernel"].transpose(1, 0, 2, 3)[i]
     q = q_tmp.reshape(q_tmp.shape[0], q_tmp.shape[1] * q_tmp.shape[2])
     v_tmp = params[f"{prefix}/{prefix}/{layer_name}/value/kernel"].transpose(1, 0, 2, 3)[i]
