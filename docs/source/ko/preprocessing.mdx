@@ -17,13 +17,13 @@ specific language governing permissions and limitations under the License.
 모델을 학습하려면 데이터셋을 모델에 맞는 입력 형식으로 전처리 해야 합니다. 데이터가 텍스트, 이미지 또는 오디오인지 여부에 관계없이 데이터를 텐서 배치로 변환하고 조립할 필요가 있습니다. 🤗 Transformers는 모델에 대한 데이터를 준비하는 데 도움이 되는 일련의 전처리 클래스를 제공합니다. 이 튜토리얼에서는 다음 내용을 배울 수 있습니다:
 
 * 텍스트는 [Tokenizer](./main_classes/tokenizer)를 사용하여 텍스트를 토큰 시퀀스로 변환하고 토큰의 숫자 표현을 만든 후 텐서로 조립합니다.
-* 음성 및 오디오는 [Feature extractor](./main_classes/feature_extractor)를 사용하여 오디오 파형에서 시퀀스 특성을 파악하여 텐서로 변환합니다.
+* 음성 및 오디오는 [Feature extractor](./main_classes/feature_extractor)를 사용하여 오디오 파형에서 시퀀스 특징을 파악하여 텐서로 변환합니다.
 * 이미지 입력은 [ImageProcessor](./main_classes/image)을 사용하여 이미지를 텐서로 변환합니다.
-* 멀티모달 입력은 [Processor](./main_classes/processors)을 사용하여 토크나이저와 특성 추출기 또는 이미지 프로세서를 결합합니다.
+* 멀티모달 입력은 [Processor](./main_classes/processors)을 사용하여 토크나이저와 특징 추출기 또는 이미지 프로세서를 결합합니다.
 
 <Tip>
 
-`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 프로세서, 특성 추출기 또는 프로세서 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
+`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 프로세서, 특징 추출기 또는 프로세서 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
 
 </Tip>
 
@@ -76,7 +76,7 @@ pip install datasets
 '[CLS] Do not meddle in the affairs of wizards, for they are subtle and quick to anger. [SEP]'
 ```
 
-보시다시피 토크나이저는 두 개의 특수한 토큰 - `CLS`와 `SEP` (분류토큰과 구분토큰) - 을 문장에 추가했습니다. 
+토크나이저가 두 개의 특수한 토큰(분류 토큰 CLS와 구분 토큰 SEP)을 문장에 추가했습니다.
 모든 모델에 특수한 토큰이 필요한 것은 아니지만, 필요한 경우 토크나이저가 자동으로 추가합니다.
 
 전처리할 문장이 여러 개 있는 경우 이를 리스트로 토크나이저에 전달합니다:
@@ -160,9 +160,9 @@ pip install datasets
 
 ### 텐서 만들기[[build-tensors]]
 
-Finally, you want the tokenizer to return the actual tensors that get fed to the model.
+마지막으로, 토크나이저가 모델에 공급되는 실제 텐서를 반환하도록 합니다.
 
-Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for TensorFlow:
+`return_tensors` 매개변수를 PyTorch의 경우 `pt`, TensorFlow의 경우 `tf`로 설정하세요:
 
 <frameworkcontent>
 <pt>
@@ -214,9 +214,9 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 ## 오디오[[audio]]
 
-For audio tasks, you'll need a [feature extractor](main_classes/feature_extractor) to prepare your dataset for the model. The feature extractor is designed to extract features from raw audio data, and convert them into tensors.
+오디오 작업에는 데이터셋을 모델에 준비하기 위해 [특징 추출기](main_classes/feature_extractor)가 필요합니다. 특징 추출기는 원시 오디오 데이터에서 피처를 추출하고 이를 텐서로 변환하는 것이 목적입니다.
 
-Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use a feature extractor with audio datasets:
+오디오 데이터셋에 특징 추출기를 사용하는 방법을 보려면 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터셋을 가져오세요. (데이터셋을 가져오는 방법은 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다).
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -224,7 +224,7 @@ Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Access the first element of the `audio` column to take a look at the input. Calling the `audio` column automatically loads and resamples the audio file:
+`audio` 열의 첫 번째 요소에 액세스하여 입력을 살펴보세요. `audio` 열을 호출하면 오디오 파일을 자동으로 가져오고 리샘플링합니다:
 
 ```py
 >>> dataset[0]["audio"]
@@ -234,21 +234,22 @@ Access the first element of the `audio` column to take a look at the input. Call
  'sampling_rate': 8000}
 ```
 
-This returns three items:
+이렇게 하면 세 가지 항목이 반환됩니다:
 
-* `array` is the speech signal loaded - and potentially resampled - as a 1D array.
-* `path` points to the location of the audio file.
-* `sampling_rate` refers to how many data points in the speech signal are measured per second.
+* `array`는 1D 배열로 가져와서 (필요한 경우) 리샘플링된 음성 신호입니다.
+* `path`는 오디오 파일의 위치를 가리킵니다.
+* `sampling_rate`는 음성 신호에서 초당 측정되는 데이터 포인트 수를 나타냅니다.
 
-For this tutorial, you'll use the [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) model. Take a look at the model card, and you'll learn Wav2Vec2 is pretrained on 16kHz sampled speech audio. It is important your audio data's sampling rate matches the sampling rate of the dataset used to pretrain the model. If your data's sampling rate isn't the same, then you need to resample your data. 
+이 튜토리얼에서는 [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) 모델을 사용합니다. 모델 카드를 보면 Wav2Vec2가 16kHz 샘플링된 음성 오디오를 기반으로 사전 학습된 것을 알 수 있습니다. 
+모델을 사전 학습하는 데 사용된 데이터셋의 샘플링 속도와 오디오 데이터의 샘플링 속도가 일치해야 합니다. 데이터의 샘플링 속도가 다르면 데이터를 리샘플링해야 합니다.
 
-1. Use 🤗 Datasets' [`~datasets.Dataset.cast_column`] method to upsample the sampling rate to 16kHz:
+1. 🤗 Datasets의 [`~datasets.Dataset.cast_column`] 메서드를 사용하여 샘플링 속도를 16kHz로 업샘플링하세요:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
 ```
 
-2. Call the `audio` column again to resample the audio file:
+2. 오디오 파일을 리샘플링하기 위해 `audio` 열을 다시 호출합니다:
 
 ```py
 >>> dataset[0]["audio"]
@@ -258,9 +259,10 @@ For this tutorial, you'll use the [Wav2Vec2](https://huggingface.co/facebook/wav
  'sampling_rate': 16000}
 ```
 
-Next, load a feature extractor to normalize and pad the input. When padding textual data, a `0` is added for shorter sequences. The same idea applies to audio data. The feature extractor adds a `0` - interpreted as silence - to `array`.
+다음으로, 입력을 정규화하고 패딩하는 특징 추출기를 가져오세요. 텍스트 데이터의 경우, 더 짧은 시퀀스에 대해 `0`이 추가됩니다. 오디오 데이터에도 같은 개념이 적용됩니다. 
+특징 추출기는 배열에 대해 `0`(묵음으로 해석)을 추가합니다.
 
-Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
+[`AutoFeatureExtractor.from_pretrained`]를 사용하여 특징 추출기를 가져오세요:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -268,7 +270,7 @@ Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-Pass the audio `array` to the feature extractor. We also recommend adding the `sampling_rate` argument in the feature extractor in order to better debug any silent errors that may occur.
+오디오 `array`를 특징 추출기에 전달하세요. 또한, 특징 추출기에 `sampling_rate` 인자를 추가하여 발생할 수 있는 silent errors(즉각적인 오류 메시지가 발생하지 않는 오류)를 더 잘 디버깅하는 것을 권장합니다.
 
 ```py
 >>> audio_input = [dataset[0]["audio"]["array"]]
@@ -277,7 +279,7 @@ Pass the audio `array` to the feature extractor. We also recommend adding the `s
         5.6335266e-04,  4.6588284e-06, -1.7142107e-04], dtype=float32)]}
 ```
 
-Just like the tokenizer, you can apply padding or truncation to handle variable sequences in a batch. Take a look at the sequence length of these two audio samples:
+토크나이저와 마찬가지로 배치 내에서 가변적인 시퀀스를 처리하기 위해 패딩 또는 생략을 적용할 수 있습니다. 이 두 개의 오디오 샘플의 시퀀스 길이를 확인해보세요:
 
 ```py
 >>> dataset[0]["audio"]["array"].shape
@@ -287,7 +289,7 @@ Just like the tokenizer, you can apply padding or truncation to handle variable 
 (106496,)
 ```
 
-Create a function to preprocess the dataset so the audio samples are the same lengths. Specify a maximum sample length, and the feature extractor will either pad or truncate the sequences to match it:
+오디오 샘플의 길이가 동일하도록 데이터셋을 전처리하는 함수를 만들어 보세요. 최대 샘플 길이를 지정하면, 특징 추출기가 해당 길이에 맞춰 시퀀스를 패딩하거나 생략합니다:
 
 ```py
 >>> def preprocess_function(examples):
@@ -302,13 +304,13 @@ Create a function to preprocess the dataset so the audio samples are the same le
 ...     return inputs
 ```
 
-Apply the `preprocess_function` to the the first few examples in the dataset:
+`preprocess_function`을 데이터셋의 처음 몇 가지 예제에 적용해보세요:
 
 ```py
 >>> processed_dataset = preprocess_function(dataset[:5])
 ```
 
-The sample lengths are now the same and match the specified maximum length. You can pass your processed dataset to the model now!
+이제 샘플 길이가 모두 같고 지정된 최대 길이에 맞게 되었습니다. 드디어 전처리된 데이터셋을 모델에 전달할 수 있습니다!
 
 ```py
 >>> processed_dataset["input_values"][0].shape
