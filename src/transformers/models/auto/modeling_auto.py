@@ -129,7 +129,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTModel"),
         ("mpnet", "MPNetModel"),
         ("mt5", "MT5Model"),
-        ("umt5", "UMT5Model"),
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
         ("nezha", "NezhaModel"),
@@ -174,6 +173,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
+        ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
@@ -607,7 +607,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianMTModel"),
         ("mbart", "MBartForConditionalGeneration"),
         ("mt5", "MT5ForConditionalGeneration"),
-        ("umt5", "UMT5ForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("pegasus", "PegasusForConditionalGeneration"),
@@ -616,6 +615,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("prophetnet", "ProphetNetForConditionalGeneration"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("umt5", "UMT5ForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )

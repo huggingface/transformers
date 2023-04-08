@@ -218,13 +218,6 @@ else:
                     "MT5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            (
-                "umt5",
-                (
-                    "T5Tokenizer" if is_sentencepiece_available() else None,
-                    "T5TokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -327,6 +320,13 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            (
+                "umt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),

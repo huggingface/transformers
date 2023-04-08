@@ -382,7 +382,6 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
-    "models.umt5": ["UMT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
@@ -485,6 +484,7 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
+    "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -2015,9 +2015,6 @@ else:
     _import_structure["models.mt5"].extend(
         ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model", "MT5PreTrainedModel"]
     )
-    _import_structure["models.umt5"].extend(
-        ["UMT5EncoderModel", "UMT5ForConditionalGeneration", "UMT5Model", "UMT5PreTrainedModel"]
-    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2500,6 +2497,9 @@ else:
             "TvltModel",
             "TvltPreTrainedModel",
         ]
+    )
+    _import_structure["models.umt5"].extend(
+        ["UMT5EncoderModel", "UMT5ForConditionalGeneration", "UMT5Model", "UMT5PreTrainedModel"]
     )
     _import_structure["models.unispeech"].extend(
         [
@@ -3220,7 +3220,6 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["TFMT5EncoderModel", "TFMT5ForConditionalGeneration", "TFMT5Model"])
-    _import_structure["models.umt5"].extend(["TFUMT5EncoderModel", "TFUMT5ForConditionalGeneration", "TFUMT5Model"])
     _import_structure["models.openai"].extend(
         [
             "TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3379,6 +3378,7 @@ else:
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.umt5"].extend(["TFUMT5EncoderModel", "TFUMT5ForConditionalGeneration", "TFUMT5Model"])
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
     _import_structure["models.vision_text_dual_encoder"].extend(["TFVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(
@@ -4067,7 +4067,6 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
-    from .models.umt5 import UMT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
@@ -4161,6 +4160,7 @@ if TYPE_CHECKING:
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
+    from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
@@ -5434,7 +5434,6 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
-        from .models.umt5 import UMT5EncoderModel, UMT5ForConditionalGeneration, UMT5Model, UMT5PreTrainedModel
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
@@ -5827,6 +5826,7 @@ if TYPE_CHECKING:
             TvltModel,
             TvltPreTrainedModel,
         )
+        from .models.umt5 import UMT5EncoderModel, UMT5ForConditionalGeneration, UMT5Model, UMT5PreTrainedModel
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechForCTC,
@@ -6422,7 +6422,6 @@ if TYPE_CHECKING:
             TFMPNetPreTrainedModel,
         )
         from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
-        from .models.umt5 import TFUMT5EncoderModel, TFUMT5ForConditionalGeneration, TFUMT5Model
         from .models.openai import (
             TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,
@@ -6540,6 +6539,7 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.umt5 import TFUMT5EncoderModel, TFUMT5ForConditionalGeneration, TFUMT5Model
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
@@ -6753,7 +6753,6 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
-        from .models.umt5 import FlaxUMT5EncoderModel, FlaxUMT5ForConditionalGeneration, FlaxUMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.regnet import FlaxRegNetForImageClassification, FlaxRegNetModel, FlaxRegNetPreTrainedModel
@@ -6789,6 +6788,7 @@ if TYPE_CHECKING:
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
         from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.umt5 import FlaxUMT5EncoderModel, FlaxUMT5ForConditionalGeneration, FlaxUMT5Model
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel

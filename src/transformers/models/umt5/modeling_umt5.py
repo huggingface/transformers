@@ -811,7 +811,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UMT5Attention, MT5Stack)):
+        if isinstance(module, (UMT5Attention, UMT5Stack)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -1127,8 +1127,10 @@ class UMT5Stack(UMT5PreTrainedModel):
 
 UMT5_START_DOCSTRING = r"""
 
-    The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual
+    Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay,
+    Orhan Firat, Sharan Narang, Noah Constant. It's an encoder decoder transformer pre-trained in a text-to-text
+    denoising generative setting.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1240,8 +1242,8 @@ UMT5_INPUTS_DOCSTRING = r"""
 UMT5_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so
+            you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.

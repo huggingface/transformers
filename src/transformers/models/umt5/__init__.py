@@ -22,6 +22,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {"configuration_umt5": ["UMT5Config", "UMT5OnnxConfig"]}
 
 try:

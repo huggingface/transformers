@@ -31,6 +31,7 @@ Steps:
 import argparse
 import collections
 
+import numpy as np
 import torch
 from flax import traverse_util
 from t5x import checkpoints
@@ -38,30 +39,30 @@ from t5x import checkpoints
 from transformers import UMT5Config, UMT5EncoderModel, UMT5ForConditionalGeneration
 from transformers.utils import logging
 
-import numpy as np
-
 
 logging.set_verbosity_info()
 
+
 def t5x_relpos_bias_lookup(params, i, prefix):
     """Returns the Relative Position Bias parameters of a layer. Does not transpose."""
-    return params[f'{prefix}/{prefix}/relpos_bias/rel_embedding'].transpose(1, 0, 2)[i]
+    return params[f"{prefix}/{prefix}/relpos_bias/rel_embedding"].transpose(1, 0, 2)[i]
+
 
 def t5x_attention_lookup(params, i, prefix, layer_name="attention"):
     """Returns the KOQV parameters of (self-)attention. Does not transpose."""
-    k_tmp = params[f'{prefix}/{prefix}/{layer_name}/key/kernel'].transpose(1, 0, 2, 3)[i]
+    k_tmp = params[f"{prefix}/{prefix}/{layer_name}/key/kernel"].transpose(1, 0, 2, 3)[i]
     # k_tmp = k_tmp.transpose(1, 0, 2)
     k = k_tmp.reshape(k_tmp.shape[0], k_tmp.shape[1] * k_tmp.shape[2])
     # o = params[f"{prefix}/layers_{i}/{layer_name}/out/kernel"]
-    o_tmp = params[f'{prefix}/{prefix}/{layer_name}/out/kernel'].transpose(1, 3, 0, 2)[i]
+    o_tmp = params[f"{prefix}/{prefix}/{layer_name}/out/kernel"].transpose(1, 3, 0, 2)[i]
     # o_tmp = o_tmp.transpose(1, 0, 2)
     o = o_tmp.reshape(o_tmp.shape[1] * o_tmp.shape[2], o_tmp.shape[0])
     # q = params[f"{prefix}/layers_{i}/{layer_name}/query/kernel"]
-    q_tmp = params[f'{prefix}/{prefix}/{layer_name}/query/kernel'].transpose(1, 0, 2, 3)[i]
+    q_tmp = params[f"{prefix}/{prefix}/{layer_name}/query/kernel"].transpose(1, 0, 2, 3)[i]
     # q_tmp = q_tmp.transpose(1, 0, 2)
     q = q_tmp.reshape(q_tmp.shape[0], q_tmp.shape[1] * q_tmp.shape[2])
     # v = params[f"{prefix}/layers_{i}/{layer_name}/value/kernel"]
-    v_tmp = params[f'{prefix}/{prefix}/{layer_name}/value/kernel'].transpose(1, 0, 2, 3)[i]
+    v_tmp = params[f"{prefix}/{prefix}/{layer_name}/value/kernel"].transpose(1, 0, 2, 3)[i]
     # v_tmp = v_tmp.transpose(1, 0, 2)
     v = v_tmp.reshape(v_tmp.shape[0], v_tmp.shape[1] * v_tmp.shape[2])
     return k, o, q, v
@@ -83,7 +84,7 @@ def t5x_mlp_lookup(params, i, prefix, split_mlp_wi=False):
 
 def t5x_layer_norm_lookup(params, i, prefix, layer_name):
     """Returns the layer norm param of a layer."""
-    return params[f'{prefix}/{prefix}/{layer_name}/scale'].transpose(1, 0)[i]
+    return params[f"{prefix}/{prefix}/{layer_name}/scale"].transpose(1, 0)[i]
 
 
 def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only: bool):
@@ -92,7 +93,7 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
     old = {"/".join(k): v for k, v in old.items()}
 
     # v1.1 models have a gated GeLU with wi_0 and wi_1 instead of wi
-    split_mlp_wi = 'encoder/encoder/mlp/wi_0/kernel' in old
+    split_mlp_wi = "encoder/encoder/mlp/wi_0/kernel" in old
     print("Split MLP:", split_mlp_wi)
 
     new = collections.OrderedDict()
@@ -111,7 +112,9 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
         new[f"encoder.block.{i}.layer.0.SelfAttention.q.weight"] = q.T
         new[f"encoder.block.{i}.layer.0.SelfAttention.v.weight"] = v.T
 
-        new[f"encoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, i, "encoder").T
+        new[f"encoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(
+            old, i, "encoder"
+        ).T
 
         # Block i, layer 1 (MLP).
         layer_norm = t5x_layer_norm_lookup(old, i, "encoder", "pre_mlp_layer_norm")
@@ -138,6 +141,10 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
             new[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"] = q.T
             new[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = v.T
 
+            new[f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(
+                old, i, "decoder"
+            ).T
+
             # Block i, layer 1 (Cross Attention).
             layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_cross_attention_layer_norm")
             k, o, q, v = t5x_attention_lookup(old, i, "decoder", "encoder_decoder_attention")
@@ -147,18 +154,16 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
             new[f"decoder.block.{i}.layer.1.EncDecAttention.q.weight"] = q.T
             new[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = v.T
 
-            new[f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = t5x_relpos_bias_lookup(old, i, "decoder").T
-
             # Block i, layer 2 (MLP).
             layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_mlp_layer_norm")
             wi, wo = t5x_mlp_lookup(old, i, "decoder", split_mlp_wi)
             new[f"decoder.block.{i}.layer.2.layer_norm.weight"] = layer_norm
             if split_mlp_wi:
-                new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"] = wi[0] .T
-                new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"] = wi[1] .T
+                new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"] = wi[0].T
+                new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"] = wi[1].T
             else:
                 new[f"encoder.block.{i}.layer.2.DenseReluDense.wi.weight"] = wi.T
-            new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo .T
+            new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo.T
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
 
@@ -172,7 +177,9 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
 def make_state_dict(converted_params, is_encoder_only: bool):
     """Prepares a state dict for the PyTorch model."""
     # Make a state dict with torch tensors.
-    state_dict = collections.OrderedDict([(k, torch.from_numpy(np.array(v).copy())) for (k, v) in converted_params.items()])
+    state_dict = collections.OrderedDict(
+        [(k, torch.from_numpy(np.array(v).copy())) for (k, v) in converted_params.items()]
+    )
 
     # Add what is missing.
     if "encoder.embed_tokens.weight" not in state_dict:

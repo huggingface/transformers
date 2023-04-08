@@ -1231,8 +1231,10 @@ class FlaxUMT5PreTrainedModel(FlaxPreTrainedModel):
 
 
 UMT5_START_DOCSTRING = r"""
-    The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual
+    Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay,
+    Orhan Firat, Sharan Narang, Noah Constant. It's an encoder decoder transformer pre-trained in a text-to-text
+    denoising generative setting.
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
