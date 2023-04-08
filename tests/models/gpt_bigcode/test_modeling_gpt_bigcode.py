@@ -39,8 +39,6 @@ if is_torch_available():
     )
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
-    torch.backends.cuda.matmul.allow_tf32 = False
-
 
 class GPTBigCodeModelTester:
     def __init__(

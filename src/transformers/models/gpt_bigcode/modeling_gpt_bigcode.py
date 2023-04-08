@@ -197,9 +197,6 @@ class GPTBigCodeAttention(nn.Module):
         else:
             attn_output = torch.matmul(attn_weights, value)
 
-        # if self.multi_query:
-        #    attn_weights = attn_weights.permute(0, 2, 1, 3)
-
         return attn_output, attn_weights
 
     def forward(
