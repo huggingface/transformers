@@ -666,6 +666,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
+            **kwargs,
         )
 
     def _batch_encode_plus(
@@ -749,6 +750,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_length=return_length,
             return_tensors=return_tensors,
             verbose=verbose,
+            **kwargs,
         )
 
         return BatchEncoding(batch_outputs)
@@ -770,6 +772,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
@@ -799,6 +802,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
+                **kwargs,
             )
 
             for key, value in outputs.items():
