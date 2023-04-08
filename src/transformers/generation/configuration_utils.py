@@ -56,7 +56,7 @@ class GenerationConfig(PushToHubMixin):
             `constraints!=None` or `force_words_ids!=None`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
-    more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
     Arg:
         > Parameters that control the length of the output

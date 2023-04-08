@@ -528,6 +528,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
             "feature-extraction": T5Model,
             "summarization": T5ForConditionalGeneration,
             "text2text-generation": T5ForConditionalGeneration,
+            "translation": T5ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
