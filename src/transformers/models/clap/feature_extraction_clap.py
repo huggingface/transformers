@@ -194,7 +194,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False, antialias=False
         )
         mel_shrink = mel_shrink[0][0].numpy()
-        mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
+        mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
         return mel_fusion
 
     def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
