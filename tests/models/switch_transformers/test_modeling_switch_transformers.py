@@ -558,6 +558,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "feature-extraction": SwitchTransformersModel,
             "summarization": SwitchTransformersForConditionalGeneration,
             "text2text-generation": SwitchTransformersForConditionalGeneration,
+            "translation": SwitchTransformersForConditionalGeneration,
         }
         if is_torch_available()
         else {}
