@@ -170,7 +170,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 이 시점에서, 세 가지 단계만 남았습니다:
 
 1. [`TrainingArguments`]에서 하이퍼파라미터를 정의하세요. `output_dir`는 모델을 저장할 위치를 지정하는 유일한 파라미터입니다. 이 모델을 허브에 업로드하기 위해 `push_to_hub=True`를 설정합니다. (모델을 업로드하기 위해 Hugging Face에 로그인해야합니다.) 각 에폭이 끝날 때마다, [`Trainer`]는 정확도를 평가하고 학습 체크포인트를 저장합니다.
-2. [`Trainer`]에 학습 인수와 모델, 데이터셋, 토큰나이저, 데이터 수집기 및 `compute_metrics` 함수를 전달하세요.
+2. [`Trainer`]에 학습 인수와 모델, 데이터셋, 토크나이저, 데이터 수집기 및 `compute_metrics` 함수를 전달하세요.
 3. [`~Trainer.train`]를 호출하여 모델은 미세 튜닝하세요.
 
 ```py
@@ -277,7 +277,7 @@ TensorFlow에서 모델을 미세 튜닝하려면, 먼저 옵티마이저 함수
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
-[`~transformers.PushToHubCallback`]에서 모델과 토큰나이저를 업로드할 위치를 지정합니다:
+[`~transformers.PushToHubCallback`]에서 모델과 토크나이저를 업로드할 위치를 지정합니다:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -343,7 +343,7 @@ TensorFlow에서 모델을 미세 튜닝하려면, 먼저 옵티마이저 함수
 >>> inputs = tokenizer(text, return_tensors="pt")
 ```
 
-입력을 모델에 전달하고 `logits`를 반환합니다:
+입력을 모델에 전달하고 `logits`을 반환합니다:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -353,7 +353,7 @@ TensorFlow에서 모델을 미세 튜닝하려면, 먼저 옵티마이저 함수
 ...     logits = model(**inputs).logits
 ```
 
-가장 높은 확률을 가진 클래스를 가져와서, 모델의 `id2label` 매핑을 사용하여 텍스트 레이블로 변환합니다:
+가장 높은 확률을 가진 클래스를 모델의 `id2label` 매핑을 사용하여 텍스트 레이블로 변환합니다:
 
 ```py
 >>> predicted_class_id = logits.argmax().item()
@@ -371,7 +371,7 @@ TensorFlow에서 모델을 미세 튜닝하려면, 먼저 옵티마이저 함수
 >>> inputs = tokenizer(text, return_tensors="tf")
 ```
 
-입력값을 모델에 전달하고 `logits`를 반환합니다:
+입력값을 모델에 전달하고 `logits`을 반환합니다:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
@@ -380,7 +380,7 @@ TensorFlow에서 모델을 미세 튜닝하려면, 먼저 옵티마이저 함수
 >>> logits = model(**inputs).logits
 ```
 
-가장 높은 확률을 가진 클래스를 가져와서, 모델의 `id2label` 매핑을 사용하여 텍스트 레이블로 변환합니다:
+가장 높은 확률을 가진 클래스를 모델의 `id2label` 매핑을 사용하여 텍스트 레이블로 변환합니다:
 
 ```py
 >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
