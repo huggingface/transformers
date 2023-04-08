@@ -128,6 +128,7 @@ from . import (
     mobilevit,
     mpnet,
     mt5,
+    umt5,
     mvp,
     nat,
     nezha,
