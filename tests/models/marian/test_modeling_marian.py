@@ -244,8 +244,9 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "conversational": MarianMTModel,
             "feature-extraction": MarianModel,
             "summarization": MarianMTModel,
-            "text2text-generation": MarianMTModel,
             "text-generation": MarianForCausalLM,
+            "text2text-generation": MarianMTModel,
+            "translation": MarianMTModel,
         }
         if is_torch_available()
         else {}

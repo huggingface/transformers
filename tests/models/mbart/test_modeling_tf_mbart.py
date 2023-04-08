@@ -190,6 +190,7 @@ class TFMBartModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             "feature-extraction": TFMBartModel,
             "summarization": TFMBartForConditionalGeneration,
             "text2text-generation": TFMBartForConditionalGeneration,
+            "translation": TFMBartForConditionalGeneration,
         }
         if is_tf_available()
         else {}

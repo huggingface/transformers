@@ -462,9 +462,9 @@ class Trainer:
             if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
-            self.forword_prefetch = False
-            if self.args.fsdp_config.get("forword_prefect", False):
-                self.forword_prefetch = True
+            self.forward_prefetch = False
+            if self.args.fsdp_config.get("forward_prefect", False):
+                self.forward_prefetch = True
 
             self.limit_all_gathers = False
             if self.args.fsdp_config.get("limit_all_gathers", False):
@@ -1406,8 +1406,8 @@ class Trainer:
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
+        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
@@ -1481,6 +1481,11 @@ class Trainer:
                     mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
                 if type(model) != FSDP:
                     # XXX: Breaking the self.model convention but I see no way around it for now.
+                    signature = inspect.signature(FSDP.__init__).parameters.keys()
+                    kwargs = {}
+                    for arg in ["limit_all_gathers", "forward_prefetch", "backward_prefetch"]:
+                        if arg in signature:
+                            kwargs[arg] = getattr(self, arg)
                     self.model = model = FSDP(
                         model,
                         sharding_strategy=self.fsdp,
@@ -1488,9 +1493,7 @@ class Trainer:
                         auto_wrap_policy=auto_wrap_policy,
                         mixed_precision=mixed_precision_policy,
                         device_id=self.args.device,
-                        backward_prefetch=self.backward_prefetch,
-                        forward_prefetch=self.forword_prefetch,
-                        limit_all_gathers=self.limit_all_gathers,
+                        **kwargs,
                     )
             else:
                 try:
