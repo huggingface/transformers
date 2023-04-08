@@ -185,6 +185,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "xformers==0.0.16"
 ]
 
 
