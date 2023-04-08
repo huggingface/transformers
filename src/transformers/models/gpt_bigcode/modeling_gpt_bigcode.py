@@ -189,7 +189,7 @@ class GPTBigCodeAttention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             if self.multi_query:
-                head_mask = head_mask.permute(0, 2, 1, 3)
+                head_mask = head_mask.transpose(1, 2)
             attn_weights = attn_weights * head_mask
 
         if self.multi_query:
@@ -251,6 +251,9 @@ class GPTBigCodeAttention(nn.Module):
 
         outputs = (attn_output, present)
         if output_attentions:
+            if self.multi_query:
+                # Transpose to return weights in the usual format (batch_size, num_heads, query_length, key_length)
+                attn_weights = attn_weights.transpose(1, 2)
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
@@ -690,12 +693,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if self.config.multi_query and output_attentions:
-            all_permuted_self_attentions = ()
-            for attentions in all_self_attentions:
-                all_permuted_self_attentions += (attentions.permute(0, 2, 1, 3),)
-            all_self_attentions = all_permuted_self_attentions
 
         if not return_dict:
             return tuple(
