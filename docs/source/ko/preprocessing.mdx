@@ -270,7 +270,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-오디오 `array`를 특징 추출기에 전달하세요. 또한, 특징 추출기에 `sampling_rate` 인자를 추가하여 발생할 수 있는 silent errors(즉각적인 오류 메시지가 발생하지 않는 오류)를 더 잘 디버깅하는 것을 권장합니다.
+오디오 `array`를 특징 추출기에 전달하세요. 또한, 특징 추출기에 `sampling_rate` 인자를 추가하여 발생할 수 있는 조용한 오류(silent errors)를 더 잘 디버깅하는 것을 권장합니다.
 
 ```py
 >>> audio_input = [dataset[0]["audio"]["array"]]
