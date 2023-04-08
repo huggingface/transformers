@@ -154,7 +154,6 @@ class UMT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->MT5
 class UMT5DenseGatedActDense(nn.Module):
     def __init__(self, config: UMT5Config):
         super().__init__()
@@ -1868,7 +1867,6 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ]
     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MT5
     def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
