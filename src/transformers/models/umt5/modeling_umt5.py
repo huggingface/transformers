@@ -132,7 +132,6 @@ class UMT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->MT5
 class UMT5DenseActDense(nn.Module):
     def __init__(self, config: UMT5Config):
         super().__init__()
@@ -185,7 +184,6 @@ class UMT5DenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->MT5
 class UMT5LayerFF(nn.Module):
     def __init__(self, config: UMT5Config):
         super().__init__()
@@ -204,7 +202,6 @@ class UMT5LayerFF(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
 class UMT5Attention(nn.Module):
     def __init__(self, config: UMT5Config, has_relative_attention_bias=True):
         super().__init__()
@@ -439,7 +436,6 @@ class UMT5Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MT5
 class UMT5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=True):
         super().__init__()
@@ -472,7 +468,6 @@ class UMT5LayerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->MT5
 class UMT5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -509,7 +504,6 @@ class UMT5LayerCrossAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Block with T5->MT5
 class UMT5Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=True):
         super().__init__()
@@ -740,7 +734,6 @@ def load_tf_weights_in_mt5(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class UMT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -840,7 +833,6 @@ class UMT5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
 class UMT5Stack(UMT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -1314,7 +1306,6 @@ class UMT5Model(UMT5PreTrainedModel):
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
-    # Copied from transformers.models.t5.modeling_t5.T5Model.__init__ with T5->MT5
     def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1402,7 +1393,6 @@ class UMT5Model(UMT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UMT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1546,7 +1536,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.__init__ with T5->MT5
     def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.model_dim = config.d_model
@@ -1639,7 +1628,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UMT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1953,7 +1941,6 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UMT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1972,8 +1959,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, UMT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = UMT5EncoderModel.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("umt5-small")
+        >>> model = UMT5EncoderModel.from_pretrained("umt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
