@@ -226,8 +226,9 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
             "conversational": BlenderbotSmallForConditionalGeneration,
             "feature-extraction": BlenderbotSmallModel,
             "summarization": BlenderbotSmallForConditionalGeneration,
-            "text2text-generation": BlenderbotSmallForConditionalGeneration,
             "text-generation": BlenderbotSmallForCausalLM,
+            "text2text-generation": BlenderbotSmallForConditionalGeneration,
+            "translation": BlenderbotSmallForConditionalGeneration,
         }
         if is_torch_available()
         else {}
