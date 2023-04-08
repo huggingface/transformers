@@ -165,7 +165,10 @@ class GPTBigCodeAttention(nn.Module):
             # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
             # but the fix has not been released as of pytorch version 2.0.0.
             attn_weights.zero_()
-        attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor).view(attn_shape)
+            beta = 1
+        else:
+            beta = 0
+        attn_weights = torch.baddbmm(attn_weights, query, key, beta=beta, alpha=scale_factor).view(attn_shape)
 
         if upcast:
             # Use a fused kernel to prevent a large overhead from casting and scaling.

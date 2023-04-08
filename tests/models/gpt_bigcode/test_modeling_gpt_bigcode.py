@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2TokenizerFast,
         GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
@@ -65,7 +64,7 @@ class GPTBigCodeModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        multi_query=False,
+        multi_query=True,
         scope=None,
     ):
         self.parent = parent
@@ -425,6 +424,7 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     test_missing_keys = False
     test_pruning = False
     test_torchscript = False
+    multi_query = True
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
@@ -444,7 +444,7 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = GPTBigCodeModelTester(self, multi_query=True)
+        self.model_tester = GPTBigCodeModelTester(self, multi_query=self.multi_query)
         self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
 
     def tearDown(self):
@@ -459,20 +459,20 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("Skip contrastive search due to new caching mechanism due to new caching mechanism")
+    @unittest.skip("Contrastive search not supported due to non-standard caching mechanism")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("Skip contrastive search due to new caching mechanism")
+    @unittest.skip("Contrastive search not supported due to non-standard caching mechanism")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
-    def test_cpu_offload():
+    def test_cpu_offload(self):
         pass
 
     @unittest.skip("Disk offload seems to be broken for some reason - tiny models keep hitting corner cases")
-    def test_disk_offload():
+    def test_disk_offload(self):
         pass
 
     def test_gpt_bigcode_model(self):
@@ -521,114 +521,9 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
 
 @require_torch
-class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    # TODO: Update the tests to use valid pretrained models.
-    all_model_classes = (
-        (
-            GPTBigCodeModel,
-            GPTBigCodeForCausalLM,
-            GPTBigCodeForSequenceClassification,
-            GPTBigCodeForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (GPTBigCodeForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
-    test_missing_keys = False
-    test_pruning = False
-    test_torchscript = False
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GPTBigCodeModel,
-            "text-classification": GPTBigCodeForSequenceClassification,
-            "text-generation": GPTBigCodeForCausalLM,
-            "token-classification": GPTBigCodeForTokenClassification,
-            "zero-shot": GPTBigCodeForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    # special case for DoubleHeads model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        return inputs_dict
-
-    def setUp(self):
-        self.model_tester = GPTBigCodeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
-
-    def tearDown(self):
-        import gc
-
-        gc.collect()
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    @unittest.skip("Skip contrastive search due to new caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Skip contrastive search due to new caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("CPU offload seems to be broken for some reason")
-    def test_cpu_offload():
-        pass
-
-    def test_gpt_bigcode_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_model(*config_and_inputs)
-
-    def test_gpt_bigcode_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_model_past(*config_and_inputs)
-
-    def test_gpt_bigcode_model_att_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_model_attention_mask_past(*config_and_inputs)
-
-    def test_gpt_bigcode_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_model_past_large_inputs(*config_and_inputs)
-
-    def test_gpt_bigcode_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_gpt_bigcode_sequence_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_for_sequence_classification(*config_and_inputs)
-
-    def test_gpt_bigcode_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_for_token_classification(*config_and_inputs)
-
-    def test_gpt_bigcode_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
-
-    def test_gpt_bigcode_scale_attn_by_inverse_layer_idx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
-
-    def test_gpt_bigcode_reorder_and_upcast_attn(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(reorder_and_upcast_attn=True)
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
-
-    def test_gpt_bigcode_weight_initialization(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_bigcode_weight_initialization(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTBigCodeModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+class GPTBigCodeMHAModelTest(GPTBigCodeMQAModelTest):
+    # `parameterized_class` breaks with mixins, so we use inheritance instead
+    multi_query = False
 
 
 @slow
@@ -683,7 +578,7 @@ class GPTBigCodeMQATest(unittest.TestCase):
 
         # CREATE MQA AND MHA ATTENTIONS
         attention_mqa = self.get_attention(True)
-        attention_mh = self.get_attention(False)
+        attention_mha = self.get_attention(False)
 
         # ENFORCE MATCHING WEIGHTS
         num_heads = attention_mqa.num_heads
@@ -703,20 +598,20 @@ class GPTBigCodeMQATest(unittest.TestCase):
                 3 * num_heads * head_dim
             )
 
-            attention_mh.c_attn.weight.copy_(mha_c_weight)
-            attention_mh.c_attn.bias.copy_(mha_c_bias)
-            attention_mh.c_proj.weight.copy_(attention_mqa.c_proj.weight)
-            attention_mh.c_proj.bias.copy_(attention_mqa.c_proj.bias)
+            attention_mha.c_attn.weight.copy_(mha_c_weight)
+            attention_mha.c_attn.bias.copy_(mha_c_bias)
+            attention_mha.c_proj.weight.copy_(attention_mqa.c_proj.weight)
+            attention_mha.c_proj.bias.copy_(attention_mqa.c_proj.bias)
 
         # PUT THE MODEL INTO THE CORRECT MODE
-        attention_mh.train(is_train_mode)
+        attention_mha.train(is_train_mode)
         attention_mqa.train(is_train_mode)
 
         # RUN AN INPUT THROUGH THE MODELS
         num_tokens = 5
         hidden_states = torch.randn(1, num_tokens, embed_dim)
-        attention_mh_result = attention_mh(hidden_states)[0]
-        attention_mq_result = attention_mqa(hidden_states)[0]
+        attention_mha_result = attention_mha(hidden_states)[0]
+        attention_mqa_result = attention_mqa(hidden_states)[0]
 
         # CHECK THAT ALL OUTPUTS ARE THE SAME
-        self.assertTrue(torch.allclose(attention_mh_result, attention_mq_result, atol=1e-5))
+        self.assertTrue(torch.allclose(attention_mha_result, attention_mqa_result, atol=1e-5))
