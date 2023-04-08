@@ -110,14 +110,14 @@ DEPARALLELIZE_DOCSTRING = r"""
 class UMT5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Construct a layernorm module in the MT5 style. No bias and no subtraction of mean.
+        Construct a layernorm module in the UMT5 style. No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        # MT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # UMT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
@@ -1075,13 +1075,6 @@ class UMT5Stack(UMT5PreTrainedModel):
 
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            # In UMT5 we should not share position biases across layers
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
-            # (cross-attention position bias), (cross-attention weights)
-            # position_bias = layer_outputs[2]
-            # if self.is_decoder and encoder_hidden_states is not None:
-            #     encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
@@ -1445,7 +1438,7 @@ class UMT5Model(UMT5PreTrainedModel):
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for MT5Model.
-        >>> # This is not needed for torch's MT5ForConditionalGeneration as it does this internally using labels arg.
+        >>> # This is not needed for torch's UMT5ForConditionalGeneration as it does this internally using labels arg.
         >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
@@ -1869,8 +1862,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ```python
     >>> from transformers import UMT5EncoderModel, AutoTokenizer
 
-    >>> model = UMT5EncoderModel.from_pretrained("google/mt5-small")
-    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+    >>> model = UMT5EncoderModel.from_pretrained("google/umt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
     >>> outputs = model(input_ids)
@@ -1979,8 +1972,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, UMT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("umt5-small")
-        >>> model = UMT5EncoderModel.from_pretrained("umt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
+        >>> model = UMT5EncoderModel.from_pretrained("mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

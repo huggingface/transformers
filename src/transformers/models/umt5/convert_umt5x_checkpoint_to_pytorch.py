@@ -51,19 +51,12 @@ def t5x_relpos_bias_lookup(params, i, prefix):
 def t5x_attention_lookup(params, i, prefix, layer_name="attention"):
     """Returns the KOQV parameters of (self-)attention. Does not transpose."""
     k_tmp = params[f"{prefix}/{prefix}/{layer_name}/key/kernel"].transpose(1, 0, 2, 3)[i]
-    # k_tmp = k_tmp.transpose(1, 0, 2)
     k = k_tmp.reshape(k_tmp.shape[0], k_tmp.shape[1] * k_tmp.shape[2])
-    # o = params[f"{prefix}/layers_{i}/{layer_name}/out/kernel"]
     o_tmp = params[f"{prefix}/{prefix}/{layer_name}/out/kernel"].transpose(1, 3, 0, 2)[i]
-    # o_tmp = o_tmp.transpose(1, 0, 2)
     o = o_tmp.reshape(o_tmp.shape[1] * o_tmp.shape[2], o_tmp.shape[0])
-    # q = params[f"{prefix}/layers_{i}/{layer_name}/query/kernel"]
     q_tmp = params[f"{prefix}/{prefix}/{layer_name}/query/kernel"].transpose(1, 0, 2, 3)[i]
-    # q_tmp = q_tmp.transpose(1, 0, 2)
     q = q_tmp.reshape(q_tmp.shape[0], q_tmp.shape[1] * q_tmp.shape[2])
-    # v = params[f"{prefix}/layers_{i}/{layer_name}/value/kernel"]
     v_tmp = params[f"{prefix}/{prefix}/{layer_name}/value/kernel"].transpose(1, 0, 2, 3)[i]
-    # v_tmp = v_tmp.transpose(1, 0, 2)
     v = v_tmp.reshape(v_tmp.shape[0], v_tmp.shape[1] * v_tmp.shape[2])
     return k, o, q, v
 
@@ -77,7 +70,6 @@ def t5x_mlp_lookup(params, i, prefix, split_mlp_wi=False):
     else:
         wi = params[f"{prefix}/{prefix}/mlp/wi/kernel"].transpose(1, 0, 2)[i]
 
-    # wo = params[f"{prefix}/layers_{i}/mlp/wo/kernel"]
     wo = params[f"{prefix}/{prefix}/mlp/wo/kernel"].transpose(1, 0, 2)[i]
     return wi, wo
 

@@ -1890,27 +1890,6 @@ class TFMT5Model(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFUMT5EncoderModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFUMT5ForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFUMT5Model(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2539,6 +2518,27 @@ class TFTransfoXLModel(metaclass=DummyObject):
 
 
 class TFTransfoXLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFUMT5EncoderModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFUMT5ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFUMT5Model(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
