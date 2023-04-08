@@ -18,26 +18,9 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
-    is_sentencepiece_available,
     is_tf_available,
-    is_tokenizers_available,
     is_torch_available,
 )
-
-
-if is_sentencepiece_available():
-    from ..t5.tokenization_t5 import T5Tokenizer
-else:
-    from ...utils.dummy_sentencepiece_objects import T5Tokenizer
-
-UMT5Tokenizer = T5Tokenizer
-
-if is_tokenizers_available():
-    from ..t5.tokenization_t5_fast import T5TokenizerFast
-else:
-    from ...utils.dummy_tokenizers_objects import T5TokenizerFast
-
-UMT5TokenizerFast = T5TokenizerFast
 
 _import_structure = {"configuration_umt5": ["UMT5Config", "UMT5OnnxConfig"]}
 
@@ -116,6 +99,5 @@ else:
         __name__,
         globals()["__file__"],
         _import_structure,
-        extra_objects={"UMT5Tokenizer": UMT5Tokenizer, "UMT5TokenizerFast": UMT5TokenizerFast},
         module_spec=__spec__,
     )
