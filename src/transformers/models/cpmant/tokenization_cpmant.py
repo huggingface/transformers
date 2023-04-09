@@ -17,12 +17,8 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
-from transformers import is_torch_available
 from transformers.utils import is_jieba_available, requires_backends
 
-
-if is_torch_available():
-    import torch
 
 if is_jieba_available():
     import jieba

@@ -1316,14 +1316,6 @@ else:
             "ConvNextPreTrainedModel",
         ]
     )
-    _import_structure["models.cpmant"].extend(
-        [
-            "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CpmAntForCausalLM",
-            "CpmAntModel",
-            "CpmAntPreTrainedModel",
-        ]
-    )
     _import_structure["models.convnextv2"].extend(
         [
             "CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1331,6 +1323,14 @@ else:
             "ConvNextV2ForImageClassification",
             "ConvNextV2Model",
             "ConvNextV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.cpmant"].extend(
+        [
+            "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CpmAntForCausalLM",
+            "CpmAntModel",
+            "CpmAntPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -3937,8 +3937,8 @@ if TYPE_CHECKING:
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
-    from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
     from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
+    from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -4879,18 +4879,18 @@ if TYPE_CHECKING:
             ConvNextModel,
             ConvNextPreTrainedModel,
         )
-        from .models.cpmant import (
-            CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CpmAntForCausalLM,
-            CpmAntModel,
-            CpmAntPreTrainedModel,
-        )
         from .models.convnextv2 import (
             CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextV2Backbone,
             ConvNextV2ForImageClassification,
             ConvNextV2Model,
             ConvNextV2PreTrainedModel,
+        )
+        from .models.cpmant import (
+            CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CpmAntForCausalLM,
+            CpmAntModel,
+            CpmAntPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,

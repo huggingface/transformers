@@ -1810,30 +1810,6 @@ class ConvNextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class CpmAntForCausalLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CpmAntModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CpmAntPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1859,6 +1835,30 @@ class ConvNextV2Model(metaclass=DummyObject):
 
 
 class ConvNextV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CpmAntForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
