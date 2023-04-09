@@ -126,7 +126,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-그런 다음 `compute_metrics` 함수를 만들어서 예측과 레이블을 계산하여 정학도를 계산하도록 [`~evaluate.EvaluationModule.compute`]를 호출합니다.
+그런 다음 `compute_metrics` 함수를 만들어서 예측과 레이블을 계산하여 정확도를 계산하도록 [`~evaluate.EvaluationModule.compute`]를 호출합니다.
 
 ```py
 >>> import numpy as np
@@ -157,7 +157,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 </Tip>
 
-이제 모델을 학습할 준비가 되었습니다! [`AutoModelForSequenceClassification`]를 사용하여 DistilBERT를 로드하고 예상되는 라벨 수와 라벨 매핑을 지정하세요:
+이제 모델을 학습할 준비가 되었습니다! [`AutoModelForSequenceClassification`]를 사용하여 DistilBERT를 로드하고 예상되는 레이블 수와 레이블 매핑을 지정하세요:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
