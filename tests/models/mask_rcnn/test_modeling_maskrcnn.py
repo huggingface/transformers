@@ -248,14 +248,10 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         pixel_values = transforms(image).unsqueeze(0).to(torch_device)
 
-        width, height = image.size
-        pixel_values_height, pixel_values_width = pixel_values.shape[-2:]
-
         img_metas = [
             {
                 "img_shape": pixel_values.shape[1:],
                 "scale_factor": np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-                "ori_shape": (3, height, width),
             }
         ]
 
@@ -285,7 +281,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         results = processor.post_process_object_detection(
             outputs,
             threshold=0.5,
-            target_sizes=[meta["ori_shape"] for meta in img_metas],
+            target_sizes=[image.size[::-1]],
             scale_factors=[meta["scale_factor"] for meta in img_metas],
         )
 
@@ -315,7 +311,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         mask_results = processor.post_process_instance_segmentation(
             results,
             mask_pred,
-            target_sizes=[meta["ori_shape"] for meta in img_metas],
+            target_sizes=[image.size[::-1]],
             scale_factors=[meta["scale_factor"] for meta in img_metas],
         )
         self.assertEquals(len(mask_results[0]), 80)
