@@ -14,8 +14,13 @@
 # limitations under the License.
 """ Mask-RCNN model configuration"""
 
+import copy
+from typing import Dict
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
+from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -32,33 +37,15 @@ class MaskRCNNConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MaskRCNNModel`]. It is used to instantiate a Mask
     RCNN model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Mask RCNN
-    [facebook/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
+    [microsoft/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
-            Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
-            The number of stages in the model.
-        hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
-            Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to [3, 3, 9, 3]):
-            Depth (number of blocks) for each stage.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            The initial value for the layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The drop rate for stochastic depth.
+        backbone_config (`Dict`, *optional*):
+            The configuration passed to the backbone, if unset, the configuration corresponding to
+            `facebook/convnext-tiny-224` will be used.
         fpn_out_channels (`int`, optional, defaults to 256):
             Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network
             (FPN).
@@ -81,17 +68,8 @@ class MaskRCNNConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
-        patch_size=4,
-        num_stages=4,
-        hidden_sizes=None,
-        depths=None,
-        hidden_act="gelu",
+        backbone_config=None,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        layer_scale_init_value=1e-6,
-        drop_path_rate=0.0,
-        image_size=224,
         # FPN
         fpn_out_channels=256,
         fpn_num_outputs=5,
@@ -160,17 +138,16 @@ class MaskRCNNConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.num_stages = num_stages
-        self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
-        self.depths = [3, 3, 9, 3] if depths is None else depths
-        self.hidden_act = hidden_act
+        # Backbone
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ConvNeXt` backbone.")
+            backbone_config = CONFIG_MAPPING["convnext"](out_features=["stage1", "stage2", "stage3", "stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+        self.backbone_config = backbone_config
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.layer_scale_init_value = layer_scale_init_value
-        self.drop_path_rate = drop_path_rate
-        self.image_size = image_size
         # FPN
         self.fpn_out_channels = fpn_out_channels
         self.fpn_num_outputs = fpn_num_outputs
@@ -220,3 +197,16 @@ class MaskRCNNConfig(PretrainedConfig):
         self.rcnn_sampler_pos_fraction = rcnn_sampler_pos_fraction
         self.rcnn_sampler_neg_pos_ub = rcnn_sampler_neg_pos_ub
         self.rcnn_sampler_add_gt_as_proposals = rcnn_sampler_add_gt_as_proposals
+
+    
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
