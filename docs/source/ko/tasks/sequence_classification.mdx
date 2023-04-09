@@ -138,7 +138,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ...     return accuracy.compute(predictions=predictions, references=labels)
 ```
 
-이제, `compute_metrics`가 준비되었습니다. 이 함수는 학습 설정 시 돌아가게 됩니다.
+이제 `compute_metrics` 함수는 준비되었고, 훈련 과정을 설정할 때 다시 살펴볼 예정입니다.
 
 ## 학습[[train]]
 
