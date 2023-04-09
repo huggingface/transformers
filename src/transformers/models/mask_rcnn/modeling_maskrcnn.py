@@ -352,14 +352,14 @@ class MaskRCNNFPN(nn.Module):
     This is an implementation of [Feature Pyramid Networks for Object Detection](https://arxiv.org/abs/1612.03144).
     """
 
-    def __init__(self, config):
+    def __init__(self, config, hidden_sizes):
         super().__init__()
 
         self.num_outs = config.fpn_num_outputs
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
 
-        for hidden_size in config.hidden_sizes:
+        for hidden_size in hidden_sizes:
             lateral_conv = nn.Conv2d(hidden_size, config.fpn_out_channels, kernel_size=1)
             fpn_conv = nn.Conv2d(config.fpn_out_channels, config.fpn_out_channels, kernel_size=3, padding=1)
 
@@ -2751,7 +2751,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         self.config = config
 
         self.backbone = AutoBackbone.from_config(config.backbone_config)
-        self.neck = MaskRCNNFPN(config)
+        self.neck = MaskRCNNFPN(config, self.backbone.channels)
         self.rpn_head = MaskRCNNRPN(config)
         self.roi_head = MaskRCNNRoIHead(config)
 

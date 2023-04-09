@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
     import torchvision.transforms as T
 
-    from transformers import MaskRCNNForObjectDetection, MaskRCNNModel
+    from transformers import MaskRCNNForObjectDetection
     from transformers.models.mask_rcnn.modeling_maskrcnn import (
         MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -100,26 +100,7 @@ class MaskRCNNModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return MaskRCNNConfig(
-            num_channels=self.num_channels,
-            hidden_sizes=self.hidden_sizes,
-            depths=self.depths,
-            num_stages=self.num_stages,
-            hidden_act=self.hidden_act,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-        )
-
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = MaskRCNNModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        # expected last hidden states: B, C, H // 32, W // 32
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
-        )
+        return MaskRCNNConfig(initializer_range=self.initializer_range)
 
     def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
         model = MaskRCNNForObjectDetection(config=config)
@@ -146,14 +127,7 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            MaskRCNNModel,
-            MaskRCNNForObjectDetection,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MaskRCNNForObjectDetection,) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -201,10 +175,6 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_for_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_for_object_detection(*config_and_inputs)
@@ -244,7 +214,7 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MaskRCNNModel.from_pretrained(model_name)
+            model = MaskRCNNForObjectDetection.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -267,7 +237,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         }
         num_classes = 80
         # TODO update to appropriate organization
-        feature_extractor = MaskRCNNImageProcessor(test_cfg=test_cfg, num_classes=num_classes)
+        processor = MaskRCNNImageProcessor(test_cfg=test_cfg, num_classes=num_classes)
         model = MaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
         # TODO use feature extractor instead?
@@ -296,7 +266,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         # verify outputs
         self.assertListEqual(
             list(outputs.keys()),
-            ["losses", "rois", "proposals", "logits", "pred_boxes", "fpn_hidden_states", "hidden_states"],
+            ["losses", "rois", "proposals", "logits", "pred_boxes", "fpn_hidden_states"],
         )
         expected_slice_logits = torch.tensor(
             [[-12.4785, -17.4976, -14.7001], [-10.9181, -16.7281, -13.2826], [-10.5053, -18.3817, -15.5554]],
@@ -312,7 +282,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessed results
-        results = feature_extractor.post_process_object_detection(
+        results = processor.post_process_object_detection(
             outputs,
             threshold=0.5,
             target_sizes=[meta["ori_shape"] for meta in img_metas],
@@ -342,7 +312,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(mask_pred[0, 0, :3, :3], expected_slice, atol=1e-4))
 
         # verify postprocessed mask results
-        mask_results = feature_extractor.post_process_instance_segmentation(
+        mask_results = processor.post_process_instance_segmentation(
             results,
             mask_pred,
             target_sizes=[meta["ori_shape"] for meta in img_metas],
