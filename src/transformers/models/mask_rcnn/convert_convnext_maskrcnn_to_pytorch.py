@@ -140,7 +140,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         {
             "img_shape": pixel_values.shape[1:],
             "scale_factor": np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-            "ori_shape": (3, height, width),
         }
     ]
 
