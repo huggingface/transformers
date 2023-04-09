@@ -581,7 +581,7 @@ class MRASelfAttention(nn.Module):
         )
 
         if head_dim < gpu_warp_size:
-            context_layer = context_layer[:, :, :head_dim]
+            context_layer = context_layer[:, :, :, :head_dim]
 
         context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
 
