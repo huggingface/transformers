@@ -30,20 +30,17 @@ from torch import nn
 from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
+from ... import AutoBackbone
 
 # TODO maybe include these dependencies somewhere else
 from ...assign_result import AssignResult
 from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
 from ...mask_target import mask_target
-from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...nms import batched_nms
 from ...sampling_result import SamplingResult
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
 )
 from .configuration_maskrcnn import MaskRCNNConfig
@@ -346,232 +343,6 @@ def bbox2roi(bbox_list):
         rois_list.append(rois)
     rois = torch.cat(rois_list, 0)
     return rois
-
-
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->MaskRCNN
-class MaskRCNNDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->MaskRCNN
-class MaskRCNNLayerNorm(nn.Module):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->MaskRCNN
-class MaskRCNNEmbeddings(nn.Module):
-    """This class is comparable to (and inspired by) the SwinEmbeddings class
-    found in src/transformers/models/swin/modeling_swin.py.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
-        )
-        self.layernorm = MaskRCNNLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
-        self.num_channels = config.num_channels
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        embeddings = self.patch_embeddings(pixel_values)
-        embeddings = self.layernorm(embeddings)
-        return embeddings
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->MaskRCNN
-class MaskRCNNLayer(nn.Module):
-    """This corresponds to the `Block` class in the original implementation.
-
-    There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
-    H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
-
-    The authors used (2) as they find it slightly faster in PyTorch.
-
-    Args:
-        config ([`MaskRCNNConfig`]): Model configuration class.
-        dim (`int`): Number of input channels.
-        drop_path (`float`): Stochastic depth rate. Default: 0.0.
-    """
-
-    def __init__(self, config, dim, drop_path=0):
-        super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = MaskRCNNLayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
-        self.act = ACT2FN[config.hidden_act]
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.layer_scale_parameter = (
-            nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            if config.layer_scale_init_value > 0
-            else None
-        )
-        self.drop_path = MaskRCNNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        input = hidden_states
-        x = self.dwconv(hidden_states)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.layernorm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.layer_scale_parameter is not None:
-            x = self.layer_scale_parameter * x
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        x = input + self.drop_path(x)
-        return x
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->MaskRCNN, ConvNeXT->MaskRCNN
-class MaskRCNNStage(nn.Module):
-    """MaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
-
-    Args:
-        config ([`MaskRCNNConfig`]): Model configuration class.
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
-    """
-
-    def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):
-        super().__init__()
-
-        if in_channels != out_channels or stride > 1:
-            self.downsampling_layer = nn.Sequential(
-                MaskRCNNLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
-            )
-        else:
-            self.downsampling_layer = nn.Identity()
-        drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.Sequential(
-            *[MaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
-        )
-
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        hidden_states = self.downsampling_layer(hidden_states)
-        hidden_states = self.layers(hidden_states)
-        return hidden_states
-
-
-# this class isn't copied from modeling_convnext.py as layernorms are added
-class MaskRCNNEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.stages = nn.ModuleList()
-        drop_path_rates = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
-        ]
-        prev_chs = config.hidden_sizes[0]
-        for i in range(config.num_stages):
-            out_chs = config.hidden_sizes[i]
-            stage = MaskRCNNStage(
-                config,
-                in_channels=prev_chs,
-                out_channels=out_chs,
-                stride=2 if i > 0 else 1,
-                depth=config.depths[i],
-                drop_path_rates=drop_path_rates[i],
-            )
-            self.stages.append(stage)
-            prev_chs = out_chs
-
-        self.layernorms = nn.ModuleList(
-            [MaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes]
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
-        all_hidden_states = () if output_hidden_states else None
-
-        for i, stage_module in enumerate(self.stages):
-            if output_hidden_states:
-                if i == 0:
-                    # add initial embeddings
-                    all_hidden_states = all_hidden_states + (hidden_states,)
-                else:
-                    all_hidden_states = all_hidden_states + (self.layernorms[i - 1](hidden_states),)
-
-            hidden_states = stage_module(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (self.layernorms[-1](hidden_states),)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
 
 
 class MaskRCNNFPN(nn.Module):
@@ -2973,67 +2744,13 @@ MASK_RCNN_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The bare MaskRCNN model outputting raw features without any specific head on top.",
-    MASK_RCNN_START_DOCSTRING,
-)
-class MaskRCNNModel(MaskRCNNPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-
-        self.embeddings = MaskRCNNEmbeddings(config)
-        self.encoder = MaskRCNNEncoder(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(MASK_RCNN_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        embedding_output = self.embeddings(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-
-        if not return_dict:
-            return (last_hidden_state,) + encoder_outputs[1:]
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-        )
-
-
 class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.config = config
 
-        self.convnext = MaskRCNNModel(config)
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
         self.neck = MaskRCNNFPN(config)
         self.rpn_head = MaskRCNNRPN(config)
         self.roi_head = MaskRCNNRoIHead(config)
@@ -3054,19 +2771,10 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
 
-        # we need the intermediate hidden states
-        outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        # only keep certain features based on config.backbone_out_indices
-        # note that the hidden_states also include the initial embeddings
-        hidden_states = [
-            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-        ]
+        outputs = self.backbone(pixel_values, return_dict=return_dict)
 
         # the FPN outputs feature maps at 5 different scales
-        hidden_states = self.neck(hidden_states)
+        hidden_states = self.neck(outputs.feature_maps)
 
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps

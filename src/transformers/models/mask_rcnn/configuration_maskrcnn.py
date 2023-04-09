@@ -59,8 +59,6 @@ class MaskRCNNConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
-        backbone_out_indices (`List[int]`, *optional*, defaults to [0, 1, 2, 3]):
-            Indices of the intermediate hidden states to use from backbone.
         fpn_out_channels (`int`, optional, defaults to 256):
             Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network
             (FPN).
@@ -95,7 +93,6 @@ class MaskRCNNConfig(PretrainedConfig):
         drop_path_rate=0.0,
         image_size=224,
         # FPN
-        backbone_out_indices=[0, 1, 2, 3],
         fpn_out_channels=256,
         fpn_num_outputs=5,
         # Anchor generator
@@ -175,7 +172,6 @@ class MaskRCNNConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
         # FPN
-        self.backbone_out_indices = backbone_out_indices
         self.fpn_out_channels = fpn_out_channels
         self.fpn_num_outputs = fpn_num_outputs
         # Anchor generator
