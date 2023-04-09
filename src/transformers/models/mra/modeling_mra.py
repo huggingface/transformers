@@ -499,13 +499,12 @@ class MRAEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
+        embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+            embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
