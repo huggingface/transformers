@@ -57,6 +57,9 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "NllbMoeDecoder",
+    "NllbMoeEncoder",
+    "LlamaDecoder",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
@@ -68,6 +71,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerEncoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
+    "InformerEncoder",  # Building part of bigger (tested) model.
+    "InformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -93,6 +98,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "MCTCTEncoder",  # Building part of bigger (tested) model.
+    "MgpstrModel",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
     "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
@@ -139,6 +145,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "SpeechT5Decoder",  # Building part of bigger (tested) model.
@@ -199,15 +206,23 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipVisionModel",
     "BlipTextLMHeadModel",
     "BlipTextModel",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForImageTextRetrieval",
+    "TFBlipForQuestionAnswering",
+    "TFBlipVisionModel",
+    "TFBlipTextLMHeadModel",
+    "TFBlipTextModel",
     "Swin2SRForImageSuperResolution",
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",
+    "BridgeTowerForContrastiveLearning",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
+    "InformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -251,6 +266,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+    "Pix2StructForConditionalGeneration",
     "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
@@ -265,6 +283,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
+    "MgpstrModel",
     "OpenAIGPTDoubleHeadsModel",
     "OwlViTTextModel",
     "OwlViTVisionModel",
@@ -814,6 +833,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "AutoBackbone",
     "BitBackbone",
     "ConvNextBackbone",
+    "ConvNextV2Backbone",
     "DinatBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",

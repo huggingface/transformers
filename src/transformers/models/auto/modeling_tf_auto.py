@@ -34,6 +34,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
+        ("blip", "TFBlipModel"),
         ("camembert", "TFCamembertModel"),
         ("clip", "TFCLIPModel"),
         ("convbert", "TFConvBertModel"),
@@ -209,6 +210,16 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+
+TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Zero Shot Image Classification mapping
+        ("blip", "TFBlipModel"),
+        ("clip", "TFCLIPModel"),
+    ]
+)
+
+
 TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
@@ -220,6 +231,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("blip", "TFBlipForConditionalGeneration"),
         ("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),
     ]
 )
@@ -424,6 +436,9 @@ TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
 )
@@ -502,6 +517,15 @@ class TFAutoModelForImageClassification(_BaseAutoModelClass):
 
 TFAutoModelForImageClassification = auto_class_update(
     TFAutoModelForImageClassification, head_doc="image classification"
+)
+
+
+class TFAutoModelForZeroShotImageClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForZeroShotImageClassification = auto_class_update(
+    TFAutoModelForZeroShotImageClassification, head_doc="zero-shot image classification"
 )
 
 

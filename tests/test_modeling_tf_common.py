@@ -28,7 +28,7 @@ from math import isnan
 from typing import List, Tuple, get_type_hints
 
 from datasets import Dataset
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
@@ -85,6 +85,7 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
         TFAutoModel,
@@ -92,6 +93,7 @@ if is_tf_available():
         TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
+        TFPreTrainedModel,
         TFRagModel,
         TFSharedEmbeddings,
     )
@@ -666,7 +668,7 @@ class TFModelTesterMixin:
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
 
     @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
         for model_class in self.all_model_classes:
@@ -697,12 +699,16 @@ class TFModelTesterMixin:
 
             # For some models (e.g. base models), there is no label returned.
             # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if set(tf_inputs_dict_with_labels.keys()).symmetric_difference(tf_inputs_dict.keys()):
+            if not set(tf_inputs_dict_with_labels.keys()).symmetric_difference(tf_inputs_dict.keys()):
                 tf_inputs_dict_with_labels = None
 
             # Check we can load pt model in tf and vice-versa with model => model functions
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+            )
+            pt_model = transformers.load_tf2_model_in_pytorch_model(
+                pt_model, tf_model, allow_missing_keys=allow_missing_keys
+            )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
@@ -714,11 +720,15 @@ class TFModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
                 torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
+                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
+                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
@@ -789,7 +799,7 @@ class TFModelTesterMixin:
                     name="pixel_values",
                     dtype="float32",
                 )
-            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel"]:
+            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel", "TFBlipModel"]:
                 inputs = {
                     "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
                     "pixel_values": tf.keras.Input(
@@ -1790,6 +1800,8 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=False)
+            if "labels" in tf_inputs_dict:
+                return  # This is some kinda funky decoder model that needs labels in its forward pass
             tf_inputs_dict = {
                 key: val
                 for key, val in tf_inputs_dict.items()
@@ -1803,7 +1815,7 @@ class TFModelTesterMixin:
             test_batch = next(iter(tf_dataset))
             if isinstance(test_batch, tf.Tensor):
                 self.assertEqual(len(test_batch), len(input_dataset))  # Assert we didn't lose any data
-            else:
+            elif isinstance(test_batch, dict):
                 # Assert we discarded the unwanted extra column but kept everything else
                 self.assertEqual(len(test_batch), len(input_dataset.features) - 1)
                 self.assertNotIn("extra_unwanted_column", test_batch)
@@ -2407,7 +2419,6 @@ class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -2466,6 +2477,7 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
+    @is_pt_tf_cross_test
     def test_push_to_hub_callback(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2488,6 +2500,12 @@ class TFModelPushToHubTester(unittest.TestCase):
                 models_equal = False
                 break
         self.assertTrue(models_equal)
+
+        tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
+        tf_push_to_hub_params.pop("base_model_card_args")
+        pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
+        pt_push_to_hub_params.pop("deprecated_kwargs")
+        self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(

@@ -1,0 +1,139 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# AutoClass로 사전 학습된 인스턴스 로드[[Load pretrained instances with an AutoClass]]
+
+트랜스포머 아키텍처가 매우 다양하기 때문에 체크포인트에 맞는 아키텍처를 생성하는 것이 어려울 수 있습니다. 라이브러리를 쉽고 간단하며 유연하게 사용하기 위한 Transformer 핵심 철학의 일환으로, `AutoClass`는 주어진 체크포인트에서 올바른 아키텍처를 자동으로 추론하여 로드합니다. `from_pretrained()` 메서드를 사용하면 모든 아키텍처에 대해 사전 학습된 모델을 빠르게 로드할 수 있으므로 모델을 처음부터 학습하는 데 시간과 리소스를 투입할 필요가 없습니다. 이러한 유형의 체크포인트에 구애받지 않는 코드를 생성한다는 것은 코드가 한 체크포인트에서 작동한다면 아키텍처가 다르더라도 유사한 작업에 대해 학습된 것이라면 다른 체크포인트에서도 작동한다는 것을 의미합니다.
+
+<Tip>
+
+아키텍처는 모델의 골격을 의미하며 체크포인트는 주어진 아키텍처에 대한 가중치입니다. 예를 들어, [BERT](https://huggingface.co/bert-base-uncased)는 아키텍처이고, `bert-base-uncased`는 체크포인트입니다. 모델은 아키텍처 또는 체크포인트를 의미할 수 있는 일반적인 용어입니다.
+
+</Tip>
+
+이 튜토리얼에서는 다음을 학습합니다:
+
+* 사전 학습된 토크나이저 로드하기.
+* 사전 학습된 이미지 프로세서 로드하기
+* 사전 학습된 특징 추출기 로드하기.
+* 사전 훈련된 프로세서 로드하기.
+* 사전 학습된 모델 로드하기.
+
+## AutoTokenizer
+
+거의 모든 NLP 작업은 토크나이저로 시작됩니다. 토크나이저는 사용자의 입력을 모델에서 처리할 수 있는 형식으로 변환합니다.
+[`AutoTokenizer.from_pretrained`]로 토크나이저를 로드합니다:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+```
+
+그리고 다음 아래와 같이 입력을 토큰화합니다:
+
+```py
+>>> sequence = "In a hole in the ground there lived a hobbit."
+>>> print(tokenizer(sequence))
+{'input_ids': [101, 1999, 1037, 4920, 1999, 1996, 2598, 2045, 2973, 1037, 7570, 10322, 4183, 1012, 102], 
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+ 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+```
+
+## AutoImageProcessor
+
+비전 작업의 경우 이미지 프로세서가 이미지를 올바른 입력 형식으로 처리합니다.
+
+```py
+>>> from transformers import AutoImageProcessor
+
+>>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+```
+
+
+## AutoFeatureExtractor
+
+오디오 작업의 경우 특징 추출기가 오디오 신호를 올바른 입력 형식으로 처리합니다.
+
+[`AutoFeatureExtractor.from_pretrained`]로 특징 추출기를 로드합니다:
+
+```py
+>>> from transformers import AutoFeatureExtractor
+
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained(
+...     "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+... )
+```
+
+## AutoProcessor
+
+멀티모달 작업에는 두 가지 유형의 전처리 도구를 결합한 프로세서가 필요합니다. 예를 들어 LayoutLMV2 모델에는 이미지를 처리하는 이미지 프로세서와 텍스트를 처리하는 토크나이저가 필요하며, 프로세서는 이 두 가지를 결합합니다.
+
+[`AutoProcessor.from_pretrained()`]로 프로세서를 로드합니다:
+
+```py
+>>> from transformers import AutoProcessor
+
+>>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+```
+
+## AutoModel
+
+<frameworkcontent>
+<pt>
+마지막으로 AutoModelFor클래스를 사용하면 주어진 작업에 대해 미리 학습된 모델을 로드할 수 있습니다 (사용 가능한 작업의 전체 목록은 [여기](model_doc/auto)를 참조하세요). 예를 들어, [`AutoModelForSequenceClassification.from_pretrained`]를 사용하여 시퀀스 분류용 모델을 로드할 수 있습니다:
+
+```py
+>>> from transformers import AutoModelForSequenceClassification
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+동일한 체크포인트를 쉽게 재사용하여 다른 작업에 아키텍처를 로드할 수 있습니다:
+
+```py
+>>> from transformers import AutoModelForTokenClassification
+
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+```
+
+<Tip warning={true}>
+
+PyTorch모델의 경우 `from_pretrained()` 메서드는 내부적으로 피클을 사용하여 안전하지 않은 것으로 알려진 `torch.load()`를 사용합니다. 
+일반적으로 신뢰할 수 없는 소스에서 가져왔거나 변조되었을 수 있는 모델은 로드하지 마세요. 허깅 페이스 허브에서 호스팅되는 공개 모델의 경우 이러한 보안 위험이 부분적으로 완화되며, 각 커밋 시 멀웨어를 [검사합니다](https://huggingface.co/docs/hub/security-malware). GPG를 사용해 서명된 [커밋 검증](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg)과 같은 모범사례는 [문서](https://huggingface.co/docs/hub/security)를 참조하세요.
+
+텐서플로우와 Flax 체크포인트는 영향을 받지 않으며, `from_pretrained`메서드에 `from_tf` 와 `from_flax` 키워드 가변 인자를 사용하여 이 문제를 우회할 수 있습니다.
+
+</Tip>
+
+일반적으로 AutoTokenizer 클래스와 AutoModelFor 클래스를 사용하여 미리 학습된 모델 인스턴스를 로드하는 것이 좋습니다. 이렇게 하면 매번 올바른 아키텍처를 로드할 수 있습니다. 다음 [튜토리얼](preprocessing)에서는 새롭게 로드한 토크나이저, 이미지 프로세서, 특징 추출기를 사용하여 미세 튜닝용 데이터 세트를 전처리하는 방법에 대해 알아봅니다.
+</pt>
+<tf>
+마지막으로 `TFAutoModelFor` 클래스를 사용하면 주어진 작업에 대해 사전 훈련된 모델을 로드할 수 있습니다. (사용 가능한 작업의 전체 목록은 [여기](model_doc/auto)를 참조하세요. 예를 들어, [`TFAutoModelForSequenceClassification.from_pretrained`]로 시퀀스 분류를 위한 모델을 로드합니다:
+
+```py
+>>> from transformers import TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+쉽게 동일한 체크포인트를 재사용하여 다른 작업에 아키텍처를 로드할 수 있습니다:
+
+```py
+>>> from transformers import TFAutoModelForTokenClassification
+
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+```
+
+일반적으로, `AutoTokenizer`클래스와 `TFAutoModelFor` 클래스를 사용하여 미리 학습된 모델 인스턴스를 로드하는 것이 좋습니다. 이렇게 하면 매번 올바른 아키텍처를 로드할 수 있습니다. 다음 [튜토리얼](preprocessing)에서는 새롭게 로드한 토크나이저, 이미지 프로세서, 특징 추출기를 사용하여 미세 튜닝용 데이터 세트를 전처리하는 방법에 대해 알아봅니다.
+</tf>
+</frameworkcontent>

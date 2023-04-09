@@ -28,7 +28,6 @@ import tempfile
 import time
 import unittest
 from collections.abc import Mapping
-from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
@@ -94,6 +93,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    strtobool,
 )
 
 
@@ -140,11 +140,10 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
-_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
+_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=True)
+_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 
@@ -256,16 +255,6 @@ def require_bs4(test_case):
     Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
     """
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
-
-
-def require_git_lfs(test_case):
-    """
-    Decorator marking a test that requires git-lfs.
-
-    git-lfs requires additional dependencies, and tests are skipped by default. Set the RUN_GIT_LFS_TESTS environment
-    variable to a truthy value to run them.
-    """
-    return unittest.skipUnless(_run_git_lfs_tests, "test of git lfs workflow")(test_case)
 
 
 def require_accelerate(test_case):

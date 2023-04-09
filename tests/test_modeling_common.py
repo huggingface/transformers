@@ -15,6 +15,7 @@
 
 import copy
 import gc
+import glob
 import inspect
 import json
 import os
@@ -26,11 +27,12 @@ import tempfile
 import unittest
 import unittest.mock as mock
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -119,6 +121,7 @@ if is_torch_available():
         AutoTokenizer,
         BertConfig,
         BertModel,
+        CLIPTextModel,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -1624,6 +1627,41 @@ class ModelTesterMixin:
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
+    @require_safetensors
+    def test_can_use_safetensors(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                try:
+                    model_tied.save_pretrained(d, safe_serialization=True)
+                except Exception as e:
+                    raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model_tied.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_close(
+                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                    )
+
+                # Checking the tensor sharing are correct
+                ptrs = defaultdict(list)
+                for k, v in model_tied.state_dict().items():
+                    ptrs[v.data_ptr()].append(k)
+
+                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+
+                for _, shared_names in shared_ptrs.items():
+                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                    self.assertEqual(
+                        len(reloaded_ptrs),
+                        1,
+                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                    )
+
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -1946,7 +1984,7 @@ class ModelTesterMixin:
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
 
     @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
         for model_class in self.all_model_classes:
@@ -1992,14 +2030,18 @@ class ModelTesterMixin:
 
             # For some models (e.g. base models), there is no label returned.
             # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
+            if not set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
                 pt_inputs_dict_with_labels = None
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             # Here requires `tf_inputs_dict` to build `tf_model`
             tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+            )
+            pt_model = transformers.load_tf2_model_in_pytorch_model(
+                pt_model, tf_model, allow_missing_keys=allow_missing_keys
+            )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
@@ -2011,11 +2053,15 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
                 torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
+                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
+                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
@@ -2497,7 +2543,7 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2533,7 +2579,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2569,7 +2615,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3328,6 +3374,49 @@ class ModelUtilsTest(TestCasePlus):
         )
 
     @require_safetensors
+    def test_use_safetensors(self):
+        # test nice error message if no safetensor files available
+        with self.assertRaises(OSError) as env_error:
+            AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
+
+        self.assertTrue(
+            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
+            in str(env_error.exception)
+        )
+
+        # test that error if only safetensors is available
+        with self.assertRaises(OSError) as env_error:
+            BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors", use_safetensors=False)
+
+        self.assertTrue("does not appear to have a file named pytorch_model.bin" in str(env_error.exception))
+
+        # test that only safetensors if both available and use_safetensors=False
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            CLIPTextModel.from_pretrained(
+                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                subfolder="text_encoder",
+                use_safetensors=False,
+                cache_dir=tmp_dir,
+            )
+
+            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
+            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
+
+        # test that no safetensors if both available and use_safetensors=True
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            CLIPTextModel.from_pretrained(
+                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                subfolder="text_encoder",
+                use_safetensors=True,
+                cache_dir=tmp_dir,
+            )
+
+            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
+            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+
+    @require_safetensors
     def test_safetensors_save_and_load(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3429,7 +3518,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

@@ -57,14 +57,17 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("markuplm", "MarkupLMProcessor"),
+        ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
+        ("pix2struct", "Pix2StructProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
         ("trocr", "TrOCRProcessor"),
+        ("tvlt", "TvltProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
         ("vilt", "ViltProcessor"),
@@ -186,7 +189,7 @@ class AutoProcessor:
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> processor = AutoProcessor.from_pretrained("./test/saved_model/")
+        >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)

@@ -44,7 +44,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
     >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion/clap-htsat-unfused")
     >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
-    [{'score': 0.9995999932289124, 'label': 'Sound of a dog'}, {'score': 0.00040007088682614267, 'label': 'Sound of vaccum cleaner'}]
+    [{'score': 0.9996, 'label': 'Sound of a dog'}, {'score': 0.0004, 'label': 'Sound of vaccum cleaner'}]
     ```
 
 

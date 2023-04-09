@@ -406,6 +406,7 @@ def unpack_inputs(func):
         func (`callable`):
             The callable function of the TensorFlow model.
 
+
     Returns:
         A callable that wraps the original `func` with the behavior described above.
     """
@@ -1156,6 +1157,38 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         All context managers that the model should be initialized under go here.
         """
         return cls(config, **kwargs)
+
+    def get_head_mask(self, head_mask: Optional[tf.Tensor], num_hidden_layers: int) -> tf.Tensor:
+        """
+        Prepare the head mask if needed.
+
+        Args:
+            head_mask (`tf.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (`int`):
+                The number of hidden layers in the model.
+
+        Returns:
+            `tf.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
+        """
+        if head_mask is not None:
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+        else:
+            head_mask = [None] * num_hidden_layers
+
+        return head_mask
+
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
+        if head_mask.shape.rank == 1:
+            head_mask = head_mask[None, None, :, None, None]
+            head_mask = tf.repeat(head_mask, repeats=num_hidden_layers, axis=0)
+        elif head_mask.shape.rank == 2:
+            head_mask = head_mask[:, None, :, None, None]
+        assert head_mask.shape.rank == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+        head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
+        return head_mask
 
     def eager_serving(self, inputs):
         """
@@ -2905,9 +2938,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         use_temp_dir: Optional[bool] = None,
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
-        **model_card_kwargs,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        create_pr: bool = False,
+        **base_model_card_args,
     ) -> str:
         """
         Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
@@ -2931,8 +2965,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
                 by a unit (like `"5MB"`).
-            model_card_kwargs:
-                Additional keyword arguments passed along to the [`~TFPreTrainedModel.create_model_card`] method.
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
         Examples:
 
@@ -2948,15 +2982,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         model.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        if "repo_path_or_name" in model_card_kwargs:
+        if "repo_path_or_name" in base_model_card_args:
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
                 "`repo_id` instead."
             )
-            repo_id = model_card_kwargs.pop("repo_path_or_name")
+            repo_id = base_model_card_args.pop("repo_path_or_name")
         # Deprecation warning will be sent after for repo_url and organization
-        repo_url = model_card_kwargs.pop("repo_url", None)
-        organization = model_card_kwargs.pop("organization", None)
+        repo_url = base_model_card_args.pop("repo_url", None)
+        organization = base_model_card_args.pop("organization", None)
 
         if os.path.isdir(repo_id):
             working_dir = repo_id
@@ -2982,11 +3016,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "output_dir": work_dir,
                     "model_name": Path(repo_id).name,
                 }
-                base_model_card_args.update(model_card_kwargs)
+                base_model_card_args.update(base_model_card_args)
                 self.create_model_card(**base_model_card_args)
 
             self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token
+                work_dir,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=use_auth_token,
+                create_pr=create_pr,
             )
 
     @classmethod

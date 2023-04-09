@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.util
 import platform
 from argparse import ArgumentParser
 
 import huggingface_hub
 
 from .. import __version__ as version
-from ..utils import is_flax_available, is_tf_available, is_torch_available
+from ..utils import is_flax_available, is_safetensors_available, is_tf_available, is_torch_available
 from . import BaseTransformersCLICommand
 
 
@@ -33,6 +34,16 @@ class EnvironmentCommand(BaseTransformersCLICommand):
         download_parser.set_defaults(func=info_command_factory)
 
     def run(self):
+        safetensors_version = "not installed"
+        if is_safetensors_available():
+            import safetensors
+
+            safetensors_version = safetensors.__version__
+        elif importlib.util.find_spec("safetensors") is not None:
+            import safetensors
+
+            safetensors_version = f"{safetensors.__version__} but is ignored because of PyTorch version too old."
+
         pt_version = "not installed"
         pt_cuda_available = "NA"
         if is_torch_available():
@@ -73,6 +84,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Platform": platform.platform(),
             "Python version": platform.python_version(),
             "Huggingface_hub version": huggingface_hub.__version__,
+            "Safetensors version": f"{safetensors_version}",
             "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
             "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
