@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for ConvNext Mask-RCNN."""
+"""Feature extractor class for Mask-RCNN."""
 
 import warnings
 from typing import List, Union
@@ -24,8 +24,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin
 from ...nms import multiclass_nms
 from ...utils import is_torch_available, logging
-
-from .modeling_convnext_maskrcnn import ConvNextMaskRCNNDeltaXYWHBBoxCoder
+from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 
 if is_torch_available():
@@ -111,9 +110,9 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
         return img_masks[:, 0], ()
 
 
-class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class MaskRCNNImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a ConvNeXT Mask R-CNN feature extractor.
+    Constructs a Mask R-CNN feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
@@ -133,13 +132,13 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         num_classes,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.test_cfg = test_cfg
         self.num_classes = num_classes
-        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
+        self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
             target_means=bbox_head_bbox_coder_target_means, target_stds=bbox_head_bbox_coder_target_stds
         )
         # TODO remove this attribute
@@ -316,11 +315,11 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         scale_factors=None,
     ):
         """
-        Converts the output of [`ConvNextForObjectDetection`] into the format expected by the COCO api. Only supports
+        Converts the output of [`MaskRCNNForObjectDetection`] into the format expected by the COCO api. Only supports
         PyTorch.
 
         Args:
-            outputs ([`ConvNextForObjectDetection`]):
+            outputs ([`MaskRCNNForObjectDetection`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.

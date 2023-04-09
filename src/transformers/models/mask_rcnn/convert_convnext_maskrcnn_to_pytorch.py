@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ConvNextMaskRCNN checkpoints from the mmdetection repository.
+"""Convert ConvNeXt Mask R-CNN checkpoints from the mmdetection repository.
 
 URL: https://github.com/open-mmlab/mmdetection"""
 
@@ -22,13 +22,13 @@ import json
 from pathlib import Path
 
 import numpy as np
+import requests
 import torch
 import torchvision.transforms as T
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import ConvNextMaskRCNNConfig, ConvNextMaskRCNNForObjectDetection
+from transformers import MaskRCNNConfig, MaskRCNNForObjectDetection
 from transformers.utils import logging
 
 
@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_convnext_maskrcnn_config():
-    config = ConvNextMaskRCNNConfig()
+    config = MaskRCNNConfig()
 
     config.num_labels = 80
     repo_id = "datasets/huggingface/label-files"
@@ -107,10 +107,10 @@ def prepare_img():
 @torch.no_grad()
 def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     """
-    Copy/paste/tweak model's weights to our ConvNextMaskRCNN structure.
+    Copy/paste/tweak model's weights to our MaskRCNN structure.
     """
 
-    # define ConvNextMaskRCNN configuration based on URL
+    # define MaskRCNN configuration based on URL
     config = get_convnext_maskrcnn_config()
     # load original state_dict
     state_dict = torch.load(checkpoint_path)["state_dict"]
@@ -120,7 +120,7 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
         state_dict[rename_key(key)] = val
 
     # load HuggingFace model
-    model = ConvNextMaskRCNNForObjectDetection(config)
+    model = MaskRCNNForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -133,11 +133,11 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     pixel_values = transform(image).unsqueeze(0)
 
     img_metas = [
-        dict(
-            img_shape=(800, 1067, 3),
-            scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-            ori_shape=(480, 640, 3),
-        )
+        {
+            "img_shape": (800, 1067, 3),
+            "scale_factor": np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+            "ori_shape": (480, 640, 3),
+        }
     ]
 
     outputs = model(pixel_values, img_metas=img_metas, output_hidden_states=True)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
         default="/home/niels/checkpoints/convnext_maskrcnn/mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco_20220426_154953-050731f4.pth",
         required=False,
         type=str,
-        help="Path to the original ConvNextMaskRCNN checkpoint you'd like to convert.",
+        help="Path to the original MaskRCNN checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

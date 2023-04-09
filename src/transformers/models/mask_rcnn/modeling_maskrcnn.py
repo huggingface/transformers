@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNext Mask R-CNN model."""
+""" PyTorch Mask R-CNN model."""
 
 
 import copy
@@ -46,23 +46,23 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_convnext_maskrcnn import ConvNextMaskRCNNConfig
+from .configuration_maskrcnn import MaskRCNNConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ConvNextMaskRCNNConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
+_CONFIG_FOR_DOC = "MaskRCNNConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "MaskRCNNImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-maskrcnn"
 _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 
-CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
+MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-maskrcnn",
-    # See all ConvNextMaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
+    # See all MaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
 
 
@@ -369,8 +369,8 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->ConvNextMaskRCNN
-class ConvNextMaskRCNNDropPath(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->MaskRCNN
+class MaskRCNNDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -384,8 +384,8 @@ class ConvNextMaskRCNNDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNextMaskRCNN
-class ConvNextMaskRCNNLayerNorm(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->MaskRCNN
+class MaskRCNNLayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -415,8 +415,8 @@ class ConvNextMaskRCNNLayerNorm(nn.Module):
         return x
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNextMaskRCNN
-class ConvNextMaskRCNNEmbeddings(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->MaskRCNN
+class MaskRCNNEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
@@ -426,7 +426,7 @@ class ConvNextMaskRCNNEmbeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.layernorm = ConvNextMaskRCNNLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.layernorm = MaskRCNNLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -440,8 +440,8 @@ class ConvNextMaskRCNNEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->ConvNextMaskRCNN
-class ConvNextMaskRCNNLayer(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->MaskRCNN
+class MaskRCNNLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -450,7 +450,7 @@ class ConvNextMaskRCNNLayer(nn.Module):
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`ConvNextMaskRCNNConfig`]): Model configuration class.
+        config ([`MaskRCNNConfig`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
@@ -458,7 +458,7 @@ class ConvNextMaskRCNNLayer(nn.Module):
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = ConvNextMaskRCNNLayerNorm(dim, eps=1e-6)
+        self.layernorm = MaskRCNNLayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
@@ -467,7 +467,7 @@ class ConvNextMaskRCNNLayer(nn.Module):
             if config.layer_scale_init_value > 0
             else None
         )
-        self.drop_path = ConvNextMaskRCNNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = MaskRCNNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
@@ -485,12 +485,12 @@ class ConvNextMaskRCNNLayer(nn.Module):
         return x
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNextMaskRCNN, ConvNeXT->ConvNeXTMaskRCNN
-class ConvNextMaskRCNNStage(nn.Module):
-    """ConvNeXTMaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->MaskRCNN, ConvNeXT->MaskRCNN
+class MaskRCNNStage(nn.Module):
+    """MaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNextMaskRCNNConfig`]): Model configuration class.
+        config ([`MaskRCNNConfig`]): Model configuration class.
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
@@ -502,14 +502,14 @@ class ConvNextMaskRCNNStage(nn.Module):
 
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
-                ConvNextMaskRCNNLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                MaskRCNNLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
             )
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = nn.Sequential(
-            *[ConvNextMaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+            *[MaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -519,7 +519,7 @@ class ConvNextMaskRCNNStage(nn.Module):
 
 
 # this class isn't copied from modeling_convnext.py as layernorms are added
-class ConvNextMaskRCNNEncoder(nn.Module):
+class MaskRCNNEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
@@ -529,7 +529,7 @@ class ConvNextMaskRCNNEncoder(nn.Module):
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
-            stage = ConvNextMaskRCNNStage(
+            stage = MaskRCNNStage(
                 config,
                 in_channels=prev_chs,
                 out_channels=out_chs,
@@ -541,7 +541,7 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             prev_chs = out_chs
 
         self.layernorms = nn.ModuleList(
-            [ConvNextMaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes]
+            [MaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes]
         )
 
     def forward(
@@ -574,7 +574,7 @@ class ConvNextMaskRCNNEncoder(nn.Module):
         )
 
 
-class ConvNextMaskRCNNFPN(nn.Module):
+class MaskRCNNFPN(nn.Module):
     """
     Feature Pyramid Network (FPN).
 
@@ -619,7 +619,7 @@ class ConvNextMaskRCNNFPN(nn.Module):
         return outs
 
 
-class ConvNextMaskRCNNAnchorGenerator(nn.Module):
+class MaskRCNNAnchorGenerator(nn.Module):
     """
     Standard 2D anchor generator.
 
@@ -839,7 +839,7 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
         return valid
 
 
-class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
+class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
     """Delta XYWH BBox coder.
     Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes bbox (x1, y1, x2, y2) into
     delta (dx, dy, dw, dh) and decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
@@ -971,7 +971,7 @@ def fp16_clamp(x, min=None, max=None):
     return x.clamp(min, max)
 
 
-class ConvNextMaskRCNNBboxOverlaps2D:
+class MaskRCNNBboxOverlaps2D:
     """2D Overlaps (e.g. IoUs, GIoUs) Calculator."""
 
     def __init__(self, scale=1.0, dtype=None):
@@ -1140,7 +1140,7 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
     return gious
 
 
-class ConvNextMaskRCNNMaxIoUAssigner:
+class MaskRCNNMaxIoUAssigner:
     """Assign a corresponding gt bbox or background to each bbox.
     Each proposals will be assigned with `-1`, or a semi-positive integer indicating the ground truth index.
     - -1: negative sample, no assigned gt
@@ -1179,9 +1179,9 @@ class ConvNextMaskRCNNMaxIoUAssigner:
         ignore_wrt_candidates=True,
         match_low_quality=True,
         gpu_assign_thr=-1,
-        iou_calculator=dict(type="BboxOverlaps2D"),
+        iou_calculator={"type": "BboxOverlaps2D"},
     ):
-        # TODO remove `iou_calculator` argument since it defaults to ConvNextMaskRCNNBboxOverlaps2D
+        # TODO remove `iou_calculator` argument since it defaults to MaskRCNNBboxOverlaps2D
 
         self.pos_iou_thr = pos_iou_thr
         self.neg_iou_thr = neg_iou_thr
@@ -1191,7 +1191,7 @@ class ConvNextMaskRCNNMaxIoUAssigner:
         self.ignore_wrt_candidates = ignore_wrt_candidates
         self.gpu_assign_thr = gpu_assign_thr
         self.match_low_quality = match_low_quality
-        self.iou_calculator = ConvNextMaskRCNNBboxOverlaps2D()
+        self.iou_calculator = MaskRCNNBboxOverlaps2D()
 
     def assign(self, bboxes, gt_bboxes, gt_bboxes_ignore=None, gt_labels=None):
         """Assign gt to bboxes.
@@ -1324,7 +1324,7 @@ class ConvNextMaskRCNNMaxIoUAssigner:
         return AssignResult(num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
 
 
-class ConvNextMaskRCNNRandomSampler:
+class MaskRCNNRandomSampler:
     """Random sampler.
 
     Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/bbox/samplers/random_sampler.py
@@ -1357,12 +1357,12 @@ class ConvNextMaskRCNNRandomSampler:
         If `gallery` is a Tensor, the returned indices will be a Tensor; If `gallery` is a ndarray or list, the
         returned indices will be a ndarray.
 
-        Args:   
+        Args:
             gallery (Tensor | ndarray | list):
                 Indices pool.
             num (int):
                 Expected sample num.
-        
+
         Returns:
             Tensor or ndarray: sampled indices.
         """
@@ -1463,7 +1463,7 @@ class ConvNextMaskRCNNRandomSampler:
         return sampling_result
 
 
-class ConvNextMaskRCNNRPN(nn.Module):
+class MaskRCNNRPN(nn.Module):
     """
     Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by 1)
     classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes) 2) for the
@@ -1479,10 +1479,10 @@ class ConvNextMaskRCNNRPN(nn.Module):
         self.config = config
 
         # anchor generator
-        self.prior_generator = ConvNextMaskRCNNAnchorGenerator(config)
+        self.prior_generator = MaskRCNNAnchorGenerator(config)
         self.num_base_priors = self.prior_generator.num_base_priors[0]
 
-        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
+        self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
             target_means=config.rpn_bbox_coder_target_means, target_stds=config.rpn_bbox_coder_target_stds
         )
 
@@ -1506,7 +1506,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         self.test_cfg = config.rpn_test_cfg
 
         # IoU assigner
-        self.assigner = ConvNextMaskRCNNMaxIoUAssigner(
+        self.assigner = MaskRCNNMaxIoUAssigner(
             pos_iou_thr=config.rpn_assigner_pos_iou_thr,
             neg_iou_thr=config.rpn_assigner_neg_iou_thr,
             min_pos_iou=config.rpn_assigner_min_pos_iou,
@@ -1514,7 +1514,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             ignore_iof_thr=config.rpn_assigner_ignore_iof_thr,
         )
         # Sampler
-        self.sampler = ConvNextMaskRCNNRandomSampler(
+        self.sampler = MaskRCNNRandomSampler(
             num=config.rpn_sampler_num,
             pos_fraction=config.rpn_sampler_pos_fraction,
             neg_pos_ub=config.rpn_sampler_neg_pos_ub,
@@ -1573,7 +1573,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         proposal_cfg=None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1973,7 +1973,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             losses_cls.append(loss_cls)
             losses_bbox.append(loss_bbox)
 
-        return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
+        return {"loss_cls": losses_cls, "loss_bbox": losses_bbox}
 
     def get_bboxes(
         self,
@@ -1984,7 +1984,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         cfg=None,
         rescale=False,
         with_nms=True,
-        **kwargs
+        **kwargs,
     ):
         """Transform network outputs of a batch into bbox results.
         Note: When score_factors is not None, the cls_scores are usually multiplied by it then obtain the real score
@@ -2063,7 +2063,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         cfg,
         rescale=False,
         with_nms=True,
-        **kwargs
+        **kwargs,
     ):
         """Transform outputs of a single image into bbox predictions.
 
@@ -2225,7 +2225,7 @@ class RoIAlign(nn.Module):
         return s
 
 
-class ConvNextMaskRCNNSingleRoIExtractor(nn.Module):
+class MaskRCNNSingleRoIExtractor(nn.Module):
     """Extract RoI features from a single level feature map."""
 
     def __init__(self, roi_layer, out_channels, featmap_strides, finest_scale=56):
@@ -2339,7 +2339,7 @@ class ConvNextMaskRCNNSingleRoIExtractor(nn.Module):
         return roi_feats
 
 
-class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
+class MaskRCNNShared2FCBBoxHead(nn.Module):
     """
     A bounding box head with 2 shared fully-connected (fc) layers.
 
@@ -2381,7 +2381,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         self.fc_cls = nn.Linear(in_features=self.fc_out_channels, out_features=config.num_labels + 1)
         self.fc_reg = nn.Linear(in_features=self.fc_out_channels, out_features=config.num_labels * 4)
 
-        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
+        self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
             target_means=config.bbox_head_bbox_coder_target_means, target_stds=config.bbox_head_bbox_coder_target_stds
         )
 
@@ -2521,7 +2521,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
     def loss(
         self, cls_score, bbox_pred, rois, labels, label_weights, bbox_targets, bbox_weights, reduction_override=None
     ):
-        losses = dict()
+        losses = {}
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.0)
             if cls_score.numel() > 0:
@@ -2567,7 +2567,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         return losses
 
 
-class ConvNextMaskRCNNFCNMaskHead(nn.Module):
+class MaskRCNNFCNMaskHead(nn.Module):
     """
     Mask head.
     """
@@ -2626,7 +2626,7 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
             targets should indicate >>> # a (potentially soft) single-class label >>> mask_targets = torch.rand(N, H *
             sf, W * sf) >>> loss = self.loss(mask_pred, mask_targets, labels) >>> print('loss = {!r}'.format(loss))
         """
-        loss = dict()
+        loss = {}
         if mask_pred.size(0) == 0:
             loss_mask = mask_pred.sum()
         else:
@@ -2638,7 +2638,7 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         return loss
 
 
-class ConvNextMaskRCNNRoIHead(nn.Module):
+class MaskRCNNRoIHead(nn.Module):
     """
     Mask R-CNN standard Region of Interest (RoI) head including one bbox head and one mask head.
 
@@ -2651,22 +2651,22 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
 
         self.train_cfg = config.rcnn_train_cfg
         self.test_cfg = config.rcnn_test_cfg
-        self.bbox_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
+        self.bbox_roi_extractor = MaskRCNNSingleRoIExtractor(
             roi_layer=config.bbox_roi_extractor_roi_layer,
             out_channels=config.bbox_roi_extractor_out_channels,
             featmap_strides=config.bbox_roi_extractor_featmap_strides,
         )
-        self.bbox_head = ConvNextMaskRNNShared2FCBBoxHead(config)
+        self.bbox_head = MaskRCNNShared2FCBBoxHead(config)
 
-        self.mask_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
+        self.mask_roi_extractor = MaskRCNNSingleRoIExtractor(
             roi_layer=config.mask_roi_extractor_roi_layer,
             out_channels=config.mask_roi_extractor_out_channels,
             featmap_strides=config.mask_roi_extractor_featmap_strides,
         )
-        self.mask_head = ConvNextMaskRCNNFCNMaskHead(config)
+        self.mask_head = MaskRCNNFCNMaskHead(config)
 
         # assigner
-        self.bbox_assigner = ConvNextMaskRCNNMaxIoUAssigner(
+        self.bbox_assigner = MaskRCNNMaxIoUAssigner(
             pos_iou_thr=config.rcnn_assigner_pos_iou_thr,
             neg_iou_thr=config.rcnn_assigner_neg_iou_thr,
             min_pos_iou=config.rcnn_assigner_min_pos_iou,
@@ -2674,7 +2674,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             ignore_iof_thr=config.rcnn_assigner_ignore_iof_thr,
         )
         # sampler
-        self.bbox_sampler = ConvNextMaskRCNNRandomSampler(
+        self.bbox_sampler = MaskRCNNRandomSampler(
             num=config.rcnn_sampler_num,
             pos_fraction=config.rcnn_sampler_pos_fraction,
             neg_pos_ub=config.rcnn_sampler_neg_pos_ub,
@@ -2710,7 +2710,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
-        bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+        bbox_results = {"cls_score": cls_score, "bbox_pred": bbox_pred, "bbox_feats": bbox_feats}
 
         return bbox_results
 
@@ -2785,7 +2785,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
 
         mask_pred = self.mask_head(mask_feats)
 
-        mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
+        mask_results = {"mask_pred": mask_pred, "mask_feats": mask_feats}
         return mask_results
 
     def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks, img_metas):
@@ -2878,7 +2878,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                 )
                 sampling_results.append(sampling_result)
 
-        losses = dict()
+        losses = {}
         # bbox head forward and loss
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
@@ -2919,15 +2919,15 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         return rois, proposals, logits, pred_boxes
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
-class ConvNextMaskRCNNPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->MaskRCNN,convnext->convnext_maskrcnn
+class MaskRCNNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ConvNextMaskRCNNConfig
-    base_model_prefix = "convnext_maskrcnn"
+    config_class = MaskRCNNConfig
+    base_model_prefix = "maskrcnn"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -2944,22 +2944,22 @@ class ConvNextMaskRCNNPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextMaskRCNNModel):
+        if isinstance(module, MaskRCNNModel):
             module.gradient_checkpointing = value
 
 
-CONVNEXTMASKRCNN_START_DOCSTRING = r"""
+MASK_RCNN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ConvNextMaskRCNNConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MaskRCNNConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CONVNEXTMASKRCNN_INPUTS_DOCSTRING = r"""
+MASK_RCNN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
@@ -2974,21 +2974,21 @@ CONVNEXTMASKRCNN_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNextMaskRCNN model outputting raw features without any specific head on top.",
-    CONVNEXTMASKRCNN_START_DOCSTRING,
+    "The bare MaskRCNN model outputting raw features without any specific head on top.",
+    MASK_RCNN_START_DOCSTRING,
 )
-class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
+class MaskRCNNModel(MaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ConvNextMaskRCNNEmbeddings(config)
-        self.encoder = ConvNextMaskRCNNEncoder(config)
+        self.embeddings = MaskRCNNEmbeddings(config)
+        self.encoder = MaskRCNNEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXTMASKRCNN_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MASK_RCNN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -3027,16 +3027,16 @@ class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
         )
 
 
-class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
+class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.config = config
 
-        self.convnext = ConvNextMaskRCNNModel(config)
-        self.neck = ConvNextMaskRCNNFPN(config)
-        self.rpn_head = ConvNextMaskRCNNRPN(config)
-        self.roi_head = ConvNextMaskRCNNRoIHead(config)
+        self.convnext = MaskRCNNModel(config)
+        self.neck = MaskRCNNFPN(config)
+        self.rpn_head = MaskRCNNRPN(config)
+        self.roi_head = MaskRCNNRoIHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3072,7 +3072,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
 
-        losses = dict()
+        losses = {}
         rois, proposals, logits, pred_boxes = None, None, None, None
         if labels is not None:
             rpn_outputs = self.rpn_head(

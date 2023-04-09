@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 MMDetection Contributors. OpenMMLab Detection Toolbox and Benchmark [Computer software]. 
+# Copyright 2022 MMDetection Contributors. OpenMMLab Detection Toolbox and Benchmark [Computer software].
 # https://github.com/open-mmlab/mmdetection
 # and The HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +15,15 @@
 # limitations under the License.
 """Non-maximum suppression (NMS) implementation."""
 
-from typing import Dict, Optional, Union, Tuple
+from typing import Dict, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torchvision
-import numpy as np
+
 
 ArrayType = Union[torch.Tensor, np.ndarray]
+
 
 def nms(
     boxes: ArrayType,
@@ -33,8 +35,8 @@ def nms(
 ) -> Tuple[ArrayType, ArrayType]:
     """Dispatch to either CPU or GPU NMS implementations.
 
-    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise CPU:
-    NMS will be used. The returned type will always be the same as inputs.
+    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise
+    CPU: NMS will be used. The returned type will always be the same as inputs.
         
     Args:
         boxes (torch.Tensor or np.ndarray):
@@ -54,15 +56,9 @@ def nms(
         tuple: kept dets (boxes and scores) and indice, which always have the same data type as the input.
     
     Example:
-        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9],
-        >>> [49.3, 32.9, 51.0, 35.3],
-        >>> [49.2, 31.8, 51.0, 35.4],
-        >>> [35.1, 11.5, 39.1, 15.7],
-        >>> [35.6, 11.8, 39.3, 14.2],
-        >>> [35.3, 11.5, 39.9, 14.5],
-        >>> [35.2, 11.7, 39.7,
-        15.7]], dtype=np.float32)
-        >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
+        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9], >>> [49.3, 32.9, 51.0, 35.3], >>> [49.2, 31.8, 51.0, 35.4], >>>
+        [35.1, 11.5, 39.1, 15.7], >>> [35.6, 11.8, 39.3, 14.2], >>> [35.3, 11.5, 39.9, 14.5], >>> [35.2, 11.7, 39.7,
+        15.7]], dtype=np.float32) >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
                dtype=np.float32)
         >>> iou_threshold = 0.6 >>> dets, inds = nms(boxes, scores, iou_threshold) >>> assert len(inds) == len(dets) ==
         3
@@ -271,4 +267,3 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
         return dets, labels[keep], inds[keep]
     else:
         return dets, labels[keep]
-

@@ -22,9 +22,9 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_convnext_maskrcnn": [
-        "CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConvNextMaskRCNNConfig",
+    "configuration_maskrcnn": [
+        "MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MaskRCNNConfig",
     ]
 }
 
@@ -34,11 +34,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_convnext_maskrcnn"] = [
-        "CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ConvNextMaskRCNNForObjectDetection",
-        "ConvNextMaskRCNNModel",
-        "ConvNextMaskRCNNPreTrainedModel",
+    _import_structure["modeling_maskrcnn"] = [
+        "MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MaskRCNNForObjectDetection",
+        "MaskRCNNModel",
+        "MaskRCNNPreTrainedModel",
     ]
 
 try:
@@ -47,11 +47,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_convnext_maskrcnn"] = ["ConvNextMaskRCNNFeatureExtractor"]
+    _import_structure["image_processing_maskrcnn"] = ["MaskRCNNImageProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_convnext_maskrcnn import CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextMaskRCNNConfig
+    from .configuration_maskrcnn import MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskRCNNConfig
 
     try:
         if not is_torch_available():
@@ -59,11 +59,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_convnext_maskrcnn import (
-            CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNextMaskRCNNForObjectDetection,
-            ConvNextMaskRCNNModel,
-            ConvNextMaskRCNNPreTrainedModel,
+        from .modeling_maskrcnn import (
+            MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskRCNNForObjectDetection,
+            MaskRCNNModel,
+            MaskRCNNPreTrainedModel,
         )
 
     try:
@@ -72,7 +72,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_convnext_maskrcnn import ConvNextMaskRCNNFeatureExtractor
+        from .image_processing_maskrcnn import MaskRCNNImageProcessor
 
 else:
     import sys
