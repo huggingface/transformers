@@ -216,7 +216,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 오디오 작업에는 데이터셋을 모델에 준비하기 위해 [특징 추출기](main_classes/feature_extractor)가 필요합니다. 특징 추출기는 원시 오디오 데이터에서 피처를 추출하고 이를 텐서로 변환하는 것이 목적입니다.
 
-오디오 데이터셋에 특징 추출기를 사용하는 방법을 보려면 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터셋을 가져오세요. (데이터셋을 가져오는 방법은 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다).
+오디오 데이터셋에 특징 추출기를 사용하는 방법을 보려면 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터셋을 가져오세요. (데이터셋을 가져오는 방법은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다).
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -393,9 +393,9 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5)])
 ```
 
-2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
-as its input. `ImageProcessor` can take care of normalizing the images, and generating appropriate tensors.
-Create a function that combines image augmentation and image preprocessing for a batch of images and generates `pixel_values`:
+2. 모델은 입력으로 [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)를 받습니다. 
+`ImageProcessor`는 이미지 정규화 및 적절한 텐서 생성을 처리할 수 있습니다. 
+배치 이미지에 대한 이미지 증강 및 이미지 전처리를 결합하고 `pixel_values`를 생성하는 함수를 만듭니다:
 
 ```py
 >>> def transforms(examples):
@@ -406,27 +406,28 @@ Create a function that combines image augmentation and image preprocessing for a
 
 <Tip>
 
-In the example above we set `do_resize=False` because we have already resized the images in the image augmentation transformation,
-and leveraged the `size` attribute from the appropriate `image_processor`. If you do not resize images during image augmentation,
-leave this parameter out. By default, `ImageProcessor` will handle the resizing.
+위의 예에서는 이미지 증강 중에 이미지 크기를 조정했기 때문에 `do_resize=False`로 설정하고, 해당 `image_processor`에서 `size` 속성을 활용했습니다. 
+이미지 증강 중에 이미지 크기를 조정하지 않은 경우 이 매개 변수를 생략하세요. 
+기본적으로 `ImageProcessor`가 크기 조정을 처리합니다. 
 
-If you wish to normalize images as a part of the augmentation transformation, use the `image_processor.image_mean`,
-and `image_processor.image_std` values.
+증강 변환 과정에서 이미지를 정규화하려면 `image_processor.image_mean` 및 `image_processor.image_std` 값을 사용하세요.
+
 </Tip>
 
-3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on the fly:
+3. 🤗 Datasets의 [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)를 사용하여 실시간으로 변환을 적용합니다:
 
 ```py
 >>> dataset.set_transform(transforms)
 ```
 
-4. Now when you access the image, you'll notice the image processor has added `pixel_values`. You can pass your processed dataset to the model now!
+4. 이제 이미지에 액세스하면 이미지 프로세서가 `pixel_values`를 추가한 것을 알 수 있습니다. 
+드디어 처리된 데이터셋을 모델에 전달할 수 있습니다!
 
 ```py
 >>> dataset[0].keys()
 ```
 
-Here is what the image looks like after the transforms are applied. The image has been randomly cropped and it's color properties are different.
+다음은 변형이 적용된 후의 이미지입니다. 이미지가 무작위로 잘려나갔고 색상 속성이 다릅니다.
 
 ```py
 >>> import numpy as np
@@ -442,17 +443,16 @@ Here is what the image looks like after the transforms are applied. The image ha
 
 <Tip>
 
-For tasks like object detection, semantic segmentation, instance segmentation, and panoptic segmentation, `ImageProcessor`
-offers post processing methods. These methods convert model's raw outputs into meaningful predictions such as bounding boxes,
-or segmentation maps.
+`ImageProcessor`는 객체 감지, 시맨틱 세그멘테이션(semantic segmentation), 인스턴스 세그멘테이션(instance segmentation), 파놉틱 세그멘테이션(panoptic segmentation)과 같은 작업에 대한 후처리 방법을 제공합니다. 
+이러한 방법은 모델의 원시 출력을 경계 상자나 세그멘테이션 맵과 같은 의미 있는 예측으로 변환해줍니다.
 
 </Tip>
 
 ### 패드[[pad]]
 
-In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
-time. This may cause images to be different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
-from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
+예를 들어, [DETR](./model_doc/detr)와 같은 경우에는 모델이 학습할 때 크기 조정 증강을 적용합니다. 
+이로 인해 배치 내 이미지 크기가 다를 수 있습니다. 
+[`DetrImageProcessor`]의 [`DetrImageProcessor.pad_and_create_pixel_mask`]를 사용하고 사용자 지정 `collate_fn`을 정의해서 배치 이미지를 처리할 수 있습니다.
 
 ```py
 >>> def collate_fn(batch):
@@ -468,9 +468,11 @@ from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images tog
 
 ## 멀티모달[[multimodal]]
 
-For tasks involving multimodal inputs, you'll need a [processor](main_classes/processors) to prepare your dataset for the model. A processor couples together two processing objects such as as tokenizer and feature extractor.
+다중 모달 입력이 필요한 작업의 경우, 모델에 데이터셋을 준비하기 위한 [프로세서](main_classes/processors)가 필요합니다. 
+프로세서는 토크나이저와 특징 추출기와 같은 두 가지 처리 객체를 결합합니다.
 
-Load the [LJ Speech](https://huggingface.co/datasets/lj_speech) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use a processor for automatic speech recognition (ASR):
+[LJ Speech](https://huggingface.co/datasets/lj_speech) 데이터셋을 로드하여 자동 음성 인식(ASR)을 위한 프로세서를 사용하는 방법을 확인하세요. 
+(데이터셋을 로드하는 방법에 대한 자세한 내용은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 볼 수 있습니다.)
 
 ```py
 >>> from datasets import load_dataset
@@ -478,13 +480,13 @@ Load the [LJ Speech](https://huggingface.co/datasets/lj_speech) dataset (see the
 >>> lj_speech = load_dataset("lj_speech", split="train")
 ```
 
-For ASR, you're mainly focused on `audio` and `text` so you can remove the other columns:
+ASR에서는 `audio`와 `text`에만 집중하면 되므로, 다른 열들을 제거할 수 있습니다:
 
 ```py
 >>> lj_speech = lj_speech.map(remove_columns=["file", "id", "normalized_text"])
 ```
 
-Now take a look at the `audio` and `text` columns:
+이제 `audio`와 `text`열을 살펴보세요:
 
 ```py
 >>> lj_speech[0]["audio"]
@@ -497,13 +499,13 @@ Now take a look at the `audio` and `text` columns:
 'Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition'
 ```
 
-Remember you should always [resample](preprocessing#audio) your audio dataset's sampling rate to match the sampling rate of the dataset used to pretrain a model!
+기존에 사전 학습된 모델에서 사용된 데이터셋과 새로운 오디오 데이터셋의 샘플링 레이트를 일치시키기 위해 오디오 데이터셋의 샘플링 레이트를 [리샘플링](preprocessing#audio)해야 합니다!
 
 ```py
 >>> lj_speech = lj_speech.cast_column("audio", Audio(sampling_rate=16_000))
 ```
 
-Load a processor with [`AutoProcessor.from_pretrained`]:
+[`AutoProcessor.from_pretrained`]로 프로세서를 가져오세요:
 
 ```py
 >>> from transformers import AutoProcessor
@@ -511,7 +513,8 @@ Load a processor with [`AutoProcessor.from_pretrained`]:
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 ```
 
-1. Create a function to process the audio data contained in `array` to `input_values`, and tokenize `text` to `labels`. These are the inputs to the model:
+1. `array`에 들어 있는 오디오 데이터를 `input_values`로 변환하고 `text`를 토큰화하여 `labels`로 변환하는 함수를 만듭니다. 
+모델의 입력은 다음과 같습니다:
 
 ```py
 >>> def prepare_dataset(example):
@@ -522,10 +525,11 @@ Load a processor with [`AutoProcessor.from_pretrained`]:
 ...     return example
 ```
 
-2. Apply the `prepare_dataset` function to a sample:
+2. 샘플을 `prepare_dataset` 함수에 적용하세요:
 
 ```py
 >>> prepare_dataset(lj_speech[0])
 ```
 
-The processor has now added `input_values` and `labels`, and the sampling rate has also been correctly downsampled to 16kHz. You can pass your processed dataset to the model now!
+이제 프로세서가 `input_values`와 `labels`를 추가하고, 샘플링 레이트도 올바르게 16kHz로 다운 샘플링했습니다. 
+드디어 처리된 데이터셋을 모델에 전달할 수 있습니다!
