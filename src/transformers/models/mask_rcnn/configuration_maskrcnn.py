@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNextMaskRCNN model configuration"""
+""" Mask-RCNN model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,18 +20,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/convnext-tiny-maskrcnn": (
         "https://huggingface.co/facebook/convnext-tiny-maskrcnn/resolve/main/config.json"
     ),
 }
 
 
-class ConvNextMaskRCNNConfig(PretrainedConfig):
+class MaskRCNNConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConvNextMaskRCNNModel`]. It is used to
-    instantiate a ConvNextMaskRCNN model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the ConvNextMaskRCNN
+    This is the configuration class to store the configuration of a [`MaskRCNNModel`]. It is used to
+    instantiate a Mask RCNN model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Mask RCNN
     [facebook/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -70,16 +70,16 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ConvNextMaskRCNNModel, ConvNextMaskRCNNConfig
+    >>> from transformers import MaskRCNNConfig, MaskRCNNModel
 
-    >>> # Initializing a ConvNextMaskRCNN convnext_maskrcnn-tiny-224 style configuration
-    >>> configuration = ConvNextMaskRCNNConfig()
-    >>> # Initializing a model from the convnext_maskrcnn-tiny-224 style configuration
-    >>> model = ConvNextMaskRCNNModel(configuration)
+    >>> # Initializing a default MaskRCNN configuration
+    >>> configuration = MaskRCNNConfig()
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = MaskRCNNModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "convnext_maskrcnn"
+    model_type = "maskrcnn"
 
     def __init__(
         self,
@@ -107,24 +107,24 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         rpn_bbox_coder_target_stds=[1.0, 1.0, 1.0, 1.0],
         rpn_in_channels=256,
         rpn_feat_channels=256,
-        rpn_loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=True, loss_weight=1.0),
-        rpn_loss_bbox=dict(type="L1Loss", loss_weight=1.0),
-        rpn_test_cfg=dict(nms_pre=1000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
+        rpn_loss_cls={"type": "CrossEntropyLoss", "use_sigmoid": True, "loss_weight": 1.0},
+        rpn_loss_bbox={"type": "L1Loss", "loss_weight": 1.0},
+        rpn_test_cfg={"nms_pre": 1000, "max_per_img": 1000, "nms": {"type": "nms", "iou_threshold": 0.7}, "min_bbox_size": 0},
         # RoI heads (box + mask)
-        rcnn_test_cfg=dict(
-            score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5
-        ),
-        bbox_roi_extractor_roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
+        rcnn_test_cfg={
+            "score_thr": 0.05, "nms": {"type": "nms", "iou_threshold": 0.5}, "max_per_img": 100, "mask_thr_binary": 0.5
+        },
+        bbox_roi_extractor_roi_layer={"type": "RoIAlign", "output_size": 7, "sampling_ratio": 0},
         bbox_roi_extractor_out_channels=256,
         bbox_roi_extractor_featmap_strides=[4, 8, 16, 32],
         bbox_head_in_channels=256,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
-        mask_roi_extractor_roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
+        mask_roi_extractor_roi_layer={"type": "RoIAlign", "output_size": 14, "sampling_ratio": 0},
         mask_roi_extractor_out_channels=256,
         mask_roi_extractor_featmap_strides=[4, 8, 16, 32],
         # Training configurations: RPN
-        rpn_train_cfg=dict(allowed_border=-1, pos_weight=-1, debug=False),
+        rpn_train_cfg={"allowed_border": -1, "pos_weight": -1, "debug": False},
         rpn_assigner_pos_iou_thr=0.7,
         rpn_assigner_neg_iou_thr=0.3,
         rpn_assigner_min_pos_iou=0.3,
@@ -134,9 +134,9 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         rpn_sampler_pos_fraction=0.5,
         rpn_sampler_neg_pos_ub=-1,
         rpn_sampler_add_gt_as_proposals=False,
-        rpn_proposal=dict(nms_pre=2000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
+        rpn_proposal={"nms_pre": 2000, "max_per_img": 1000, "nms": {"type": "nms", "iou_threshold": 0.7}, "min_bbox_size": 0},
         # Training configurations: RCNN
-        rcnn_train_cfg=dict(mask_size=28, pos_weight=-1, debug=False),
+        rcnn_train_cfg={"mask_size": 28, "pos_weight": -1, "debug": False},
         rcnn_assigner_pos_iou_thr=0.5,
         rcnn_assigner_neg_iou_thr=0.5,
         rcnn_assigner_min_pos_iou=0.5,
@@ -146,7 +146,7 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         rcnn_sampler_pos_fraction=0.25,
         rcnn_sampler_neg_pos_ub=-1,
         rcnn_sampler_add_gt_as_proposals=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

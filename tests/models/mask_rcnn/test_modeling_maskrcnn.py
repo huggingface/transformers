@@ -12,41 +12,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNextMaskRCNN model. """
+""" Testing suite for the PyTorch MaskRCNN model. """
 
 
+import inspect
 import random
 import unittest
-import inspect
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
-from transformers import ConvNextMaskRCNNConfig
+
+from transformers import MaskRCNNConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
     import torch
     import torchvision.transforms as T
 
-    from transformers import ConvNextMaskRCNNForObjectDetection, ConvNextMaskRCNNModel
-    from transformers.models.convnext_maskrcnn.modeling_convnext_maskrcnn import (
-        CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers import MaskRCNNForObjectDetection, MaskRCNNModel
+    from transformers.models.mask_rcnn.modeling_maskrcnn import (
+        MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConvNextMaskRCNNFeatureExtractor
+    from transformers import MaskRCNNImageProcessor
 
 
-class ConvNextMaskRCNNModelTester:
+class MaskRCNNModelTester:
     def __init__(
         self,
         parent,
@@ -84,7 +84,7 @@ class ConvNextMaskRCNNModelTester:
 
         labels = None
         if self.use_labels:
-            labels = {'gt_labels':[], 'gt_bboxes':[], 'gt_masks':[], 'gt_bboxes_ignore':None}
+            labels = {"gt_labels": [], "gt_bboxes": [], "gt_masks": [], "gt_bboxes_ignore": None}
             for _ in range(self.batch_size):
                 # sample a number of objects
                 number_of_objects = random.randint(0, 10)
@@ -100,7 +100,7 @@ class ConvNextMaskRCNNModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ConvNextMaskRCNNConfig(
+        return MaskRCNNConfig(
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
@@ -111,7 +111,7 @@ class ConvNextMaskRCNNModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ConvNextMaskRCNNModel(config=config)
+        model = MaskRCNNModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -122,7 +122,7 @@ class ConvNextMaskRCNNModelTester:
         )
 
     def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
-        model = ConvNextMaskRCNNForObjectDetection(config=config)
+        model = MaskRCNNForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -140,16 +140,16 @@ class ConvNextMaskRCNNModelTester:
 
 
 @require_torch
-class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
+class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ConvNextMaskRCNN does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Mask-RCNN does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            ConvNextMaskRCNNModel,
-            ConvNextMaskRCNNForObjectDetection,
+            MaskRCNNModel,
+            MaskRCNNForObjectDetection,
         )
         if is_torch_available()
         else ()
@@ -162,9 +162,9 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = ConvNextMaskRCNNModelTester(self)
+        self.model_tester = MaskRCNNModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ConvNextMaskRCNNConfig, has_text_modality=False, hidden_size=37
+            self, config_class=MaskRCNNConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -179,15 +179,15 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNextMaskRCNN does not output attentions")
+    @unittest.skip(reason="Mask-RCNN does not output attentions")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="ConvNextMaskRCNN does not use inputs_embeds")
+    @unittest.skip(reason="Mask-RCNN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ConvNextMaskRCNN does not support input and output embeddings")
+    @unittest.skip(reason="Mask-RCNN does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -225,7 +225,7 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # ConvNextMaskRCNN's feature maps are of shape (batch_size, num_channels, height, width)
+            # Mask-RCNN's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
@@ -245,8 +245,8 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextMaskRCNNModel.from_pretrained(model_name)
+        for model_name in MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MaskRCNNModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -258,14 +258,14 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
+class MaskRCNNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_object_detection_head(self):
-        test_cfg = dict(score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5)
+        test_cfg = {"score_thr": 0.05, "nms": {"type": "nms", "iou_threshold": 0.5}, "max_per_img": 100, "mask_thr_binary": 0.5}
         num_classes = 80
         # TODO update to appropriate organization
-        feature_extractor = ConvNextMaskRCNNFeatureExtractor(test_cfg=test_cfg, num_classes=num_classes)
-        model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
+        feature_extractor = MaskRCNNImageProcessor(test_cfg=test_cfg, num_classes=num_classes)
+        model = MaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
         # TODO use feature extractor instead?
         transforms = T.Compose(
@@ -277,15 +277,13 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
         width, height = image.size
         pixel_values_height, pixel_values_width = pixel_values.shape[-2:]
-        width_scale = pixel_values_width / width
-        height_scale = pixel_values_height / height
 
         img_metas = [
-            dict(
-                img_shape=pixel_values.shape[1:],
-                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-                ori_shape=(3, height, width),
-            )
+            {
+                "img_shape": pixel_values.shape[1:],
+                "scale_factor": np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+                "ori_shape": (3, height, width),
+            }
         ]
 
         # forward pass
@@ -359,13 +357,13 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         torch.manual_seed(2)
 
         # TODO update to appropriate organization
-        model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
+        model = MaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
         # TODO use feature extractor instead?
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="pixel_values.pt")
         img = torch.load(local_path).unsqueeze(0)
 
-        labels = dict()
+        labels = {}
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="boxes.pt")
         labels["gt_bboxes"] = [torch.load(local_path).to(torch_device)]
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="labels.pt")
