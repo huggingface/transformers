@@ -322,27 +322,31 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 ## 컴퓨터비전[[computer-vision]]
 
-For computer vision tasks, you'll need an [image processor](main_classes/image_processor) to prepare your dataset for the model.
-Image preprocessing consists of several steps that convert images into the input expected by the model. These steps
-include but are not limited to resizing, normalizing, color channel correction, and converting images to tensors.
+컴퓨터 비전 작업의 경우, 모델에 대한 데이터셋을 준비하기 위해 [이미지 프로세서](main_classes/image_processor)서가 필요합니다. 
+이미지 전처리는 이미지를 모델이 예상하는 입력으로 변환하는 여러 단계로 이루어집니다. 
+이러한 단계에는 크기 조정, 정규화, 색상 채널 보정, 이미지의 텐서 변환 등이 포함됩니다.
 
 <Tip>
 
-Image preprocessing often follows some form of image augmentation. Both image preprocessing and image augmentation
-transform image data, but they serve different purposes:
+이미지 전처리는 종종 몇 가지 이미지 증강 다음에 올 수도 있습니다.
+이미지 전처리 및 이미지 증강은 모두 이미지 데이터를 변형하지만, 서로 다른 목적을 가지고 있습니다:
 
-* Image augmentation alters images in a way that can help prevent overfitting and increase the robustness of the model. You can get creative in how you augment your data - adjust brightness and colors, crop, rotate, resize, zoom, etc. However, be mindful not to change the meaning of the images with your augmentations.
-* Image preprocessing guarantees that the images match the model’s expected input format. When fine-tuning a computer vision model, images must be preprocessed exactly as when the model was initially trained.
+* 이미지 증강은 과적합을 방지하고 모델의 견고성을 높이는 데 도움이 되는 방식으로 이미지를 수정합니다. 
+밝기와 색상 조정, 자르기, 회전, 크기 조정, 확대/축소 등 다양한 방법으로 데이터를 증강할 수 있습니다. 
+그러나 증강으로 이미지의 의미가 바뀌지 않도록 주의해야 합니다.
+* 이미지 전처리는 이미지가 모델이 예상하는 입력 형식과 일치하도록 보장합니다. 
+컴퓨터 비전 모델을 미세 튜닝할 때 이미지는 모델이 초기에 훈련될 때와 정확히 같은 방식으로 전처리되어야 합니다.
 
-You can use any library you like for image augmentation. For image preprocessing, use the `ImageProcessor` associated with the model.
+이미지 증강에는 원하는 라이브러리를 사용할 수 있습니다. 이미지 전처리에는 모델과 연결된 `ImageProcessor`를 사용합니다.
 
 </Tip>
 
-Load the [food101](https://huggingface.co/datasets/food101) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use an image processor with computer vision datasets:
+[food101](https://huggingface.co/datasets/food101) 데이터셋을 가져와서 컴퓨터 비전 데이터셋에서 이미지 프로세서를 어떻게 사용하는지 알아보세요. 
+데이터셋 불러오는 방법은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)를 참고하세요.
 
 <Tip>
 
-Use 🤗 Datasets `split` parameter to only load a small sample from the training split since the dataset is quite large!
+데이터셋이 상당히 크기 때문에 🤗 Datasets의 `split` 매개변수를 사용하여 학습 분할에서 작은 샘플만 가져오세요!
 
 </Tip>
 
@@ -352,7 +356,7 @@ Use 🤗 Datasets `split` parameter to only load a small sample from the trainin
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-Next, take a look at the image with 🤗 Datasets [`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=image#datasets.Image) feature:
+다음으로, 🤗 Datasets의 [`image`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=image#datasets.Image) 기능으로 이미지를 확인해보세요:
 
 ```py
 >>> dataset[0]["image"]
@@ -362,7 +366,7 @@ Next, take a look at the image with 🤗 Datasets [`Image`](https://huggingface.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png"/>
 </div>
 
-Load the image processor with [`AutoImageProcessor.from_pretrained`]:
+[`AutoImageProcessor.from_pretrained`]로 이미지 프로세서를 가져오세요:
 
 ```py
 >>> from transformers import AutoImageProcessor
@@ -370,12 +374,12 @@ Load the image processor with [`AutoImageProcessor.from_pretrained`]:
 >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-First, let's add some image augmentation. You can use any library you prefer, but in this tutorial, we'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. If you're interested in using another data augmentation library, learn how in the [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) or [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb).
+먼저, 이미지 증강을 추가해 봅시다. 어떤 라이브러리를 사용하셔도 좋지만, 이번 튜토리얼에서는 torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하겠습니다. 
+다른 데이터 증강 라이브러리를 사용하는 방법이 알고 싶다면, [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) 또는 [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb)에서 배울 수 있습니다.
 
-1. Here we use [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) to chain together a couple of
-transforms - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html).
-Note that for resizing, we can get the image size requirements from the `image_processor`. For some models, an exact height and
-width are expected, for others only the `shortest_edge` is defined.
+1. [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html)를 사용하여  [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) 및 [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html)와 같은 몇 가지 변환을 연결합니다.
+참고로, 크기 조정에 대해서는 `image_processor`에서 이미지 크기 요구사항을 가져올 수 있습니다. 
+일부 모델은 정확한 높이와 너비가 필요하지만, 다른 모델에서는 `shortest_edge`만 정의됩니다.
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
