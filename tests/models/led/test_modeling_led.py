@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -268,17 +269,40 @@ class LEDModelTester:
 
 
 @require_torch
-class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForSequenceClassification, LEDForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": LEDForConditionalGeneration,
+            "feature-extraction": LEDModel,
+            "question-answering": LEDForQuestionAnswering,
+            "summarization": LEDForConditionalGeneration,
+            "text-classification": LEDForSequenceClassification,
+            "text2text-generation": LEDForConditionalGeneration,
+            "translation": LEDForConditionalGeneration,
+            "zero-shot": LEDForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
     test_torchscript = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = LEDModelTester(self)

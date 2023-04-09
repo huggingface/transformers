@@ -230,7 +230,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
@@ -316,6 +316,7 @@ class CustomDPRReaderTokenizerMixin:
         >>> outputs = model(**encoded_inputs)
         >>> predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
         >>> print(predicted_spans[0].text)  # best span
+        a song
         ```"""
         input_ids = reader_input["input_ids"]
         start_logits, end_logits, relevance_logits = reader_output[:3]

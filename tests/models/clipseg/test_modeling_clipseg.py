@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 import transformers
 from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.models.auto import get_values
@@ -44,6 +44,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -60,6 +61,7 @@ if is_vision_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -302,7 +304,6 @@ class CLIPSegTextModelTester:
 
 @require_torch
 class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (CLIPSegTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -346,7 +347,6 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class CLIPSegModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -413,8 +413,9 @@ class CLIPSegModelTester:
 
 
 @require_torch
-class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -560,7 +561,6 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # load PyTorch class
                 pt_model = model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.

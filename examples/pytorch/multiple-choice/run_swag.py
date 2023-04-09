@@ -47,7 +47,7 @@ from transformers.utils import PaddingStrategy, check_min_version, send_example_
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,11 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     datasets.utils.logging.set_verbosity(log_level)
@@ -336,8 +341,9 @@ def main():
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
             logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+                " override this default with `--block_size xxx`."
             )
             max_seq_length = 1024
     else:
@@ -456,14 +462,14 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    kwargs = dict(
-        finetuned_from=model_args.model_name_or_path,
-        tasks="multiple-choice",
-        dataset_tags="swag",
-        dataset_args="regular",
-        dataset="SWAG",
-        language="en",
-    )
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "multiple-choice",
+        "dataset_tags": "swag",
+        "dataset_args": "regular",
+        "dataset": "SWAG",
+        "language": "en",
+    }
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

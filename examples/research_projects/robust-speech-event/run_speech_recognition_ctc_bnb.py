@@ -25,12 +25,12 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import bitsandbytes as bnb
 import datasets
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
-import bitsandbytes as bnb
 import transformers
 from transformers import (
     AutoConfig,
@@ -344,7 +344,7 @@ def create_vocabulary_from_data(
         lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:
@@ -717,7 +717,6 @@ def main():
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

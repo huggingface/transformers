@@ -26,10 +26,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import evaluate
 import tensorflow as tf
 from datasets import load_dataset
+from utils_qa import postprocess_qa_predictions
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -44,11 +45,10 @@ from transformers import (
     set_seed,
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
-from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +213,7 @@ class DataTrainingArguments:
 
 
 # endregion
+
 
 # region Helper classes
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
@@ -463,7 +464,7 @@ def main():
 
         return tokenized_examples
 
-    processed_datasets = dict()
+    processed_datasets = {}
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -610,7 +611,6 @@ def main():
     # endregion
 
     with training_args.strategy.scope():
-
         dataset_options = tf.data.Options()
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         num_replicas = training_args.strategy.num_replicas_in_sync
@@ -628,7 +628,6 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
         if training_args.do_train:
-
             training_dataset = model.prepare_tf_dataset(
                 processed_datasets["train"],
                 shuffle=True,
@@ -710,9 +709,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )

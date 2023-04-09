@@ -315,7 +315,6 @@ class SqueezeBertEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         if head_mask is None:
             head_mask_is_all_none = True
         elif head_mask.count(None) == len(head_mask):
@@ -331,7 +330,6 @@ class SqueezeBertEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
-
             if output_hidden_states:
                 hidden_states = hidden_states.permute(0, 2, 1)
                 all_hidden_states += (hidden_states,)
@@ -645,7 +643,6 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top.""", SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [
         r"predictions.decoder.bias",
         "cls.predictions.decoder.weight",

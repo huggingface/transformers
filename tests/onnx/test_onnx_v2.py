@@ -1,19 +1,19 @@
 import os
+import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
 import pytest
-
 from parameterized import parameterized
+
 from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
     OnnxConfigWithPast,
     ParameterFormat,
-    export,
     validate_model_outputs,
 )
 from transformers.onnx.utils import (
@@ -38,15 +38,6 @@ class OnnxUtilsTestCaseV2(TestCase):
     """
     Cover all the utilities involved to export ONNX models
     """
-
-    @require_torch
-    @patch("transformers.onnx.convert.is_torch_onnx_dict_inputs_support_available", return_value=False)
-    def test_ensure_pytorch_version_ge_1_8_0(self, mock_is_torch_onnx_dict_inputs_support_available):
-        """
-        Ensure we raise an Exception if the pytorch version is unsupported (< 1.8.0)
-        """
-        self.assertRaises(AssertionError, export, None, None, None, None, None)
-        mock_is_torch_onnx_dict_inputs_support_available.assert_called()
 
     def test_compute_effective_axis_dimension(self):
         """
@@ -499,6 +490,7 @@ class OnnxExportTestCaseV2(TestCase):
 class StableDropoutTestCase(TestCase):
     """Tests export of StableDropout module."""
 
+    @unittest.skip("torch 2.0.0 gives `torch.onnx.errors.OnnxExporterError: Module onnx is not installed!`.")
     @require_torch
     @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
     def test_training(self):

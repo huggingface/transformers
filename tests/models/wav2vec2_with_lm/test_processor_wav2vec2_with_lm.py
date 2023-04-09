@@ -24,8 +24,8 @@ import datasets
 import numpy as np
 from datasets import load_dataset
 from packaging import version
-
 from parameterized import parameterized
+
 from transformers import AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
@@ -38,6 +38,7 @@ from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 if is_pyctcdecode_available():
     from huggingface_hub import snapshot_download
     from pyctcdecode import BeamSearchDecoderCTC
+
     from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm.processing_wav2vec2_with_lm import Wav2Vec2DecoderWithLMOutput
 
@@ -214,7 +215,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             with get_context(pool_context).Pool() as pool:
                 decoded_processor = processor.batch_decode(logits, pool)
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as p:
             decoded_beams = decoder.decode_beams_batch(p, logits_list)
@@ -251,7 +252,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as pool:
             decoded_decoder_out = decoder.decode_beams_batch(
@@ -298,7 +299,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
         decoder.reset_params(
             alpha=alpha,
             beta=beta,

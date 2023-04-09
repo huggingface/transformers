@@ -25,15 +25,13 @@ from transformers.testing_utils import require_soundfile, require_torch, slow, t
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import MCTCTForCTC, MCTCTModel, MCTCTProcessor
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
 
 
 class MCTCTModelTester:
@@ -264,9 +262,11 @@ class MCTCTModelTester:
 
 
 @require_torch
-@unittest.skipIf(is_torch_less_than_1_9, "MCTCT is only available in torch v1.9+")
-class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
+class MCTCTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MCTCTForCTC, MCTCTModel) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": MCTCTForCTC, "feature-extraction": MCTCTModel} if is_torch_available() else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

@@ -114,7 +114,6 @@ class ChineseCLIPImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -247,7 +246,6 @@ class ChineseCLIPImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):

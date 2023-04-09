@@ -22,8 +22,10 @@ from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -56,6 +58,7 @@ class ConvNextModelTester:
         num_labels=10,
         initializer_range=0.02,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         scope=None,
     ):
         self.parent = parent
@@ -72,6 +75,7 @@ class ConvNextModelTester:
         self.num_labels = num_labels
         self.initializer_range = initializer_range
         self.out_features = out_features
+        self.out_indices = out_indices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -82,7 +86,6 @@ class ConvNextModelTester:
             labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
     def get_config(self):
@@ -95,6 +98,7 @@ class ConvNextModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_labels=self.num_labels,
         )
 
@@ -153,7 +157,7 @@ class ConvNextModelTester:
 
 
 @require_torch
-class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -167,6 +171,11 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ConvNextModel, "image-classification": ConvNextForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = True
@@ -218,6 +227,10 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -294,3 +307,14 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (ConvNextBackbone,) if is_torch_available() else ()
+    config_class = ConvNextConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = ConvNextModelTester(self)

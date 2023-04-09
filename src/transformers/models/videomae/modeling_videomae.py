@@ -106,6 +106,7 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
 def get_sinusoid_encoding_table(n_position, d_hid):
     """Sinusoid position encoding table"""
+
     # TODO: make it with torch instead of numpy
     def get_position_angle_vec(position):
         return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
@@ -236,7 +237,6 @@ class VideoMAESelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
         keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
         values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
@@ -286,7 +286,6 @@ class VideoMAESelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -344,7 +343,6 @@ class VideoMAEIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -573,16 +571,44 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
+            batch must have the same number of masked patches. If `None`, then all patches are considered. Sequence
+            length is `(num_frames // tubelet_size) * (image_size // patch_size) ** 2`.
+
         Returns:
 
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import numpy as np
 
         >>> from transformers import AutoImageProcessor, VideoMAEModel
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+
+
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
@@ -598,12 +624,11 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
+        >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
@@ -761,6 +786,11 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, VideoMAEForPreTrainingOutput]:
         r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
+            batch must have the same number of masked patches. Sequence length is `(num_frames // tubelet_size) *
+            (image_size // patch_size) ** 2`.
+
         Returns:
 
         Examples:
@@ -770,7 +800,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         >>> import torch
 
         >>> num_frames = 16
-        >>> video = list(np.random.randn(16, 3, 224, 224))
+        >>> video = list(np.random.randint(0, 256, (num_frames, 3, 224, 224)))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base")
@@ -946,7 +976,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import torch
         >>> import numpy as np
 
@@ -954,6 +984,27 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
+
+
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
@@ -969,12 +1020,11 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
+        >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")

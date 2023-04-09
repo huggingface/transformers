@@ -486,7 +486,7 @@ OPT_INPUTS_DOCSTRING = r"""
 class TFOPTDecoder(tf.keras.layers.Layer):
     config_class = OPTConfig
 
-    def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
+    def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -742,9 +742,8 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -815,9 +814,8 @@ class TFOPTModel(TFOPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -915,7 +913,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ) -> Union[TFCausalLMOutputWithPast, Tuple[tf.Tensor]]:
         r"""
         Args:

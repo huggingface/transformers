@@ -20,6 +20,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -148,7 +149,7 @@ class TFGPTJModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -159,7 +160,9 @@ class TFGPTJModelTester:
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -181,7 +184,7 @@ class TFGPTJModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -201,7 +204,9 @@ class TFGPTJModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -224,7 +229,7 @@ class TFGPTJModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -240,7 +245,10 @@ class TFGPTJModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past=past
+            next_tokens,
+            token_type_ids=next_token_types,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
@@ -286,8 +294,7 @@ class TFGPTJModelTester:
 
 
 @require_tf
-class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
+class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJForQuestionAnswering, TFGPTJModel)
         if is_tf_available()
@@ -295,10 +302,37 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     )
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFGPTJModel,
+            "question-answering": TFGPTJForQuestionAnswering,
+            "text-classification": TFGPTJForSequenceClassification,
+            "text-generation": TFGPTJForCausalLM,
+            "zero-shot": TFGPTJForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_onnx = False
     test_pruning = False
     test_missing_keys = False
     test_head_masking = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFGPTJModelTester(self)

@@ -35,7 +35,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -1089,8 +1088,14 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
+        if isinstance(module, Wav2Vec2ConformerForPreTraining):
+            module.project_hid.reset_parameters()
+            module.project_q.reset_parameters()
+            module.project_hid._is_hf_initialized = True
+            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
+        elif isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
@@ -1137,7 +1142,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1381,12 +1386,11 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         self.quantizer = Wav2Vec2ConformerGumbelVectorQuantizer(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.set_gumbel_temperature
     def set_gumbel_temperature(self, temperature: int):
@@ -1604,10 +1608,10 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         if config.vocab_size is None:
             raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
-                " vocabulary size of the language model head. Please instantiate the model as follows:"
-                " `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
-                " your model's configuration."
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
@@ -1668,7 +1672,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1721,8 +1724,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Sequence classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Sequence classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
@@ -1833,8 +1835,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings

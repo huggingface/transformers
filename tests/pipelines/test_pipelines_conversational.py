@@ -29,15 +29,16 @@ from transformers import (
     TFAutoModelForCausalLM,
     pipeline,
 )
-from transformers.testing_utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class ConversationalPipelineTests(unittest.TestCase):
     model_mapping = dict(
         list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
         if MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING

@@ -107,7 +107,7 @@ class ViTHybridConfig(PretrainedConfig):
         num_channels=3,
         backbone_featmap_shape=[1, 1024, 24, 24],
         qkv_bias=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

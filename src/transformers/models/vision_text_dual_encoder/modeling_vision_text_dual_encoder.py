@@ -169,7 +169,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         vision_model: Optional[PreTrainedModel] = None,
         text_model: Optional[PreTrainedModel] = None,
     ):
-
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")
 
@@ -317,7 +316,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
         ...     AutoImageProcessor,
-        ...     Autookenizer,
+        ...     AutoTokenizer,
         ... )
 
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -429,7 +428,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                       user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
-                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
                       loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
@@ -442,7 +441,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                       user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
-                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
                       loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided

@@ -30,10 +30,10 @@ from itertools import chain
 from typing import Optional
 
 import datasets
+import evaluate
 import torch
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
@@ -55,7 +55,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -130,6 +130,15 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
+    low_cpu_mem_usage: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded."
+                "set True will benefit LLM loading time and RAM consumption."
+            )
+        },
+    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -173,7 +182,7 @@ class DataTrainingArguments:
             )
         },
     )
-
+    streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
     block_size: Optional[int] = field(
         default=None,
         metadata={
@@ -202,6 +211,9 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
+        if self.streaming:
+            require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
+
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
         else:
@@ -236,6 +248,10 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
 
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
@@ -285,6 +301,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
+            streaming=data_args.streaming,
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
@@ -293,6 +310,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
+                streaming=data_args.streaming,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -300,6 +318,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
+                streaming=data_args.streaming,
             )
     else:
         data_files = {}
@@ -398,10 +417,11 @@ def main():
             revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
             torch_dtype=torch_dtype,
+            low_cpu_mem_usage=model_args.low_cpu_mem_usage,
         )
     else:
         model = AutoModelForCausalLM.from_config(config)
-        n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
@@ -413,9 +433,9 @@ def main():
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
-        column_names = raw_datasets["train"].column_names
+        column_names = list(raw_datasets["train"].features)
     else:
-        column_names = raw_datasets["validation"].column_names
+        column_names = list(raw_datasets["validation"].features)
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
@@ -433,21 +453,29 @@ def main():
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on dataset",
-        )
+        if not data_args.streaming:
+            tokenized_datasets = raw_datasets.map(
+                tokenize_function,
+                batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on dataset",
+            )
+        else:
+            tokenized_datasets = raw_datasets.map(
+                tokenize_function,
+                batched=True,
+                remove_columns=column_names,
+            )
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
         if block_size > 1024:
             logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+                " override this default with `--block_size xxx`."
             )
             block_size = 1024
     else:
@@ -483,13 +511,19 @@ def main():
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
     with training_args.main_process_first(desc="grouping texts together"):
-        lm_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Grouping texts in chunks of {block_size}",
-        )
+        if not data_args.streaming:
+            lm_datasets = tokenized_datasets.map(
+                group_texts,
+                batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc=f"Grouping texts in chunks of {block_size}",
+            )
+        else:
+            lm_datasets = tokenized_datasets.map(
+                group_texts,
+                batched=True,
+            )
 
     if training_args.do_train:
         if "train" not in tokenized_datasets:

@@ -18,14 +18,11 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -33,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -91,9 +88,8 @@ class BlipImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)
@@ -104,8 +100,8 @@ class BlipImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
     def resize(
@@ -114,27 +110,31 @@ class BlipImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image.
-
-        Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
-        longer side is larger than the max size `(int(`size["shortest_edge"]` * 1333 / 800))`, the longer side is then
-        resized to the max size while preserving the aspect ratio.
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size, default_to_square=True)
-        output_size = (size["width"], size["height"])
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+        output_size = (size["height"], size["width"])
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
@@ -142,7 +142,7 @@ class BlipImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -163,7 +163,7 @@ class BlipImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

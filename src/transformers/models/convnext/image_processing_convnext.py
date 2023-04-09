@@ -18,9 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
@@ -40,7 +37,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -64,7 +61,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
             be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
             `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
             be overriden by `size` in the `preprocess` method.
-        crop_pct (`float` *optional*, defaults to 244 / 256):
+        crop_pct (`float` *optional*, defaults to 224 / 256):
             Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
             overriden by `crop_pct` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
@@ -99,7 +96,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 384}
@@ -123,7 +120,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         crop_pct: float,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image.
@@ -166,7 +163,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -187,7 +184,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

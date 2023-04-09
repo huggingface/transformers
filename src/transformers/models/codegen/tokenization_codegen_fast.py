@@ -68,12 +68,14 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import CodeGenTokenizerFast
+
     >>> tokenizer = CodeGenTokenizerFast.from_pretrained("Salesforce/codegen-350M-mono")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 
@@ -126,7 +128,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -185,9 +187,9 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         truncate_before_pattern: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -200,8 +202,9 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             truncate_before_pattern (`List[str]`, *optional*, defaults to `None`):
                 A list of regular expression strings that will be used to truncate the returned string. This can be
                 used to remove extra pieces of code (e.g. truncate if observing a comment symbol "#" at the beginning

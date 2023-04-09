@@ -19,16 +19,16 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
-from PIL import Image
-from torch import Tensor, nn
-
-import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
+from PIL import Image
+from torch import Tensor, nn
+
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
@@ -72,7 +72,7 @@ class TrackedStateDict:
         Returns:
             List[str]: List of keys not yet updated
         """
-        return set(list(self.to_track.keys())) - self._seen
+        return set(self.to_track.keys()) - self._seen
 
     def copy(self) -> Dict:
         # proxy the call to the internal dictionary
@@ -106,13 +106,12 @@ def setup_cfg(args: Args):
 
 class OriginalMaskFormerConfigToOursConverter:
     def __call__(self, original_config: object) -> MaskFormerConfig:
-
         model = original_config.MODEL
         mask_former = model.MASK_FORMER
         swin = model.SWIN
 
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
-        id2label = {idx: label for idx, label in enumerate(dataset_catalog.stuff_classes)}
+        id2label = dict(enumerate(dataset_catalog.stuff_classes))
         label2id = {label: idx for idx, label in id2label.items()}
 
         config: MaskFormerConfig = MaskFormerConfig(
@@ -121,43 +120,43 @@ class OriginalMaskFormerConfigToOursConverter:
             num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
             no_object_weight=mask_former.NO_OBJECT_WEIGHT,
             num_queries=mask_former.NUM_OBJECT_QUERIES,
-            backbone_config=dict(
-                pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
-                image_size=swin.PRETRAIN_IMG_SIZE,
-                in_channels=3,
-                patch_size=swin.PATCH_SIZE,
-                embed_dim=swin.EMBED_DIM,
-                depths=swin.DEPTHS,
-                num_heads=swin.NUM_HEADS,
-                window_size=swin.WINDOW_SIZE,
-                drop_path_rate=swin.DROP_PATH_RATE,
-                model_type="swin",
-            ),
+            backbone_config={
+                "pretrain_img_size": swin.PRETRAIN_IMG_SIZE,
+                "image_size": swin.PRETRAIN_IMG_SIZE,
+                "in_channels": 3,
+                "patch_size": swin.PATCH_SIZE,
+                "embed_dim": swin.EMBED_DIM,
+                "depths": swin.DEPTHS,
+                "num_heads": swin.NUM_HEADS,
+                "window_size": swin.WINDOW_SIZE,
+                "drop_path_rate": swin.DROP_PATH_RATE,
+                "model_type": "swin",
+            },
             dice_weight=mask_former.DICE_WEIGHT,
             ce_weight=1.0,
             mask_weight=mask_former.MASK_WEIGHT,
-            decoder_config=dict(
-                model_type="detr",
-                max_position_embeddings=1024,
-                encoder_layers=6,
-                encoder_ffn_dim=2048,
-                encoder_attention_heads=8,
-                decoder_layers=mask_former.DEC_LAYERS,
-                decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
-                decoder_attention_heads=mask_former.NHEADS,
-                encoder_layerdrop=0.0,
-                decoder_layerdrop=0.0,
-                d_model=mask_former.HIDDEN_DIM,
-                dropout=mask_former.DROPOUT,
-                attention_dropout=0.0,
-                activation_dropout=0.0,
-                init_std=0.02,
-                init_xavier_std=1.0,
-                scale_embedding=False,
-                auxiliary_loss=False,
-                dilation=False,
+            decoder_config={
+                "model_type": "detr",
+                "max_position_embeddings": 1024,
+                "encoder_layers": 6,
+                "encoder_ffn_dim": 2048,
+                "encoder_attention_heads": 8,
+                "decoder_layers": mask_former.DEC_LAYERS,
+                "decoder_ffn_dim": mask_former.DIM_FEEDFORWARD,
+                "decoder_attention_heads": mask_former.NHEADS,
+                "encoder_layerdrop": 0.0,
+                "decoder_layerdrop": 0.0,
+                "d_model": mask_former.HIDDEN_DIM,
+                "dropout": mask_former.DROPOUT,
+                "attention_dropout": 0.0,
+                "activation_dropout": 0.0,
+                "init_std": 0.02,
+                "init_xavier_std": 1.0,
+                "scale_embedding": False,
+                "auxiliary_loss": False,
+                "dilation": False,
                 # default pretrained config values
-            ),
+            },
             id2label=id2label,
             label2id=label2id,
         )
@@ -557,7 +556,6 @@ class OriginalMaskFormerCheckpointToOursConverter:
 
 def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_extractor: MaskFormerFeatureExtractor):
     with torch.no_grad():
-
         original_model = original_model.eval()
         our_model = our_model.eval()
 
@@ -583,7 +581,6 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_e
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=1e-3
             ), "The backbone features are not the same."
@@ -635,7 +632,6 @@ def get_name(checkpoint_file: Path):
 
 
 if __name__ == "__main__":
-
     parser = ArgumentParser(
         description="Command line to convert the original maskformers (with swin backbone) to our implementations."
     )
@@ -690,7 +686,6 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMaskFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
-
         feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )

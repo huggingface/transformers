@@ -107,7 +107,7 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
         hidden_size: int,
         num_attention_heads: int,
         sequence_reduction_ratio: int,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
@@ -213,7 +213,7 @@ class TFSegformerAttention(tf.keras.layers.Layer):
         hidden_size: int,
         num_attention_heads: int,
         sequence_reduction_ratio: int,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.self = TFSegformerEfficientSelfAttention(
@@ -262,7 +262,7 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
         in_features: int,
         hidden_features: int = None,
         out_features: int = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         out_features = out_features or in_features
@@ -296,7 +296,7 @@ class TFSegformerLayer(tf.keras.layers.Layer):
         drop_path: float,
         sequence_reduction_ratio: int,
         mlp_ratio: int,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.layer_norm_1 = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm_1")

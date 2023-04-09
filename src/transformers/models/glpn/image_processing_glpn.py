@@ -19,13 +19,17 @@ from typing import List, Optional, Union
 import numpy as np
 import PIL.Image
 
-from transformers.image_utils import PILImageResampling
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, get_image_size, make_list_of_images, to_numpy_array, valid_images
-from ...utils import logging
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    get_image_size,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -57,7 +61,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale

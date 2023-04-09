@@ -96,7 +96,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class SegformerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = SegformerImageProcessor if is_vision_available() else None
 
     def setUp(self):

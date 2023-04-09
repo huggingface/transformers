@@ -21,10 +21,9 @@ from typing import List
 
 import numpy as np
 
-from transformers import is_flax_available, is_tf_available, is_torch_available
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 
 class OwlViTProcessor(ProcessorMixin):

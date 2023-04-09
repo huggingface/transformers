@@ -19,10 +19,10 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     normalize,
@@ -32,7 +32,7 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -41,7 +41,7 @@ from transformers.image_utils import (
     make_list_of_images,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,
@@ -120,7 +120,7 @@ def binary_mask_to_rle(mask):
     pixels = np.concatenate([[0], pixels, [0]])
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     runs[1::2] -= runs[::2]
-    return [x for x in runs]
+    return list(runs)
 
 
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
@@ -403,7 +403,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         repo_path: str = "shi-labs/oneformer_demo",
         class_info_file: str = None,
         num_text: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         if "max_size" in kwargs:
             self._max_size = kwargs.pop("max_size")
@@ -443,7 +443,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
@@ -507,7 +507,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
@@ -619,7 +619,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
@@ -881,7 +881,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -1120,7 +1120,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
             labels_per_image = labels[topk_indices]
 
-            topk_indices = topk_indices // num_classes
+            topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
             # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
             mask_pred = masks_queries_logits[i][topk_indices]
 

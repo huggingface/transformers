@@ -180,13 +180,13 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # -> [bs, seq_len, hidden_size]
         return tensor
 
-    def _create_casual_mask(self, key_length, query_length):
-        casual_mask = torch.tril(
-            torch.ones((self.max_positions, self.max_positions), dtype=torch.uint8).view(
+    def _create_causal_mask(self, key_length, query_length):
+        causal_mask = torch.tril(
+            torch.ones((self.max_positions, self.max_positions), dtype=torch.bool).view(
                 1, 1, self.max_positions, self.max_positions
             )
         )
-        return casual_mask[:, :, key_length - query_length : key_length, :key_length].bool()
+        return causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -194,7 +194,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        causal_mask = self._create_casual_mask(key_length, query_length)
+        causal_mask = self._create_causal_mask(key_length, query_length)
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
@@ -590,7 +590,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "embed_out.weight"]
 
     def __init__(self, config):
@@ -714,9 +713,9 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )

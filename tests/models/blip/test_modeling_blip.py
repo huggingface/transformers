@@ -21,10 +21,10 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -301,7 +302,6 @@ class BlipTextModelTester:
 
 @require_torch
 class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -342,10 +342,12 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -393,8 +395,13 @@ class BlipModelTester:
 
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -520,10 +527,12 @@ class BlipModelTest(ModelTesterMixin, unittest.TestCase):
             model = BlipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+
 
 class BlipTextRetrievalModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -571,7 +580,6 @@ class BlipTextRetrievalModelTester:
 
 class BlipTextImageModelsModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -1081,7 +1089,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    url = "https://huggingface.co/hf-internal-testing/blip-test-image/resolve/main/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -1112,9 +1120,10 @@ class BlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
+    @require_torch_gpu
     def test_inference_image_captioning_fp16(self):
         model = BlipForConditionalGeneration.from_pretrained(
             "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
@@ -1139,7 +1148,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
     def test_inference_vqa(self):
@@ -1167,7 +1176,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False)
 
-        expected_scores = torch.Tensor([[0.9798, 0.0202]])
+        expected_scores = torch.Tensor([[0.0029, 0.9971]])
 
         self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3))

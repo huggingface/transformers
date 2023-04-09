@@ -31,6 +31,7 @@ import numpy as np
 
 from . import __version__ as version
 from .utils import flatten_dict, is_datasets_available, is_torch_available, logging
+from .utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -53,9 +54,19 @@ if _has_comet:
     except (ImportError, ValueError):
         _has_comet = False
 
-_has_neptune = importlib.util.find_spec("neptune") is not None
+_has_neptune = (
+    importlib.util.find_spec("neptune") is not None or importlib.util.find_spec("neptune-client") is not None
+)
 if TYPE_CHECKING and _has_neptune:
-    from neptune.new.metadata_containers.run import Run
+    try:
+        _neptune_version = importlib_metadata.version("neptune")
+        logger.info(f"Neptune version {_neptune_version} available.")
+    except importlib_metadata.PackageNotFoundError:
+        try:
+            _neptune_version = importlib_metadata.version("neptune-client")
+            logger.info(f"Neptune-client version {_neptune_version} available.")
+        except importlib_metadata.PackageNotFoundError:
+            _has_neptune = False
 
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
@@ -117,6 +128,10 @@ def is_mlflow_available():
     if os.getenv("DISABLE_MLFLOW_INTEGRATION", "FALSE").upper() == "TRUE":
         return False
     return importlib.util.find_spec("mlflow") is not None
+
+
+def is_dagshub_available():
+    return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
 
 
 def is_fairscale_available():
@@ -342,7 +357,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         **kwargs,
     )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
-    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
+    best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
@@ -350,6 +365,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
+
     from transformers.utils.versions import importlib_metadata
 
     if trainer.args.process_index == 0:
@@ -360,7 +376,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 name="huggingface-tune",
                 type="offline",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 budget=n_trials,
             )
@@ -397,7 +413,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             experiment = conn.experiments().create(
                 name="huggingface-tune",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 observation_budget=n_trials,
                 project="huggingface",
@@ -420,7 +436,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     metrics = trainer.evaluate()
                     trainer.objective = trainer.compute_objective(metrics)
 
-                values = [dict(name="objective", value=trainer.objective)]
+                values = [{"name": "objective", "value": trainer.objective}]
                 obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
                 logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
                 experiment = conn.experiments(experiment.id).fetch()
@@ -462,7 +478,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             break
     if not reporting_to_wandb:
         trainer.add_callback(WandbCallback())
-    trainer.args.report_to = "wandb"
+    trainer.args.report_to = ["wandb"]
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
     sweep_id = kwargs.pop("sweep_id", None)
     project = kwargs.pop("project", None)
@@ -522,6 +538,8 @@ def get_available_reporting_integrations():
         integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
+    if is_dagshub_available():
+        integrations.append("dagshub")
     if is_mlflow_available():
         integrations.append("mlflow")
     if is_neptune_available():
@@ -717,7 +735,6 @@ class WandbCallback(TrainerCallback):
                     init_args["name"] = args.run_name
 
             if self._wandb.run is None:
-
                 self._wandb.init(
                     project=os.getenv("WANDB_PROJECT", "huggingface"),
                     **init_args,
@@ -1045,6 +1062,55 @@ class MLflowCallback(TrainerCallback):
             self._ml_flow.end_run()
 
 
+class DagsHubCallback(MLflowCallback):
+    """
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/). Extends [`MLflowCallback`]
+    """
+
+    def __init__(self):
+        super().__init__()
+        if not is_dagshub_available():
+            raise ImportError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
+
+        from dagshub.upload import Repo
+
+        self.Repo = Repo
+
+    def setup(self, *args, **kwargs):
+        """
+        Setup the DagsHub's Logging integration.
+
+        Environment:
+        - **HF_DAGSHUB_LOG_ARTIFACTS** (`str`, *optional*):
+                Whether to save the data and model artifacts for the experiment. Default to `False`.
+        """
+
+        self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self.name = os.getenv("HF_DAGSHUB_MODEL_NAME") or "main"
+        self.remote = os.getenv("MLFLOW_TRACKING_URI")
+        self.repo = self.Repo(
+            owner=self.remote.split(os.sep)[-2],
+            name=self.remote.split(os.sep)[-1].split(".")[0],
+            branch=os.getenv("BRANCH") or "main",
+        )
+        self.path = Path("artifacts")
+
+        if self.remote is None:
+            raise RuntimeError(
+                "DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run"
+                " `dagshub.init()`?"
+            )
+
+        super().setup(*args, **kwargs)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.log_artifacts:
+            if getattr(self, "train_dataloader", None):
+                torch.save(self.train_dataloader.dataset, os.path.join(args.output_dir, "dataset.pt"))
+
+            self.repo.directory(str(self.path)).add_dir(args.output_dir)
+
+
 class NeptuneMissingConfiguration(Exception):
     def __init__(self):
         super().__init__(
@@ -1057,33 +1123,32 @@ class NeptuneMissingConfiguration(Exception):
 
 
 class NeptuneCallback(TrainerCallback):
-    """TrainerCallback that sends the logs to [Neptune](https://neptune.ai).
+    """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
     Args:
-        api_token (`str`, optional):
-            Neptune API token obtained upon registration. You can leave this argument out if you have saved your token
-            to the `NEPTUNE_API_TOKEN` environment variable (strongly recommended). See full setup instructions in the
-            [docs](https://docs.neptune.ai/getting-started/installation).
-        project (`str`, optional):
-            Name of an existing Neptune project, in the form: "workspace-name/project-name". You can find and copy the
-            name from the project Settings -> Properties in Neptune. If None (default), the value of the
-            `NEPTUNE_PROJECT` environment variable will be used.
-        name (`str`, optional): Custom name for the run.
+        api_token (`str`, *optional*): Neptune API token obtained upon registration.
+            You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
+            variable (strongly recommended). See full setup instructions in the
+            [docs](https://docs.neptune.ai/setup/installation).
+        project (`str`, *optional*): Name of an existing Neptune project, in the form "workspace-name/project-name".
+            You can find and copy the name in Neptune from the project settings -> Properties. If None (default), the
+            value of the `NEPTUNE_PROJECT` environment variable is used.
+        name (`str`, *optional*): Custom name for the run.
         base_namespace (`str`, optional, defaults to "finetuning"): In the Neptune run, the root namespace
-            that will contain all of the logged metadata.
-        log_parameters (`bool`, optional, defaults to True):
+            that will contain all of the metadata logged by the callback.
+        log_parameters (`bool`, *optional*, defaults to `True`):
             If True, logs all Trainer arguments and model parameters provided by the Trainer.
-        log_checkpoints (`str`, optional, defaults to None):
-            If "same", uploads checkpoints whenever they are saved by the Trainer. If "last", uploads only the most
-            recently saved checkpoint. If "best", uploads the best checkpoint (among the ones saved by the Trainer). If
-            None, does not upload checkpoints.
-        run (`Run`, optional):
-            Pass a Neptune run object if you want to continue logging to an existing run. Read more about resuming runs
-            in the [docs](https://docs.neptune.ai/how-to-guides/neptune-api/resume-run).
-        **neptune_run_kwargs (optional):
+        log_checkpoints (`str`, *optional*): If "same", uploads checkpoints whenever they are saved by the Trainer.
+            If "last", uploads only the most recently saved checkpoint. If "best", uploads the best checkpoint (among
+            the ones saved by the Trainer). If `None`, does not upload checkpoints.
+        run (`Run`, *optional*): Pass a Neptune run object if you want to continue logging to an existing run.
+            Read more about resuming runs in the [docs](https://docs.neptune.ai/logging/to_existing_object).
+        **neptune_run_kwargs (*optional*):
             Additional keyword arguments to be passed directly to the
-            [neptune.init_run()](https://docs.neptune.ai/api-reference/neptune#.init_run) function when a new run is
-            created.
+            [`neptune.init_run()`](https://docs.neptune.ai/api/neptune#init_run) function when a new run is created.
+
+    For instructions and examples, see the [Transformers integration
+    guide](https://docs.neptune.ai/integrations/transformers) in the Neptune documentation.
     """
 
     integration_version_key = "source_code/integrations/transformers"
@@ -1100,23 +1165,23 @@ class NeptuneCallback(TrainerCallback):
         project: Optional[str] = None,
         name: Optional[str] = None,
         base_namespace: str = "finetuning",
-        run: Optional["Run"] = None,
+        run=None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
-        **neptune_run_kwargs
+        **neptune_run_kwargs,
     ):
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "
-                "To install the library, run `pip install neptune-client`."
+                "To install the library, run `pip install neptune`."
             )
 
-        from neptune.new.metadata_containers.run import Run
-
         try:
-            from neptune.new.integrations.utils import verify_type
+            from neptune import Run
+            from neptune.internal.utils import verify_type
         except ImportError:
             from neptune.new.internal.utils import verify_type
+            from neptune.new.metadata_containers.run import Run
 
         verify_type("api_token", api_token, (str, type(None)))
         verify_type("project", project, (str, type(None)))
@@ -1233,7 +1298,10 @@ class NeptuneCallback(TrainerCallback):
         if self._volatile_checkpoints_dir is not None:
             consistent_checkpoint_path = os.path.join(self._volatile_checkpoints_dir, checkpoint)
             try:
-                shutil.copytree(relative_path, os.path.join(consistent_checkpoint_path, relative_path))
+                # Remove leading ../ from a relative path.
+                cpkt_path = relative_path.replace("..", "").lstrip(os.path.sep)
+                copy_path = os.path.join(consistent_checkpoint_path, cpkt_path)
+                shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
             except IOError as e:
                 logger.warning(
@@ -1375,17 +1443,26 @@ class ClearMLCallback(TrainerCallback):
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
+        if self._initialized:
+            return
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                    output_uri=True,
-                )
-                self._initialized = True
-                logger.info("ClearML Task has been initialized.")
+                # This might happen when running inside of a pipeline, where the task is already initialized
+                # from outside of Hugging Face
+                if self._clearml.Task.current_task():
+                    self._clearml_task = self._clearml.Task.current_task()
+                    self._initialized = True
+                    logger.info("External ClearML Task has been connected.")
+                else:
+                    self._clearml_task = self._clearml.Task.init(
+                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        output_uri=True,
+                    )
+                    self._initialized = True
+                    logger.info("ClearML Task has been initialized.")
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:
@@ -1465,6 +1542,7 @@ INTEGRATION_TO_CALLBACK = {
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,
+    "dagshub": DagsHubCallback,
 }
 
 

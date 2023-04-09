@@ -174,6 +174,13 @@ concatenates all texts and then splits them in blocks of the same length).
 **Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
 
+## Streaming
+
+To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is currently supported by `run_mlm.py` and `run_clm.py`.
+
+## Low Cpu Memory Usage
+
+To use low cpu memory mode which can be very useful for LLM, add `--low_cpu_mem_usage` to the command line. This is currently supported by `run_clm.py`,`run_mlm.py`, `run_plm.py`,`run_mlm_no_trainer.py` and `run_clm_no_trainer.py`.
 
 ## Creating a model on the fly
 

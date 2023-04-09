@@ -22,8 +22,10 @@ from transformers import SwinConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -32,9 +34,7 @@ if is_torch_available():
 
     from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
     from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
+
 
 if is_vision_available():
     from PIL import Image
@@ -70,6 +70,7 @@ class SwinModelTester:
         type_sequence_label_size=10,
         encoder_stride=8,
         out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -96,6 +97,7 @@ class SwinModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -129,6 +131,7 @@ class SwinModelTester:
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -218,8 +221,7 @@ class SwinModelTester:
 
 
 @require_torch
-class SwinModelTest(ModelTesterMixin, unittest.TestCase):
-
+class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SwinModel,
@@ -229,6 +231,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": SwinModel, "image-classification": SwinForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -256,7 +263,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for SwinModel when torch < 1.9")
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
 
@@ -495,3 +506,12 @@ class SwinModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class SwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (SwinBackbone,) if is_torch_available() else ()
+    config_class = SwinConfig
+
+    def setUp(self):
+        self.model_tester = SwinModelTester(self)

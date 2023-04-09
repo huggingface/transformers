@@ -56,6 +56,21 @@ class cached_property(property):
         return cached
 
 
+# vendored from distutils.util
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return 1
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
+
+
 def is_tensor(x):
     """
     Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
@@ -282,7 +297,7 @@ class ModelOutput(OrderedDict):
 
     def __getitem__(self, k):
         if isinstance(k, str):
-            inner_dict = {k: v for (k, v) in self.items()}
+            inner_dict = dict(self.items())
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
@@ -366,13 +381,14 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -389,12 +405,15 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
+
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:

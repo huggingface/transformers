@@ -29,7 +29,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -289,7 +293,6 @@ class TapasEmbeddings(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.config.reset_position_index_per_cell:
-
                 # shape (batch_size, seq_len)
                 col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
@@ -1023,7 +1026,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1633,11 +1636,8 @@ class ProductIndexMap(IndexMap):
 
     def project_outer(self, index):
         """Projects an index with the same index set onto the outer components."""
-        return IndexMap(
-            indices=(index.indices // self.inner_index.num_segments).type(torch.float).floor().type(torch.long),
-            num_segments=self.outer_index.num_segments,
-            batch_dims=index.batch_dims,
-        )
+        indices = torch.div(index.indices, self.inner_index.num_segments, rounding_mode="floor").type(torch.long)
+        return IndexMap(indices=indices, num_segments=self.outer_index.num_segments, batch_dims=index.batch_dims)
 
     def project_inner(self, index):
         """Projects an index with the same index set onto the inner components."""
