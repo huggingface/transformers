@@ -695,7 +695,7 @@ class AutoformerDecoderLayer(nn.Module):
         # source: https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/layers/Autoformer_EncDec.py#L128
         self.trend_projection = nn.Conv1d(
             in_channels=self.embed_dim,
-            out_channels=config.input_size,
+            out_channels=config.feature_size,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -1136,6 +1136,9 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         self.layers = nn.ModuleList([AutoformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
+        # https://github.com/thuml/Autoformer/blob/e6371e24f2ae2dd53e472edefdd5814c5176f864/models/Autoformer.py#L74
+        self.seasonality_projection = nn.Linear(config.d_model, config.feature_size)
+
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -1335,9 +1338,12 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
+        # project seasonality representation
+        hidden_states = self.seasonality_projection(hidden_states)
+
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states + trend,)
+            all_hidden_states += (hidden_states, trend)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
@@ -1347,7 +1353,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states + trend,
+            last_hidden_state=(hidden_states, trend),
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -1490,9 +1496,9 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
 
         # transformer inputs
-        transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
+        # transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
-        return transformer_inputs, loc, scale, static_feat
+        return reshaped_lagged_sequence, features, loc, scale, static_feat
 
     def get_encoder(self):
         return self.encoder
@@ -1560,7 +1566,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
+        transformer_inputs, temporal_features, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
@@ -1569,9 +1575,16 @@ class AutoformerModel(AutoformerPreTrainedModel):
             future_values=future_values,
             future_time_features=future_time_features,
         )
+        seasonal_input, trend_input = self.decomposition_layer(transformer_inputs)
 
         if encoder_outputs is None:
-            enc_input = transformer_inputs[:, : self.config.context_length, ...]
+            enc_input = torch.cat(
+                (
+                    transformer_inputs[:, : self.config.context_length, ...],
+                    temporal_features[:, : self.config.context_length, ...],
+                ),
+                dim=-1,
+            )
             encoder_outputs = self.encoder(
                 inputs_embeds=enc_input,
                 head_mask=head_mask,
@@ -1588,32 +1601,50 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
 
         # Decoder inputs
-        dec_input = transformer_inputs[:, self.config.context_length :, ...]
-        # TODO ask kashif what to do if encoder_outputs is not None. In that case, enc_input is not initialized
-        mean_enc_input = torch.mean(enc_input, dim=1).unsqueeze(1).repeat(1, config.prediction_length, 1)
-        zeros = torch.zeros([dec_input.size(0), config.prediction_length, dec_input.size(2)], device=enc_input.device)
-        seasonal_enc_input, trend_enc_input = self.decomposition_layer(enc_input)
-
-        trend_init = torch.cat([trend_enc_input[:, self.config.context_length :, :], mean_enc_input], dim=1)
-        seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length :, :], zeros], dim=1)
-
-        # From the paper: "the past seasonal information from encoder is utilized by the decoder"
-        # so dec_input is the seasonal init
-        dec_input = seasonal_init
-
-        decoder_outputs = self.decoder(
-            trend=trend_init,
-            inputs_embeds=dec_input,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+        dec_input = torch.cat(
+            (
+                seasonal_input[:, self.config.context_length :, ...],
+                temporal_features[:, self.config.context_length :, ...],
+            ),
+            dim=-1,
         )
+        trend_init = torch.cat(
+            (
+                trend_input[:, self.config.context_length :, ...],
+                temporal_features[:, self.config.context_length :, ...],
+            ),
+            dim=-1,
+        )
+
+        # dec_input = transformer_inputs[:, self.config.context_length :, ...]
+        # # TODO ask kashif what to do if encoder_outputs is not None. In that case, enc_input is not initialized
+        # mean_enc_input = torch.mean(enc_input, dim=1).unsqueeze(1).repeat(1, config.prediction_length, 1)
+        # zeros = torch.zeros([dec_input.size(0), config.prediction_length, dec_input.size(2)], device=enc_input.device)
+        # seasonal_enc_input, trend_enc_input = self.decomposition_layer(enc_input)
+
+        # trend_init = torch.cat([trend_enc_input[:, self.config.context_length :, :], mean_enc_input], dim=1)
+        # seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length :, :], zeros], dim=1)
+
+        # # From the paper: "the past seasonal information from encoder is utilized by the decoder"
+        # # so dec_input is the seasonal init
+        # dec_input = seasonal_init
+
+        if dec_input.size(1) > 0:
+            decoder_outputs = self.decoder(
+                trend=trend_init,
+                inputs_embeds=dec_input,
+                attention_mask=decoder_attention_mask,
+                encoder_hidden_states=encoder_outputs[0],
+                head_mask=decoder_head_mask,
+                cross_attn_head_mask=cross_attn_head_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        else:
+            decoder_outputs = BaseModelOutputWithPastAndCrossAttentions()
 
         if not return_dict:
             return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
@@ -1651,7 +1682,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
+        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.feature_size)
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -1775,7 +1806,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         prediction_loss = None
         params = None
         if future_values is not None:
-            params = self.output_params(outputs[0])  # outputs.last_hidden_state
+            params = self.output_params(outputs[0][0] + outputs[0][1])  # outputs.last_hidden_state
             # loc is 3rd last and scale is 2nd last output
             distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
 
@@ -1956,12 +1987,21 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             lags_shape = lagged_sequence.shape
             reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
-            decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
-
-            dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
+            seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
+            dec_input = torch.cat(
+                (seasonal_input, repeated_features[:, : k + 1]),
+                dim=-1,
+            )
+            trend_init = torch.cat(
+                (trend_input, repeated_features[:, : k + 1]),
+                dim=-1,
+            )
+            dec_output = decoder(
+                trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
+            )
             dec_last_hidden = dec_output.last_hidden_state
 
-            params = self.parameter_projection(dec_last_hidden[:, -1:])
+            params = self.parameter_projection(dec_last_hidden[0][:, -1:] + dec_last_hidden[1][:, -1:])
             distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
 
