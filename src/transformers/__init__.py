@@ -369,8 +369,8 @@ _import_structure = {
         "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Mask2FormerConfig",
     ],
-    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mask_rcnn": ["MASK_RCNN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskRCNNConfig"],
+    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
@@ -877,8 +877,8 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
-    _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mask_rcnn"].append("MaskRCNNImageProcessor")
+    _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
@@ -1942,6 +1942,14 @@ else:
             "Mask2FormerPreTrainedModel",
         ]
     )
+    _import_structure["models.mask_rcnn"].extend(
+        [
+            "MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MaskRCNNForObjectDetection",
+            "MaskRCNNModel",
+            "MaskRCNNPreTrainedModel",
+        ]
+    )
     _import_structure["models.maskformer"].extend(
         [
             "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1949,14 +1957,6 @@ else:
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
             "MaskFormerSwinBackbone",
-        ]
-    )
-    _import_structure["models.mask_rcnn"].extend(
-        [
-            "MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MaskRCNNForObjectDetection",
-            "MaskRCNNModel",
-            "MaskRCNNPreTrainedModel",
         ]
     )
     _import_structure["models.mbart"].extend(
@@ -4121,8 +4121,8 @@ if TYPE_CHECKING:
         MarkupLMTokenizer,
     )
     from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
-    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mask_rcnn import MASK_RCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskRCNNConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
@@ -4569,8 +4569,8 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.mask2former import Mask2FormerImageProcessor
-        from .models.maskformer import MaskFormerFeatureExtractor, MaskFormerImageProcessor
         from .models.mask_rcnn import MaskRCNNImageProcessor
+        from .models.maskformer import MaskFormerFeatureExtractor, MaskFormerImageProcessor
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
@@ -5454,18 +5454,18 @@ if TYPE_CHECKING:
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
         )
+        from .models.mask_rcnn import (
+            MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskRCNNForObjectDetection,
+            MaskRCNNModel,
+            MaskRCNNPreTrainedModel,
+        )
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
             MaskFormerSwinBackbone,
-        )
-        from .models.mask_rcnn import (
-            MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MaskRCNNForObjectDetection,
-            MaskRCNNModel,
-            MaskRCNNPreTrainedModel,
         )
         from .models.mbart import (
             MBartForCausalLM,

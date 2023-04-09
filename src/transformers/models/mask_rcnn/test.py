@@ -8,7 +8,12 @@ from transformers import ConvNextMaskRCNNForObjectDetection
 from transformers.models.convnext_maskrcnn.feature_extraction_convnext_maskrcnn import ConvNextMaskRCNNFeatureExtractor
 
 
-test_cfg = {"score_thr": 0.05, "nms": {"type": "nms", "iou_threshold": 0.5}, "max_per_img": 100, "mask_thr_binary": 0.5}
+test_cfg = {
+    "score_thr": 0.05,
+    "nms": {"type": "nms", "iou_threshold": 0.5},
+    "max_per_img": 100,
+    "mask_thr_binary": 0.5,
+}
 
 feature_extractor = ConvNextMaskRCNNFeatureExtractor(test_cfg=test_cfg)
 model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn")
