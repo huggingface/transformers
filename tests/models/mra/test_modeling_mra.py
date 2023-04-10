@@ -25,7 +25,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 
 if is_torch_available():
-    import sys
     import torch
 
     from transformers import (
@@ -282,7 +281,6 @@ class MRAModelTester:
 
 @require_torch
 class MRAModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             MRAModel,
