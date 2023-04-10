@@ -53,12 +53,13 @@ class SamPromptEncoderConfig(PretrainedConfig):
         mask_input_channels=16,
         num_point_embeddings=4,
         hidden_act="gelu",
+        **kwargs,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.input_image_size = input_image_size
         self.patch_size = patch_size
-        self.image_embedding_size = (input_image_size // patch_size) ** 2
+        self.image_embedding_size = (input_image_size // patch_size) 
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
@@ -81,7 +82,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=256,
-        hidden_act="gelu",
+        hidden_act="relu",
         mlp_dim=2048,
         num_hidden_layers=2,
         num_attention_heads=8,
@@ -89,6 +90,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
+        **kwargs,
     ):
         super().__init__()
         self.hidden_size = hidden_size

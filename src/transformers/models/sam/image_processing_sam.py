@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
-
+from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -21,8 +21,8 @@ import numpy as np
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -30,7 +30,8 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging, is_torchvision_available
+from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
@@ -81,6 +82,7 @@ class SamImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        target_size: int = 1024,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -100,16 +102,60 @@ class SamImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
+        self.target_size = target_size
+    
+    def get_preprocess_shape(self, oldh: int, oldw: int, long_side_length: int):
+        """
+        Compute the output size given input size and target long side length.
+        """
+        scale = long_side_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def apply_coords(self, coords: np.ndarray, original_size) -> np.ndarray:
+        """
+        Expects a numpy array of length 2 in the final dimension. Requires the
+        original image size in (H, W) format.
+        """
+        old_h, old_w = original_size
+        new_h, new_w = self.get_preprocess_shape(
+            original_size[0], original_size[1], self.target_size
+        )
+        coords = deepcopy(coords).astype(float)
+        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 1] = coords[..., 1] * (new_h / old_h)
+        return coords
+
+    def pad_to_target_size(
+        self,
+        image: np.ndarray,
+        target_size: int=None,
+    ):
+        requires_backends(self, "torch")
+
+        target_size = target_size if target_size is not None else self.target_size
+
+        import torch
+        import torch.nn.functional as F
+
+        image = torch.from_numpy(image).permute(2, 0, 1)
+
+        height, width = image.shape[-2:]
+        padh = target_size - height
+        padw = target_size - width
+        image = F.pad(image, (0, padw, 0, padh))
+
+        return image.numpy()
 
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
+        target_size: int=None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -118,24 +164,24 @@ class SamImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            target_size (`int`, *optional*, defaults to `self.target_size`):
+                Target size of the long side of the image.
 
         Returns:
             `np.ndarray`: The resized image.
         """
-        size = get_size_dict(size, default_to_square=True)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        requires_backends(self, "torchvision")
+        target_size = target_size if target_size is not None else self.target_size
+
+        output_size = self.get_preprocess_shape(image.shape[0], image.shape[1], target_size)
+
+        from torchvision.transforms.functional import resize, to_pil_image
+
+        image = to_pil_image(image)
+
+        image = to_numpy_array(resize(image, output_size))
+
+        return image.astype(np.float32)
 
     def rescale(
         self,
@@ -183,12 +229,14 @@ class SamImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        input_points: Optional[tuple[int]] = None,
+        input_labels: Optional[tuple[int]] = None,
+        input_boxes: Optional[tuple[int]] = None,
+        target_size: Optional[int] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
+        scale: Optional[Union[int, float]] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -209,14 +257,10 @@ class SamImageProcessor(BaseImageProcessor):
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
                 is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
                 edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
@@ -236,30 +280,42 @@ class SamImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        scale = scale if do_rescale and scale is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
+        target_size = target_size if target_size is not None else self.target_size
 
         images = make_list_of_images(images)
+
+        if input_points is not None:
+            if not isinstance(input_points, tuple):
+                raise ValueError("Input points must be a tuple of tuple of floating integers.")
+            input_points = [np.array([point]) for point in input_points]
+        else:
+            input_points = None
+
+        if input_points is not None:
+            if not isinstance(input_labels, tuple):
+                raise ValueError("Input labels must be a tuple of integers.")
+            input_labels = [np.array([label]) for label in input_labels]
+        else:
+            input_labels = None
+    
+        if input_boxes is not None:
+            if not isinstance(input_boxes, tuple):
+                raise ValueError("Input boxes must be a tuple of tuple of floating integers.")
+            input_boxes = [np.array(box) for box in input_boxes]
+        else:
+            input_boxes = None
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
@@ -271,17 +327,35 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        original_sizes = [image.shape[:2] for image in images]
+
+        if input_points is not None:
+            input_points = [self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)]
+
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [self.resize(image=image) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [self.rescale(image=image, scale=scale) for image in images]
+   
+        
+        input_image_sizes = [image.shape[:2] for image in images]
 
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
+        images = [self.pad_to_target_size(image=image, target_size=target_size) for image in images]
+
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        data = {"pixel_values": images, "input_image_sizes": input_image_sizes, "original_sizes": original_sizes}
+        if input_labels is not None:
+            data["input_labels"] = input_labels
+        if input_points is not None:
+            data["input_points"] = input_points
+        if input_boxes is not None:
+            data["input_boxes"] = input_boxes
+        
+        encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
