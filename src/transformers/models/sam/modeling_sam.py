@@ -42,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
-from .configuration_sam import SamConfig, SamVisionConfig
+from .configuration_sam import SamConfig, SamVisionConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -56,16 +56,12 @@ SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class SamMLPBlock(nn.Module):
-    def __init__(
-        self,
-        hidden_size: int,
-        mlp_dim: int,
-        act: Type[nn.Module] = None
-    ) -> None:
+    def __init__(self, hidden_size: int, mlp_dim: int, hidden_act: str):
         super().__init__()
         self.lin1 = nn.Linear(hidden_size, mlp_dim)
         self.lin2 = nn.Linear(mlp_dim, hidden_size)
-        self.act = nn.GELU() if act is None else act
+        # self.act = nn.GELU() if act is None else act
+        self.act = ACT2FN[hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.lin1(hidden_states)
@@ -92,7 +88,7 @@ class SamLayerNorm2d(nn.Module):
 
 
 class SamTwoWayTransformer(nn.Module):
-    def __init__(self, config: "SamSamMaskDecoderConfig"):
+    def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
         self.config = config
 
@@ -110,27 +106,28 @@ class SamTwoWayTransformer(nn.Module):
                     hidden_size=self.config.hidden_size,
                     num_attention_heads=self.config.num_attention_heads,
                     mlp_dim=self.config.mlp_dim,
-                    activation=self.activation,
+                    activation=self.config.hidden_act,
                     attention_downsample_rate=self.config.attention_downsample_rate,
                     skip_first_layer_pe=(i == 0),
                 )
             )
 
         self.final_attn_token_to_image = SamTwoWayTransformerAttention(
-            self.config.hidden_size, self.config.num_attention_heads, downsample_rate=self.config.attention_downsample_rate
+            self.config.hidden_size, 
+            self.config.num_attention_heads, 
+            downsample_rate=self.config.attention_downsample_rate
         )
+
         self.norm_final_attn = nn.LayerNorm(self.config.hidden_size)
 
     def forward(
         self,
         image_embedding: Tensor,
-        image_pe: Tensor,
+        image_position_embedding: Tensor,
         point_embedding: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
-        # BxCxHxW -> BxHWxC == B x N_image_tokens x C
-        bs, c, h, w = image_embedding.shape
+    ):
         image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
-        image_pe = image_pe.flatten(2).permute(0, 2, 1)
+        image_position_embedding = image_position_embedding.flatten(2).permute(0, 2, 1)
 
         # Prepare queries
         queries = point_embedding
@@ -141,17 +138,18 @@ class SamTwoWayTransformer(nn.Module):
             queries, keys = layer(
                 queries=queries,
                 keys=keys,
-                query_pe=point_embedding,
-                key_pe=image_pe,
+                query_point_embedding=point_embedding,
+                key_point_embedding=image_position_embedding,
             )
 
         # Apply the final attenion layer from the points to the image
-        q = queries + point_embedding
-        k = keys + image_pe
-        attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
+        query = queries + point_embedding
+        key = keys + image_position_embedding
+
+        attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
+        
         queries = queries + attn_out
         queries = self.norm_final_attn(queries)
-
         return queries, keys
 
 
@@ -161,7 +159,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         mlp_dim: int = 2048,
-        activation: Type[nn.Module] = nn.ReLU,
+        activation: str = "gelu",
         attention_downsample_rate: int = 2,
         skip_first_layer_pe: bool = False,
         layer_norm_eps=1e-6,
@@ -180,7 +178,6 @@ class SamTwoWayAttentionBlock(nn.Module):
           skip_first_layer_pe (bool): skip the PE on the first layer
         """
         super().__init__()
-
         self.self_attn = SamTwoWayTransformerAttention(hidden_size, num_attention_heads)
         self.norm1 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
@@ -199,23 +196,23 @@ class SamTwoWayAttentionBlock(nn.Module):
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
-    def forward(
-        self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, queries: Tensor, keys: Tensor, query_point_embedding: Tensor, key_point_embedding: Tensor):
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(q=queries, k=queries, v=queries)
+            queries = self.self_attn(query=queries, key=queries, value=queries)
         else:
-            q = queries + query_pe
-            attn_out = self.self_attn(q=q, k=q, v=queries)
+            query = queries + query_point_embedding
+            attn_out = self.self_attn(query=query, key=query, value=queries)
             queries = queries + attn_out
         queries = self.norm1(queries)
 
         # Cross attention block, tokens attending to image embedding
-        q = queries + query_pe
-        k = keys + key_pe
-        attn_out = self.cross_attn_token_to_image(q=q, k=k, v=keys)
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out = self.cross_attn_token_to_image(query=query, key=key, value=keys)
         queries = queries + attn_out
+
         queries = self.norm2(queries)
 
         # MLP block
@@ -224,12 +221,13 @@ class SamTwoWayAttentionBlock(nn.Module):
         queries = self.norm3(queries)
 
         # Cross attention block, image embedding attending to tokens
-        q = queries + query_pe
-        k = keys + key_pe
-        attn_out = self.cross_attn_image_to_token(q=k, k=q, v=queries)
-        keys = keys + attn_out
-        keys = self.norm4(keys)
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
 
+        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        keys = keys + attn_out
+        
+        keys = self.norm4(keys)
         return queries, keys
 
 
@@ -249,7 +247,8 @@ class SamTwoWayTransformerAttention(nn.Module):
         self.hidden_size = hidden_size
         self.internal_dim = hidden_size // downsample_rate
         self.num_attention_heads = num_attention_heads
-        assert self.internal_dim % num_attention_heads == 0, "num_attention_heads must divide hidden_size."
+        if self.internal_dim % num_attention_heads != 0:
+            raise ValueError("num_attention_heads must divide hidden_size.")
 
         self.q_proj = nn.Linear(hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(hidden_size, self.internal_dim)
@@ -266,25 +265,25 @@ class SamTwoWayTransformerAttention(nn.Module):
         x = x.transpose(1, 2)
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
-    def forward(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+    def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
-        q = self.q_proj(q)
-        k = self.k_proj(k)
-        v = self.v_proj(v)
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
 
         # Separate into heads
-        q = self._separate_heads(q, self.num_attention_heads)
-        k = self._separate_heads(k, self.num_attention_heads)
-        v = self._separate_heads(v, self.num_attention_heads)
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
 
         # SamAttention
-        _, _, _, c_per_head = q.shape
-        attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
+        _, _, _, c_per_head = query.shape
+        attn = query @ key.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
 
         # Get output
-        out = attn @ v
+        out = attn @ value
         out = self._recombine_heads(out)
         out = self.out_proj(out)
 
@@ -302,9 +301,8 @@ class SamMaskDecoder(nn.Module):
 
         self.iou_token = nn.Embedding(1, self.config.hidden_size)
         self.num_mask_tokens = self.config.num_multimask_outputs + 1
-        self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.config.hidden_size)
 
-        self.activation = ACT2FN[self.config.hidden_act]
+        self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.config.hidden_size)
 
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(self.config.hidden_size, self.config.hidden_size // 4, kernel_size=2, stride=2),
@@ -316,7 +314,7 @@ class SamMaskDecoder(nn.Module):
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
                 MLP(self.config.hidden_size, self.config.hidden_size, self.config.hidden_size // 8, 3)
-                for i in range(self.num_mask_tokens)
+                for _ in range(self.num_mask_tokens)
             ]
         )
 
@@ -629,7 +627,6 @@ class SamRandomPositionEmbedding(nn.Module):
         return self._pe_encoding(coords.to(self.positional_encoding_gaussian_matrix.dtype))  # B x N x C
 
 
-# This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
 class SamViTEncoder(nn.Module):
     def __init__(self, config: SamVisionConfig):
         super().__init__()
@@ -645,7 +642,7 @@ class SamViTEncoder(nn.Module):
         )
 
         self.pos_embed = None
-        self.activation = ACT2FN[self.config.hidden_act]
+        # self.activation = ACT2FN[self.config.hidden_act]
         if self.config.use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
@@ -659,7 +656,7 @@ class SamViTEncoder(nn.Module):
                 num_attention_heads=self.config.num_attention_heads,
                 mlp_ratio=self.config.mlp_ratio,
                 qkv_bias=self.config.qkv_bias,
-                act_layer=self.activation,
+                activation=self.config.hidden_act,
                 use_rel_pos=self.config.use_rel_pos,
                 rel_pos_zero_init=self.config.rel_pos_zero_init,
                 window_size=self.config.window_size if i not in self.config.global_attn_indexes else 0,
@@ -685,17 +682,16 @@ class SamViTEncoder(nn.Module):
             SamLayerNorm2d(self.config.output_channels),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.patch_embed(x)
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.patch_embed(hidden_states)
         if self.pos_embed is not None:
-            x = x + self.pos_embed
+            hidden_states = hidden_states + self.pos_embed
 
-        for blk in self.blocks:
-            x = blk(x)
+        for block in self.blocks:
+            hidden_states = block(hidden_states)
 
-        x = self.neck(x.permute(0, 3, 1, 2))
-
-        return x
+        hidden_states = self.neck(hidden_states.permute(0, 3, 1, 2))
+        return hidden_states
 
 
 class SamTransformerBlock(nn.Module):
@@ -705,7 +701,7 @@ class SamTransformerBlock(nn.Module):
         num_attention_heads: int,
         mlp_ratio: float = 4.0,
         qkv_bias: bool = True,
-        act_layer: Type[nn.Module] = nn.GELU,
+        activation: str = "gelu",
         use_rel_pos: bool = False,
         rel_pos_zero_init: bool = True,
         window_size: int = 0,
@@ -734,12 +730,11 @@ class SamTransformerBlock(nn.Module):
             num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             use_rel_pos=use_rel_pos,
-            rel_pos_zero_init=rel_pos_zero_init,
             input_size=input_size if window_size == 0 else (window_size, window_size),
         )
 
         self.norm2 = nn.LayerNorm(dim, eps=layer_norm_eps)
-        self.mlp = SamMLPBlock(hidden_size=dim, mlp_dim=int(dim * mlp_ratio), act=act_layer)
+        self.mlp = SamMLPBlock(hidden_size=dim, mlp_dim=int(dim * mlp_ratio), hidden_act=activation)
 
         self.window_size = window_size
 
@@ -771,7 +766,6 @@ class SamAttention(nn.Module):
         num_attention_heads: int = 8,
         qkv_bias: bool = True,
         use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
         input_size: Optional[Tuple[int, int]] = None,
     ) -> None:
         super().__init__()
@@ -894,7 +888,7 @@ def get_rel_pos(q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor
 
 def add_decomposed_rel_pos(
     attn: torch.Tensor,
-    q: torch.Tensor,
+    query: torch.Tensor,
     rel_pos_h: torch.Tensor,
     rel_pos_w: torch.Tensor,
     q_size: Tuple[int, int],
@@ -919,8 +913,8 @@ def add_decomposed_rel_pos(
     Rh = get_rel_pos(q_h, k_h, rel_pos_h)
     Rw = get_rel_pos(q_w, k_w, rel_pos_w)
 
-    B, _, dim = q.shape
-    r_q = q.reshape(B, q_h, q_w, dim)
+    B, _, dim = query.shape
+    r_q = query.reshape(B, q_h, q_w, dim)
     rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
     rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
 
@@ -942,22 +936,18 @@ class SamPatchEmbed(nn.Module):
         padding: Tuple[int, int] = (0, 0),
         num_channels: int = 3,
         hidden_size: int = 768,
-    ) -> None:
-        """
-        Args:
-            kernel_size ()
-        """
+    ):
         super().__init__()
 
         self.proj = nn.Conv2d(
             num_channels, hidden_size, kernel_size=kernel_size, stride=stride, padding=padding
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.proj(x)
-        # B C H W -> B H W C
-        x = x.permute(0, 2, 3, 1)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.proj(hidden_states)
+        # batch_size, channel, height, width -> batch_size, height, width, channel
+        hidden_states = hidden_states.permute(0, 2, 3, 1)
+        return hidden_states
 
 
 class SamPreTrainedModel(PreTrainedModel):
@@ -1101,7 +1091,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
         input_points=None,
         input_labels=None,
         input_image_sizes=None,
-        boxes=None,
+        input_boxes=None,
         mask_inputs=None,
         original_sizes=None,
         multimask_output: bool=True,
@@ -1111,7 +1101,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             points=input_points,
             labels=input_labels,
-            boxes=boxes,
+            boxes=input_boxes,
             masks=mask_inputs,
         )
         low_res_masks, iou_predictions = self.mask_decoder(

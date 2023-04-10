@@ -133,6 +133,17 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         assert scores[-1].item() == 0.9712603092193604
 
+        input_boxes = ((75, 275, 1725, 850),)
+
+        inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to("cuda")
+
+        with torch.no_grad():
+            output = hf_model(**inputs)
+        scores = output["iou_predictions"].squeeze()
+
+        # TODO: verify logits here
+        print(scores)
+
     # for i, (mask, score) in enumerate(zip(masks, scores)):
     #     mask = mask.cpu().detach()
     #     plt.imshow(np.array(raw_image))

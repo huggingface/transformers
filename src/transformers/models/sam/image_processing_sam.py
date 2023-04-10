@@ -131,6 +131,20 @@ class SamImageProcessor(BaseImageProcessor):
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
         return coords
 
+    # def apply_coords_torch(self, coords, original_size):
+    #     """
+    #     Expects a torch tensor with length 2 in the last dimension. Requires the
+    #     original image size in (H, W) format.
+    #     """
+    #     old_h, old_w = original_size
+    #     new_h, new_w = self.get_preprocess_shape(
+    #         original_size[0], original_size[1], self.target_size
+    #     )
+    #     coords = np.astype(deepcopy(coords), np.float32)
+    #     coords[..., 0] = coords[..., 0] * (new_w / old_w)
+    #     coords[..., 1] = coords[..., 1] * (new_h / old_h)
+    #     return coords
+
     def pad_to_target_size(
         self,
         image: np.ndarray,
@@ -331,6 +345,9 @@ class SamImageProcessor(BaseImageProcessor):
 
         if input_points is not None:
             input_points = [self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)]
+
+        if input_boxes is not None:
+            input_boxes = [self.apply_coords(box, original_size) for box, original_size in zip(input_boxes, original_sizes)]
 
         if do_resize:
             images = [self.resize(image=image) for image in images]
