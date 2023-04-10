@@ -113,10 +113,7 @@ class SeaformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        # num_channels=3,
-        # num_encoder_blocks=3,
         depths=[3, 3, 3],
-        num_labels=150,
         channels=[32, 64, 128, 192, 256, 320],
         mv2_blocks_cfgs=[
             [[3, 3, 32, 1], [3, 4, 64, 2], [3, 4, 64, 1]],
@@ -137,7 +134,6 @@ class SeaformerConfig(PretrainedConfig):
         embed_dims=[128, 160, 192],
         is_depthwise=True,
         semantic_loss_ignore_index=255,
-        # hidden_sizes=[128],
         hidden_act="relu",
         **kwargs,
     ):
@@ -150,8 +146,6 @@ class SeaformerConfig(PretrainedConfig):
                 FutureWarning,
             )
 
-        # self.num_channels = num_channels
-        # self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
         self.channels = channels
         self.mv2_blocks_cfgs = mv2_blocks_cfgs
@@ -166,8 +160,6 @@ class SeaformerConfig(PretrainedConfig):
         self.embed_dims = embed_dims
         self.decoder_channels = decoder_channels
         self.is_depthwise = is_depthwise
-        self.num_labels = num_labels
-        # self.hidden_sizes = hidden_sizes
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self.hidden_act = hidden_act
