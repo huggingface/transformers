@@ -60,20 +60,19 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_cuda_kernels():
+    global cuda_kernel
     curr_path = os.path.dirname(os.path.realpath(__file__))
     src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
     src_files = [os.path.join(curr_path, file) for file in src_files]
     cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
     import cuda_kernel
-
-    return cuda_kernel
  
 if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
 
     try:
-        cuda_kernel = load_cuda_kernels()
+        load_cuda_kernels()
     except Exception as e:
         logger.warning(
             "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
@@ -355,6 +354,9 @@ def mra2_attention(
     """
     Use MRA to approximate self-attention.
     """
+    if cuda_kernel is None:
+        return torch.zeros_like(Q).requires_grad_()
+
     batch_size, num_head, seq_len, head_dim = Q.size()
     meta_batch = batch_size * num_head
 
