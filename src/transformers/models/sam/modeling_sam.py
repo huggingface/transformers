@@ -658,7 +658,6 @@ class SamViTEncoder(nn.Module):
                 qkv_bias=self.config.qkv_bias,
                 activation=self.config.hidden_act,
                 use_rel_pos=self.config.use_rel_pos,
-                rel_pos_zero_init=self.config.rel_pos_zero_init,
                 window_size=self.config.window_size if i not in self.config.global_attn_indexes else 0,
                 input_size=(self.config.image_size // self.config.patch_size, self.config.image_size // self.config.patch_size),
             )
@@ -703,7 +702,6 @@ class SamTransformerBlock(nn.Module):
         qkv_bias: bool = True,
         activation: str = "gelu",
         use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
         window_size: int = 0,
         input_size: Optional[Tuple[int, int]] = None,
         layer_norm_eps: float = 1e-6,
@@ -717,7 +715,6 @@ class SamTransformerBlock(nn.Module):
             norm_layer (nn.Module): Normalization layer.
             act_layer (nn.Module): Activation layer.
             use_rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
             window_size (int): Window size for window attention blocks. If it equals 0, then
                 use global attention.
             input_size (int or None): Input resolution for calculating the relative positional
