@@ -14,12 +14,8 @@
 # limitations under the License.
 """
 Convert SAM checkpoints from the original repository.
-
-URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
 """
-
 import argparse
-import gc
 
 import requests
 import torch
@@ -29,10 +25,6 @@ from PIL import Image
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-import cv2
-
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
 
 from transformers import (
     SamConfig,
