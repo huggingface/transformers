@@ -333,11 +333,6 @@ class AutoFeatureExtractor:
                         "in that repo on your local machine. Make sure you have read the code there to avoid "
                         "malicious use, then set the option `trust_remote_code=True` to remove this error."
                     )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a feature extractor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
                 feature_extractor_class = get_class_from_dynamic_module(
                     feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
                 )

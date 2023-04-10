@@ -456,11 +456,6 @@ class _BaseAutoModelClass:
                     "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
                     "the option `trust_remote_code=True` to remove this error."
                 )
-            if hub_kwargs.get("revision", None) is None:
-                logger.warning(
-                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                    "no malicious code has been contributed in a newer revision."
-                )
             class_ref = config.auto_map[cls.__name__]
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs

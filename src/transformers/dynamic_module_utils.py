@@ -379,6 +379,12 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
+    if revision is None:
+        logger.warning(
+            "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure"
+            " no malicious code has been contributed in a newer revision."
+        )
+
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
