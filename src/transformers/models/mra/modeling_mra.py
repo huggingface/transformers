@@ -67,7 +67,8 @@ def load_cuda_kernels():
     cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
     import cuda_kernel
- 
+
+
 if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
 
@@ -535,7 +536,9 @@ class MRASelfAttention(nn.Module):
             position_embedding_type if position_embedding_type is not None else config.position_embedding_type
         )
 
-        self.num_block = config.num_block
+        self.num_block = (config.max_position_embeddings // 32) * config.block_per_row
+        self.num_block = min(self.num_block, int((config.max_position_embeddings // 32) ** 2))
+
         self.approx_mode = config.approx_mode
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
@@ -984,8 +987,7 @@ class MRAModel(MRAPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        # extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-        extended_attention_mask = attention_mask
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
