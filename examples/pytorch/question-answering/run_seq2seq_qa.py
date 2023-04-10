@@ -19,6 +19,7 @@ Fine-tuning the library's seq2seq models for question answering using the 🤗 S
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
 import logging
+import numpy as np
 import os
 import sys
 from dataclasses import dataclass, field
@@ -614,6 +615,8 @@ def main():
         preds = outputs.predictions
         if isinstance(preds, tuple):
             preds = preds[0]
+        # Replace -100s used for padding as we can't decode them
+        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
 
         # Build a map example to its corresponding features.
