@@ -16,13 +16,10 @@
 import os
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_jieba
+from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
+from transformers.testing_utils import require_jieba
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-if is_torch_available():
-    from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
 
 
 @require_jieba
