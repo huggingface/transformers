@@ -29,6 +29,7 @@ from .utils import (
     extract_commit_hash,
     is_offline_mode,
     logging,
+    try_to_load_from_cache,
 )
 
 
@@ -222,11 +223,16 @@ def get_cached_module_file(
 
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
+    is_local = os.path.isdir(pretrained_model_name_or_path)
+    if is_local:
         submodule = pretrained_model_name_or_path.split(os.path.sep)[-1]
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
+        cached_module = try_to_load_from_cache(
+            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash
+        )
 
+    new_files = []
     try:
         # Load from URL or cache if already cached
         resolved_module_file = cached_file(
@@ -241,6 +247,8 @@ def get_cached_module_file(
             revision=revision,
             _commit_hash=_commit_hash,
         )
+        if not is_local and cached_module != resolved_module_file:
+            new_files.append(module_file)
 
     except EnvironmentError:
         logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
@@ -284,7 +292,7 @@ def get_cached_module_file(
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
-            if not (submodule_path / module_needed).exists():
+            if not (submodule_path / f"{module_needed}.py").exists():
                 get_cached_module_file(
                     pretrained_model_name_or_path,
                     f"{module_needed}.py",
@@ -295,7 +303,18 @@ def get_cached_module_file(
                     use_auth_token=use_auth_token,
                     revision=revision,
                     local_files_only=local_files_only,
+                    _commit_hash=commit_hash,
                 )
+                new_files.append(f"{module_needed}.py")
+
+    if len(new_files) > 0:
+        new_files = "\n".join([f"- {f}" for f in new_files])
+        logger.warning(
+            f"A new version of the following files was downloaded from {pretrained_model_name_or_path}:\n{new_files}"
+            "\n. Make sure to double-check they do not contain any added malicious code. To avoid downloading new "
+            "versions of the code file, you can pin a revision."
+        )
+
     return os.path.join(full_submodule, module_file)
 
 
@@ -379,12 +398,6 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
-    if revision is None:
-        logger.warning(
-            "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure"
-            " no malicious code has been contributed in a newer revision."
-        )
-
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
