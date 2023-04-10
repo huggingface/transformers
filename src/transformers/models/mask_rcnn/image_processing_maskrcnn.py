@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for Mask-RCNN."""
 
-import warnings
 from typing import List, Union
 
 import numpy as np
@@ -243,18 +242,6 @@ class MaskRCNNImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         bboxes = det_bboxes[:, :4]
         labels = det_labels
 
-        # In most cases, scale_factor should have been
-        # converted to Tensor when rescale the bbox
-        if not isinstance(scale_factor, torch.Tensor):
-            if isinstance(scale_factor, float):
-                scale_factor = np.array([scale_factor] * 4)
-                # TODO: remove this deprecation
-                warnings.warn(
-                    "Scale_factor should be a Tensor or ndarray with shape (4,), float would be deprecated. "
-                )
-            assert isinstance(scale_factor, np.ndarray)
-            scale_factor = torch.Tensor(scale_factor)
-
         if rescale:
             img_h, img_w = ori_shape[-2:]
             bboxes = bboxes / scale_factor.to(bboxes)
@@ -281,7 +268,8 @@ class MaskRCNNImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             # so we need to change the types of img_w and img_h to int.
             # See https://github.com/open-mmlab/mmdetection/pull/5191
             num_chunks = int(np.ceil(N * int(img_h) * int(img_w) * BYTES_PER_FLOAT / GPU_MEM_LIMIT))
-            assert num_chunks <= N, "Default GPU_MEM_LIMIT is too small; try increasing it"
+            if num_chunks > N:
+                raise ValueError("Default GPU_MEM_LIMIT is too small; try increasing it")
         chunks = torch.chunk(torch.arange(N, device=device), num_chunks)
 
         threshold = rcnn_test_cfg["mask_thr_binary"]
