@@ -16,9 +16,9 @@
 # limitations under the License.
 """ PyTorch Mask R-CNN model."""
 
-
 import copy
 import warnings
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -89,7 +89,9 @@ class MaskRCNNModelOutput(ModelOutput):
     Base class for models that leverage the Mask R-CNN framework.
 
     Args:
-        losses (...)
+        loss (...)
+            ...
+        loss_dict (...)
             ...
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -103,11 +105,12 @@ class MaskRCNNModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    losses: torch.FloatTensor = None
-    rois: torch.FloatTensor = None
-    proposals: torch.FloatTensor = None
+    loss: torch.FloatTensor = None
+    loss_dict: dict = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
+    rois: torch.FloatTensor = None
+    proposals: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -2757,6 +2760,33 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def parse_losses(self, losses):
+        """Parse the raw outputs (losses) of the network.
+
+        Source:
+        https://github.com/open-mmlab/mmdetection/blob/ff9bc39913cb3ff5dde79d3933add7dc2561bab7/mmdet/models/detectors/base.py#L176
+
+        Args:
+            losses (dict): Raw output of the network, which usually contain
+                losses and other necessary information.
+        Returns:
+            tuple[Tensor, dict]: (loss, log_vars), loss is the loss tensor \
+                which may be a weighted sum of all losses, log_vars contains \ all the variables to be sent to the
+                logger.
+        """
+        log_vars = OrderedDict()
+        for loss_name, loss_value in losses.items():
+            if isinstance(loss_value, torch.Tensor):
+                log_vars[loss_name] = loss_value.mean()
+            elif isinstance(loss_value, list):
+                log_vars[loss_name] = sum(_loss.mean() for _loss in loss_value)
+            else:
+                raise TypeError(f"{loss_name} is not a tensor or list of tensors")
+
+        loss = sum(_value for _key, _value in log_vars.items() if "loss" in _key)
+
+        return loss
+
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
@@ -2785,9 +2815,10 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
 
-        losses = {}
+        loss, loss_dict = None, None
         rois, proposals, logits, pred_boxes = None, None, None, None
         if labels is not None:
+            loss_dict = {}
             rpn_outputs = self.rpn_head(
                 hidden_states,
                 img_metas,
@@ -2796,7 +2827,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 gt_bboxes_ignore=labels["gt_bboxes_ignore"],
                 proposal_cfg=self.config.rpn_proposal,
             )
-            losses.update(rpn_outputs.losses)
+            loss_dict.update(rpn_outputs.losses)
             # TODO: check for kwargs forwarded here
             roi_losses = self.roi_head.forward_train(
                 hidden_states,
@@ -2807,21 +2838,24 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 labels["gt_bboxes_ignore"],
                 labels["gt_masks"],
             )
-            losses.update(roi_losses)
+            loss_dict.update(roi_losses)
+            # compute final loss
+            loss = self.parse_losses(loss_dict)
         else:
             rpn_outputs = self.rpn_head(hidden_states, img_metas)
             rois, proposals, logits, pred_boxes = self.roi_head.forward_test(hidden_states, rpn_outputs.proposal_list)
 
         if not return_dict:
-            output = (rois, proposals, logits, pred_boxes, hidden_states) + outputs[2:]
-            return ((losses,) + output) if losses is not None else output
+            output = (logits, pred_boxes, rois, proposals, hidden_states) + outputs[2:]
+            return ((loss, loss_dict) + output) if loss is not None else output
 
         return MaskRCNNModelOutput(
-            losses=losses,
-            rois=rois,
-            proposals=proposals,
+            loss=loss,
+            loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
+            rois=rois,
+            proposals=proposals,
             fpn_hidden_states=hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

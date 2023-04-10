@@ -53,13 +53,8 @@ class MaskRCNNModelTester:
         batch_size=13,
         image_size=32,
         num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
         is_training=True,
         use_labels=True,
-        intermediate_size=37,
-        hidden_act="gelu",
         initializer_range=0.02,
         num_labels=3,
         scope=None,
@@ -68,19 +63,16 @@ class MaskRCNNModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+
+        img_metas = [{"img_shape": (self.num_channels, self.image_size, self.image_size)}]
 
         labels = None
         if self.use_labels:
@@ -97,12 +89,12 @@ class MaskRCNNModelTester:
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, img_metas, labels
 
     def get_config(self):
         return MaskRCNNConfig(initializer_range=self.initializer_range)
 
-    def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
+    def create_and_check_model_for_object_detection(self, config, pixel_values, img_metas, labels):
         model = MaskRCNNForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -113,10 +105,17 @@ class MaskRCNNModelTester:
             (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
+        result = model(pixel_values, labels=labels)
+        # expected last hidden states: B, C, H // 32, W // 32
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, labels = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, pixel_values, img_metas, labels = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values, "img_metas": img_metas}
         return config, inputs_dict
 
 
@@ -134,6 +133,26 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     has_attentions = False
     test_torchscript = False
+
+    # special case for head models
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ in ["MaskRCNNForObjectDetection"]:
+                labels = {"gt_labels": [], "gt_bboxes": [], "gt_masks": [], "gt_bboxes_ignore": None}
+                for _ in range(self.batch_size):
+                    # sample a number of objects
+                    number_of_objects = random.randint(0, 10)
+                    class_labels = torch.tensor([random.randint(0, self.num_labels) for _ in range(number_of_objects)])
+                    boxes = torch.randn(number_of_objects, 4)
+                    masks = torch.randn(number_of_objects, self.image_size, self.image_size)
+                    labels["gt_labels"].append(class_labels)
+                    labels["gt_bboxes"].append(boxes)
+                    labels["gt_masks"].append(masks)
+                inputs_dict["labels"] = labels
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = MaskRCNNModelTester(self)
@@ -188,9 +207,9 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
-            expected_num_stages = self.model_tester.num_stages
+            expected_num_stages = len(config.backbone_config.hidden_sizes)
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
             # Mask-RCNN's feature maps are of shape (batch_size, num_channels, height, width)
@@ -262,7 +281,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         # verify outputs
         self.assertListEqual(
             list(outputs.keys()),
-            ["losses", "rois", "proposals", "logits", "pred_boxes", "fpn_hidden_states"],
+            ["logits", "pred_boxes", "rois", "proposals", "fpn_hidden_states"],
         )
         expected_slice_logits = torch.tensor(
             [[-12.4785, -17.4976, -14.7001], [-10.9181, -16.7281, -13.2826], [-10.5053, -18.3817, -15.5554]],
@@ -345,7 +364,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(img.to(torch_device), img_metas=img_metas, labels=labels)
-            losses = outputs.losses
+            losses = outputs.loss_dict
 
         # verify the losses
         expected_loss_gpu = {
