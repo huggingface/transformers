@@ -63,6 +63,7 @@ class FlaxGreedySearchOutput(ModelOutput):
     """
 
     sequences: jnp.ndarray = None
+    scores: jnp.ndarray = None
 
 
 @flax.struct.dataclass
@@ -100,6 +101,7 @@ class FlaxBeamSearchOutput(ModelOutput):
 class GreedyState:
     cur_len: jnp.ndarray
     sequences: jnp.ndarray
+    scores: jnp.ndarray
     running_token: jnp.ndarray
     is_sent_finished: jnp.ndarray
     model_kwargs: Dict[str, jnp.ndarray]
@@ -420,6 +422,7 @@ class FlaxGenerationMixin:
                 generation_config.max_length,
                 generation_config.pad_token_id,
                 generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,
                 logits_processor=logits_processor,
                 trace=trace,
                 params=params,
@@ -459,6 +462,7 @@ class FlaxGenerationMixin:
                 generation_config.max_length,
                 generation_config.pad_token_id,
                 generation_config.eos_token_id,
+                output_scores=generation_config.output_scores,                
                 length_penalty=generation_config.length_penalty,
                 early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
@@ -562,6 +566,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        output_scores: Optional[bool] = None,        
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
@@ -571,6 +576,7 @@ class FlaxGenerationMixin:
         max_length = max_length if max_length is not None else self.generation_config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
 
         batch_size, cur_len = input_ids.shape
 
@@ -581,6 +587,8 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
+        vocab_size = self.config.vocab_size
+        scores = jnp.float16(jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7))
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
@@ -595,6 +603,7 @@ class FlaxGenerationMixin:
         state = GreedyState(
             cur_len=cur_len,
             sequences=sequences,
+            scores=scores,
             running_token=input_ids,
             is_sent_finished=is_sent_finished,
             model_kwargs=model_kwargs,
@@ -613,10 +622,10 @@ class FlaxGenerationMixin:
             logits = model_outputs.logits[:, -1]
 
             # apply min_length, ...
-            logits = logits_processor(state.sequences, logits, state.cur_len)
+            next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
-            next_token = jnp.argmax(logits, axis=-1)
-
+            next_token = jnp.argmax(next_tokens_scores, axis=-1)
+            tokens_scores = state.logits.at[:,state.cur_len,:].set(next_tokens_scores)
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
@@ -626,6 +635,7 @@ class FlaxGenerationMixin:
             return GreedyState(
                 cur_len=state.cur_len + 1,
                 sequences=next_sequences,
+                scores=tokens_scores,
                 running_token=next_token,
                 is_sent_finished=next_is_sent_finished,
                 model_kwargs=next_model_kwargs,
@@ -745,6 +755,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        output_scores: Optional[bool] = None,        
         length_penalty: Optional[float] = None,
         early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
@@ -794,6 +805,7 @@ class FlaxGenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
+        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
 
         batch_size, num_beams, cur_len = input_ids.shape
 
@@ -997,8 +1009,13 @@ class FlaxGenerationMixin:
         sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
-        # take best beam for each batch
-        sequences = sequences[:, 0]
-        scores = scores[:, 0]
+        if output_scores:
+            # take all beam of each batch
+            sequences = sequences[:, :]
+            scores = scores[:, :]
+        else:
+            # take best beam for each batch
+            sequences = sequences[:, 0]
+            scores = scores[:, 0]
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
