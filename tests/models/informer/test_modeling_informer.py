@@ -26,6 +26,7 @@ from transformers.testing_utils import is_flaky, require_torch, slow, torch_devi
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 TOLERANCE = 1e-4
@@ -177,9 +178,10 @@ class InformerModelTester:
 
 
 @require_torch
-class InformerModelTest(ModelTesterMixin, unittest.TestCase):
+class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (InformerForPrediction,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False

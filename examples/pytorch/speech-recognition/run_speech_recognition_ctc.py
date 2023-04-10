@@ -673,11 +673,14 @@ def main():
         return metrics
 
     # Now save everything to be able to create a single processor later
-    if is_main_process(training_args.local_rank):
-        # save feature extractor, tokenizer and config
-        feature_extractor.save_pretrained(training_args.output_dir)
-        tokenizer.save_pretrained(training_args.output_dir)
-        config.save_pretrained(training_args.output_dir)
+    # make sure all processes wait until data is saved
+    with training_args.main_process_first():
+        # only the main process saves them
+        if is_main_process(training_args.local_rank):
+            # save feature extractor, tokenizer and config
+            feature_extractor.save_pretrained(training_args.output_dir)
+            tokenizer.save_pretrained(training_args.output_dir)
+            config.save_pretrained(training_args.output_dir)
 
     try:
         processor = AutoProcessor.from_pretrained(training_args.output_dir)

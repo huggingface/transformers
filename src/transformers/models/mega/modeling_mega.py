@@ -896,7 +896,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
         # apply causal mask (presumed to be 1/0 for not masked / masked)
         # additive, but convert to 0/-inf (which is not explicitly in the Mega source code)
         if causal_mask is not None:
-            additive_causal_mask = torch.zeros_like(causal_mask, dtype=torch.float)
+            additive_causal_mask = torch.zeros_like(causal_mask, dtype=qk.dtype)
             additive_causal_mask = additive_causal_mask.masked_fill((1 - causal_mask).bool(), float("-inf"))
             qk = qk + additive_causal_mask
 
