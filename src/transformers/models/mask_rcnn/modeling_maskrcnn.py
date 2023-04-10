@@ -2535,13 +2535,10 @@ class MaskRCNNRoIHead(nn.Module):
         pred_boxes = bbox_results["bbox_pred"]
         num_proposals_per_img = tuple(len(p) for p in proposals)
 
-        print("Shape of logits:", logits.shape)
-        print("Shape of pred boxes:", pred_boxes.shape)
-
         # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
         # print("Shape of cls score:", cls_score.shape)
         # print("Shape of pred boxes:", bbox_pred.shape)
-        print("Number of proposals per image:", num_proposals_per_img)
+        # print("Number of proposals per image:", num_proposals_per_img)
         # logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
         # pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
 
@@ -2580,7 +2577,6 @@ class MaskRCNNRoIHead(nn.Module):
 
         mask_targets = self.mask_head.get_targets(sampling_results, gt_masks, self.train_cfg)
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
-        print("Mask targets:", mask_targets)
         loss_mask = self.mask_head.loss(mask_results["mask_pred"], mask_targets, pos_labels)
 
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
@@ -2667,7 +2663,6 @@ class MaskRCNNRoIHead(nn.Module):
                 x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
             )
             losses.update(mask_results["loss_mask"])
-            # print("Mask loss:", mask_results["loss_mask"])
 
         return losses
 
@@ -2709,7 +2704,7 @@ class MaskRCNNPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -2800,10 +2795,13 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
 
+        # send pixel_values through backbone
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values,
             output_attentions=output_attentions,
@@ -2812,7 +2810,8 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         )
 
         # the FPN outputs feature maps at 5 different scales
-        hidden_states = self.neck(outputs.feature_maps)
+        feature_maps = outputs.feature_maps if return_dict else outputs[0]
+        hidden_states = self.neck(feature_maps)
 
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
