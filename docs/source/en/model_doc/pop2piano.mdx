@@ -43,32 +43,47 @@ Tips:
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
-Example:
-```
-import librosa
-from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
+###Example using HuggingFace Dataset:###
+```python
+>>> from datasets import load_dataset
+>>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
-raw_audio, sr = librosa.load("audio.mp3", sr=44100)
-model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
+>>> model.eval()
+>>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+>>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+>>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-model.eval()
-
-feature_extractor_outputs = feature_extractor(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
-model_outputs = model.generate(feature_extractor_outputs, composer="composer1")
-
-opt_postprocess = tokenizer(relative_tokens=model_outputs,
-                           beatsteps=feature_extractor_outputs["beatsteps"],
-                           ext_beatstep=feature_extractor_outputs["ext_beatstep"],
-                           raw_audio=raw_audio,
-                           sampling_rate=sr,
-                           save_path="./Music/Outputs/",
-                           audio_file_name="filename",
-                           save_midi=True
-                )
+>>> fe_output = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+>>> model_output = model.generate(fe_output, composer="composer1")
+>>> tokenizer_output = tokenizer(
+...     relative_tokens=model_output.cpu(),
+...     beatsteps=fe_output["beatsteps"].cpu(),
+...     ext_beatstep=fe_output["ext_beatstep"].cpu(),
+... )
+>>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
+###Example using Your own Audio:###
+```python
+>>> import librosa
+>>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
+
+>>> raw_audio, sr = librosa.load("<your_audio_file_here>", sr=44100)
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
+>>> model.eval()
+>>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+>>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+
+>>> fe_output = feature_extractor(raw_audio, audio_sr=sr).to("cuda")
+>>> model_output = model.generate(fe_output, composer="composer1")
+>>> tokenizer_output = tokenizer(
+...     relative_tokens=model_output.cpu(),
+...     beatsteps=fe_output["beatsteps"].cpu(),
+...     ext_beatstep=fe_output["ext_beatstep"].cpu(),
+... )
+>>> tokenizer_output.write("./Outputs/midi_output.mid")
+```
 
 ## Pop2PianoConfig
 

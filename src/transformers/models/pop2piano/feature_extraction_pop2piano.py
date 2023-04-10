@@ -23,9 +23,9 @@ import librosa
 import numpy as np
 import scipy
 import torch
-import torchaudio
 from torch.nn.utils.rnn import pad_sequence
 
+from ...audio_utils import fram_wave, get_mel_filter_banks, stft
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -93,19 +93,34 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     def log_mel_spectogram(self, sequence):
         """Generates MelSpectrogram then applies log base e."""
 
-        melspectrogram = torchaudio.transforms.MelSpectrogram(
+        mel_fb = get_mel_filter_banks(
+            nb_frequency_bins=(self.n_fft // 2) + 1,
+            nb_mel_filters=self.n_mels,
+            frequency_min=self.f_min,
+            frequency_max=float(self.sampling_rate // 2),
             sample_rate=self.sampling_rate,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            f_min=self.f_min,
-            n_mels=self.n_mels,
-        )
-        with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=False):
-                X = melspectrogram(sequence)
-                X = X.clamp(min=1e-6).log()
+            norm=None,
+            mel_scale="htk",
+        ).astype(np.float32)
 
-        return X
+        spectrogram = []
+        for seq in sequence:
+            window = np.hanning(self.n_fft + 1)[:-1]
+            framed_audio = fram_wave(seq, self.hop_length, self.n_fft)
+            spec = stft(framed_audio, window, fft_window_size=self.n_fft)
+            spec = np.abs(spec) ** 2.0
+            spectrogram.append(spec)
+
+        spec_shape = spec.shape
+        spectrogram = torch.Tensor(spectrogram).view(-1, *spec_shape)
+        log_melspec = (
+            torch.matmul(spectrogram.transpose(-1, -2), torch.from_numpy(mel_fb))
+            .transpose(-1, -2)
+            .clamp(min=1e-6)
+            .log()
+        )
+
+        return log_melspec
 
     def extract_rhythm(self, raw_audio):
         """
@@ -238,6 +253,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
+        warnings.warn("Please make sure to have the audio sampling_rate as 44100, to get the optimal performence!")
         warnings.warn(
             "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
         )
@@ -250,10 +266,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
         if self.sampling_rate != audio_sr and self.sampling_rate is not None:
-            # Change `raw_audio_sr` to `self.sampling_rate`
+            # Change audio_sr to self.sampling_rate
             raw_audio = librosa.core.resample(
                 raw_audio, orig_sr=audio_sr, target_sr=self.sampling_rate, res_type="kaiser_best"
             )
+
         audio_sr = self.sampling_rate
         start_sample = int(beatsteps[0] * audio_sr)
         end_sample = int(beatsteps[-1] * audio_sr)

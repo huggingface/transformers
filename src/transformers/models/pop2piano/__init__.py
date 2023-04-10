@@ -20,9 +20,7 @@ from ...utils import (
     is_librosa_available,
     is_pretty_midi_available,
     is_scipy_available,
-    is_soundfile_availble,
     is_torch_available,
-    is_torchaudio_available,
 )
 
 
@@ -30,6 +28,7 @@ _import_structure = {
     "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
 }
 
+# Model
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -42,27 +41,29 @@ else:
         "Pop2PianoPreTrainedModel",
     ]
 
+# Feature Extractor
 try:
-    if not (
-        is_librosa_available()
-        and is_essentia_available()
-        and is_scipy_available()
-        and is_pretty_midi_available()
-        and is_soundfile_availble()
-        and is_torch_available()
-        and is_torchaudio_available()
-    ):
+    if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_pop2piano"] = ["Pop2PianoFeatureExtractor"]
+
+# Tokenizer
+try:
+    if not (is_pretty_midi_available() and is_torch_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_pop2piano"] = ["Pop2PianoTokenizer"]
 
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
 
+    # Model
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -75,21 +76,22 @@ if TYPE_CHECKING:
             Pop2PianoPreTrainedModel,
         )
 
+    # Feature Extractor
     try:
-        if not (
-            is_librosa_available()
-            and is_essentia_available()
-            and is_scipy_available()
-            and is_pretty_midi_available()
-            and is_soundfile_availble()
-            and is_torch_available()
-            and is_torchaudio_available()
-        ):
+        if not (is_librosa_available() and is_essentia_available() and is_scipy_available() and is_torch_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .feature_extraction_pop2piano import Pop2PianoFeatureExtractor
+
+    # Tokenizer
+    try:
+        if not (is_pretty_midi_available() and is_torch_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_pop2piano import Pop2PianoTokenizer
 
 else:

@@ -169,7 +169,6 @@ except Exception:
 ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
 
 
-
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoDenseActDense(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
@@ -191,7 +190,6 @@ class Pop2PianoDenseActDense(nn.Module):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
-
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->Pop2Piano
@@ -224,8 +222,6 @@ class Pop2PianoDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-
-# Adapted from transformers.models.t5.modeling_t5.T5LayerFF with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerFF(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
@@ -237,6 +233,7 @@ class Pop2PianoLayerFF(nn.Module):
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    # Copied from transformers.models.t5.modeling_t5.T5LayerFF.forward
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.DenseReluDense(forwarded_states)
@@ -244,9 +241,8 @@ class Pop2PianoLayerFF(nn.Module):
         return hidden_states
 
 
-
-# Adapted from transformers.models.t5.modeling_t5.T5Attention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoAttention(nn.Module):
+    # Copied from transformers.models.t5.modeling_t5.T5Attention.__init__ with T5->Pop2Piano,t5->pop2piano
     def __init__(self, config: Pop2PianoConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -270,6 +266,7 @@ class Pop2PianoAttention(nn.Module):
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
+    # Copied from transformers.models.t5.modeling_t5.T5Attention.prune_heads with T5->Pop2Piano,t5->pop2piano
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -287,20 +284,25 @@ class Pop2PianoAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     @staticmethod
+    # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket with T5->Pop2Piano,t5->pop2piano
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
-        Args:
         Adapted from Mesh Tensorflow:
-        https:
-            //github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+
         Translate relative position to a bucket number for relative attention. The relative position is defined as
         memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
         position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
         small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.:
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
         This should allow for more graceful generalization to longer sequences than the model has been trained on
-            relative_position: an int32 Tensor bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer max_distance: an integer
+
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
         """
@@ -330,6 +332,7 @@ class Pop2PianoAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
+    # Copied from transformers.models.t5.modeling_t5.T5Attention.compute_bias with T5->Pop2Piano,t5->pop2piano
     def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
         if device is None:
@@ -370,8 +373,10 @@ class Pop2PianoAttention(nn.Module):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            if len(past_key_value)!=2:
-                raise ValueError(f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states")
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
@@ -475,7 +480,6 @@ class Pop2PianoAttention(nn.Module):
         return outputs
 
 
-
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
@@ -507,7 +511,6 @@ class Pop2PianoLayerSelfAttention(nn.Module):
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
-
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
@@ -545,7 +548,6 @@ class Pop2PianoLayerCrossAttention(nn.Module):
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
-
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
@@ -741,7 +743,9 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         if decoder_start_token_id is None:
-            raise ValueError("self.model.config.decoder_start_token_id has to be defined. In Pop2Piano it is usually set to the pad_token_id.")
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In Pop2Piano it is usually set to the pad_token_id."
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -761,9 +765,8 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-
-# Adapted from transformers.models.t5.modeling_t5.T5Stack with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__ with T5->Pop2Piano,t5->pop2piano
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
@@ -783,16 +786,13 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
     def get_input_embeddings(self):
         return self.embed_tokens
 
+    # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
 
     def forward(
         self,
@@ -952,12 +952,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1270,29 +1264,17 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         Examples:
         ```python
-        >>> import librosa
-        >>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration
+        >>> from datasets import load_dataset
+        >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
 
-        >>> raw_audio, sr = librosa.load("audio.mp3", sr=44100)
-        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
         >>> model.eval()
+        >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        >>> feature_extractor_outputs = feature_extractor(raw_audio=raw_audio, audio_sr=sr, return_tensors="pt")
-        >>> model_outputs = model.generate(feature_extractor_outputs, composer="composer1")
-
-        >>> prettymidi_output = feature_extractor.postprocess(
-        ...     relative_tokens=model_outputs,
-        ...     beatsteps=feature_extractor_outputs["beatsteps"],
-        ...     ext_beatstep=feature_extractor_outputs["ext_beatstep"],
-        ...     raw_audio=raw_audio,
-        ...     sampling_rate=sr,
-        ...     mix_sampling_rate=sr,
-        ...     save_path="./Outputs/",
-        ...     audio_file_name="output_filename",
-        ...     save_midi=True,
-        ...     save_mix=True,
-        ... )
+        >>> fe_output = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+        >>> model_output = model.generate(fe_output, composer="composer1")
         ```"""
         if input_features is not None and inputs_embeds is not None:
             raise ValueError("Both input_features and inputs_embeds received. Please give only input_features")
@@ -1379,7 +1361,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
             if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
                 raise ValueError
-            if  len(reordered_layer_past_states) != len(layer_past_states):
+            if len(reordered_layer_past_states) != len(layer_past_states):
                 raise ValueError
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)

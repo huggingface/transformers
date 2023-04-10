@@ -420,14 +420,7 @@ def is_pretty_midi_available():
 
 
 def is_music_available():
-    if (
-        is_pretty_midi_available()
-        and is_soundfile_availble()
-        and is_essentia_available()
-        and is_librosa_available()
-        and is_scipy_available()
-        and is_torchaudio_available()
-    ):
+    if is_pretty_midi_available() and is_essentia_available() and is_librosa_available() and is_scipy_available():
         return True
     return False
 
@@ -1174,9 +1167,9 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 MUSIC_IMPORT_ERROR = """
-{0} requires these libraries - pretty_midi, soundfile, essentia, librosa, scipy, torchaudio. But at least
+{0} requires these libraries - pretty_midi, essentia, librosa, scipy. But at least
 one of them were not found in your environment. You can install them with pip:
-`pip install pretty-midi==0.2.9 soundfile essentia==2.1b6.dev609 librosa scipy torchaudio`
+`pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy`
 Please note that you may need to restart your runtime after installation.
 """
 

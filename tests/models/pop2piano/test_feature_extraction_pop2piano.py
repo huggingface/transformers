@@ -22,33 +22,22 @@ from datasets import load_dataset
 
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    is_torchaudio_available,
     require_essentia,
     require_librosa,
-    require_pretty_midi,
     require_scipy,
-    require_soundfile,
     require_torch,
 )
 from transformers.utils.import_utils import (
     is_essentia_available,
     is_librosa_available,
     is_scipy_available,
-    is_soundfile_availble,
     is_torch_available,
 )
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
-requirements = (
-    is_torchaudio_available()
-    and is_torch_available()
-    and is_essentia_available()
-    and is_scipy_available()
-    and is_librosa_available()
-    and is_soundfile_availble()
-)
+requirements = is_torch_available() and is_essentia_available() and is_scipy_available() and is_librosa_available()
 
 if requirements:
     import torch
@@ -56,12 +45,6 @@ if requirements:
     from transformers import Pop2PianoFeatureExtractor
 
 
-@require_torch
-@require_essentia
-@require_librosa
-@require_soundfile
-@require_scipy
-@require_pretty_midi
 class Pop2PianoFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -101,9 +84,7 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_essentia
 @require_librosa
-@require_soundfile
 @require_scipy
-@require_pretty_midi
 class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Pop2PianoFeatureExtractor if requirements else None
 
@@ -156,21 +137,18 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.assertTrue(input_features.beatsteps.ndim == 1)
         self.assertTrue(input_features.ext_beatstep.ndim == 1)
 
-    def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
-
     def test_integration(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        speech_samples = ds.sort("id").select([0])["audio"]
+        input_speech, sampling_rate = [x["array"] for x in speech_samples], [
+            x["sampling_rate"] for x in speech_samples
+        ]
+        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
+        input_features = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt").input_features
+
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [[-7.1493, -6.8701, -4.3214], [-5.9473, -5.7548, -3.8438], [-6.1324, -5.9018, -4.3778]]
         )
-
-        input_speech, sampling_rate = self._load_datasamples(1)
-        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        input_features = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, :3, :3], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
     @unittest.skip("Pop2PianoFeatureExtractor does not return attention_mask")

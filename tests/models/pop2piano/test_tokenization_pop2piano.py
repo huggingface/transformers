@@ -13,25 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import tempfile
 import unittest
 
+import numpy as np
 from datasets import load_dataset
 
 from transformers.testing_utils import (
-    is_essentia_available,
-    is_librosa_available,
     is_pretty_midi_available,
-    is_scipy_available,
-    is_soundfile_availble,
     is_torch_available,
-    is_torchaudio_available,
-    require_essentia,
-    require_librosa,
     require_pretty_midi,
-    require_scipy,
-    require_soundfile,
     require_torch,
     slow,
 )
@@ -42,15 +32,7 @@ if is_torch_available():
 
     from transformers import Pop2PianoForConditionalGeneration
 
-requirements = (
-    is_torch_available()
-    and is_torchaudio_available()
-    and is_essentia_available()
-    and is_scipy_available()
-    and is_librosa_available()
-    and is_soundfile_availble()
-    and is_pretty_midi_available()
-)
+requirements = is_torch_available() and is_pretty_midi_available()
 if requirements:
     import pretty_midi
 
@@ -58,8 +40,6 @@ if requirements:
 
 
 @require_torch
-@require_librosa
-@require_soundfile
 @require_pretty_midi
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_call(self):
@@ -76,52 +56,55 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
                     958,
                 ]
             ),
-            "raw_audio": torch.zeros(
-                [
-                    141301,
-                ]
-            ),
-            "sampling_rate": 44100,
-            "save_midi": False,
-            "save_mix": False,
         }
 
         output = tokenizer(**input)
         self.assertTrue(isinstance(output, pretty_midi.pretty_midi.PrettyMIDI))
 
-    def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
-
+    # This is the test for a real music from K-Pop genre.
     @slow
-    @require_scipy
-    @require_essentia
-    @require_librosa
-    def test_midi_saving(self):
+    def test_real_music(self):
+        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
+        model.eval()
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
-        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        input_speech, sampling_rate = self._load_datasamples(1)
-        fe_outputs = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt")
-        model_outputs = model.generate(fe_outputs)
-        filename = "tmp-file"
+        output_fe = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+        output_model = model.generate(output_fe, composer="composer1")
+        output_tokenizer = tokenizer(
+            relative_tokens=output_model.cpu(),
+            beatsteps=output_fe["beatsteps"].cpu(),
+            ext_beatstep=output_fe["ext_beatstep"].cpu(),
+        )
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tokenizer(
-                relative_tokens=model_outputs,
-                beatsteps=fe_outputs["beatsteps"],
-                ext_beatstep=fe_outputs["ext_beatstep"],
-                raw_audio=input_speech,
-                sampling_rate=sampling_rate,
-                mix_sampling_rate=sampling_rate,
-                save_path=tmpdirname,
-                audio_file_name=filename,
-                save_midi=True,
-            )
+        # Checking if no of notes are same
+        self.assertEqual(len(output_tokenizer.instruments[0].notes), 59)
 
-            # check if files are saved there or not
-            self.assertTrue(os.path.isfile(os.path.join(tmpdirname, f"midi_output_{filename}.mid")))
+        predicted_timings = []
+        for i in output_tokenizer.instruments[0].notes:
+            predicted_timings.append(i.start)
+
+        # Checking note start timings(first 6)
+        EXPECTED_START_TIMINGS = [
+            0.4876190423965454,
+            0.7314285635948181,
+            0.9752380847930908,
+            1.4396371841430664,
+            1.6718367338180542,
+            1.904036283493042,
+        ]
+
+        np.allclose(EXPECTED_START_TIMINGS, predicted_timings[:6])
+
+        # Checking note end timings(last 6)
+        EXPECTED_END_TIMINGS = [
+            12.341403007507324,
+            12.567797183990479,
+            12.567797183990479,
+            12.567797183990479,
+            12.794191360473633,
+            12.794191360473633,
+        ]
+
+        np.allclose(EXPECTED_END_TIMINGS, predicted_timings[-6:])
