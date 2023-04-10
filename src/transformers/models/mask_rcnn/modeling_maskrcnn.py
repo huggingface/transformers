@@ -93,8 +93,6 @@ class MaskRCNNModelOutput(ModelOutput):
             ...
         loss_dict (...)
             ...
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
@@ -111,7 +109,6 @@ class MaskRCNNModelOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     rois: torch.FloatTensor = None
     proposals: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -2519,7 +2516,6 @@ class MaskRCNNRoIHead(nn.Module):
                 dimension 5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor in the second list is the labels
                 with shape (num_boxes, ). The length of both lists should be equal to batch_size.
         """
-
         rois = bbox2roi(proposals)
 
         if rois.shape[0] == 0:
@@ -2535,13 +2531,19 @@ class MaskRCNNRoIHead(nn.Module):
         bbox_results = self._bbox_forward(x, rois)
 
         # split batch bbox prediction back to each image
-        cls_score = bbox_results["cls_score"]
-        bbox_pred = bbox_results["bbox_pred"]
+        logits = bbox_results["cls_score"]
+        pred_boxes = bbox_results["bbox_pred"]
         num_proposals_per_img = tuple(len(p) for p in proposals)
 
+        print("Shape of logits:", logits.shape)
+        print("Shape of pred boxes:", pred_boxes.shape)
+
         # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
-        logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
-        pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
+        # print("Shape of cls score:", cls_score.shape)
+        # print("Shape of pred boxes:", bbox_pred.shape)
+        print("Number of proposals per image:", num_proposals_per_img)
+        # logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
+        # pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
 
         return rois, proposals, logits, pred_boxes
 
@@ -2578,6 +2580,7 @@ class MaskRCNNRoIHead(nn.Module):
 
         mask_targets = self.mask_head.get_targets(sampling_results, gt_masks, self.train_cfg)
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
+        print("Mask targets:", mask_targets)
         loss_mask = self.mask_head.loss(mask_results["mask_pred"], mask_targets, pos_labels)
 
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
