@@ -1667,6 +1667,7 @@ else:
         [
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoXForCausalLM",
+            "GPTNeoXForSequenceClassification",
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
@@ -5179,6 +5180,7 @@ if TYPE_CHECKING:
         from .models.gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
+            GPTNeoXForSequenceClassification,
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
