@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tensorflow_text_available,
     is_tokenizers_available,
     is_torch_available,
 )
@@ -51,12 +50,6 @@ else:
         "PoNetPreTrainedModel",
     ]
 
-try:
-    if not is_tensorflow_text_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-
 if TYPE_CHECKING:
     from .configuration_ponet import PONET_PRETRAINED_CONFIG_ARCHIVE_MAP, PoNetConfig, PoNetOnnxConfig
     from .tokenization_ponet import BasicTokenizer, PoNetTokenizer, WordpieceTokenizer
@@ -84,11 +77,6 @@ if TYPE_CHECKING:
             PoNetPreTrainedModel,
         )
 
-    try:
-        if not is_tensorflow_text_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
 
 else:
     import sys

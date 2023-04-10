@@ -382,6 +382,7 @@ class PoNetTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer with Bert->PoNet
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -399,7 +400,7 @@ class BasicTokenizer(object):
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original PONET).
+            value for `lowercase` (as in the original BERT).
     """
 
     def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
@@ -531,6 +532,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer with Bert->PoNet
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 

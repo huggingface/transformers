@@ -415,10 +415,8 @@ _import_structure = {
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.ponet": [
         "PONET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BasicTokenizer",
         "PoNetConfig",
         "PoNetTokenizer",
-        "WordpieceTokenizer",
     ],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
@@ -4106,10 +4104,8 @@ if TYPE_CHECKING:
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.ponet import (
         PONET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BasicTokenizer,
         PoNetConfig,
         PoNetTokenizer,
-        WordpieceTokenizer,
     )
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer

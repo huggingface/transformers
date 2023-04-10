@@ -185,9 +185,9 @@ class PoNetModelTester:
 class PoNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            # PoNetModel,
+            PoNetModel,
             PoNetForPreTraining,
-            # PoNetForSequenceClassification,
+            PoNetForSequenceClassification,
         )
         if is_torch_available()
         else ()
