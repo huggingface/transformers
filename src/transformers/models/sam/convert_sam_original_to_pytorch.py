@@ -48,19 +48,28 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     if "sam_vit_b" in model_name:
         config = SamConfig()
     elif "sam_vit_l" in model_name:
+        vision_config = SamVisionConfig(
+            hidden_size=1024,
+            num_hidden_layers=24,
+            num_attention_heads=16,
+            global_attn_indexes=[5, 11, 17, 23],
+        )
+
         config = SamConfig(
-            encoder_embed_dim=1024,
-            encoder_depth=24,
-            encoder_num_heads=16,
-            encoder_global_attn_indexes=[5, 11, 17, 23],
+            vision_config=vision_config,
         )
     elif "sam_vit_h" in model_name:
-        config = SamConfig(
-            encoder_embed_dim=1280,
-            encoder_depth=32,
-            encoder_num_heads=16,
-            encoder_global_attn_indexes=[7, 15, 23, 31],
+        vision_config = SamVisionConfig(
+            hidden_size=1280,
+            num_hidden_layers=32,
+            num_attention_heads=16,
+            global_attn_indexes=[7, 15, 23, 31],
         )
+
+        config = SamConfig(
+            vision_config=vision_config,
+        )
+
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)
@@ -89,7 +98,7 @@ if __name__ == "__main__":
     ]
     parser.add_argument(
         "--model_name",
-        default="sam_vit_b_01ec64",
+        default="sam_vit_h_4b8939",
         choices=choices,
         type=str,
         help="Path to hf config.json of model to convert",

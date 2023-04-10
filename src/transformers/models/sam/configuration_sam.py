@@ -158,11 +158,6 @@ class SamVisionConfig(PretrainedConfig):
 
     model_type = "sam_vision_model"
 
-    # encoder_embed_dim=768,
-    # encoder_depth=12,
-    # encoder_num_heads=12,
-    # encoder_global_attn_indexes=[2, 5, 8, 11],
-
     def __init__(
         self,
         hidden_size=768,
@@ -283,13 +278,15 @@ class SamConfig(PretrainedConfig):
     model_type = "sam"
     is_composition = True
 
-    def __init__(self, vision_config=None, prompt_encoder_config={}, mask_decoder_config={}, **kwargs):
+    def __init__(self, vision_config={}, prompt_encoder_config={}, mask_decoder_config={}, **kwargs):
         super().__init__(**kwargs)
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the SamVisionConfig with default values.")
-
+        if isinstance(vision_config, SamVisionConfig):
+            vision_config = vision_config.to_dict()
+        if isinstance(prompt_encoder_config, SamPromptEncoderConfig):
+            prompt_encoder_config = prompt_encoder_config.to_dict()
+        if isinstance(mask_decoder_config, SamMaskDecoderConfig):   
+            mask_decoder_config = mask_decoder_config.to_dict()
 
         self.vision_config = SamVisionConfig(**vision_config)
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
