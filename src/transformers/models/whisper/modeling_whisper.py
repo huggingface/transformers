@@ -17,6 +17,7 @@
 import math
 import random
 from typing import List, Optional, Tuple, Union
+import copy
 
 import numpy as np
 import torch
@@ -1465,6 +1466,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[List[int]] = None,
+        always_use_initial_prompt = False,
+        condition_on_previous_text = True,
         **kwargs,
     ):
         """
@@ -1528,6 +1531,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 for transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those
                 word correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this
                 value.
+            always_use_initial_prompt (`bool`, *optional*):
+                Specifies whether or not to use the prompt initially specified in `prompt_ids` as context for all chunks.
+                Defaults to False as it cannot be used in conjunction with `condition_on_previous_text`, which is by
+                default True.
+            condition_on_previous_text (`bool`, *optional*):
+                Defaults to True, determines whether to use the previous text to condition the outputs of the subsequent 
+                chunk(s).
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1621,14 +1631,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        if prompt_ids is not None:
+        if prompt_ids is not None and len(prompt_ids) > 1:
             if kwargs.get("decoder_start_token_id") is not None:
                 raise ValueError(
                     "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
             # Set <|startofprev|> to the decoder_start_token_id
-            kwargs.update({"decoder_start_token_id": prompt_ids.pop(0)})
-            forced_decoder_ids = [*prompt_ids, generation_config.decoder_start_token_id]
+            kwargs.update({"decoder_start_token_id": prompt_ids[0]})
+            forced_decoder_ids = [*prompt_ids[1:], generation_config.decoder_start_token_id]
             additional_decoder_ids = kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
             forced_decoder_ids.extend([id for _, id in additional_decoder_ids])
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
@@ -1653,10 +1663,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
+        # print('-------------')
+        # print('decoder_input_ids', decoder_input_ids)
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
-
+        # print('decoder_input_ids', decoder_input_ids)
+        # print('decoder_input_ids.shape', decoder_input_ids.shape)
+        # print('-------------')
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,

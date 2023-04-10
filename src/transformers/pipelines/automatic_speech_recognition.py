@@ -221,6 +221,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
+        self.condition_on_previous_text = None
 
     def __call__(
         self,
@@ -300,7 +301,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
+            if generate_kwargs.get("prompt_ids") is not None and generate_kwargs.get("condition_on_previous_text") is False:
+                raise ValueError("`prompt_ids` cannot be provided when `condition_on_previous_text` is False as they are mutually exclusive")
             forward_params["generate_kwargs"].update(generate_kwargs)
+
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -328,6 +332,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         stride = None
         extra = {}
+
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
             # Accepting `"array"` which is the key defined in `datasets` for
@@ -442,11 +447,28 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # `generate` magic to create the mask automatically won't work, we basically need to help
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
+            condition_on_previous_text = generate_kwargs.get("condition_on_previous_text")
+            if condition_on_previous_text is False and generate_kwargs.get("prompt_ids"):
+                generate_kwargs["prompt_ids"] = {}
+
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
+            # update generate_kwargs to use previous tokens at first non-special token from end to next special token
+            # later: update this to continue appending to previous tokens until length reaches context length // 2 - 1
+            if condition_on_previous_text is not False and not generate_kwargs.get("always_use_initial_prompt"): # default to False
+                next_prompt_ids = []
+                in_previous_text = False
+                for token in reversed(tokens.flatten().tolist()):
+                    if token in self.tokenizer.all_special_ids:
+                        if in_previous_text: break
+                        else: continue
+                    in_previous_text = True
+                    next_prompt_ids.insert(0, token)
+                generate_kwargs["prompt_ids"] = [generate_kwargs["prompt_ids"][0], *next_prompt_ids]
+
             out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
                 stride = model_inputs.pop("stride", None)

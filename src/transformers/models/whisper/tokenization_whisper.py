@@ -309,9 +309,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
-        self.tok = self._convert_token_to_id_with_added_voc("<|startofprev|>")
-        self.tok2 = self._convert_token_to_id("<|startofprev|>")
-        print("tok2 = ", self.tok2)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -591,7 +588,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         token_ids = to_py_obj(token_ids)
         prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_prompt = len(token_ids) > 0 and (token_ids[0] == prompt_token_id)
+        has_prompt = not isinstance(token_ids, int) and len(token_ids) > 0 and (token_ids[0] == prompt_token_id)
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
@@ -743,7 +740,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     #   - special token
     #   - timestamp token
     #   - text token
-    # - We accumulate the text tokens.
+    # - We accumulate the text tokens (excluding the prompt, if it exists).
     # - We split on end timestamps
     # - Lots of complexity comes from stride and timestamps
 
@@ -799,7 +796,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         last_timestamp = token
 
         current_tokens = []
-
+        passed_prompt = False
         # - all tokens within output
         for i, token in enumerate(token_ids):
             # 4 possible states for each token
@@ -808,6 +805,9 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             # - 3/ Timestamp
             # - 4/ Regular text
             if token in all_special_ids:
+                # If we reach a special token and it isn't the first one, we've passed the prompt
+                if i > 0:
+                    passed_prompt = True 
                 # Either language code or other
                 text = tokenizer.decode([token])
                 # Removing outer shell <|XX|>
@@ -873,9 +873,10 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         chunk = new_chunk()
             else:
                 # 4/ Regular token
-                # We just append to the list of all tokens so we can handle
-                # merges later and decode into text.
-                current_tokens.append(token)
+                # We just append to the list of all tokens not in the prompt
+                # so we can handle merges later and decode into text.
+                if passed_prompt:
+                    current_tokens.append(token)
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
