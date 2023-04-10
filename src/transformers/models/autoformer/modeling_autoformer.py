@@ -1980,7 +1980,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         for k in range(self.config.prediction_length):
             lagged_sequence = self.model.get_lagged_subsequences(
                 sequence=repeated_past_values,
-                subsequences_length=1 + k,
+                subsequences_length=1 + k + self.config.prediction_length,
                 shift=1,
             )
 
@@ -1988,14 +1988,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
             seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
-            dec_input = torch.cat(
-                (seasonal_input, repeated_features[:, : k + 1]),
-                dim=-1,
-            )
-            trend_init = torch.cat(
-                (trend_input, repeated_features[:, : k + 1]),
-                dim=-1,
-            )
+            
+            dec_input = torch.cat((seasonal_input[:, - (k + 1):, ...], repeated_features[:, : k + 1, ...]), dim=-1)
+            trend_init = torch.cat((trend_input[:, - (k + 1):, ...], repeated_features[:, : k + 1, ...]), dim=-1)
             dec_output = decoder(
                 trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
             )
