@@ -825,8 +825,8 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
-                labels = labels.to(logits.device)
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
                 elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
