@@ -947,7 +947,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5550,8 +5549,6 @@ if TYPE_CHECKING:
             ProphetNetModel,
             ProphetNetPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.pvt import (
             PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             PVTForImageClassification,

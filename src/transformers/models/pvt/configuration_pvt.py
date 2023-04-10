@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Authors: Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan,
+# Copyright 2023 Authors: Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan,
 # Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao and The HuggingFace Inc. team.
 # All rights reserved.
 #
@@ -30,7 +30,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt-tiny-224": "https://huggingface.co/Xrenya/pvt-tiny-224/config.json",
+    "pvt-tiny-224": "https://huggingface.co/Xrenya/pvt-tiny-224",
     # See all PVT models at https://huggingface.co/models?filter=pvt
 }
 
@@ -115,7 +115,7 @@ class PVTConfig(PretrainedConfig):
         hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
+        initializer_range: float = 1.0,
         drop_path_rate: float = 0.0,
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,

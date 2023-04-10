@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ if is_torch_available():
     )
 
 
-class PVTModelTester:
+class PvtModelTester:
     def __init__(
         self,
         parent,
@@ -149,8 +149,8 @@ class PVTModelTester:
     all_model_classes = (PVTForImageClassification, PVTModel) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = PVTModelTester(self)
-        self.config_tester = PVTModelTester(self)
+        self.model_tester = PvtModelTester(self)
+        self.config_tester = PvtModelTester(self)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -320,11 +320,11 @@ def prepare_img():
 
 
 @require_torch
-class PVTModelIntegrationTest(unittest.TestCase):
+class PvtModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        feature_extractor = PVTImageProcessor(size=224)
+        feature_extractor = PVTImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
         model = PVTForImageClassification.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
 
         image = prepare_img()
@@ -336,6 +336,33 @@ class PVTModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-0.2910, -0.2229,  0.0321]).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_model(self):
+        model = PVTModel.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
+
+        feature_extractor = PVTImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 50, 512))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.3641, -0.6515,  1.4248], [0.5005, 0.2392, -0.6012], [0.6238, 0.0133, -0.3935]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     @require_accelerate
@@ -351,7 +378,7 @@ class PVTModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
+        pixel_values = inputs.pixel_values.to(torch_device).astype(torch.float16)
 
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
