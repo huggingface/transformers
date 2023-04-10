@@ -160,9 +160,9 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     expected_slice_boxes = torch.tensor(
         [[-0.8485, 0.6819, -1.1016], [1.4864, -0.1529, -1.2551], [0.0233, 0.4202, 0.2257]],
     )
-    print("Logits:", outputs.logits[0, :3, :3])
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
+    print("Logits:", outputs.logits[:3, :3])
+    assert torch.allclose(outputs.logits[:3, :3], expected_slice_logits, atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[:3, :3], expected_slice_boxes, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
