@@ -935,7 +935,6 @@ class SamPatchEmbed(nn.Module):
     """
     Image to Patch Embedding.
     """
-
     def __init__(
         self,
         kernel_size: Tuple[int, int] = (16, 16),
@@ -946,11 +945,7 @@ class SamPatchEmbed(nn.Module):
     ) -> None:
         """
         Args:
-            kernel_size (Tuple): kernel size of the projection layer.
-            stride (Tuple): stride of the projection layer.
-            padding (Tuple): padding size of the projection layer.
-            num_channels (int): Number of input image channels.
-            hidden_size (int):  hidden_size (int): Patch embedding dimension.
+            kernel_size ()
         """
         super().__init__()
 
@@ -1094,35 +1089,11 @@ class SamForImageSegmentation(SamPreTrainedModel):
     mask_threshold: float = 0.0
     image_format: str = "RGB"
 
-    def __init__(
-        self,
-        config,
-        pixel_mean: List[float] = [123.675, 116.28, 103.53],
-        pixel_std: List[float] = [58.395, 57.12, 57.375],
-    ) -> None:
-        """
-        SAM predicts object masks from an image and input prompts.
-
-        Arguments:
-          image_encoder (SamViTEncoder): The backbone used to encode the
-            image into image embeddings that allow for efficient mask prediction.
-          prompt_encoder (SamPromptEncoder): Encodes various types of input prompts.
-          mask_decoder (SamMaskDecoder): Predicts masks from the image embeddings
-            and encoded prompts.
-          pixel_mean (list(float)): Mean values for normalizing pixels in the input image.
-          pixel_std (list(float)): Std values for normalizing pixels in the input image.
-        """
+    def __init__(self, config) -> None:
         super().__init__(config)
         self.image_encoder = SamViTEncoder(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
-
-        self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
-        self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
-
-    @property
-    def device(self) -> Any:
-        return self.pixel_mean.device
 
     def forward(
         self,
@@ -1135,47 +1106,8 @@ class SamForImageSegmentation(SamPreTrainedModel):
         original_sizes=None,
         multimask_output: bool=True,
     ) -> List[Dict[str, torch.Tensor]]:
-        """
-        Predicts masks end-to-end from provided images and prompts.
-        If prompts are not known in advance, using SamPredictor is
-        recommended over calling the model directly.
-
-        Arguments:
-          batched_input (list(dict)): A list over input images, each a
-            dictionary with the following keys. A prompt key can be
-            excluded if it is not present.
-              'image': The image as a torch tensor in 3xHxW format,
-                already transformed for input to the model.
-              'original_size': (tuple(int, int)) The original size of
-                the image before transformation, as (H, W).
-              'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxNx2. Already transformed to the
-                input frame of the model.
-              'point_labels': (torch.Tensor) Batched labels for point prompts,
-                with shape BxN.
-              'boxes': (torch.Tensor) Batched box inputs, with shape Bx4.
-                Already transformed to the input frame of the model.
-              'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form Bx1xHxW.
-          multimask_output (bool): Whether the model should predict multiple
-            disambiguating masks, or return a single mask.
-
-        Returns:
-          (list(dict)): A list over input images, where each element is
-            as dictionary with the following keys.
-              'masks': (torch.Tensor) Batched binary mask predictions,
-                with shape BxCxHxW, where B is the number of input promts,
-                C is determiend by multimask_output, and (H, W) is the
-                original size of the image.
-              'iou_predictions': (torch.Tensor) The model's predictions
-                of mask quality, in shape BxC.
-              'low_res_logits': (torch.Tensor) Low resolution logits with
-                shape BxCxHxW, where H=W=256. Can be passed as mask input
-                to subsequent iterations of prediction.
-        """
         image_embeddings = self.image_encoder(pixel_values)
 
-        outputs = []
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             points=input_points,
             labels=input_labels,
@@ -1240,12 +1172,3 @@ class SamForImageSegmentation(SamPreTrainedModel):
         else:
             output_masks = F.interpolate(masks, (original_size[0][0], original_size[0][1]), mode="bilinear", align_corners=False)
         return output_masks
-
-    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize pixel values and pad to a square input."""
-        # Pad
-        h, w = x.shape[-2:]
-        padh = self.image_encoder.image_size - h
-        padw = self.image_encoder.image_size - w
-        x = F.pad(x, (0, padw, 0, padh))
-        return x

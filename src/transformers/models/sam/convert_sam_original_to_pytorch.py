@@ -65,6 +65,9 @@ def show_box(box, ax):
     ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))   
 
 def replace_keys(state_dict):
+    state_dict.pop("pixel_mean", None)
+    state_dict.pop("pixel_std", None)
+
     return state_dict
 
 
