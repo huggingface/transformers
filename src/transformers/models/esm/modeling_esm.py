@@ -1032,6 +1032,8 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1131,6 +1133,8 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1228,6 +1232,8 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
