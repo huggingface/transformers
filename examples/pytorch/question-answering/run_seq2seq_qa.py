@@ -19,7 +19,6 @@ Fine-tuning the library's seq2seq models for question answering using the 🤗 S
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
 import logging
-import numpy as np
 import os
 import sys
 from dataclasses import dataclass, field
@@ -27,6 +26,7 @@ from typing import List, Optional, Tuple
 
 import datasets
 import evaluate
+import numpy as np
 from datasets import load_dataset
 from trainer_seq2seq_qa import QuestionAnsweringSeq2SeqTrainer
 
