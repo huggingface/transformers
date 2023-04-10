@@ -60,25 +60,28 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_cuda_kernels():
+    curr_path = os.path.dirname(os.path.realpath(__file__))
+    src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
+    src_files = [os.path.join(curr_path, file) for file in src_files]
+    cuda_kernel = load("cuda_kernel", src_files, verbose=True)
+
+    import cuda_kernel
+
+    return cuda_kernel
+ 
+if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
-    global cuda_kernel
 
-    if is_torch_cuda_available() and is_ninja_available():
-        try:
-            curr_path = os.path.dirname(os.path.realpath(__file__))
-            src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
-            src_files = [os.path.join(curr_path, file) for file in src_files]
-            cuda_kernel = load("cuda_kernel", src_files, verbose=True)
-
-            import cuda_kernel
-        except Exception as e:
-            logger.warning(
-                "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
-                f" PyTorch and CUDA Toolkit are installed: {e}"
-            )
-            cuda_kernel = None
-    else:
+    try:
+        cuda_kernel = load_cuda_kernels()
+    except Exception as e:
+        logger.warning(
+            "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
+            f" PyTorch and CUDA Toolkit are installed: {e}"
+        )
         cuda_kernel = None
+else:
+    cuda_kernel = None
 
 
 def sparse_max(sparse_C, indices, A_num_block, B_num_block):
