@@ -52,7 +52,7 @@ class MRAModelTester:
         vocab_size=99,
         hidden_size=128,
         num_hidden_layers=5,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=36,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
