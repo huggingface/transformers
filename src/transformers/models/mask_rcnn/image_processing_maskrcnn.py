@@ -12,17 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for Mask-RCNN."""
+"""Image processor class for Mask-RCNN."""
 
-from typing import List, Union
+import pathlib
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-from PIL import Image
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    get_image_size,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...nms import multiclass_nms
-from ...utils import is_torch_available, logging
+from ...utils import ExplicitEnum, TensorType, is_torch_available, logging
 from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 
@@ -33,12 +44,75 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
+# TODO move this to general utils?
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+
+
+class AnnotionFormat(ExplicitEnum):
+    COCO_DETECTION = "coco_detection"
+    COCO_PANOPTIC = "coco_panoptic"
+
 
 BYTES_PER_FLOAT = 4
 # TODO: This memory limit may be too much or too little. It would be better to
 # determine it based on available resources.
 GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
+
+
+# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image size and the desired output size.
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        size (`int`):
+            The desired output size.
+        max_size (`int`, *optional*):
+            The maximum allowed output size.
+    """
+    height, width = image_size
+    if max_size is not None:
+        min_original_size = float(min((height, width)))
+        max_original_size = float(max((height, width)))
+        if max_original_size / min_original_size * size > max_size:
+            size = int(round(max_size * min_original_size / max_original_size))
+
+    if (height <= width and height == size) or (width <= height and width == size):
+        return height, width
+
+    if width < height:
+        ow = size
+        oh = int(size * height / width)
+    else:
+        oh = size
+        ow = int(size * width / height)
+    return (oh, ow)
+
+
+# Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: np.ndarray, size: Union[int, Tuple[int, int], List[int]], max_size: Optional[int] = None
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image size and the desired output size. If the desired output size
+    is a tuple or list, the output image size is returned as is. If the desired output size is an integer, the output
+    image size is computed by keeping the aspect ratio of the input image size.
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        size (`int`):
+            The desired output size.
+        max_size (`int`, *optional*):
+            The maximum allowed output size.
+    """
+    image_size = get_image_size(input_image)
+    if isinstance(size, (list, tuple)):
+        return size
+
+    return get_size_with_aspect_ratio(image_size, size, max_size)
 
 
 def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
@@ -109,32 +183,47 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
         return img_masks[:, 0], ()
 
 
-class MaskRCNNImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class MaskRCNNImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Mask R-CNN feature extractor.
-
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    Constructs a Mask R-CNN image processor.
 
     Args:
-        test_cfg
-            ...
-        num_classes
-            ...
+        TODO
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        test_cfg,
-        num_classes,
+        do_resize: bool = True,
+        size: Dict[str, int] = {"shortest_edge": 800, "longest_edge": 1333},
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Union[float, List[float]] = None,
+        image_std: Union[float, List[float]] = None,
+        test_cfg={
+            "score_thr": 0.05,
+            "nms": {"type": "nms", "iou_threshold": 0.5},
+            "max_per_img": 100,
+            "mask_thr_binary": 0.5,
+        },
+        num_classes=80,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        self.do_resize = do_resize
+        self.size = size
+        self.resample = resample
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.test_cfg = test_cfg
         self.num_classes = num_classes
         self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
@@ -143,32 +232,133 @@ class MaskRCNNImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         # TODO remove this attribute
         self.class_agnostic = False
 
-    def __call__(self, **kwargs) -> BatchFeature:
+    def resize(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
         """
-        Main method to prepare for the model one or several image(s) and optional annotations. Images are by default
-        padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
-        real/which are padding.
+        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
+        int, smaller edge of the image will be matched to this number.
+        """
+        if "shortest_edge" in size and "longest_edge" in size:
+            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
+                f" {size.keys()}."
+            )
+        image = resize(image, size=size, resample=resample, data_format=data_format)
+        return image
 
-        <Tip warning={true}>
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
+    def rescale(
+        self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None
+    ) -> np.ndarray:
+        """
+        Rescale the image by the given factor.
+        """
+        return rescale(image, rescale_factor, data_format=data_format)
 
-        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-        PIL images.
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Normalize the image with the given mean and standard deviation.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format)
 
-        </Tip>
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        return_segmentation_masks: bool = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        resample=None,  # PILImageResampling
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[Union[int, float]] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        format: Optional[Union[str, AnnotionFormat]] = None,
+        return_tensors: Optional[Union[TensorType, str]] = None,
+        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images so that it can be used by the model.
 
         Args:
             ...
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
-
-        Returns:
-            ...
         """
-        # Input type checking for clearer error
 
-        raise NotImplementedError("To do")
+        do_resize = self.do_resize if do_resize is None else do_resize
+        size = self.size if size is None else size
+        resample = self.resample if resample is None else resample
+        do_rescale = self.do_rescale if do_rescale is None else do_rescale
+        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
+        do_normalize = self.do_normalize if do_normalize is None else do_normalize
+        image_mean = self.image_mean if image_mean is None else image_mean
+        image_std = self.image_std if image_std is None else image_std
+
+        if do_resize is not None and size is None:
+            raise ValueError("Size and max_size must be specified if do_resize is True.")
+
+        if do_rescale is not None and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_normalize is not None and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
+        images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if annotations is not None:
+            raise NotImplementedError("To do")
+
+        # All transformations expect numpy arrays
+        images = [to_numpy_array(image) for image in images]
+
+        # transformations
+        if do_resize:
+            if annotations is not None:
+                raise NotImplementedError("To do")
+            else:
+                images = [self.resize(image, size=size, resample=resample) for image in images]
+
+        if do_rescale:
+            images = [self.rescale(image, rescale_factor) for image in images]
+
+        if do_normalize:
+            images = [self.normalize(image, image_mean, image_std) for image in images]
+            if annotations is not None:
+                raise NotImplementedError("To do")
+
+        images = [to_channel_dimension_format(image, data_format) for image in images]
+        data = {"pixel_values": images}
+
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+        if annotations is not None:
+            raise NotImplementedError("To do")
+
+        return encoded_inputs
 
     def get_bboxes(self, rois, cls_score, bbox_pred, img_shape, scale_factor, rescale=False, cfg=None):
         # # some loss (Seesaw loss..) may have custom activation
