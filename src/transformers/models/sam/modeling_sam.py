@@ -1173,10 +1173,6 @@ class SamForImageSegmentation(SamPreTrainedModel):
                 shape BxCxHxW, where H=W=256. Can be passed as mask input
                 to subsequent iterations of prediction.
         """
-        if pixel_values.shape[0] > 1:
-            raise ValueError("Only batch size 1 is supported for now.")
-
-        # pixel_values = self.preprocess(pixel_values)
         image_embeddings = self.image_encoder(pixel_values)
 
         outputs = []
