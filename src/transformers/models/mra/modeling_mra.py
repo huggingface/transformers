@@ -61,10 +61,10 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def load_cuda_kernels():
     logger.info("Loading custom CUDA kernels...")
+    global cuda_kernel
 
     if is_torch_cuda_available() and is_ninja_available():
         try:
-            global cuda_kernel
             curr_path = os.path.dirname(os.path.realpath(__file__))
             src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
             src_files = [os.path.join(curr_path, file) for file in src_files]
@@ -78,7 +78,7 @@ def load_cuda_kernels():
             )
             cuda_kernel = None
     else:
-        None
+        cuda_kernel = None
 
 
 def sparse_max(sparse_C, indices, A_num_block, B_num_block):
