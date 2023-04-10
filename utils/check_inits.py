@@ -277,10 +277,6 @@ def check_submodules():
 
     transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
-    transformers.is_torch_available = lambda x: True
-    transformers.is_tf_available = lambda x: True
-    transformers.is_flax_available = lambda x: True
-
     import_structure_keys = set(transformers._import_structure.keys())
     # This contains all the base keys of the _import_structure object defined in the init, but if the user is missing
     # some optional dependencies, they may not have all of them. Thus we read the init to read all additions and
