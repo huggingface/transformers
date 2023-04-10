@@ -29,7 +29,6 @@ import torchvision
 from torch import nn
 from torch.nn.modules.utils import _pair
 
-from ...activations import ACT2FN
 from ... import AutoBackbone
 
 # TODO maybe include these dependencies somewhere else
@@ -2715,7 +2714,7 @@ class MaskRCNNPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MaskRCNNModel):
+        if isinstance(module, MaskRCNNForObjectDetection):
             module.gradient_checkpointing = value
 
 
@@ -2763,6 +2762,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         img_metas: Optional[List] = None,
         labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskRCNNModelOutput]:
@@ -2771,7 +2771,12 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
 
-        outputs = self.backbone(pixel_values, return_dict=return_dict)
+        outputs = self.backbone.forward_with_filtered_kwargs(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(outputs.feature_maps)
@@ -2819,4 +2824,5 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             pred_boxes=pred_boxes,
             fpn_hidden_states=hidden_states,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

@@ -19,7 +19,6 @@ from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
@@ -198,7 +197,6 @@ class MaskRCNNConfig(PretrainedConfig):
         self.rcnn_sampler_neg_pos_ub = rcnn_sampler_neg_pos_ub
         self.rcnn_sampler_add_gt_as_proposals = rcnn_sampler_add_gt_as_proposals
 
-    
     def to_dict(self) -> Dict[str, any]:
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].

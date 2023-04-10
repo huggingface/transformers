@@ -37,7 +37,9 @@ logger = logging.get_logger(__name__)
 
 
 def get_convnext_maskrcnn_config():
-    backbone_config = ConvNextConfig.from_pretrained("facebook/convnext-tiny-224", out_features=["stage1", "stage2", "stage3", "stage4"])
+    backbone_config = ConvNextConfig.from_pretrained(
+        "facebook/convnext-tiny-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+    )
     config = MaskRCNNConfig(backbone_config=backbone_config)
 
     config.num_labels = 80
