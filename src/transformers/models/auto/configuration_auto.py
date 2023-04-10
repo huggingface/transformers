@@ -133,6 +133,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mask2former", "Mask2FormerConfig"),
         ("maskformer", "MaskFormerConfig"),
         ("maskformer-swin", "MaskFormerSwinConfig"),
+        ("maskrcnn", "MaskRCNNConfig"),
         ("mbart", "MBartConfig"),
         ("mctct", "MCTCTConfig"),
         ("mega", "MegaConfig"),
@@ -560,6 +561,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mask2former", "Mask2Former"),
         ("maskformer", "MaskFormer"),
         ("maskformer-swin", "MaskFormerSwin"),
+        ("maskrcnn", "Mask R-CNN"),
         ("matcha", "MatCha"),
         ("mbart", "mBART"),
         ("mbart50", "mBART-50"),
@@ -704,6 +706,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
         ("maskformer-swin", "maskformer"),
+        ("maskrcnn", "mask_rcnn"),
         ("xclip", "x_clip"),
     ]
 )

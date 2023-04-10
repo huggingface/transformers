@@ -27,7 +27,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
@@ -74,8 +74,13 @@ class MaskRCNNModelTester:
         torch.manual_seed(0)
         pixel_values = torch.randn([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        img_metas = [{"img_shape": (self.num_channels, self.image_size, self.image_size),
-                     "pad_shape": (self.num_channels, self.image_size, self.image_size)} for _ in range(self.batch_size)]
+        img_metas = [
+            {
+                "img_shape": (self.num_channels, self.image_size, self.image_size),
+                "pad_shape": (self.num_channels, self.image_size, self.image_size),
+            }
+            for _ in range(self.batch_size)
+        ]
 
         labels = None
         if self.use_labels:
@@ -146,7 +151,9 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
                 for _ in range(self.model_tester.batch_size):
                     # sample a number of objects
                     number_of_objects = random.randint(0, 10)
-                    class_labels = torch.tensor([random.randint(0, self.model_tester.num_labels - 1) for _ in range(number_of_objects)])
+                    class_labels = torch.tensor(
+                        [random.randint(0, self.model_tester.num_labels - 1) for _ in range(number_of_objects)]
+                    )
                     boxes = torch.randn(number_of_objects, 4)
                     masks = torch.randn(number_of_objects, self.model_tester.image_size, self.model_tester.image_size)
                     labels["gt_labels"].append(class_labels)

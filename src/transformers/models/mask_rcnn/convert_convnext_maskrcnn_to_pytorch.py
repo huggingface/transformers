@@ -28,7 +28,7 @@ import torchvision.transforms as T
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ConvNextConfig, MaskRCNNConfig, MaskRCNNForObjectDetection
+from transformers import ConvNextConfig, MaskRCNNConfig, MaskRCNNForObjectDetection, MaskRCNNImageProcessor
 from transformers.utils import logging
 
 
@@ -132,11 +132,13 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_url, pytorch_dump_folder_pat
 
     # standard PyTorch mean-std input image normalization
     transform = T.Compose([T.Resize(800), T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+    original_pixel_values = transform(image).unsqueeze(0)
 
-    pixel_values = transform(image).unsqueeze(0)
+    image_processor = MaskRCNNImageProcessor()
+    pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-    width, height = image.size
-    pixel_values_height, pixel_values_width = pixel_values.shape[-2:]
+    # verify image processor
+    assert torch.allclose(pixel_values, original_pixel_values)
 
     img_metas = [
         {

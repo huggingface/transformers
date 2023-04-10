@@ -2533,7 +2533,6 @@ class MaskRCNNRoIHead(nn.Module):
         # split batch bbox prediction back to each image
         logits = bbox_results["cls_score"]
         pred_boxes = bbox_results["bbox_pred"]
-        num_proposals_per_img = tuple(len(p) for p in proposals)
 
         # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
         # print("Shape of cls score:", cls_score.shape)
@@ -2795,7 +2794,9 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
