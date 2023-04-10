@@ -182,6 +182,19 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+        # test no attention_mask works
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        _, past_key_values = outputs.to_tuple()
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):

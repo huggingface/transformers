@@ -20,7 +20,7 @@ import shutil
 
 import torch
 
-from transformers import LlamaConfig, LlamaForCausalLM
+from transformers import LlamaConfig, LlamaForCausalLM, LlamaTokenizer
 
 
 """
@@ -34,7 +34,7 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import LlamaForCausalLM, LlamaForTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer
 
 model = LlamaForCausalLM.from_pretrained("/output/path")
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
@@ -233,19 +233,9 @@ def write_model(model_path, input_base_path, model_size):
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
     print(f"Fetching the tokenizer from {input_tokenizer_path}.")
-    os.makedirs(tokenizer_path, exist_ok=True)
-    write_json({}, os.path.join(tokenizer_path, "special_tokens_map.json"))
-    write_json(
-        {
-            "bos_token": "",
-            "eos_token": "",
-            "model_max_length": int(1e30),
-            "tokenizer_class": "LlamaTokenizer",
-            "unk_token": "",
-        },
-        os.path.join(tokenizer_path, "tokenizer_config.json"),
-    )
-    shutil.copyfile(input_tokenizer_path, os.path.join(tokenizer_path, "tokenizer.model"))
+    # Initialize the tokenizer based on the `spm` model
+    tokenizer = LlamaTokenizer(input_tokenizer_path)
+    tokenizer.save_pretrained(tokenizer_path)
 
 
 def main():

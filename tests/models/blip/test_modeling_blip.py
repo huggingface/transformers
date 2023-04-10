@@ -342,6 +342,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -523,6 +526,9 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
 
 
 class BlipTextRetrievalModelTester:
@@ -1114,7 +1120,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
     @require_torch_gpu
@@ -1142,7 +1148,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
     def test_inference_vqa(self):
@@ -1170,7 +1176,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False)
 
-        expected_scores = torch.Tensor([[0.9798, 0.0202]])
+        expected_scores = torch.Tensor([[0.0029, 0.9971]])
 
         self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3))

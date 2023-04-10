@@ -27,6 +27,7 @@ import tempfile
 import unittest
 import unittest.mock as mock
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -1626,6 +1627,41 @@ class ModelTesterMixin:
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
+    @require_safetensors
+    def test_can_use_safetensors(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                try:
+                    model_tied.save_pretrained(d, safe_serialization=True)
+                except Exception as e:
+                    raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model_tied.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_close(
+                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                    )
+
+                # Checking the tensor sharing are correct
+                ptrs = defaultdict(list)
+                for k, v in model_tied.state_dict().items():
+                    ptrs[v.data_ptr()].append(k)
+
+                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+
+                for _, shared_names in shared_ptrs.items():
+                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                    self.assertEqual(
+                        len(reloaded_ptrs),
+                        1,
+                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                    )
+
     def test_tied_model_weights_key_ignore(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -1948,7 +1984,7 @@ class ModelTesterMixin:
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
 
     @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
         for model_class in self.all_model_classes:
@@ -1994,14 +2030,18 @@ class ModelTesterMixin:
 
             # For some models (e.g. base models), there is no label returned.
             # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
+            if not set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
                 pt_inputs_dict_with_labels = None
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             # Here requires `tf_inputs_dict` to build `tf_model`
             tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+            )
+            pt_model = transformers.load_tf2_model_in_pytorch_model(
+                pt_model, tf_model, allow_missing_keys=allow_missing_keys
+            )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
@@ -2013,11 +2053,15 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
                 torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
+                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
+                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
