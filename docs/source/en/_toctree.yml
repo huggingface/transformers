@@ -309,6 +309,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -337,6 +339,8 @@
         title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
       - local: model_doc/megatron-bert
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
@@ -355,6 +359,8 @@
         title: NEZHA
       - local: model_doc/nllb
         title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/opt
@@ -570,6 +576,8 @@
         title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
       - local: model_doc/flava
@@ -590,6 +598,8 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/oneformer
