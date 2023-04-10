@@ -1,4 +1,5 @@
-from transformers import pipeline  
+from transformers import pipeline
+
 
 pipe = pipeline(task="object-detection", model="nielsr/convnext-tiny-maskrcnn")
 

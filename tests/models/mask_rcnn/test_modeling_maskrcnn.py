@@ -32,7 +32,6 @@ from ...test_modeling_common import ModelTesterMixin
 
 if is_torch_available():
     import torch
-    import torchvision.transforms as T
 
     from transformers import MaskRCNNForObjectDetection
     from transformers.models.mask_rcnn.modeling_maskrcnn import (
@@ -257,24 +256,12 @@ def prepare_img():
 class MaskRCNNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_object_detection_head(self):
-        test_cfg = {
-            "score_thr": 0.05,
-            "nms": {"type": "nms", "iou_threshold": 0.5},
-            "max_per_img": 100,
-            "mask_thr_binary": 0.5,
-        }
-        num_classes = 80
-        # TODO update to appropriate organization
-        processor = MaskRCNNImageProcessor(test_cfg=test_cfg, num_classes=num_classes)
+        # TODO update to appropriate organization + use from_pretrained for image processor
+        processor = MaskRCNNImageProcessor()
         model = MaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
-        # TODO use image processor instead?
-        transforms = T.Compose(
-            [T.Resize(800), T.ToTensor(), T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
-        )
-
         image = prepare_img()
-        pixel_values = transforms(image).unsqueeze(0).to(torch_device)
+        pixel_values = processor(image, return_tensors="pt").to(torch_device).pixel_values
 
         img_metas = [
             {
