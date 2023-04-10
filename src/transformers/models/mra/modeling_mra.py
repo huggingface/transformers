@@ -913,7 +913,6 @@ MRA_INPUTS_DOCSTRING = r"""
 class MRAModel(MRAPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        load_cuda_kernels()
         self.config = config
 
         self.embeddings = MRAEmbeddings(config)
