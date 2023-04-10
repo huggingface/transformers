@@ -20,7 +20,6 @@ _import_structure = {
     "configuration_sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
-        "SamQFormerConfig",
         "SamVisionConfig",
     ],
     "processing_sam": ["SamProcessor"],
@@ -34,18 +33,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_sam"] = [
         "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SamModel",
-        "SamQFormerModel",
-        "SamPreTrainedModel",
-        "SamForConditionalGeneration",
-        "SamVisionModel",
+        "SamForImageSegmentation",
     ]
 
 if TYPE_CHECKING:
     from .configuration_sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
-        SamQFormerConfig,
         SamVisionConfig,
     )
     from .processing_sam import SamProcessor
@@ -58,11 +52,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SamForConditionalGeneration,
-            SamModel,
-            SamPreTrainedModel,
-            SamQFormerModel,
-            SamVisionModel,
+            SamForImageSegmentation
         )
 
 else:

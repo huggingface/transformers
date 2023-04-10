@@ -30,6 +30,76 @@ SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/sam-vit-h": "https://huggingface.co/facebook/sam-vit-h/resolve/main/config.json",
 }
 
+class SamPromptEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a
+    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the SAM
+    [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1408):
+            Dimensionality of the encoder layers and the pooler layer.
+    
+    """
+    def __init__(
+        self,
+        hidden_size=256,
+        input_image_size=1024,
+        patch_size=16,
+        mask_input_channels=16,
+        num_point_embeddings=4,
+        hidden_act="gelu",
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.input_image_size = input_image_size
+        self.patch_size = patch_size
+        self.image_embedding_size = (input_image_size // patch_size) ** 2
+        self.mask_input_channels = mask_input_channels
+        self.num_point_embeddings = num_point_embeddings
+        self.hidden_act = hidden_act
+
+class SamMaskDecoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a
+    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the SAM
+    [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1408):
+            Dimensionality of the encoder layers and the pooler layer.
+    
+    """
+    def __init__(
+        self,
+        hidden_size=256,
+        hidden_act="gelu",
+        mlp_dim=2048,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        attention_downsample_rate=2,
+        num_multimask_outputs=3,
+        iou_head_depth=3,
+        iou_head_hidden_dim=256,
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
+        self.mlp_dim = mlp_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.attention_downsample_rate = attention_downsample_rate
+        self.num_multimask_outputs = num_multimask_outputs
+        self.iou_head_depth = iou_head_depth
+        self.iou_head_hidden_dim = iou_head_hidden_dim
 
 
 class SamVisionConfig(PretrainedConfig):
@@ -88,16 +158,22 @@ class SamVisionConfig(PretrainedConfig):
 
     model_type = "sam_vision_model"
 
+    # encoder_embed_dim=768,
+    # encoder_depth=12,
+    # encoder_num_heads=12,
+    # encoder_global_attn_indexes=[2, 5, 8, 11],
+
     def __init__(
         self,
-        hidden_size=1408,
+        hidden_size=768,
         intermediate_size=6144,
         projection_dim=512,
-        num_hidden_layers=39,
-        num_attention_heads=16,
+        output_channels=256,
+        num_hidden_layers=12,
+        num_attention_heads=12,
         num_channels=3,
-        image_size=224,
-        patch_size=14,
+        image_size=1024,
+        patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=0.00001,
         dropout=0.0,
@@ -105,6 +181,12 @@ class SamVisionConfig(PretrainedConfig):
         initializer_range=1e-10,
         initializer_factor=1.0,
         qkv_bias=True,
+        mlp_ratio=4.0,
+        use_abs_pos=True,
+        use_rel_pos=True,
+        rel_pos_zero_init=False,
+        window_size=14,
+        global_attn_indexes=[2, 5, 8, 11],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,6 +206,13 @@ class SamVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.qkv_bias = qkv_bias
+        self.use_abs_pos = use_abs_pos
+        self.use_rel_pos = use_rel_pos
+        self.output_channels = output_channels
+        self.mlp_ratio = mlp_ratio
+        self.rel_pos_zero_init = rel_pos_zero_init
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -132,126 +221,6 @@ class SamVisionConfig(PretrainedConfig):
         # get the vision config dict if we are loading from SamConfig
         if config_dict.get("model_type") == "sam":
             config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class SamQFormerConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`SamQFormerModel`]. It is used to instantiate a
-    SAM Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the SAM
-    [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture. Configuration objects
-    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
-
-    Note that [`SamQFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the Q-Former model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling the model.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
-        cross_attention_frequency (`int`, *optional*, defaults to 2):
-            The frequency of adding cross-attention to the Transformer layers.
-        encoder_hidden_size (`int`, *optional*, defaults to 1408):
-            The hidden size of the hidden states for cross-attention.
-
-    Examples:
-
-    ```python
-    >>> from transformers import SamQFormerConfig, SamQFormerModel
-
-    >>> # Initializing a SAM facebook/sam-vit-h style configuration
-    >>> configuration = SamQFormerConfig()
-
-    >>> # Initializing a model (with random weights) from the facebook/sam-vit-h style configuration
-    >>> model = SamQFormerModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-    model_type = "sam_qformer"
-
-    def __init__(
-        self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        position_embedding_type="absolute",
-        classifier_dropout=None,
-        cross_attention_frequency=2,
-        encoder_hidden_size=1408,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.classifier_dropout = classifier_dropout
-        self.cross_attention_frequency = cross_attention_frequency
-        self.encoder_hidden_size = encoder_hidden_size
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the qformer config dict if we are loading from SamConfig
-        if config_dict.get("model_type") == "sam":
-            config_dict = config_dict["qformer_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -275,8 +244,6 @@ class SamConfig(PretrainedConfig):
     Args:
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`SamVisionConfig`].
-        qformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`SamQFormerConfig`].
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize any [`PretrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
@@ -290,7 +257,6 @@ class SamConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     SamVisionConfig,
-    ...     SamQFormerConfig,
     ...     OPTConfig,
     ...     SamConfig,
     ...     SamForConditionalGeneration,
@@ -305,70 +271,32 @@ class SamConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a SamConfig from a SamVisionConfig, SamQFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a SamConfig from a SamVisionConfig and any PretrainedConfig
 
     >>> # Initializing SAM vision, SAM Q-Former and language model configurations
     >>> vision_config = SamVisionConfig()
-    >>> qformer_config = SamQFormerConfig()
     >>> text_config = OPTConfig()
 
-    >>> config = SamConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    >>> config = SamConfig.from_text_vision_configs(vision_config, text_config)
     ```"""
 
     model_type = "sam"
     is_composition = True
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(self, vision_config=None, prompt_encoder_config={}, mask_decoder_config={}, **kwargs):
         super().__init__(**kwargs)
 
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the SamVisionConfig with default values.")
 
-        if qformer_config is None:
-            qformer_config = {}
-            logger.info("qformer_config is None. Initializing the SamQFormerConfig with default values.")
-
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
 
         self.vision_config = SamVisionConfig(**vision_config)
-        self.qformer_config = SamQFormerConfig(**qformer_config)
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
-        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+        self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
+        self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
 
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
-
-        self.num_query_tokens = num_query_tokens
-        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
-        self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-
-    @classmethod
-    def from_vision_qformer_text_configs(
-        cls,
-        vision_config: SamVisionConfig,
-        qformer_config: SamQFormerConfig,
-        text_config: PretrainedConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`SamConfig`] (or a derived class) from a SAM vision model, Q-Former and language model
-        configurations.
-
-        Returns:
-            [`SamConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            vision_config=vision_config.to_dict(),
-            qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict(),
-            **kwargs,
-        )
 
     def to_dict(self):
         """
@@ -379,7 +307,7 @@ class SamConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["vision_config"] = self.vision_config.to_dict()
-        output["qformer_config"] = self.qformer_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
+        output["prompt_encoder_config"] = self.prompt_encoder_config.to_dict()
+        output["mask_decoder_config"] = self.mask_decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

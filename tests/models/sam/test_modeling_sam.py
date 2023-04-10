@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import CONFIG_MAPPING, SamConfig, SamQFormerConfig, SamVisionConfig
+from transformers import CONFIG_MAPPING, SamConfig, SamVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -203,81 +203,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-class SamQFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=6,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        bos_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.bos_token_id = bos_token_id
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        if input_mask is not None:
-            batch_size, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-            for batch_idx, start_index in enumerate(rnd_start_indices):
-                input_mask[batch_idx, :start_index] = 1
-                input_mask[batch_idx, start_index:] = 0
-
-        config = self.get_config()
-
-        return config, input_ids, input_mask
-
-    def get_config(self):
-        return SamQFormerConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            bos_token_id=self.bos_token_id,
-        )
-
-
 # this class is based on `OPTModelTester` found in tests/models/opt/test_modeling_opt.py
 class SamTextModelDecoderOnlyTester:
     def __init__(
@@ -372,7 +297,6 @@ class SamForConditionalGenerationDecoderOnlyModelTester:
 
         self.parent = parent
         self.vision_model_tester = SamVisionModelTester(parent, **vision_kwargs)
-        self.qformer_model_tester = SamQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = SamTextModelDecoderOnlyTester(parent, **text_kwargs)
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
@@ -388,7 +312,6 @@ class SamForConditionalGenerationDecoderOnlyModelTester:
     def get_config(self):
         return SamConfig.from_vision_qformer_text_configs(
             vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
         )
@@ -478,11 +401,6 @@ class SamForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Test
             vision_config = SamVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-        # Save SamConfig and check if we can load SamQFormerConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            qformer_config = SamQFormerConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
@@ -598,7 +516,6 @@ class SamModelTester:
 
         self.parent = parent
         self.vision_model_tester = SamVisionModelTester(parent, **vision_kwargs)
-        self.qformer_model_tester = SamQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = SamTextModelTester(parent, **text_kwargs)
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
@@ -729,12 +646,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             vision_config = SamVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
-
-        # Save SamConfig and check if we can load SamQFormerConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            qformer_config = SamQFormerConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):

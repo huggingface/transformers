@@ -37,7 +37,7 @@ class SamProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "SamImageProcessor"
+    image_processor_class = "ViTImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):

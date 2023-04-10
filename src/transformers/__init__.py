@@ -200,7 +200,6 @@ _import_structure = {
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
         "SamProcessor",
-        "SamQFormerConfig",
         "SamVisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
@@ -1196,11 +1195,7 @@ else:
     _import_structure["models.sam"].extend(
         [
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SamForConditionalGeneration",
-            "SamModel",
-            "SamPreTrainedModel",
-            "SamQFormerModel",
-            "SamVisionModel",
+            "SamForImageSegmentation",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -3905,7 +3900,6 @@ if TYPE_CHECKING:
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
         SamProcessor,
-        SamQFormerConfig,
         SamVisionConfig,
     )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
@@ -4790,11 +4784,7 @@ if TYPE_CHECKING:
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SamForConditionalGeneration,
-            SamModel,
-            SamPreTrainedModel,
-            SamQFormerModel,
-            SamVisionModel,
+            SamForImageSegmentation,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
