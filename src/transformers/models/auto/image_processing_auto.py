@@ -360,14 +360,8 @@ class AutoImageProcessor:
                         "Explicitly passing a `revision` is encouraged when loading a image processor with custom "
                         "code to ensure no malicious code has been contributed in a newer revision."
                     )
-
-                if "--" in image_processor_auto_map:
-                    repo_id, image_processor_auto_map = image_processor_auto_map.split("--")
-                else:
-                    repo_id = pretrained_model_name_or_path
-                module_file, class_name = image_processor_auto_map.split(".")
                 image_processor_class = get_class_from_dynamic_module(
-                    repo_id, module_file + ".py", class_name, **kwargs
+                    image_processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)

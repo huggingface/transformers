@@ -462,13 +462,8 @@ class _BaseAutoModelClass:
                     "no malicious code has been contributed in a newer revision."
                 )
             class_ref = config.auto_map[cls.__name__]
-            if "--" in class_ref:
-                repo_id, class_ref = class_ref.split("--")
-            else:
-                repo_id = pretrained_model_name_or_path
-            module_file, class_name = class_ref.split(".")
             model_class = get_class_from_dynamic_module(
-                repo_id, module_file + ".py", class_name, **hub_kwargs, **kwargs
+                class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs

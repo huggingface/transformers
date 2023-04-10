@@ -680,13 +680,7 @@ class AutoTokenizer:
                     class_ref = tokenizer_auto_map[1]
                 else:
                     class_ref = tokenizer_auto_map[0]
-
-                if "--" in class_ref:
-                    repo_id, class_ref = class_ref.split("--")
-                else:
-                    repo_id = pretrained_model_name_or_path
-                module_file, class_name = class_ref.split(".")
-                tokenizer_class = get_class_from_dynamic_module(repo_id, module_file + ".py", class_name, **kwargs)
+                tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
 
             elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"

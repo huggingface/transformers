@@ -300,9 +300,8 @@ def get_cached_module_file(
 
 
 def get_class_from_dynamic_module(
+    class_reference: str,
     pretrained_model_name_or_path: Union[str, os.PathLike],
-    module_file: str,
-    class_name: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: bool = False,
@@ -323,6 +322,8 @@ def get_class_from_dynamic_module(
     </Tip>
 
     Args:
+        class_reference (`str`):
+            The full name of the class to load, including its module and optionally its repo.
         pretrained_model_name_or_path (`str` or `os.PathLike`):
             This can be either:
 
@@ -332,6 +333,7 @@ def get_class_from_dynamic_module(
             - a path to a *directory* containing a configuration file saved using the
               [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
+            This is used when `class_reference` does not specify another repo.
         module_file (`str`):
             The name of the module file containing the class to look for.
         class_name (`str`):
@@ -371,12 +373,25 @@ def get_class_from_dynamic_module(
     ```python
     # Download module `modeling.py` from huggingface.co and cache then extract the class `MyBertModel` from this
     # module.
-    cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
+    cls = get_class_from_dynamic_module("modeling.MyBertModel", "sgugger/my-bert-model")
+
+    # Download module `modeling.py` from a given repo and cache then extract the class `MyBertModel` from this
+    # module.
+    cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
+    # Catch the name of the repo if it's specified in `class_reference`
+    if "--" in class_reference:
+        repo_id, class_reference = class_reference.split("--")
+        # Invalidate revision since it's not relevant for this repo
+        revision = "main"
+    else:
+        repo_id = pretrained_model_name_or_path
+    module_file, class_name = class_reference.split(".")
+
     # And lastly we get the class inside our newly created module
     final_module = get_cached_module_file(
-        pretrained_model_name_or_path,
-        module_file,
+        repo_id,
+        module_file + ".py",
         cache_dir=cache_dir,
         force_download=force_download,
         resume_download=resume_download,
