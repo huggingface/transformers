@@ -69,6 +69,7 @@ class AggregationStrategy(ExplicitEnum):
         stride (`int`, *optional*):
             If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
             model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`.
+            The value of this argument defines the number of overlapping tokens between chunks.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
             The strategy to fuse (or not) tokens based on the model prediction.
 
