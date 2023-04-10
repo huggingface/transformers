@@ -1369,7 +1369,18 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
             decoder_input_length = len(kwargs["decoder_input_ids"])
         else:
             decoder_input_length = 1
-
+        
+        if kwargs is not None and "output_scores" in kwargs:
+            generation_config.output_scores = kwargs["output_scores"]
+        else:
+            generation_config.output_scores = False
+            
+        if kwargs is not None and "num_beams" in kwargs:
+            generation_config.num_beams = kwargs["num_beams"]
+        else:
+            generation_config.num_beams = 1
+        
+            
         forced_decoder_ids = []
 
         if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
