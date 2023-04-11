@@ -999,6 +999,8 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(shifted_prediction_scores.device)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1114,6 +1116,8 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1224,6 +1228,8 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1337,6 +1343,8 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(reshaped_logits.device)
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
@@ -1421,6 +1429,8 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
