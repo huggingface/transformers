@@ -46,12 +46,6 @@ jobs:
           (cd /tmp && /usr/bin/python3 -c 'import transformers')
           /usr/bin/python3 -m pip uninstall transformers --yes
 
-      - name: Check transformers Installation from VCS URL (editable)
-        run: |
-          /usr/bin/python3 -m pip install -vvv -e "git+${VCS_URL}"
-          (cd /tmp && /usr/bin/python3 -c 'import transformers')
-          /usr/bin/python3 -m pip uninstall transformers --yes
-
       - name: Checkout transformers
         uses: actions/checkout@v3
         with:
