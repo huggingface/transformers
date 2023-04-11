@@ -38,7 +38,7 @@ if is_vision_available():
 class EDSRModelTester:
     def __init__(
         self,
-        scale_factor=2,
+        upscale=2,
         num_channels=3,
         batch_size=8,
         image_size=128,
@@ -47,15 +47,10 @@ class EDSRModelTester:
         num_feature_maps=64,
         res_scale=1,
         shift_mean=True,
-        rdn_n_filters=1,
-        rdn_k_size=1,
-        rdn_config="B",
-        num_residual_groups=10,
-        reduction=16,
         self_ensemble=True,
         **kwargs,
     ):
-        self.scale_factor = scale_factor
+        self.upscale = upscale
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.hidden_act = hidden_act
@@ -63,11 +58,6 @@ class EDSRModelTester:
         self.num_feature_maps = num_feature_maps
         self.res_scale = res_scale
         self.shift_mean = shift_mean
-        self.rdn_n_filters = rdn_n_filters
-        self.rdn_k_size = rdn_k_size
-        self.rdn_config = rdn_config
-        self.num_residual_groups = num_residual_groups
-        self.reduction = reduction
         self.self_ensemble = self_ensemble
         self.image_size = image_size
 
@@ -80,17 +70,12 @@ class EDSRModelTester:
 
     def get_config(self):
         return EDSRConfig(
-            scale_factor=self.scale_factor,
+            upscale=self.upscale,
             hidden_act=self.hidden_act,
             num_res_block=self.num_res_block,
             num_feature_maps=self.num_feature_maps,
             res_scale=self.res_scale,
             shift_mean=self.shift_mean,
-            rdn_n_filters=self.rdn_n_filters,
-            rdn_k_size=self.rdn_k_size,
-            rdn_config=self.rdn_config,
-            num_residual_groups=self.num_residual_groups,
-            reduction=self.reduction,
             self_ensemble=self.self_ensemble,
         )
 

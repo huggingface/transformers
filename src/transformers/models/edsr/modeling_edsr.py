@@ -84,43 +84,39 @@ class EDSRResBlock(nn.Module):
             if i == 0:
                 res_block_module.append(activation)
 
-        self.edsr_res_block = nn.Sequential(*res_block_module)
+        self.edsr_body = nn.Sequential(*res_block_module)
         self.res_scale = res_scale
 
     def forward(self, feature_maps):
-        residual = self.edsr_res_block(feature_maps).mul(self.res_scale)
+        residual = self.edsr_body(feature_maps).mul(self.res_scale)
         residual += feature_maps
 
         return residual
 
 
 class EDSRUpsampler(nn.Sequential):
-    def __init__(self, conv, scale, n_feats, batch_norm=False, activation=False, bias=True):
-        m = []
+    def __init__(self, conv, scale, n_feats, batch_norm=False, activation=nn.ReLU(True), bias=True):
+        upsample_module = []
         if (scale & (scale - 1)) == 0:  # Is scale = 2^n?
             for _ in range(int(math.log(scale, 2))):
-                m.append(conv(n_feats, 4 * n_feats, 3, bias))
-                m.append(nn.PixelShuffle(2))
+                upsample_module.append(conv(n_feats, 4 * n_feats, 3, bias))
+                upsample_module.append(nn.PixelShuffle(2))
                 if batch_norm:
-                    m.append(nn.BatchNorm2d(n_feats))
-                if activation == "relu":
-                    m.append(nn.ReLU(True))
-                elif activation == "prelu":
-                    m.append(nn.PReLU(n_feats))
+                    upsample_module.append(nn.BatchNorm2d(n_feats))
+                if activation is not None:
+                    upsample_module.append(activation)
 
         elif scale == 3:
-            m.append(conv(n_feats, 9 * n_feats, 3, bias))
-            m.append(nn.PixelShuffle(3))
+            upsample_module.append(conv(n_feats, 9 * n_feats, 3, bias))
+            upsample_module.append(nn.PixelShuffle(3))
             if batch_norm:
-                m.append(nn.BatchNorm2d(n_feats))
-            if activation == "relu":
-                m.append(nn.ReLU(True))
-            elif activation == "prelu":
-                m.append(nn.PReLU(n_feats))
+                upsample_module.append(nn.BatchNorm2d(n_feats))
+            if activation is not None:
+                upsample_module.append(activation)
         else:
             raise NotImplementedError
 
-        super(EDSRUpsampler, self).__init__(*m)
+        super(EDSRUpsampler, self).__init__(*upsample_module)
 
 
 class EDSRPreTrainedModel(PreTrainedModel):
@@ -197,12 +193,8 @@ class EDSRModel(EDSRPreTrainedModel):
         ]
         edsr_body.append(default_conv(num_feature_maps, num_feature_maps, kernel_size))
 
-        # define tail module
-        edsr_tail = [EDSRUpsampler(default_conv, config.upscale, num_feature_maps, activation=False), default_conv(num_feature_maps, config.num_channels, kernel_size)]
-
         self.edsr_head = nn.Sequential(*edsr_head)
         self.edsr_body = nn.Sequential(*edsr_body)
-        self.edsr_tail = nn.Sequential(*edsr_tail)
 
     def get_activation_function(self, activation_str: str):
         activation_str_to_activation_dict = {
@@ -236,18 +228,22 @@ class EDSRModel(EDSRPreTrainedModel):
         res = self.edsr_body(pixel_values)
         res += pixel_values
 
-        pixel_values = self.edsr_tail(res)
-        pixel_values = self.add_mean(pixel_values)
-
         return ImageSuperResolutionOutput(
             reconstruction=pixel_values,
         )
 
 
 class EDSRForImageSuperResolution(EDSRPreTrainedModel):
-    def __init__(self, config, conv=default_conv):
-        super(EDSRPreTrainedModel, self).__init__()
-        pass
+    def __init__(self, config):
+        super(EDSRPreTrainedModel, self).__init__(config)
+        self.edsr_model = EDSRModel(config)
+
+        # define tail module
+        kernel_size = 3
+        edsr_tail = [EDSRUpsampler(default_conv, config.upscale, config.num_feature_maps, activation=None),
+            default_conv(config.num_feature_maps, config.num_channels, kernel_size)]
+
+        self.upsampler = nn.Sequential(*edsr_tail)
 
     @add_start_docstrings_to_model_forward(EDSR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
@@ -267,16 +263,10 @@ class EDSRForImageSuperResolution(EDSRPreTrainedModel):
          >>> processor = EDSRImageProcessor.from_pretrained("")
          >>> model = EDSRForImageSuperResolution.from_pretrained("")
          ```"""
-        if self.self_ensemble:
-            return self.forward_x8(pixel_values, forward_function=self.forward)
-        pixel_values = self.sub_mean(pixel_values)
-        pixel_values = self.edsr_head(pixel_values)
 
-        res = self.edsr_body(pixel_values)
-        res += pixel_values
-
-        pixel_values = self.edsr_tail(res)
-        pixel_values = self.add_mean(pixel_values)
+        pixel_values = self.edsr_model(pixel_values)[0]
+        pixel_values = self.upsampler(pixel_values)
+        pixel_values = self.edsr_model.add_mean(pixel_values)
 
         return ImageSuperResolutionOutput(
             reconstruction=pixel_values,
@@ -335,23 +325,23 @@ class EDSRForImageSuperResolution(EDSRPreTrainedModel):
 
         return y
 
-    def load_state_dict(self, state_dict, strict=True):
-        own_state = self.state_dict()
-        for name, param in state_dict.items():
-            if name in own_state:
-                if isinstance(param, nn.Parameter):
-                    param = param.data
-                try:
-                    own_state[name].copy_(param)
-                except Exception:
-                    if name.find("tail") == -1:
-                        raise RuntimeError(
-                            "While copying the parameter named {}, "
-                            "whose dimensions in the model are {} and "
-                            "whose dimensions in the checkpoint are {}.".format(
-                                name, own_state[name].size(), param.size()
-                            )
-                        )
-            elif strict:
-                if name.find("tail") == -1:
-                    raise KeyError('unexpected key "{}" in state_dict'.format(name))
+    # def load_state_dict(self, state_dict, strict=True):
+    #     own_state = self.state_dict()
+    #     for name, param in state_dict.items():
+    #         if name in own_state:
+    #             if isinstance(param, nn.Parameter):
+    #                 param = param.data
+    #             try:
+    #                 own_state[name].copy_(param)
+    #             except Exception:
+    #                 if name.find("tail") == -1:
+    #                     raise RuntimeError(
+    #                         "While copying the parameter named {}, "
+    #                         "whose dimensions in the model are {} and "
+    #                         "whose dimensions in the checkpoint are {}.".format(
+    #                             name, own_state[name].size(), param.size()
+    #                         )
+    #                     )
+    #         elif strict:
+    #             if name.find("tail") == -1:
+    #                 raise KeyError('unexpected key "{}" in state_dict'.format(name))

@@ -24,9 +24,10 @@ from PIL import Image
 from transformers import EDSRConfig, EDSRForImageSuperResolution, EDSRImageProcessor
 
 
-def get_config(checkpoint_url):
+def get_edsr_config(checkpoint_url):
     config = EDSRConfig()
 
+    print(checkpoint_url)
     if "edsr_baseline_x2" in checkpoint_url:
         config.n_resblocks = 16
         config.n_feats = 64
@@ -55,20 +56,45 @@ def get_config(checkpoint_url):
     return config
 
 
+def rename_key(name):
+    if "model" in name:
+        name = name.replace("model", "edsr_model")
+    if "head" in name:
+        name = name.replace("head", "edsr_head")
+    if "body" in name:
+        name = name.replace("body", "edsr_body")
+    if "tail" in name:
+        name = name.replace("tail", "upsampler")
+
+    return name
+
+def load_sample_image():
+    url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    return image
+
+@torch.no_grad()
 def convert_edsr_checkpoint(checkpoint_url: str, pytorch_dump_folder_path: str, push_to_hub: bool):
-    config = get_config(checkpoint_url)
-    url = {
-        "r16f64x2": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x2-1bc95232.pt",
-        "r16f64x3": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x3-abf2a44e.pt",
-        "r16f64x4": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x4-6b446fab.pt",
-        "r32f256x2": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x2-0edfb8a3.pt",
-        "r32f256x3": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x3-ea3ef2c6.pt",
-        "r32f256x4": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x4-4f62e9ef.pt",
+    config = get_edsr_config(checkpoint_url)
+    name_to_url = {
+        "edsr_baseline_x2": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x2-1bc95232.pt",
+        "edsr_baseline_x3": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x3-abf2a44e.pt",
+        "edsr_baseline_x4": "https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x4-6b446fab.pt",
+        "edsr_x2": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x2-0edfb8a3.pt",
+        "edsr_x3": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x3-ea3ef2c6.pt",
+        "edsr_x4": "https://cv.snu.ac.kr/research/EDSR/models/edsr_x4-4f62e9ef.pt",
     }
+
     model = EDSRForImageSuperResolution(config)
     model.eval()
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
+
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        state_dict[rename_key(key)] = val
+
+
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     print("Missing:", missing_keys)
@@ -105,8 +131,8 @@ def convert_edsr_checkpoint(checkpoint_url: str, pytorch_dump_folder_path: str, 
     print("Looks ok!")
 
 
-def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
-    get_config(checkpoint_url)
+# def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
+#     get_edsr_config(checkpoint_url)
 
 
 if __name__ == "__main__":
@@ -114,7 +140,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://cv.snu.ac.kr/research/EDSR/models/edsr_x4-4f62e9ef.pt",
+        default="https://cv.snu.ac.kr/research/EDSR/models/edsr_baseline_x2-1bc95232.pt",
         type=str,
         help="URL of the original EDSR checkpoint you'd like to convert.",
     )

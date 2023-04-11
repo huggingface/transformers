@@ -273,6 +273,7 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
+    "models.edsr": ["EDSR_PRETRAINED_CONFIG_ARCHIVE_MAP", "EDSRConfig"],
     "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
     "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
@@ -856,6 +857,7 @@ else:
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
+    _import_structure["models.edsr"].append("EDSRImageProcessor")
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
@@ -1483,6 +1485,14 @@ else:
             "DPTForSemanticSegmentation",
             "DPTModel",
             "DPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.edsr"].extend(
+        [
+            "EDSR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EDSRForImageSuperResolution",
+            "EDSRModel",
+            "EDSRPreTrainedModel",
         ]
     )
     _import_structure["models.efficientformer"].extend(
@@ -3971,6 +3981,7 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
+    from .models.edsr import EDSR_PRETRAINED_CONFIG_ARCHIVE_MAP, EDSRConfig
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
     from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
@@ -5014,6 +5025,12 @@ if TYPE_CHECKING:
             DPTModel,
             DPTPreTrainedModel,
         )
+        from .models.edsr import (
+             EDSR_PRETRAINED_MODEL_ARCHIVE_LIST,
+             EDSRForImageSuperResolution,
+             EDSRModel,
+             EDSRPreTrainedModel,
+         )
         from .models.efficientformer import (
             EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             EfficientFormerForImageClassification,
