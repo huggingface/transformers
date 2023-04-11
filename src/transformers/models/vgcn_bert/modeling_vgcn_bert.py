@@ -116,23 +116,11 @@ class VocabGraphConvolution(nn.Module):
         self.word_embeddings = word_embeddings
         self.position_embeddings = position_embeddings
 
+        self._check_wgraphs(wgraphs)
         self.wgraphs = wgraphs  # List[torch.sparse.FloatTensor]
-        wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
-        assert wgraph_id_to_tokenizer_id_maps.keys()[-1] == len(wgraph_id_to_tokenizer_id_maps) - 1
-        # self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
-        # self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = tokenizer_id_to_wgraph_id_arrays
-        # self.max_tokenizer_id_for_wgraph_list = [len(m) for m in self.tokenizer_id_to_wgraph_id_arrays]
-        # TODO: device?
-        self.gvocab_order_tokenizer_id_arrays: List[torch.LongTensor] = [
-            torch.LongTensor(list(m.values())) for m in wgraph_id_to_tokenizer_id_maps
-        ]
-
-        self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = [
-            torch.zeros(max(m.values()) + 1, dtype=torch.long) for m in wgraph_id_to_tokenizer_id_maps
-        ]
-        for m, t in zip(wgraph_id_to_tokenizer_id_maps, self.tokenizer_id_to_wgraph_id_arrays):
-            for graph_id, tok_id in m.items():
-                t[tok_id] = graph_id
+        self.gvocab_order_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inversion_arrays(
+            wgraph_id_to_tokenizer_id_maps
+        )
 
         self.hid_dim = hid_dim
         self.out_dim = out_dim
@@ -158,6 +146,38 @@ class VocabGraphConvolution(nn.Module):
         # for n, p in self.named_parameters():
         # if n.startswith("W") or n.startswith("a") or n in ("W", "a", "dense"):
         # nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+
+    def _prepare_inversion_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
+        wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
+        assert wgraph_id_to_tokenizer_id_maps.keys()[-1] == len(wgraph_id_to_tokenizer_id_maps) - 1
+        # self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
+        # self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = tokenizer_id_to_wgraph_id_arrays
+        # self.max_tokenizer_id_for_wgraph_list = [len(m) for m in self.tokenizer_id_to_wgraph_id_arrays]
+        gvocab_order_tokenizer_id_arrays: List[torch.LongTensor] = [
+            torch.LongTensor(list(m.values())) for m in wgraph_id_to_tokenizer_id_maps
+        ]
+
+        tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = [
+            torch.zeros(max(m.values()) + 1, dtype=torch.long) for m in wgraph_id_to_tokenizer_id_maps
+        ]
+        for m, t in zip(wgraph_id_to_tokenizer_id_maps, tokenizer_id_to_wgraph_id_arrays):
+            for graph_id, tok_id in m.items():
+                t[tok_id] = graph_id
+
+        return gvocab_order_tokenizer_id_arrays, tokenizer_id_to_wgraph_id_arrays
+
+    def _check_wgraphs(self, wgraphs: list) -> bool:
+        for g in wgraphs:
+            assert g.layout is torch.sparse_coo
+            # g[0,:] and g[:,0] should be 0
+            assert 0 not in g.indices()
+
+    # def _zero_padding_graph(self, adj_matrix: torch.Tensor):
+    #     if adj_matrix.layout is not torch.sparse_coo:
+    #         adj_matrix=adj_matrix.to_sparse_coo()
+    #     indices=adj_matrix.indices()+1
+    #     padded_adj= torch.sparse_coo_tensor(indices=indices, values=adj_matrix.values(), size=(adj_matrix.shape[0]+1,adj_matrix.shape[1]+1))
+    #     return padded_adj.coalesce()
 
     def get_subgraphs(self, adj_matrix: torch.Tensor, gx_ids: torch.LongTensor):
         # assert adj_matrix.layout is torch.sparse_coo
