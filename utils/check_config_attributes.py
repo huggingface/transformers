@@ -78,7 +78,6 @@ SPECIAL_CASES_TO_ALLOW = {
 }
 
 
-
 # TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
 SPECIAL_CASES_TO_ALLOW.update(
     {
