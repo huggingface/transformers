@@ -1791,7 +1791,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
                         if matches_pattern and name in state_dict:
                             found += 1
-                            if found > 1:
+                            if found < len(names):
                                 del state_dict[name]
 
                 # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
