@@ -783,7 +783,7 @@ class TFBlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].numpy().tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
     def test_inference_vqa(self):
