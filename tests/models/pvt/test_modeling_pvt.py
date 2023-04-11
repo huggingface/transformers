@@ -337,7 +337,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2910, -0.2229,  0.0321]).to(torch_device)
+        expected_slice = torch.tensor([-0.2910, -0.2229, 0.0321]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
@@ -359,7 +359,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3641, -0.6515,  1.4248], [0.5005, 0.2392, -0.6012], [0.6238, 0.0133, -0.3935]]
+            [[-0.3641, -0.6515, 1.4248], [0.5005, 0.2392, -0.6012], [0.6238, 0.0133, -0.3935]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
