@@ -1776,7 +1776,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ident = hash(tensor)
+                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
                 ptrs[ident].append(name)
 
             # These are all the pointers of shared tensors.
