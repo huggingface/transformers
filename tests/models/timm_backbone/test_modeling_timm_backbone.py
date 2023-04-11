@@ -30,8 +30,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-
-if is_timm_available():
     from transformers import TimmBackbone, TimmBackboneConfig
 
 
