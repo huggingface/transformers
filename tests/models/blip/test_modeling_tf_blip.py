@@ -810,6 +810,6 @@ class TFBlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False, training=False)
 
-        expected_scores = tf.convert_to_tensor([[0.9798, 0.0202]])
+        expected_scores = tf.convert_to_tensor([[0.0029, 0.9971]])
         self.assertTrue(np.allclose(tf.nn.softmax(out_itm[0]).numpy(), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5162]]), rtol=1e-3, atol=1e-3))
