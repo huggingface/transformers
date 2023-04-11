@@ -320,7 +320,7 @@ class SamMaskDecoder(nn.Module):
 
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(self.config.hidden_size, self.config.hidden_size // 4, kernel_size=2, stride=2),
-            SamLayerNorm2d(self.config.hidden_size // 4),
+            SamLayerNorm(self.config.hidden_size // 4),
             nn.GELU(),
             nn.ConvTranspose2d(self.config.hidden_size // 4, self.config.hidden_size // 8, kernel_size=2, stride=2),
             nn.GELU(),
@@ -473,10 +473,10 @@ class SamPromptEncoder(nn.Module):
         
         self.mask_downscaling = nn.Sequential(
             nn.Conv2d(1, self.config.mask_input_channels // 4, kernel_size=2, stride=2),
-            SamLayerNorm2d(self.config.mask_input_channels // 4),
+            SamLayerNorm(self.config.mask_input_channels // 4),
             self.activation,
             nn.Conv2d(self.config.mask_input_channels // 4, self.config.mask_input_channels, kernel_size=2, stride=2),
-            SamLayerNorm2d(self.config.mask_input_channels),
+            SamLayerNorm(self.config.mask_input_channels),
             self.activation,
             nn.Conv2d(self.config.mask_input_channels, self.hidden_size, kernel_size=1),
         )
@@ -684,7 +684,7 @@ class SamViTEncoder(nn.Module):
                 kernel_size=1,
                 bias=False,
             ),
-            SamLayerNorm2d(self.config.output_channels),
+            SamLayerNorm(self.config.output_channels),
             nn.Conv2d(
                 self.config.output_channels,
                 self.config.output_channels,
@@ -692,7 +692,7 @@ class SamViTEncoder(nn.Module):
                 padding=1,
                 bias=False,
             ),
-            SamLayerNorm2d(self.config.output_channels),
+            SamLayerNorm(self.config.output_channels),
         )
 
     def forward(self, hidden_states: torch.Tensor):
@@ -1086,6 +1086,7 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+
 class SamForImageSegmentation(SamPreTrainedModel):
     mask_threshold: float = 0.0
     image_format: str = "RGB"
@@ -1173,3 +1174,5 @@ class SamForImageSegmentation(SamPreTrainedModel):
         else:
             output_masks = F.interpolate(masks, (original_size[0][0], original_size[0][1]), mode="bilinear", align_corners=False)
         return output_masks
+    
+
