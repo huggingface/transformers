@@ -335,6 +335,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
+        image_shapes = [image.shape for image in images]
 
         # transformations
         if do_resize:
@@ -342,6 +343,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 raise NotImplementedError("To do")
             else:
                 images = [self.resize(image, size=size, resample=resample) for image in images]
+                image_shapes = [image.shape for image in images]
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor) for image in images]
@@ -355,6 +357,12 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        # add metadata
+        # TODO perhaps remove?
+        img_metas = [{"img_shape": image_shape, "pad_shape": image_shape} for image_shape in image_shapes]
+        encoded_inputs["img_metas"] = img_metas
+
         if annotations is not None:
             raise NotImplementedError("To do")
 
