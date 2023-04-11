@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PVT model configuration"""
+""" Pvt model configuration"""
 
 import warnings
 from collections import OrderedDict
@@ -37,9 +37,9 @@ PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PvtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an PVT
+    This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the PVT
+    defaults will yield a similar configuration to that of the Pvt
     [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

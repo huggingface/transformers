@@ -79,7 +79,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False, scale_by_ke
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->PVT
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Pvt
 class PvtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -522,7 +522,7 @@ PVT_START_DOCSTRING = r"""
 PVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PVTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PvtImageProcessor.__call__`]
             for details.
 
         output_attentions (`bool`, *optional*):
@@ -539,7 +539,7 @@ PVT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare PVT encoder outputting raw hidden-states without any specific head on top.",
+    "The bare Pvt encoder outputting raw hidden-states without any specific head on top.",
     PVT_START_DOCSTRING,
 )
 class PvtModel(PvtPreTrainedModel):
@@ -602,7 +602,7 @@ class PvtModel(PvtPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PVT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    Pvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
     PVT_START_DOCSTRING,

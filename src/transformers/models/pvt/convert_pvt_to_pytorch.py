@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert PVT checkpoints from the original library."""
+"""Convert Pvt checkpoints from the original library."""
 
 
 import argparse
@@ -147,7 +147,7 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our PVT structure.
     """
 
-    # define default PVT configuration
+    # define default Pvt configuration
     if pvt_size == "tiny":
         config_path = "https://huggingface.co/Xrenya/pvt-medium-224/raw/main/config.json"
     elif pvt_size == "small":
