@@ -1776,7 +1776,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
+                ident = hash(tensor)
                 ptrs[ident].append(name)
 
             # These are all the pointers of shared tensors.
@@ -1786,15 +1786,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
                 if self._keys_to_ignore_on_load_missing is not None:
-                    del_names = set()
-                    for name in names:
+                    found = 0
+                    for name in sorted(names):
                         matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
                         if matches_pattern and name in state_dict:
-                            del_names.add(name)
-                    # This makes sure even if the pattern covers all names
-                    # that we keep at least 1 copy of the name.
-                    for name in sorted(del_names)[: len(names) - 1]:
-                        del state_dict[name]
+                            found += 1
+                            if found > 1:
+                                del state_dict[name]
 
                 # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
                 # If the link between tensors was done at runtime then `from_pretrained` will not get
