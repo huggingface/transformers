@@ -1,0 +1,74 @@
+name: Check VCS installation
+
+on:
+  push:
+    branches:
+      - main
+      - v*-release
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check-vcs-installation:
+    runs-on: ubuntu-20.04  # the oldest Ubuntu LTS version
+    timeout-minutes: 30
+    steps:
+      - name: Setup system pip
+        run: |
+          sudo apt-get update && sudo apt-get install -y python3-dev python3-pip
+          echo '$ which -a python3' && which -a python3 || true
+          echo '$ which -a python' && which -a python || true
+          echo '$ which -a pip3' && which -a pip3 || true
+          echo '$ which -a pip' && which -a pip || true
+          echo '$ /usr/bin/python3 --version' && /usr/bin/python3 --version
+          echo '$ /usr/bin/python3 -m pip --version' && /usr/bin/python3 -m pip --version
+
+      - name: Print commit information
+        run: |
+          if [[ "${{ github.event_name }}" != 'pull_request' ]]; then
+            REPOSITORY="${{ github.repository }}"
+          else
+            REPOSITORY="${{ github.event.pull_request.head.repo.full_name }}"  # name of the fork repository
+          fi
+          SHA="${{ github.sha }}"
+          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
+          echo "REPOSITORY:  ${REPOSITORY}"
+          echo "SHA:         ${SHA}"
+          echo "BRANCH_NAME: ${BRANCH_NAME}"
+          echo "VCS_URL=https://github.com/${REPOSITORY}@${BRANCH_NAME}" >> "${GITHUB_ENV}"
+
+      - name: Check transformers installation from VCS URL
+        run: |
+          /usr/bin/python3 -m pip install -vvv "git+${VCS_URL}"
+          (cd /tmp && /usr/bin/python3 -c 'import transformers')
+          /usr/bin/python3 -m pip uninstall transformers --yes
+
+      - name: Check transformers installation from VCS URL (editable)
+        run: |
+          /usr/bin/python3 -m pip install -vvv -e "git+${VCS_URL}#egg=transformers"
+          (cd /tmp && /usr/bin/python3 -c 'import transformers')
+          /usr/bin/python3 -m pip uninstall transformers --yes
+
+      - name: Checkout transformers
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Check transformers installation from VCS repo
+        run: |
+          /usr/bin/python3 -m pip install -vvv .
+          (cd /tmp && /usr/bin/python3 -c 'import transformers')
+          /usr/bin/python3 -m pip uninstall transformers --yes
+
+      - name: Check transformers installation from VCS repo (editable)
+        run: |
+          /usr/bin/python3 -m pip install -vvv -e .
+          (cd /tmp && /usr/bin/python3 -c 'import transformers')
+          /usr/bin/python3 -m pip uninstall transformers --yes
