@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -56,6 +58,23 @@ else:
         "BlipForImageTextRetrieval",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_blip"] = [
+        "TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFBlipModel",
+        "TFBlipPreTrainedModel",
+        "TFBlipForConditionalGeneration",
+        "TFBlipForQuestionAnswering",
+        "TFBlipVisionModel",
+        "TFBlipTextModel",
+        "TFBlipForImageTextRetrieval",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
     from .processing_blip import BlipProcessor
@@ -83,6 +102,23 @@ if TYPE_CHECKING:
             BlipPreTrainedModel,
             BlipTextModel,
             BlipVisionModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_blip import (
+            TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFBlipForConditionalGeneration,
+            TFBlipForImageTextRetrieval,
+            TFBlipForQuestionAnswering,
+            TFBlipModel,
+            TFBlipPreTrainedModel,
+            TFBlipTextModel,
+            TFBlipVisionModel,
         )
 
 else:

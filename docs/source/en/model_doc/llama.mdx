@@ -1,0 +1,84 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# LLaMA
+
+## Overview
+
+The LLaMA model was proposed in [LLaMA: Open and Efficient Foundation Language Models](LLaMA: Open and Efficient Foundation Language Models)  by Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, Guillaume Lample. It is a collection of foundation language models ranging from 7B to 65B parameters.
+
+The abstract from the paper is the following:
+
+*We introduce LLaMA, a collection of foundation language models ranging from 7B to 65B parameters. We train our models on trillions of tokens, and show that it is possible to train state-of-the-art models using publicly available datasets exclusively, without resorting to proprietary and inaccessible datasets. In particular, LLaMA-13B outperforms GPT-3 (175B) on most benchmarks, and LLaMA-65B is competitive with the best models, Chinchilla-70B and PaLM-540B. We release all our models to the research community. *
+
+Tips:
+
+- Weights for the LLaMA models can be obtained from by filling out [this form](https://docs.google.com/forms/d/e/1FAIpQLSfqNECQnMkycAp2jP4Z9TFX0cGR4uf7b_fBxjY_OjhJILlKGA/viewform?usp=send_form)
+- After downloading the weights, they will need to be converted to the Hugging Face Transformers format using the [conversion script](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/convert_llama_weights_to_hf.py). The script can be called with the following (example) command:
+
+```bash
+python src/transformers/models/llama/convert_llama_weights_to_hf.py \
+    --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
+```
+
+- After conversion, the model and tokenizer can be loaded via:
+
+```python
+from transformers import LlamaForCausalLM, LlamaTokenizer
+
+tokenizer = LlamaTokenizer.from_pretrained("/output/path")
+model = LlamaForCausalLM.from_pretrained("/output/path")
+```
+
+Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
+come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 65B model, it's thus 130GB of RAM needed.
+
+- The LLaMA tokenizer is based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string. To have the tokenizer output the prefix space, set `decode_with_prefix_space=True` in the `LlamaTokenizer` object or in the tokenizer configuration.
+
+This model was contributed by [zphang](https://huggingface.co/zphang) with contributions from [BlackSamorez](https://huggingface.co/BlackSamorez). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
+
+## LlamaConfig
+
+[[autodoc]] LlamaConfig
+
+
+## LlamaTokenizer
+
+[[autodoc]] LlamaTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## LlamaTokenizerFast
+
+[[autodoc]] LlamaTokenizerFast
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## LlamaModel
+
+[[autodoc]] LlamaModel
+    - forward
+
+
+## LlamaForCausalLM
+
+[[autodoc]] LlamaForCausalLM
+    - forward
+
+## LlamaForSequenceClassification
+
+[[autodoc]] LlamaForSequenceClassification
+    - forward

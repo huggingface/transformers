@@ -176,7 +176,7 @@ class TableTransformerConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
@@ -189,6 +189,8 @@ class TableTransformerConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            # set timm attributes to None
+            dilation, backbone, use_pretrained_backbone = None, None, None
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
@@ -238,7 +240,6 @@ class TableTransformerConfig(PretrainedConfig):
 
 # Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
 class TableTransformerOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

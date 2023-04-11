@@ -23,7 +23,8 @@ from transformers.testing_utils import require_accelerate, require_torch, requir
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -147,13 +148,18 @@ class ViTHybridModelTester:
 
 
 @require_torch
-class ViTHybridModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (ViTHybridModel, ViTHybridForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -197,6 +203,28 @@ class ViTHybridModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            # Skip the check for the backbone
+            for name, module in model.named_modules():
+                if module.__class__.__name__ == "ViTHybridPatchEmbeddings":
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    break
+
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if name in backbone_params:
+                        continue
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     @slow
     def test_model_from_pretrained(self):

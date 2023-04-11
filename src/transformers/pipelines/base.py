@@ -15,6 +15,7 @@
 import collections
 import csv
 import importlib
+import inspect
 import json
 import os
 import pickle
@@ -80,6 +81,9 @@ def _pad(items, key, padding_value, padding_side):
         if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
+            return torch.cat([item[key] for item in items], dim=0)
+        elif dim == 4 and key == "input_features":
+            # this is probably a mel spectrogram batched
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
         min_length = min(item[key].shape[1] for item in items)
@@ -154,7 +158,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for key in keys:
             if key in {"input_ids"}:
                 # ImageGPT uses a feature extractor
-                if feature_extractor is not None:
+                if tokenizer is None and feature_extractor is not None:
                     _padding_value = f_padding_value
                 else:
                     _padding_value = t_padding_value
@@ -266,7 +270,7 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
     return framework, model
 
 
@@ -339,7 +343,7 @@ def get_framework(model, revision: Optional[str] = None):
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
     return framework
 
 
@@ -749,7 +753,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = -1,
+        device: Union[int, str, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -764,6 +768,19 @@ class Pipeline(_ScikitCompat):
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
+
+        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
+            self.model.to(device)
+
+        if device is None:
+            # `accelerate` device map
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
                 self.device = device
@@ -774,13 +791,9 @@ class Pipeline(_ScikitCompat):
             else:
                 self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device
+            self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
-
-        # Special handling
-        if self.framework == "pt" and self.device.type != "cpu":
-            self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -1074,7 +1087,7 @@ class Pipeline(_ScikitCompat):
                 final_iterator = self.get_iterator(
                     inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
                 )
-                outputs = [output for output in final_iterator]
+                outputs = list(final_iterator)
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)

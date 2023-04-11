@@ -133,7 +133,7 @@ class BlipTextConfig(PretrainedConfig):
         sep_token_id=102,
         is_decoder=True,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -161,7 +161,6 @@ class BlipTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from BlipConfig
@@ -242,7 +241,7 @@ class BlipVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -261,7 +260,6 @@ class BlipVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from BlipConfig
@@ -334,25 +332,17 @@ class BlipConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
-
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the BlipTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the BlipVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
 
         self.text_config = BlipTextConfig(**text_config)
         self.vision_config = BlipVisionConfig(**vision_config)

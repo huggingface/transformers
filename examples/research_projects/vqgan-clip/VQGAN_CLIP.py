@@ -1,15 +1,15 @@
 import os
 from glob import glob
 
+import imageio
 import torch
 import torchvision
-from PIL import Image
-from torch import nn
-
-import imageio
 import wandb
 from img_processing import custom_to_pil, loop_post_process, preprocess, preprocess_vqgan
 from loaders import load_vqgan
+from PIL import Image
+from torch import nn
+
 from transformers import CLIPModel, CLIPTokenizerFast
 from utils import get_device, get_timestamp, show_pil
 
@@ -99,7 +99,7 @@ class VQGAN_CLIP(nn.Module):
             output_path = "./animation.gif"
         if input_path is None:
             input_path = self.save_path
-        paths = list(sorted(glob(input_path + "/*")))
+        paths = sorted(glob(input_path + "/*"))
         if not len(paths):
             raise ValueError(
                 "No images found in save path, aborting (did you pass save_intermediate=True to the generate"
@@ -178,7 +178,7 @@ class VQGAN_CLIP(nn.Module):
         wandb.init(reinit=True, project="face-editor")
         wandb.config.update({"Positive Prompts": positive_prompts})
         wandb.config.update({"Negative Prompts": negative_prompts})
-        wandb.config.update(dict(lr=self.lr, iterations=self.iterations))
+        wandb.config.update({"lr": self.lr, "iterations": self.iterations})
         if image_path:
             image = Image.open(image_path)
             image = image.resize((256, 256))

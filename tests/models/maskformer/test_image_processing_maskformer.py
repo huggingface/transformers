@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 from datasets import load_dataset
-
 from huggingface_hub import hf_hub_download
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -131,7 +131,6 @@ class MaskFormerImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = MaskFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
@@ -299,9 +298,7 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
             high = num_labels
             if is_instance_map:
                 labels_expanded = list(range(num_labels)) * 2
-                instance_id_to_semantic_id = {
-                    instance_id: label_id for instance_id, label_id in enumerate(labels_expanded)
-                }
+                instance_id_to_semantic_id = dict(enumerate(labels_expanded))
             annotations = [
                 np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
             ]

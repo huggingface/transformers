@@ -117,7 +117,6 @@ class MT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # MT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -146,7 +145,11 @@ class MT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -171,7 +174,11 @@ class MT5DenseGatedActDense(nn.Module):
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
@@ -529,7 +536,6 @@ class MT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -560,8 +566,12 @@ class MT5Block(nn.Module):
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
@@ -587,8 +597,12 @@ class MT5Block(nn.Module):
             hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            if hidden_states.dtype == torch.float16:
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Combine self attn and cross attn key value states
@@ -602,8 +616,12 @@ class MT5Block(nn.Module):
         hidden_states = self.layer[-1](hidden_states)
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
@@ -845,6 +863,13 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`MT5Stack.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         # Check validity of device_map
         self.device_map = (
             get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
@@ -866,6 +891,10 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -961,6 +990,13 @@ class MT5Stack(MT5PreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -998,11 +1034,6 @@ class MT5Stack(MT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1316,6 +1347,13 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'encoder.block.0':"
+            " 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1329,6 +1367,10 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1541,6 +1583,13 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5ForConditionalGeneration.parallelize` is deprecated and will be removed in v5 of Transformers, you"
+            " should load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also"
+            " provide your own `device_map` but it needs to be a dictionary module_name to device, so for instance"
+            " {'encoder.block.0': 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1555,6 +1604,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1725,6 +1778,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
@@ -1755,9 +1810,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
@@ -1778,15 +1832,15 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         return self._shift_right(labels)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1852,6 +1906,13 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5EncoderModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1864,6 +1925,10 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
         self.model_parallel = False

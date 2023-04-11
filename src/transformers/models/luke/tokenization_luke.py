@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -198,12 +197,14 @@ class LukeTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LukeTokenizer
+
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -313,9 +314,8 @@ class LukeTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
-
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
@@ -597,7 +597,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -742,9 +742,8 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -824,7 +823,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -916,7 +915,6 @@ class LukeTokenizer(PreTrainedTokenizer):
             )
 
         if entities is not None:
-
             if not isinstance(entities, list):
                 raise ValueError("If you specify entities, they should be given as a list")
 
@@ -934,7 +932,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         entities_pair: Optional[EntityInput] = None,
         entity_spans: Optional[EntitySpanInput] = None,
         entity_spans_pair: Optional[EntitySpanInput] = None,
-        **kwargs
+        **kwargs,
     ) -> Tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
             tokens = self.tokenize(text, **kwargs)
@@ -975,7 +973,6 @@ class LukeTokenizer(PreTrainedTokenizer):
         first_entity_token_spans, second_entity_token_spans = None, None
 
         if self.task is None:
-
             if entity_spans is None:
                 first_ids = get_input_ids(text)
             else:
@@ -1058,7 +1055,6 @@ class LukeTokenizer(PreTrainedTokenizer):
                 first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
 
         elif self.task == "entity_span_classification":
-
             if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
                 raise ValueError(
                     "Entity spans should be provided as a list of tuples, "
@@ -1187,7 +1183,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
@@ -1535,7 +1531,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}
             outputs = self._pad(
                 inputs,
                 max_length=max_length,

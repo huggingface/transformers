@@ -88,7 +88,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         stop_gradient=False,
         share_layernorm=True,
         remove_last_layer=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
@@ -207,7 +207,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -317,8 +317,12 @@ class BridgeTowerConfig(PretrainedConfig):
         init_layernorm_from_vision_encoder=False,
         text_config=None,
         vision_config=None,
-        **kwargs
+        **kwargs,
     ):
+        # TODO: remove this once the Hub files are updated.
+        _ = kwargs.pop("text_config_dict", None)
+        _ = kwargs.pop("vision_config_dict", None)
+
         super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.hidden_act = hidden_act
@@ -332,20 +336,13 @@ class BridgeTowerConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
 
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
-
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the BridgeTowerTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. Initializing the BridgeTowerVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values.")
 
         self.text_config = BridgeTowerTextConfig(**text_config)
         self.vision_config = BridgeTowerVisionConfig(**vision_config)

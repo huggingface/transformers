@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,11 +9,11 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='1.13.1'
+ARG PYTORCH='2.0.0'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='1.11.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu116'
+ARG CUDA='cu117'
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -51,7 +51,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/acc
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-RUN python3 -m pip install --no-cache-dir decord
+# For video model testing
+RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
 RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/

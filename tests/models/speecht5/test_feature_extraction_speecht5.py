@@ -149,7 +149,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
     feature_extraction_class = SpeechT5FeatureExtractor if is_speech_available() else None
 
     def setUp(self):
@@ -373,7 +372,7 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         )
         self.assertIn("attention_mask", processed_pad)
         self.assertListEqual(
-            list(processed_pad.attention_mask.shape), list((processed_pad[input_name].shape[0], max_length))
+            list(processed_pad.attention_mask.shape), [processed_pad[input_name].shape[0], max_length]
         )
         self.assertListEqual(
             processed_pad.attention_mask[:, :max_length].sum(-1).tolist(), [max_length for x in speech_inputs]

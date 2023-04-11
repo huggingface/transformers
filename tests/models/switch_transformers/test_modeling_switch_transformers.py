@@ -24,6 +24,7 @@ from transformers.testing_utils import require_tokenizers, require_torch, requir
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -73,7 +74,6 @@ class SwitchTransformersModelTester:
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -547,12 +547,22 @@ class SwitchTransformersModelTester:
 
 
 @require_torch
-class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": SwitchTransformersForConditionalGeneration,
+            "feature-extraction": SwitchTransformersModel,
+            "summarization": SwitchTransformersForConditionalGeneration,
+            "text2text-generation": SwitchTransformersForConditionalGeneration,
+            "translation": SwitchTransformersForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -828,7 +838,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

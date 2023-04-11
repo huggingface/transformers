@@ -162,7 +162,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
         full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
-        added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
         return added_vocab
 
     def __len__(self) -> int:
@@ -411,7 +411,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
             raise TypeError(
                 f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})"
@@ -495,9 +494,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
             batched_input,
@@ -541,8 +539,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self,
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        clean_up_tokenization_spaces: bool = None,
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
@@ -550,6 +548,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text

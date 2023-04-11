@@ -21,8 +21,13 @@ import os
 from pathlib import Path
 
 import datasets
+import evaluate
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from torchvision.transforms import (
     CenterCrop,
@@ -35,19 +40,14 @@ from torchvision.transforms import (
 )
 from tqdm.auto import tqdm
 
-import evaluate
 import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.utils import set_seed
-from huggingface_hub import Repository, create_repo
 from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification, SchedulerType, get_scheduler
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = get_logger(__name__)
 

@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -292,7 +293,6 @@ class AltCLIPTextModelTester:
 
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
@@ -343,7 +343,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class AltCLIPModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -394,14 +393,23 @@ def prepare_img():
 
 
 @require_torch
-class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
-
+class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
     fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = AltCLIPModelTester(self)

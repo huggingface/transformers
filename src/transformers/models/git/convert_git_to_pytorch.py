@@ -21,12 +21,12 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     AutoTokenizer,
     CLIPImageProcessor,

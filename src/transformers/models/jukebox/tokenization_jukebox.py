@@ -23,13 +23,12 @@ from json.encoder import INFINITY
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex
-from transformers.utils.generic import _is_jax, _is_numpy
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
+from ...utils.generic import _is_jax, _is_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -69,13 +68,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     as the conditioning of the model can be done on the three different queries. If None is provided, defaults values will be used.:
 
     Depending on the number of genres on which the model should be conditioned (`n_genres`).
-    ```
+    ```python
     >>> from transformers import JukeboxTokenizer
+
     >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
-    >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
+    >>> tokenizer("Alan Jackson", "Country Rock", "old town road")["input_ids"]
     [tensor([[   0,    0,    0, 6785,  546,   41,   38,   30,   76,   46,   41,   49,
                40,   76,   44,   41,   27,   30]]), tensor([[  0,   0,   0, 145,   0]]), tensor([[  0,   0,   0, 145,   0]])]
-
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
@@ -126,7 +125,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         max_n_lyric_tokens=512,
         n_genres=5,
         unk_token="<|endoftext|>",
-        **kwargs
+        **kwargs,
     ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
@@ -187,7 +186,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Do NOT take care of added tokens. Only the lyrics are split into character for the character-based vocabulary.
         """
         # only lyrics are not tokenized, but character based is easily handled
-        return [character for character in lyrics]
+        return list(lyrics)
 
     def tokenize(self, artist, genre, lyrics, **kwargs):
         """

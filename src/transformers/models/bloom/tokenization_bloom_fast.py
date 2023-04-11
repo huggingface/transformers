@@ -54,13 +54,15 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import BloomTokenizerFast
+
     >>> tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
-    >>> tokenizer("Hello world")['input_ids']
-    [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
+    >>> tokenizer("Hello world")["input_ids"]
+    [59414, 8876]
+
+    >>> tokenizer(" Hello world")["input_ids"]
+    [86153, 8876]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
@@ -113,7 +115,8 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         pad_token="<pad>",
         add_prefix_space=False,
-        **kwargs
+        clean_up_tokenization_spaces=False,
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -124,6 +127,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())

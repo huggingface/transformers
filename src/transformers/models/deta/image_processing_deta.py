@@ -63,6 +63,7 @@ from ...utils.generic import ExplicitEnum, TensorType
 if is_torch_available():
     import torch
 
+
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
@@ -491,7 +492,7 @@ class DetaImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -568,7 +569,7 @@ class DetaImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -746,7 +747,7 @@ class DetaImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -965,7 +966,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
         all_scores = prob.view(batch_size, num_queries * num_labels).to(out_logits.device)
         all_indexes = torch.arange(num_queries * num_labels)[None].repeat(batch_size, 1).to(out_logits.device)
-        all_boxes = all_indexes // out_logits.shape[2]
+        all_boxes = torch.div(all_indexes, out_logits.shape[2], rounding_mode="floor")
         all_labels = all_indexes % out_logits.shape[2]
 
         boxes = center_to_corners_format(out_bbox)

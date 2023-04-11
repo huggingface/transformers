@@ -1276,7 +1276,6 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
-
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1408,7 +1407,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1478,7 +1476,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def embed_image_query(
         self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
     ) -> torch.FloatTensor:
-
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)

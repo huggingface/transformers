@@ -1,4 +1,4 @@
-from transformers import PretrainedConfig
+from ... import PretrainedConfig
 
 
 NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -86,7 +86,7 @@ class NezhaConfig(PretrainedConfig):
         bos_token_id=2,
         eos_token_id=3,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

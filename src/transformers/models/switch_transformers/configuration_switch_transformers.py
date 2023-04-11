@@ -111,7 +111,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_sparse_decoder_layers=3,
         num_heads=12,
         num_experts=8,
-        router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
@@ -129,7 +128,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -157,7 +156,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
 
         self.num_heads = num_heads
-        self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias

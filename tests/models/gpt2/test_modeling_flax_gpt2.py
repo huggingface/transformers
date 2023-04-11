@@ -29,6 +29,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -189,7 +190,6 @@ class FlaxGPT2ModelTester:
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxGPT2Model, FlaxGPT2LMHeadModel) if is_flax_available() else ()
     all_generative_model_classes = (FlaxGPT2LMHeadModel,) if is_flax_available() else ()
 

@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -70,9 +71,6 @@ if is_torch_available():
         _compute_mask_indices,
         _sample_negative_indices,
     )
-    from transformers.pytorch_utils import is_torch_less_than_1_9
-else:
-    is_torch_less_than_1_9 = True
 
 
 if is_torchaudio_available():
@@ -81,6 +79,7 @@ if is_torchaudio_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -90,7 +89,6 @@ if is_torch_fx_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -467,11 +465,21 @@ class Wav2Vec2ModelTester:
 
 
 @require_torch
-class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Wav2Vec2ForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2ForCTC,
+            "feature-extraction": Wav2Vec2Model,
+            "fill-mask": Wav2Vec2ForMaskedLM,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
     test_pruning = False
@@ -1206,10 +1214,10 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence_length = 10
         hidden_size = 4
         num_negatives = 3
-
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        sequence = torch.div(
+            torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
+        )
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -1236,9 +1244,10 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
         mask[-1, sequence_length // 2 :] = 0
 
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        sequence = torch.div(
+            torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
+        )
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled
@@ -1643,10 +1652,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     @require_pyctcdecode
     @require_torchaudio
-    @unittest.skipIf(
-        is_torch_less_than_1_9,
-        reason="`torchaudio.functional.resample` needs torchaudio >= 0.9 which requires torch >= 0.9",
-    )
     def test_wav2vec2_with_lm(self):
         ds = load_dataset("common_voice", "es", split="test", streaming=True)
         sample = next(iter(ds))
@@ -1671,10 +1676,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     @require_pyctcdecode
     @require_torchaudio
-    @unittest.skipIf(
-        is_torch_less_than_1_9,
-        reason="`torchaudio.functional.resample` needs torchaudio >= 0.9 which requires torch >= 0.9",
-    )
     def test_wav2vec2_with_lm_pool(self):
         ds = load_dataset("common_voice", "es", split="test", streaming=True)
         sample = next(iter(ds))
@@ -1713,10 +1714,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_invalid_pool(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
 
     def test_inference_diarization(self):
         model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)

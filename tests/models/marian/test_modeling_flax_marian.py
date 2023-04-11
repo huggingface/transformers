@@ -35,6 +35,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers import MarianTokenizer
     from transformers.models.marian.modeling_flax_marian import FlaxMarianModel, FlaxMarianMTModel, shift_tokens_right
 

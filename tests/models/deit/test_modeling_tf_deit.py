@@ -26,6 +26,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -129,7 +130,7 @@ class TFDeiTModelTester:
         model = TFDeiTForMaskedImageModeling(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -138,7 +139,7 @@ class TFDeiTModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -162,7 +163,7 @@ class TFDeiTModelTester:
 
 
 @require_tf
-class TFDeiTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_tf_common.py, as DeiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -177,6 +178,14 @@ class TFDeiTModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDeiTModel,
+            "image-classification": (TFDeiTForImageClassification, TFDeiTForImageClassificationWithTeacher),
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_pruning = False

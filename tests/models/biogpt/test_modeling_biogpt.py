@@ -23,12 +23,13 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import BioGptForCausalLM, BioGptModel, BioGptTokenizer
+    from transformers import BioGptForCausalLM, BioGptForTokenClassification, BioGptModel, BioGptTokenizer
     from transformers.models.biogpt.modeling_biogpt import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -246,6 +247,16 @@ class BioGptModelTester:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
+    def create_and_check_biogpt_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        config.num_labels = self.num_labels
+        model = BioGptForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -262,10 +273,18 @@ class BioGptModelTester:
 
 
 @require_torch
-class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
-    all_model_classes = (BioGptModel, BioGptForCausalLM) if is_torch_available() else ()
+class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (BioGptModel, BioGptForCausalLM, BioGptForTokenClassification) if is_torch_available() else ()
     all_generative_model_classes = (BioGptForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BioGptModel,
+            "text-generation": BioGptForCausalLM,
+            "token-classification": BioGptForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
 
     def setUp(self):
@@ -300,6 +319,10 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_biogpt_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_biogpt_weight_initialization(*config_and_inputs)
+
+    def test_biogpt_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_biogpt_for_token_classification(*config_and_inputs)
 
     @slow
     def test_batch_generation(self):

@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import inspect
-import os
 import re
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -25,12 +25,7 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers = spec.loader.load_module()
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
@@ -46,6 +41,7 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "SpeechEncoderDecoderConfig",
     "VisionEncoderDecoderConfig",
     "VisionTextDualEncoderConfig",
+    "LlamaConfig",
 }
 
 
@@ -56,10 +52,12 @@ def get_checkpoint_from_config_class(config_class):
     config_source = inspect.getsource(config_class)
     checkpoints = _re_checkpoint.findall(config_source)
 
-    for checkpoint in checkpoints:
-        # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
-        # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
-        ckpt_name, ckpt_link = checkpoint
+    # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+    # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+    for ckpt_name, ckpt_link in checkpoints:
+        # allow the link to end with `/`
+        if ckpt_link.endswith("/"):
+            ckpt_link = ckpt_link[:-1]
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"

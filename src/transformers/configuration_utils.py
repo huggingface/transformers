@@ -313,14 +313,18 @@ class PretrainedConfig(PushToHubMixin):
         self.finetuning_task = kwargs.pop("finetuning_task", None)
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
+        if self.label2id is not None and not isinstance(self.label2id, dict):
+            raise ValueError("Argument label2id should be a dictionary.")
         if self.id2label is not None:
+            if not isinstance(self.id2label, dict):
+                raise ValueError("Argument id2label should be a dictionary.")
             num_labels = kwargs.pop("num_labels", None)
             if num_labels is not None and len(self.id2label) != num_labels:
                 logger.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
                 )
-            self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+            self.id2label = {int(key): value for key, value in self.id2label.items()}
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
@@ -692,7 +696,7 @@ class PretrainedConfig(PushToHubMixin):
         config = cls(**config_dict)
 
         if hasattr(config, "pruned_heads"):
-            config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
+            config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
 
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:

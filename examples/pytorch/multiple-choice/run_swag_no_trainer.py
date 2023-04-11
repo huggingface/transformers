@@ -30,17 +30,17 @@ from pathlib import Path
 from typing import Optional, Union
 
 import datasets
-import torch
-from datasets import load_dataset
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
-
 import evaluate
-import transformers
+import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
+from datasets import load_dataset
 from huggingface_hub import Repository, create_repo
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -56,7 +56,7 @@ from transformers.utils import PaddingStrategy, check_min_version, get_full_repo
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`

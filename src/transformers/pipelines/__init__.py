@@ -1,11 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-import io
-import json
-import os
-
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -20,13 +12,15 @@ import os
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
+import json
+import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from numpy import isin
-
 from huggingface_hub import model_info
+from numpy import isin
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -38,7 +32,6 @@ from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoIma
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
@@ -84,6 +77,7 @@ from .token_classification import (
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
@@ -108,6 +102,7 @@ if is_tf_available():
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelForVision2Seq,
+        TFAutoModelForZeroShotImageClassification,
     )
 
 if is_torch_available():
@@ -140,11 +135,16 @@ if is_torch_available():
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
+
+
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+
 
 logger = logging.get_logger(__name__)
 
@@ -295,12 +295,23 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
-        "pt": (AutoModel,) if is_torch_available() else (),
+        "tf": (TFAutoModelForZeroShotImageClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
                 "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
+        "type": "multimodal",
+    },
+    "zero-shot-audio-classification": {
+        "impl": ZeroShotAudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",
@@ -407,7 +418,7 @@ def get_supported_tasks() -> List[str]:
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     if is_offline_mode():
-        raise RuntimeError(f"You cannot infer task automatically within `pipeline` when using offline mode")
+        raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=use_auth_token)
     except Exception as e:
@@ -487,7 +498,7 @@ def pipeline(
     task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
@@ -540,6 +551,7 @@ def pipeline(
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
@@ -744,6 +756,11 @@ def pipeline(
                 'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if device is not None:
+            logger.warning(
+                "Both `device` and `device_map` are specified. `device` will override `device_map`. You"
+                " will most likely encounter unexpected behavior. Please remove `device` and keep `device_map`."
+            )
         model_kwargs["device_map"] = device_map
     if torch_dtype is not None:
         if "torch_dtype" in model_kwargs:
@@ -771,7 +788,6 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
@@ -854,7 +870,8 @@ def pipeline(
                 tokenizer_kwargs = tokenizer[1]
             else:
                 tokenizer_identifier = tokenizer
-                tokenizer_kwargs = model_kwargs
+                tokenizer_kwargs = model_kwargs.copy()
+                tokenizer_kwargs.pop("torch_dtype", None)
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
@@ -867,6 +884,10 @@ def pipeline(
                 image_processor = model_name
             elif isinstance(config, str):
                 image_processor = config
+            # Backward compatibility, as `feature_extractor` used to be the name
+            # for `ImageProcessor`.
+            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
+                image_processor = feature_extractor
             else:
                 # Impossible to guess what is the right image_processor here
                 raise Exception(

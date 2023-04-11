@@ -106,13 +106,13 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples:
 
     ```python
-    >>> from transformers import MarianTokenizer
+    >>> from transformers import MarianForCausalLM, MarianTokenizer
 
+    >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
     >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
-    # keys  [input_ids, attention_mask, labels].
 
     >>> outputs = model(**inputs)  # should work
     ```"""
@@ -138,7 +138,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         model_max_length=512,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         separate_vocabs=False,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -225,8 +225,9 @@ class MarianTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
@@ -250,8 +251,9 @@ class MarianTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).

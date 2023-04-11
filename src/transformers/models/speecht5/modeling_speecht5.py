@@ -34,7 +34,6 @@ from ...modeling_outputs import (
     Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
@@ -83,18 +82,20 @@ def shift_spectrograms_right(input_values: torch.Tensor):
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
+        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
@@ -620,7 +621,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1440,7 +1441,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         hidden_states, attention_mask = self.prenet(input_values, attention_mask)
 
         outputs = self.wrapped_encoder(
@@ -1484,7 +1484,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         hidden_states = self.prenet(input_values)
 
         outputs = self.wrapped_encoder(
@@ -1522,7 +1521,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         return self.wrapped_encoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -1556,8 +1554,11 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
+                input_shape,
+                inputs_embeds.dtype,
+                device=inputs_embeds.device,
+                past_key_values_length=past_key_values_length,
+            )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1665,6 +1666,13 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1694,11 +1702,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1792,7 +1795,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
@@ -1846,7 +1848,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
 
         outputs = self.wrapped_decoder(
@@ -1894,7 +1895,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         outputs = self.wrapped_decoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -2296,7 +2296,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToText
         >>> from datasets import load_dataset
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
+        ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -2372,22 +2374,22 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2397,9 +2399,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
@@ -2570,7 +2572,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+        >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan, set_seed
         >>> import torch
 
         >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
@@ -2580,10 +2582,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
+        >>> set_seed(555)  # make deterministic
+
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([15872])
+        torch.Size([16384])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2764,11 +2768,13 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToSpeech, SpeechT5HifiGan
+        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToSpeech, SpeechT5HifiGan, set_seed
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
+        ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -2781,10 +2787,12 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
+        >>> set_seed(555)  # make deterministic
+
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_values"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([77312])
+        torch.Size([77824])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2869,7 +2877,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
         if speaker_embeddings is None:
-            speaker_embeddings = torch.zeros((1, 512))
+            speaker_embeddings = torch.zeros((1, 512), device=input_values.device)
 
         return _generate_speech(
             self,
@@ -3028,19 +3036,27 @@ class SpeechT5HifiGan(PreTrainedModel):
 
     def forward(self, spectrogram):
         r"""
-        Converts a single log-mel spectogram into a speech waveform.
+        Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
+        of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
+        waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor` of shape `(sequence_length, config.model_in_dim)`):
-                Tensor containing the log-mel spectrogram.
+            spectrogram (`torch.FloatTensor`):
+                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
-            `torch.FloatTensor`: Tensor of shape `(num_frames,)` containing the speech waveform.
+            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
         """
         if self.config.normalize_before:
             spectrogram = (spectrogram - self.mean) / self.scale
 
-        hidden_states = spectrogram.transpose(1, 0).unsqueeze(0)
+        is_batched = spectrogram.dim() == 3
+        if not is_batched:
+            spectrogram = spectrogram.unsqueeze(0)
+
+        hidden_states = spectrogram.transpose(2, 1)
 
         hidden_states = self.conv_pre(hidden_states)
         for i in range(self.num_upsamples):
@@ -3056,5 +3072,11 @@ class SpeechT5HifiGan(PreTrainedModel):
         hidden_states = self.conv_post(hidden_states)
         hidden_states = torch.tanh(hidden_states)
 
-        waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
+        if not is_batched:
+            # remove batch dim and collapse tensor to 1-d audio waveform
+            waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
+        else:
+            # remove seq-len dim since this collapses to 1
+            waveform = hidden_states.squeeze(1)
+
         return waveform

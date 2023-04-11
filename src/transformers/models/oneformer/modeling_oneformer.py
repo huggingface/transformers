@@ -24,9 +24,7 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
-from transformers import AutoBackbone
-from transformers.utils import logging
-
+from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -35,6 +33,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    logging,
     replace_return_docstrings,
     requires_backends,
 )
@@ -2507,7 +2506,7 @@ class OneFormerTextContextDecoder(nn.Module):
         visual_dim=1024,
         dropout=0.1,
         layer_norm_eps=1e-05,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
 
@@ -2801,6 +2800,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OneFormerTransformerDecoder):
             nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
             nn.init.constant_(module.query_input_projection.bias, 0)
+            module.query_input_projection._is_hf_initialized = True
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)

@@ -26,6 +26,7 @@ from transformers.testing_utils import require_torchvision, require_vision, slow
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -169,13 +170,27 @@ class DetaModelTester:
 
 
 @require_torchvision
-class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
+        if is_torchvision_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "ObjectDetectionPipelineTests":
+            return True
+
+        return False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -410,17 +425,23 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
+            # Skip the check for the backbone
+            for name, module in model.named_modules():
+                if module.__class__.__name__ == "DetaBackboneWithPositionalEncodings":
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    break
+
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if param.requires_grad:
-                        if (
-                            "level_embed" in name
-                            or "sampling_offsets.bias" in name
-                            or "value_proj" in name
-                            or "output_proj" in name
-                            or "reference_points" in name
-                        ):
-                            continue
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                        or name in backbone_params
+                    ):
+                        continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],

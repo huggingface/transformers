@@ -162,33 +162,24 @@ If after trying everything suggested you still encounter build issues, please, p
 
 ### Deployment with multiple GPUs
 
-To deploy this feature with multiple GPUs adjust the [`Trainer`] command line arguments as
-following:
-
-1. replace `python -m torch.distributed.launch` with `deepspeed`.
-2. add a new argument `--deepspeed ds_config.json`, where `ds_config.json` is the DeepSpeed configuration file as
+To deploy the DeepSpeed integration adjust the [`Trainer`] command line arguments to include a new argument `--deepspeed ds_config.json`, where `ds_config.json` is the DeepSpeed configuration file as
    documented [here](https://www.deepspeed.ai/docs/config-json/). The file naming is up to you.
 
-Therefore, if your original command line looked as follows:
+You can use a launcher of your choice here. You can continue using the pytorch launcher:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 your_program.py <normal cl args>
+torch.distributed.run --nproc_per_node=2 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
-
-Now it should be:
+or use the launcher provided by `deepspeed`:
 
 ```bash
 deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 
-Unlike, `torch.distributed.launch` where you have to specify how many GPUs to use with `--nproc_per_node`, with the
-`deepspeed` launcher you don't have to use the corresponding `--num_gpus` if you want all of your GPUs used. The
+As you can see the arguments aren't the same, but for most needs either of them works. The
 full details on how to configure various nodes and GPUs can be found [here](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node).
 
-In fact, you can continue using `-m torch.distributed.launch` with DeepSpeed as long as you don't need to use
-`deepspeed` launcher-specific arguments. Typically if you don't need a multi-node setup you're not required to use
-the `deepspeed` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
-use it here as well.
+When you use the `deepspeed` launcher and you want to use all available gpus you can just omit the `--num_gpus` flag.
 
 Here is an example of running `run_translation.py` under DeepSpeed deploying all available GPUs:
 
@@ -280,6 +271,95 @@ Notes:
 
   In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
+
+
+<a id='deepspeed-multi-node'></a>
+
+### Deployment with multiple Nodes
+
+The information in this section isn't not specific to the DeepSpeed integration and is applicable to any multi-node program. But DeepSpeed provides a `deepspeed` launcher that is easier to use than other launchers unless you are in a SLURM environment.
+
+For the duration of this section let's assume that you have 2 nodes with 8 gpus each. And you can reach the first node with `ssh hostname1` and second node with `ssh hostname2`, and both must be able to reach each other via ssh locally without a password. Of course, you will need to rename these host (node) names to the actual host names you are working with.
+
+#### The torch.distributed.run launcher
+
+
+For example, to use `torch.distributed.run`, you could do:
+
+```bash
+python -m torch.distributed.run --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
+--master_port=9901 your_program.py <normal cl args> --deepspeed ds_config.json
+```
+
+You have to ssh to each node and run this same command on each one of them! There is no rush, the launcher will wait until both nodes will synchronize.
+
+For more information please see [torchrun](https://pytorch.org/docs/stable/elastic/run.html). Incidentally, this is also the launcher that replaced `torch.distributed.launch` a few pytorch versions back.
+
+
+#### The deepspeed launcher
+
+To use the `deepspeed` launcher instead, you have to first create a `hostfile` file:
+
+```
+hostname1 slots=8
+hostname2 slots=8
+```
+and then you can launch it as:
+
+```bash
+deepspeed --num_gpus 8 --num_nodes 2 --hostfile hostfile --master_addr hostname1 --master_port=9901 \
+your_program.py <normal cl args> --deepspeed ds_config.json
+```
+
+Unlike the `torch.distributed.run` launcher, `deepspeed` will automatically launch this command on both nodes!
+
+For more information please see [Resource Configuration (multi-node)](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node).
+
+
+#### Launching in a SLURM environment
+
+In the SLURM environment the following approach can be used. The following is a slurm script `launch.slurm` which you will need to adapt it to your specific SLURM environment.
+
+```bash
+#SBATCH --job-name=test-nodes        # name
+#SBATCH --nodes=2                    # nodes
+#SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
+#SBATCH --cpus-per-task=10           # number of cores per tasks
+#SBATCH --gres=gpu:8                 # number of gpus
+#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
+#SBATCH --output=%x-%j.out           # output file name
+
+export GPUS_PER_NODE=8
+export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+export MASTER_PORT=9901
+
+srun --jobid $SLURM_JOBID bash -c 'python -m torch.distributed.run \
+ --nproc_per_node $GPUS_PER_NODE --nnodes $SLURM_NNODES --node_rank $SLURM_PROCID \
+ --master_addr $MASTER_ADDR --master_port $MASTER_PORT \
+your_program.py <normal cl args> --deepspeed ds_config.json'
+```
+
+All is left is to schedule it to run:
+```bash
+sbatch launch.slurm
+```
+
+`srun` will take care of launching the program simultaneously on all nodes.
+
+
+#### Use of Non-shared filesystem
+
+By default DeepSpeed expects that a multi-node environment uses a shared storage. If this is not the case and each node can only see the local filesystem, you need to adjust the config file to include a  [`checkpoint`_section](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) with the following setting:
+
+```json
+{
+  "checkpoint": {
+    "use_node_local_storage": true
+  }
+}
+```
+
+Alternatively, you can also use the [`Trainer`]'s `--save_on_each_node` argument, and the above config will be added automatically for you.
 
 
 <a id='deepspeed-notebook'></a>
@@ -715,6 +795,39 @@ default value in the following cases:
    the increased data buffers.
 
 
+#### ZeRO-0 Config
+
+Note that we're listing Stage 0 and 1 last since they are rarely used.
+
+Stage 0 is disabling all types of sharding and just using DeepSpeed as DDP. You can turn it on with:
+
+```json
+{
+    "zero_optimization": {
+        "stage": 0
+    }
+}
+```
+
+This will essentially disable ZeRO without you needing to change anything else.
+
+
+#### ZeRO-1 Config
+
+
+Stage 1 is Stage 2 minus gradient sharding. You can always try it to speed things a tiny bit to only shard the optimizer states with:
+
+
+```json
+{
+    "zero_optimization": {
+        "stage": 1
+    }
+}
+```
+
+
+
 <a id='deepspeed-nvme'></a>
 
 ### NVMe Support
@@ -1037,6 +1150,68 @@ values look like, but we highly recommend using the one with multiple `auto` set
 }
 ```
 
+#### How to Choose Which ZeRO Stage and Offloads To Use For Best Performance
+
+So now you know there are all these different stages. How to decide which of them to use? This section will attempt to address this question.
+
+In general the following applies:
+
+- Speed-wise (left is faster than right)
+
+Stage 0 (DDP) > Stage 1 > Stage 2 > Stage 2 + offload > Stage 3 > Stage 3 + offloads
+
+- GPU Memory usage-wise (right is more GPU memory efficient than left)
+
+Stage 0 (DDP) < Stage 1 < Stage 2 < Stage 2 + offload < Stage 3 < Stage 3 + offloads
+
+So when you want to get the fastest execution while fitting into minimal number of GPUs, here is the process you could follow. We start with the fastest approach and if running into GPU OOM we then go to the next slower approach, but which will use less GPU memory. And so on and so forth.
+
+First of all set batch size to 1 (you can always use gradient accumulation for any desired effective batch size).
+
+1. Enable `--gradient_checkpointing 1` (HF Trainer) or directly `model.gradient_checkpointing_enable()` - if OOM then
+2. Try ZeRO stage 2 first. if OOM then
+3. Try ZeRO stage 2 + `offload_optimizer` - if OOM then
+4. Switch to ZeRO stage 3 - if OOM then
+5. Enable `offload_param` to `cpu` - if OOM then
+6. Enable `offload_optimizer` to `cpu` - if OOM then
+
+7. If you still can't fit a batch size of 1 first check various default values and lower them if you can. For example, if you use `generate` and you don't use a wide search beam make it narrower as it'd take a lot of memory.
+
+8. Definitely use mixed half-precision over fp32 - so bf16 on Ampere and higher GPUs and fp16 on older gpu architectures.
+
+9. If you still OOM you could add more hardware or enable ZeRO-Infinity - that is switch offloads `offload_param` and  `offload_optimizer` to `nvme`. You need to make sure it's a very fast nvme. As an anecdote I was able to infer BLOOM-176B on a tiny GPU using ZeRO-Infinity except it was extremely slow. But it worked!
+
+You can, of course, work through these steps in reverse by starting with the most GPU memory efficient config and then going backwards. Or try bi-secting it.
+
+Once you have your batch size 1 not leading to OOM, measure your effective throughput.
+
+Next try to increase the batch size to as large as you can, since the higher the batch size the more efficient the GPUs are as they perform the best when matrices they multiply are huge.
+
+Now the performance optimization game starts. You can turn off some offload features or step down in ZeRO stages and increase/decrease batch size and again measure your effective throughput. Rinse and repeat until satisfied.
+
+Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you. Before beginning to train BLOOM-176B I spent 2 days on this process and was able to increase throughput from 90 to 150 TFLOPs! This effort saved us more than one month of training time.
+
+These notes were written primarily for the training mode, but they should mostly apply for inference as well. For example, during inference Gradient Checkpointing is a no-op since it is only useful during training. Additionally, we found out that if you are doing a multi-GPU inference and not using [DeepSpeed-Inference](https://www.deepspeed.ai/tutorials/inference-tutorial/), [Accelerate](https://huggingface.co/blog/bloom-inference-pytorch-scripts) should provide a superior performance.
+
+
+Other quick related performance notes:
+- if you are training something from scratch always try to have tensors with shapes that are divisible by 16 (e.g. hidden size). For batch size try divisible by 2 at least. There are [wave and tile quanitization](https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/) divisibility that is hardware-specific if you want to squeeze even higher performance from your GPUs.
+
+
+### Activation Checkpointing or Gradient Checkpointing
+
+Activation checkpointing and gradient checkpointing are two distinct terms that refer to the same methodology. It's very confusing but this is how it is.
+
+Gradient checkpointing allows one to trade speed for GPU memory, which either allows one to overcome a GPU OOM, or increase their batch size, which often leads to a better performance.
+
+HF Transformers models don't know anything about DeepSpeed's activation checkpointing, so if you try to enable that feature in the DeepSpeed config file, nothing will happen.
+
+Therefore you have two ways to take advantage of this very beneficial feature:
+
+1. If you want to use a HF Transformers models you can do `model.gradient_checkpointing_enable()` or use `--gradient_checkpointing` in the HF Trainer, which will automatically enable this for you. `torch.utils.checkpoint` is used there.
+2. If you write your own model and you want to use DeepSpeed's activation checkpointing you can use the [API prescribed there](https://deepspeed.readthedocs.io/en/latest/activation-checkpointing.html). You can also take the HF Transformers modeling code and replace `torch.utils.checkpoint` with the DeepSpeed's API. The latter is more flexible since it allows you to offload the forward activations to the CPU memory instead of recalculating them.
+
+
 ### Optimizer and Scheduler
 
 As long as you don't enable `offload_optimizer` you can mix and match DeepSpeed and HuggingFace schedulers and
@@ -1118,8 +1293,17 @@ If you want to use another optimizer which is not listed above, you will have to
 }
 ```
 
-Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that may have different
-config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+Similarly to `AdamW`, you can configure other officially supported optimizers. Just remember that those may have different config values. e.g. for Adam you will want `weight_decay` around `0.01`.
+
+Additionally, offload works the best when it's used with Deepspeed's CPU Adam optimizer. If you want to use a different optimizer with offload, since `deepspeed==0.8.3` you need to also add:
+
+
+```json
+{
+   "zero_force_ds_cpu_optimizer": false
+}
+```
+to the top level configuration.
 
 
 
@@ -1316,7 +1500,30 @@ As of `deepspeed==0.6.0` the bf16 support is new and experimental.
 
 If you use [gradient accumulation](#gradient-accumulation) with bf16-enabled, you need to be aware that it'll accumulate gradients in bf16, which may not be what you want due to this format's low precision, as it may lead to a lossy accumulation.
 
+A work is being done to fix that and provide an option to use a higher precision `dtype` (fp16 or fp32).
+
 </Tip>
+
+
+### NCCL Collectives
+
+There is the `dtype` of the training regime and there is a separate `dtype` that is used for communication collectives like various reduction and gathering/scattering operations.
+
+All gather/scatter ops are performed in the same `dtype` the data is in, so if you're using bf16 training regime it gets gathered in bf16 - gathering is a non-lossy operation.
+
+Various reduce operations can be quite lossy, for example when gradients are averaged across multiple-gpus, if the communications are done in fp16 or bf16 the outcome is likely be lossy - since when one ads multiple numbers in low precision the result isn't exact. More so with bf16 as it has a lower precision than fp16. Often fp16 is good enough as the loss is minimal when averaging grads which are typically very small. Therefore, by default for half precision training fp16 is used as the default for reduction operations. But you have full control over this functionality and if you choose you can add a small overhead and ensure that reductions will be using fp32 as the accumulation dtype and only when the result is ready it'll get downcast to the half precision `dtype` you're training in.
+
+In order to override the default you simply add a new configuration entry:
+
+```json
+{
+    "communication_data_type": "fp32"
+}
+```
+The valid values as of this writing are "fp16", "bfp16", "fp32".
+
+note: stage zero 3 had a bug with regards to bf16 comm dtype that was fixed in `deepspeed==0.8.1`
+
 
 
 ### apex
@@ -2060,6 +2267,32 @@ rank1:
 ```
 
 This was a very basic example and you will want to adapt it to your needs.
+
+### `generate` nuances
+
+When using multiple GPUs with ZeRO Stage-3, one has to synchronize the GPUs by calling `generate(..., synced_gpus=True)`. If this is not done if one GPU finished generating before other GPUs the whole system will hang as the rest of the GPUs will not be able to received the shard of weights from the GPU that stopped generating.
+
+Starting from `transformers>=4.28`, if `synced_gpus` isn't explicitly specified, it'll be set to `True` automatically if these conditions are detected. But you can still override the value of `synced_gpus` if need to.
+
+
+
+## Testing Deepspeed Integration
+
+If you submit a PR that involves DeepSpeed integration please note our CircleCI PR CI setup has no GPUs, so we only run tests requiring gpus on a different CI nightly. Therefore if you get a green CI report in your PR it doesn't mean DeepSpeed tests pass.
+
+To run DeepSpeed tests, please run at least:
+
+```
+RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
+```
+
+If you changed any of the modeling or pytorch examples code, then run the model zoo tests as well. The following will run all DeepSpeed tests:
+
+```
+RUN_SLOW=1 pytest tests/deepspeed
+```
+
+
 
 
 ## Main DeepSpeed Resources

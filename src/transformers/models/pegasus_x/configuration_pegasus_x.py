@@ -135,7 +135,7 @@ class PegasusXConfig(PretrainedConfig):
         num_global_tokens=32,
         block_size=512,
         stagger_local_blocks=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

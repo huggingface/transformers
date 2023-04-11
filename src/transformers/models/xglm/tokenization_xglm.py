@@ -124,7 +124,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

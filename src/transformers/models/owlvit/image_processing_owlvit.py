@@ -19,8 +19,8 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     center_crop,
     center_to_corners_format,
     normalize,
@@ -29,14 +29,16 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
     make_list_of_images,
     valid_images,
 )
-from transformers.utils import TensorType, is_torch_available, logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 if is_torch_available():
@@ -136,7 +138,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         do_normalize=True,
         image_mean=None,
         image_std=None,
-        **kwargs
+        **kwargs,
     ):
         size = size if size is not None else {"height": 768, "width": 768}
         size = get_size_dict(size, default_to_square=True)
@@ -160,8 +162,8 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
-        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
 
     def resize(
         self,
@@ -169,7 +171,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to a certain size.
@@ -185,7 +187,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         crop_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to a certain size.
@@ -201,7 +203,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         rescale_factor: float,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Rescale an image by a certain factor.
@@ -214,7 +216,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         mean: List[float],
         std: List[float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image with a certain mean and standard deviation.
@@ -236,7 +238,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Prepares an image or batch of images for the model.

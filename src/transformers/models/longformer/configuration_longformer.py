@@ -133,7 +133,7 @@ class LongformerConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         position_embedding_type: str = "absolute",
         onnx_export: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """Constructs LongformerConfig."""
         super().__init__(pad_token_id=pad_token_id, **kwargs)

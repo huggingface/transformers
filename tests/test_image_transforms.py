@@ -16,8 +16,8 @@
 import unittest
 
 import numpy as np
-
 from parameterized import parameterized
+
 from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
@@ -95,6 +95,32 @@ class ImageTransformsTester(unittest.TestCase):
 
         # make sure image is correctly rescaled
         self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+        # Make sure that an exception is raised if image is not in [0, 1]
+        image = np.random.randn(*image_shape).astype(dtype)
+        with self.assertRaises(ValueError):
+            to_pil_image(image)
+
+    @require_vision
+    def test_to_pil_image_from_mask(self):
+        # Make sure binary mask remains a binary mask
+        image = np.random.randint(0, 2, (3, 4, 5)).astype(np.uint8)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        np_img = np.asarray(pil_image)
+        self.assertTrue(np_img.min() == 0)
+        self.assertTrue(np_img.max() == 1)
+
+        image = np.random.randint(0, 2, (3, 4, 5)).astype(np.float32)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        np_img = np.asarray(pil_image)
+        self.assertTrue(np_img.min() == 0)
+        self.assertTrue(np_img.max() == 1)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
@@ -217,11 +243,19 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(resized_image, np.ndarray)
         self.assertEqual(resized_image.shape, (30, 40, 3))
 
-        # Check PIL.Image.Image is return if return_numpy=False
+        # Check PIL.Image.Image is returned if return_numpy=False
         resized_image = resize(image, (30, 40), return_numpy=False)
         self.assertIsInstance(resized_image, PIL.Image.Image)
         # PIL size is in (width, height) order
         self.assertEqual(resized_image.size, (40, 30))
+
+        # Check an image with float values between 0-1 is returned with values in this range
+        image = np.random.rand(3, 224, 224)
+        resized_image = resize(image, (30, 40))
+        self.assertIsInstance(resized_image, np.ndarray)
+        self.assertEqual(resized_image.shape, (3, 30, 40))
+        self.assertTrue(np.all(resized_image >= 0))
+        self.assertTrue(np.all(resized_image <= 1))
 
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255

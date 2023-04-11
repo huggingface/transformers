@@ -163,7 +163,6 @@ class TFAttention(tf.keras.layers.Layer):
         output_attentions,
         training=False,
     ):
-
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
@@ -183,7 +182,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=0)
+            past_key, past_value = tf.unstack(layer_past, axis=0, num=2)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
 
@@ -230,7 +229,6 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
         if config.add_cross_attention:
-
             self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
             self.ln_cross_attn = tf.keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
@@ -365,7 +363,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1054,6 +1051,12 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
+        if return_dict and output_hidden_states:
+            # We do this to match the slightly odd PT behaviour - the final hidden state is reshaped to rank 4 when the
+            # input is rank 3, but all other hidden states remain at rank-3 (with the first 2 dims merged)
+            all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
+        else:
+            all_hidden_states = None
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
@@ -1065,7 +1068,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             logits=lm_logits,
             mc_logits=mc_logits,
             past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
+            hidden_states=all_hidden_states,
             attentions=transformer_outputs.attentions,
         )
 
