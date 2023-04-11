@@ -1575,7 +1575,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             future_values=future_values,
             future_time_features=future_time_features,
         )
-        seasonal_input, trend_input = self.decomposition_layer(transformer_inputs)
 
         if encoder_outputs is None:
             enc_input = torch.cat(
@@ -1601,6 +1600,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
 
         # Decoder inputs
+        seasonal_input, trend_input = self.decomposition_layer(transformer_inputs)
+
         dec_input = torch.cat(
             (
                 seasonal_input[:, self.config.context_length :, ...],
@@ -1615,19 +1616,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             ),
             dim=-1,
         )
-
-        # dec_input = transformer_inputs[:, self.config.context_length :, ...]
-        # # TODO ask kashif what to do if encoder_outputs is not None. In that case, enc_input is not initialized
-        # mean_enc_input = torch.mean(enc_input, dim=1).unsqueeze(1).repeat(1, config.prediction_length, 1)
-        # zeros = torch.zeros([dec_input.size(0), config.prediction_length, dec_input.size(2)], device=enc_input.device)
-        # seasonal_enc_input, trend_enc_input = self.decomposition_layer(enc_input)
-
-        # trend_init = torch.cat([trend_enc_input[:, self.config.context_length :, :], mean_enc_input], dim=1)
-        # seasonal_init = torch.cat([seasonal_enc_input[:, self.config.context_length :, :], zeros], dim=1)
-
-        # # From the paper: "the past seasonal information from encoder is utilized by the decoder"
-        # # so dec_input is the seasonal init
-        # dec_input = seasonal_init
 
         if dec_input.size(1) > 0:
             decoder_outputs = self.decoder(
@@ -1980,17 +1968,15 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         for k in range(self.config.prediction_length):
             lagged_sequence = self.model.get_lagged_subsequences(
                 sequence=repeated_past_values,
-                subsequences_length=1 + k + self.config.prediction_length,
+                subsequences_length=1 + k + self.config.context_length,
                 shift=1,
             )
-
             lags_shape = lagged_sequence.shape
             reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
-
             seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
-            
-            dec_input = torch.cat((seasonal_input[:, - (k + 1):, ...], repeated_features[:, : k + 1, ...]), dim=-1)
-            trend_init = torch.cat((trend_input[:, - (k + 1):, ...], repeated_features[:, : k + 1, ...]), dim=-1)
+
+            dec_input = torch.cat((seasonal_input[:, -(k + 1) :, ...], repeated_features[:, : k + 1, ...]), dim=-1)
+            trend_init = torch.cat((trend_input[:, -(k + 1) :, ...], repeated_features[:, : k + 1, ...]), dim=-1)
             dec_output = decoder(
                 trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
             )
