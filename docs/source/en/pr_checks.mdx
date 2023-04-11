@@ -24,7 +24,7 @@ When you open a pull request on 🤗 Transformers, a fair number of checks will 
 
 In this document, we will take a stab at explaining what those various checks are and the reason behind them, as well as how to debug them locally if one of them fails on your PR.
 
-Note that they all require you to have a dev install:
+Note that, ideally, they require you to have a dev install:
 
 ```bash
 pip install transformers[dev]
@@ -36,7 +36,18 @@ or for an editable install:
 pip install -e .[dev]
 ```
 
-inside the Transformers repo.
+inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install the Deep Learning framework you are working with (PyTorch, TensorFlow and/or Flax) then do
+
+```bash
+pip install transformers[quality]
+```
+
+or for an editable install:
+
+```bash
+pip install -e .[quality]
+```
+
 
 ## Tests
 
