@@ -1925,10 +1925,10 @@ class SpeechT5GuidedMultiheadAttentionLoss(nn.Module):
     Networks with Guided Attention](https://arxiv.org/abs/1710.08969), adapted for multi-head attention.
     """
 
-    def __init__(self, sigma=0.4, scale=1.0):
+    def __init__(self, config: SpeechT5Config):
         super().__init__()
-        self.sigma = sigma
-        self.scale = scale
+        self.sigma = config.guided_attention_loss_sigma
+        self.scale = config.guided_attention_loss_scale
 
     def forward(
         self, attentions: torch.FloatTensor, input_masks: torch.BoolTensor, output_masks: torch.BoolTensor
@@ -1985,15 +1985,15 @@ class SpeechT5SpectrogramLoss(nn.Module):
 
     def __init__(self, config: SpeechT5Config):
         super().__init__()
-        self.config = config
+        self.use_guided_attention_loss = config.use_guided_attention_loss
+        self.guided_attention_loss_num_heads = config.guided_attention_loss_num_heads
+        self.reduction_factor = config.reduction_factor
+
         self.l1_criterion = L1Loss()
         self.bce_criterion = BCEWithLogitsLoss(pos_weight=torch.tensor(5.0))
 
-        if self.config.use_guided_attention_loss:
-            self.attn_criterion = SpeechT5GuidedMultiheadAttentionLoss(
-                sigma=self.config.guided_attention_loss_sigma,
-                scale=self.config.guided_attention_loss_scale,
-            )
+        if self.use_guided_attention_loss:
+            self.attn_criterion = SpeechT5GuidedMultiheadAttentionLoss(config)
 
     def forward(
         self,
@@ -2023,15 +2023,16 @@ class SpeechT5SpectrogramLoss(nn.Module):
         # stop token loss
         bce_loss = self.bce_criterion(logits, stop_labels)
 
+        # combined loss
         loss = l1_loss + bce_loss
 
         # guided attention loss
-        if self.config.use_guided_attention_loss:
-            attn = torch.cat([x[:, : self.config.guided_attention_loss_num_heads] for x in cross_attentions], dim=1)
+        if self.use_guided_attention_loss:
+            attn = torch.cat([x[:, : self.guided_attention_loss_num_heads] for x in cross_attentions], dim=1)
             input_masks = attention_mask == 1
             output_masks = padding_mask[:, :, 0]
-            if self.config.reduction_factor > 1:
-                output_masks = output_masks[:, self.config.reduction_factor - 1 :: self.config.reduction_factor]
+            if self.reduction_factor > 1:
+                output_masks = output_masks[:, self.reduction_factor - 1 :: self.reduction_factor]
             attn_loss = self.attn_criterion(attn, input_masks, output_masks)
             loss += attn_loss
 
