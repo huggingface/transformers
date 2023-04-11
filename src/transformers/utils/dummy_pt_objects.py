@@ -1297,6 +1297,16 @@ class Blip2VisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SamForImageSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
