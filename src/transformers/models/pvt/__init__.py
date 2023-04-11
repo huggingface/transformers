@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PVTConfig", "PVTOnnxConfig"],
+    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig", "PvtOnnxConfig"],
 }
 
 try:
@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_pvt"] = ["PVTImageProcessor"]
+    _import_structure["image_processing_pvt"] = ["PvtImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -43,14 +43,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pvt"] = [
-        "PVTForImageClassification",
-        "PVTModel",
-        "PVTPreTrainedModel",
+        "PvtForImageClassification",
+        "PvtModel",
+        "PvtPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PVTConfig, PVTOnnxConfig
+    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig, PvtOnnxConfig
 
     try:
         if not is_vision_available():
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_pvt import PVTImageProcessor
+        from .image_processing_pvt import PvtImageProcessor
 
     try:
         if not is_torch_available():
@@ -67,9 +67,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pvt import (
-            PVTForImageClassification,
-            PVTModel,
-            PVTPreTrainedModel,
+            PvtForImageClassification,
+            PvtModel,
+            PvtPreTrainedModel,
         )
 
 else:

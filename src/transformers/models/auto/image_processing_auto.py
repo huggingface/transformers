@@ -82,7 +82,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverImageProcessor"),
         ("pix2struct", "Pix2StructImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
-        ("pvt", "PVTImageProcessor"),
+        ("pvt", "PvtImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),
         ("resnet", "ConvNextImageProcessor"),
         ("segformer", "SegformerImageProcessor"),

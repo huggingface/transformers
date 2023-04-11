@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     from PIL import Image
 
-    from transformers import MODEL_MAPPING, PVTConfig, PVTForImageClassification, PVTImageProcessor, PVTModel
+    from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
     from transformers.models.pvt.modeling_pvt import (
         PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -59,7 +59,7 @@ class PvtModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
+        initializer_range=1.0,
         num_labels=3,
         scope=None,
     ):
@@ -93,7 +93,7 @@ class PvtModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return PVTConfig(
+        return PvtConfig(
             image_size=self.image_size,
             num_channels=self.num_channels,
             num_encoder_blocks=self.num_encoder_blocks,
@@ -107,7 +107,7 @@ class PvtModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = PVTForImageClassification(config=config)
+        model = PvtForImageClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -118,7 +118,7 @@ class PvtModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = PVTForImageClassification(config)
+        model = PvtForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -126,7 +126,7 @@ class PvtModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = PVTForImageClassification(config)
+        model = PvtForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -146,7 +146,7 @@ class PvtModelTester:
     test_resize_embeddings = False
     test_head_masking = False
 
-    all_model_classes = (PVTForImageClassification, PVTModel) if is_torch_available() else ()
+    all_model_classes = (PvtForImageClassification, PvtModel) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = PvtModelTester(self)
@@ -309,7 +309,7 @@ class PvtModelTester:
     @slow
     def test_model_from_pretrained(self):
         for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PVTForImageClassification.from_pretrained(model_name)
+            model = PvtForImageClassification.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -324,8 +324,8 @@ class PvtModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        feature_extractor = PVTImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
-        model = PVTForImageClassification.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
+        feature_extractor = PvtImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
+        model = PvtForImageClassification.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
 
         image = prepare_img()
         encoded_inputs = feature_extractor(images=image, return_tensors="pt")
@@ -343,9 +343,9 @@ class PvtModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_model(self):
-        model = PVTModel.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
+        model = PvtModel.from_pretrained("Xrenya/pvt-medium-224").to(torch_device).eval()
 
-        feature_extractor = PVTImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
+        feature_extractor = PvtImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -371,10 +371,10 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PVTForImageClassification.from_pretrained(
+        model = PvtForImageClassification.from_pretrained(
             "Xrenya/pvt-medium-224", torch_dtype=torch.float16, device_map="auto"
         )
-        feature_extractor = PVTImageProcessor(size=224)
+        feature_extractor = PvtImageProcessor(size=224)
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt")

@@ -36,7 +36,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class PVTImageProcessor(BaseImageProcessor):
+class PvtImageProcessor(BaseImageProcessor):
     r"""
     Constructs a PVT image processor.
 

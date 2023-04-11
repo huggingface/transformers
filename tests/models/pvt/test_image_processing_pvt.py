@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PVTImageProcessor
+    from transformers import PvtImageProcessor
 
 
 class PvtImageProcessingTester(unittest.TestCase):
@@ -74,7 +74,7 @@ class PvtImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class PvtImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-    image_processing_class = PVTImageProcessor if is_vision_available() else None
+    image_processing_class = PvtImageProcessor if is_vision_available() else None
 
     def setUp(self):
         self.image_processor_tester = PvtImageProcessingTester(self)

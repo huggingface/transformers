@@ -35,9 +35,9 @@ PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PVTConfig(PretrainedConfig):
+class PvtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PVTModel`]. It is used to instantiate an PVT
+    This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an PVT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PVT
     [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224) architecture.
@@ -87,13 +87,13 @@ class PVTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PVTModel, PVTConfig
+    >>> from transformers import PvtModel, PvtConfig
 
     >>> # Initializing a PVT Xrenya/pvt-tiny-224  style configuration
-    >>> configuration = PVTConfig()
+    >>> configuration = PvtConfig()
 
     >>> # Initializing a model from the Xrenya/pvt-tiny-224 style configuration
-    >>> model = PVTModel(configuration)
+    >>> model = PvtModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -151,7 +151,7 @@ class PVTConfig(PretrainedConfig):
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
 
 
-class PVTOnnxConfig(OnnxConfig):
+class PvtOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

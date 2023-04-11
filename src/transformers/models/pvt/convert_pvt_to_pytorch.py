@@ -24,7 +24,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import PVTConfig, PVTForImageClassification, PVTImageProcessor
+from transformers import PVTConfig, PvtForImageClassification, PvtImageProcessor
 from transformers.utils import logging
 
 
@@ -168,11 +168,11 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     read_in_k_v(state_dict, config)
 
     # load HuggingFace model
-    model = PVTForImageClassification(config).eval()
+    model = PvtForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by PVTFeatureExtractor
-    feature_extractor = PVTImageProcessor(size=config.image_size)
+    feature_extractor = PvtImageProcessor(size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)

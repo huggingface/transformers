@@ -36,12 +36,12 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_pvt import PVTConfig
+from .configuration_pvt import PvtConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PVTConfig"
+_CONFIG_FOR_DOC = "PvtConfig"
 
 _CHECKPOINT_FOR_DOC = "Xrenya/pvt-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
@@ -94,7 +94,7 @@ class PvtDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class PVTPatchEmbeddings(nn.Module):
+class PvtPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -103,7 +103,7 @@ class PVTPatchEmbeddings(nn.Module):
 
     def __init__(
         self,
-        config: PVTConfig,
+        config: PvtConfig,
         image_size: Mapping[int, Iterable[int]],
         patch_size: Mapping[int, Iterable[int]],
         stride: int,
@@ -168,69 +168,8 @@ class PVTPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->PVT
-class PVTSelfAttention(nn.Module):
-    def __init__(self, config: PVTConfig) -> None:
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class PVTSelfOutput(nn.Module):
-    def __init__(self, config: PVTConfig, hidden_size: int):
+class PvtSelfOutput(nn.Module):
+    def __init__(self, config: PvtConfig, hidden_size: int):
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -241,11 +180,11 @@ class PVTSelfOutput(nn.Module):
         return hidden_states
 
 
-class PVTEfficientSelfAttention(nn.Module):
+class PvtEfficientSelfAttention(nn.Module):
     """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://arxiv.org/abs/2102.12122)."""
 
     def __init__(
-        self, config: PVTConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
+        self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -323,18 +262,18 @@ class PVTEfficientSelfAttention(nn.Module):
         return outputs
 
 
-class PVTAttention(nn.Module):
+class PvtAttention(nn.Module):
     def __init__(
-        self, config: PVTConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
+        self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
     ):
         super().__init__()
-        self.self = PVTEfficientSelfAttention(
+        self.self = PvtEfficientSelfAttention(
             config,
             hidden_size=hidden_size,
             num_attention_heads=num_attention_heads,
             sequences_reduction_ratio=sequences_reduction_ratio,
         )
-        self.output = PVTSelfOutput(config, hidden_size=hidden_size)
+        self.output = PvtSelfOutput(config, hidden_size=hidden_size)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -365,10 +304,10 @@ class PVTAttention(nn.Module):
         return outputs
 
 
-class PVTFFN(nn.Module):
+class PvtFFN(nn.Module):
     def __init__(
         self,
-        config: PVTConfig,
+        config: PvtConfig,
         in_features: int,
         hidden_features: Optional[int] = None,
         out_features: Optional[int] = None,
@@ -392,10 +331,10 @@ class PVTFFN(nn.Module):
         return hidden_states
 
 
-class PVTLayer(nn.Module):
+class PvtLayer(nn.Module):
     def __init__(
         self,
-        config: PVTConfig,
+        config: PvtConfig,
         hidden_size: int,
         num_attention_heads: int,
         drop_path: float,
@@ -404,7 +343,7 @@ class PVTLayer(nn.Module):
     ):
         super().__init__()
         self.layer_norm_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.attention = PVTAttention(
+        self.attention = PvtAttention(
             config=config,
             hidden_size=hidden_size,
             num_attention_heads=num_attention_heads,
@@ -413,7 +352,7 @@ class PVTLayer(nn.Module):
         self.drop_path = PvtDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = PVTFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = PvtFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False):
         self_attention_outputs = self.attention(
@@ -438,8 +377,8 @@ class PVTLayer(nn.Module):
         return outputs
 
 
-class PVTEncoder(nn.Module):
-    def __init__(self, config: PVTConfig):
+class PvtEncoder(nn.Module):
+    def __init__(self, config: PvtConfig):
         super().__init__()
         self.config = config
 
@@ -451,7 +390,7 @@ class PVTEncoder(nn.Module):
 
         for i in range(config.num_encoder_blocks):
             embeddings.append(
-                PVTPatchEmbeddings(
+                PvtPatchEmbeddings(
                     config=config,
                     image_size=config.image_size if i == 0 else self.config.image_size // (2 ** (i + 1)),
                     patch_size=config.patch_sizes[i],
@@ -473,7 +412,7 @@ class PVTEncoder(nn.Module):
                 cur += config.depths[i - 1]
             for j in range(config.depths[i]):
                 layers.append(
-                    PVTLayer(
+                    PvtLayer(
                         config=config,
                         hidden_size=config.hidden_sizes[i],
                         num_attention_heads=config.num_attention_heads[i],
@@ -530,13 +469,13 @@ class PVTEncoder(nn.Module):
         )
 
 
-class PVTPreTrainedModel(PreTrainedModel):
+class PvtPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = PVTConfig
+    config_class = PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
 
@@ -551,7 +490,7 @@ class PVTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, PVTPatchEmbeddings):
+        elif isinstance(module, PvtPatchEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data,
                 mean=0.0,
@@ -564,8 +503,8 @@ class PVTPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             )
 
-    def _set_gradient_checkpointing(self, module: PVTEncoder, value: bool = False):
-        if isinstance(module, PVTEncoder):
+    def _set_gradient_checkpointing(self, module: PvtEncoder, value: bool = False):
+        if isinstance(module, PvtEncoder):
             module.gradient_checkpointing = value
 
 
@@ -575,7 +514,7 @@ PVT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~PVTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`~PvtConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -603,13 +542,13 @@ PVT_INPUTS_DOCSTRING = r"""
     "The bare PVT encoder outputting raw hidden-states without any specific head on top.",
     PVT_START_DOCSTRING,
 )
-class PVTModel(PVTPreTrainedModel):
-    def __init__(self, config: PVTConfig):
+class PvtModel(PvtPreTrainedModel):
+    def __init__(self, config: PvtConfig):
         super().__init__(config)
         self.config = config
 
         # hierarchical Transformer encoder
-        self.encoder = PVTEncoder(config)
+        self.encoder = PvtEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -668,12 +607,12 @@ class PVTModel(PVTPreTrainedModel):
     """,
     PVT_START_DOCSTRING,
 )
-class PVTForImageClassification(PVTPreTrainedModel):
-    def __init__(self, config: PVTConfig) -> None:
+class PvtForImageClassification(PvtPreTrainedModel):
+    def __init__(self, config: PvtConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.pvt = PVTModel(config)
+        self.pvt = PvtModel(config)
 
         # Classifier head
         self.classifier = (
