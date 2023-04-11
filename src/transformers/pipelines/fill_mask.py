@@ -93,7 +93,7 @@ class FillMaskPipeline(Pipeline):
     def preprocess(self, inputs, return_tensors=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **preprocess_parameters)
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
 
@@ -198,8 +198,10 @@ class FillMaskPipeline(Pipeline):
         target_ids = np.array(target_ids)
         return target_ids
 
-    def _sanitize_parameters(self, top_k=None, targets=None):
+    def _sanitize_parameters(self, top_k=None, targets=None, **tokenizer_kwargs):
         postprocess_params = {}
+
+        preprocess_params = tokenizer_kwargs
 
         if targets is not None:
             target_ids = self.get_target_ids(targets, top_k)
@@ -212,7 +214,7 @@ class FillMaskPipeline(Pipeline):
             raise PipelineException(
                 "fill-mask", self.model.base_model_prefix, "The tokenizer does not define a `mask_token`."
             )
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs, *args, **kwargs):
         """
