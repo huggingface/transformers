@@ -17,14 +17,18 @@ concurrency:
 
 jobs:
   check-vcs-installation:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-20.04  # the oldest Ubuntu LTS version
     timeout-minutes: 30
     steps:
       - name: Setup system pip
         run: |
           sudo apt-get update && sudo apt-get install -y python3-dev python3-pip
-          /usr/bin/python3 --version
-          /usr/bin/python3 -m pip --version
+          echo '$ which -a python3' && which -a python3 || true
+          echo '$ which -a python' && which -a python || true
+          echo '$ which -a pip3' && which -a pip3 || true
+          echo '$ which -a pip' && which -a pip || true
+          echo '$ /usr/bin/python3 --version' && /usr/bin/python3 --version
+          echo '$ /usr/bin/python3 -m pip --version' && /usr/bin/python3 -m pip --version
 
       - name: Print commit information
         run: |
