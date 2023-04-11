@@ -587,10 +587,17 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
-        if not self.config.is_encoder_decoder:
+        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:            
             vocab_size = self.config.vocab_size
-        else:
+        elif (hasattr(self.config, "decoder") 
+            and hasattr(self.config.decoder, "vocab_size") 
+            and self.config.decoder.vocab_size is not None):
             vocab_size = self.config.decoder.vocab_size
+        elif (hasattr(self.config, "encoder") 
+            and hasattr(self.config.encoder, "vocab_size") 
+            and self.config.encoder.vocab_size is not None):
+            vocab_size = self.config.encoder.vocab_size
+        
         scores = jnp.float16(jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7))
 
         # per batch-item state bit indicating if sentence has finished.
@@ -652,8 +659,13 @@ class FlaxGenerationMixin:
             state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
-
-        return FlaxGreedySearchOutput(sequences=state.sequences, scores=state.scores)
+    
+        if output_states:
+            final_scores = state.scores
+        else:
+            final_scores = None
+            
+        return FlaxGreedySearchOutput(sequences=state.sequences, scores=final_scores)
 
     def _sample(
         self,
