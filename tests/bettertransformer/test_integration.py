@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-from optimum.bettertransformer import BetterTransformer
-
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
     require_optimum,
@@ -40,15 +38,23 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
 
         inp = tokenizer("This is me", return_tensors="pt")
 
-        model = BetterTransformer.transform(model)
+        model = model.to_bettertransformer()
+
+        self.assertTrue(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
 
         model.generate(**inp)
 
-        model = BetterTransformer.reverse(model)
+        model = model.reverse_bettertransformer()
+
+        self.assertFalse(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
 
             model_reloaded = AutoModelForSeq2SeqLM.from_pretrained(tmpdirname)
+
+            self.assertFalse(
+                any("BetterTransformer" in mod.__class__.__name__ for _, mod in model_reloaded.named_modules())
+            )
 
             model_reloaded.generate(**inp)
