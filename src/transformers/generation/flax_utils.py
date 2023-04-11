@@ -462,7 +462,7 @@ class FlaxGenerationMixin:
                 generation_config.max_length,
                 generation_config.pad_token_id,
                 generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,                
+                output_scores=generation_config.output_scores,
                 length_penalty=generation_config.length_penalty,
                 early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
@@ -566,7 +566,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        output_scores: Optional[bool] = None,        
+        output_scores: Optional[bool] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
@@ -587,17 +587,21 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
-        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:            
+        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
             vocab_size = self.config.vocab_size
-        elif (hasattr(self.config, "decoder") 
-            and hasattr(self.config.decoder, "vocab_size") 
-            and self.config.decoder.vocab_size is not None):
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "vocab_size")
+            and self.config.decoder.vocab_size is not None
+        ):
             vocab_size = self.config.decoder.vocab_size
-        elif (hasattr(self.config, "encoder") 
-            and hasattr(self.config.encoder, "vocab_size") 
-            and self.config.encoder.vocab_size is not None):
+        elif (
+            hasattr(self.config, "encoder")
+            and hasattr(self.config.encoder, "vocab_size")
+            and self.config.encoder.vocab_size is not None
+        ):
             vocab_size = self.config.encoder.vocab_size
-        
+
         scores = jnp.float16(jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7))
 
         # per batch-item state bit indicating if sentence has finished.
@@ -635,7 +639,7 @@ class FlaxGenerationMixin:
             next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
             next_token = jnp.argmax(next_tokens_scores, axis=-1)
-            tokens_scores = state.scores.at[:,state.cur_len,:].set(next_tokens_scores)
+            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores)
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
@@ -659,12 +663,12 @@ class FlaxGenerationMixin:
             state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
-    
+
         if output_scores:
             final_scores = state.scores
         else:
             final_scores = None
-            
+
         return FlaxGreedySearchOutput(sequences=state.sequences, scores=final_scores)
 
     def _sample(
@@ -770,7 +774,7 @@ class FlaxGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        output_scores: Optional[bool] = None,        
+        output_scores: Optional[bool] = None,
         length_penalty: Optional[float] = None,
         early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
