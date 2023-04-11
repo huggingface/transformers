@@ -17,14 +17,14 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_timm_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {"configuration_timm_backbone": ["TimmBackboneConfig"]}
 
 
 try:
-    if not is_timm_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from .configuration_timm_backbone import TimmBackboneConfig
 
     try:
-        if not is_timm_available():
+        if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

@@ -18,8 +18,6 @@ from typing import Tuple, Union
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import is_torch_available, requires_backends
-
-# from transformers.configuration_utils import PretrainedConfig
 from .configuration_timm_backbone import TimmBackboneConfig
 
 

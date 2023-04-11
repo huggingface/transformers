@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import inspect
 import unittest
 
@@ -115,7 +116,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    @require_timm
     def test_timm_transformer_backbone_equivalence(self):
         timm_checkpoint = "resnet50"
         transformers_checkpoint = "microsoft/resnet-50"
@@ -215,3 +215,35 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
 
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
+
+    # TimmBackbone config doesn't have out_features attribute
+    def test_create_from_modified_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            result = model(**inputs_dict)
+
+            self.assertEqual(len(result.feature_maps), len(config.out_indices))
+            self.assertEqual(len(model.channels), len(config.out_indices))
+
+            # Check output of last stage is taken if out_features=None, out_indices=None
+            modified_config = copy.deepcopy(config)
+            modified_config.out_indices = None
+            model = model_class(modified_config)
+            model.to(torch_device)
+            model.eval()
+            result = model(**inputs_dict)
+
+            self.assertEqual(len(result.feature_maps), 1)
+            self.assertEqual(len(model.channels), 1)
+
+            # Check backbone can be initialized with fresh weights
+            modified_config = copy.deepcopy(config)
+            modified_config.use_pretrained_backbone = False
+            model = model_class(modified_config)
+            model.to(torch_device)
+            model.eval()
+            result = model(**inputs_dict)
