@@ -862,9 +862,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        # This uses inputs_embeds.device to create new tensor, which inhibits us from tracing it
+        # attention_mask = self._prepare_decoder_attention_mask(
+        #     attention_mask, input_shape, inputs_embeds, past_key_values_length
+        # )
 
         # embed positions
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
