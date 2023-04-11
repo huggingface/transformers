@@ -34,6 +34,14 @@ cd transformers
 pip install -e ".[dev]"
 ```
 
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
+```
+
 Once the installation is done, you can use the CLI command `add-new-model` to generate your models:
 
 ```shell script
@@ -131,6 +139,14 @@ first clone the repository and install it in our environment:
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install -e ".[dev]"
+```
+
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
 ```
 
 Once the installation is done, you can use the CLI command `add-new-model-like` to generate your models:
