@@ -660,7 +660,7 @@ class FlaxGenerationMixin:
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
     
-        if output_states:
+        if output_scores:
             final_scores = state.scores
         else:
             final_scores = None
