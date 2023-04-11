@@ -27,6 +27,7 @@ from ..bert_generation.test_modeling_bert_generation import BertGenerationEncode
 from ..gpt2.test_modeling_gpt2 import GPT2ModelTester
 from ..prophetnet.test_modeling_prophetnet import ProphetNetStandaloneDecoderModelTester
 from ..roberta.test_modeling_roberta import RobertaModelTester
+from ..gpt_neo.test_modeling_gpt_neo import GPTNeoModelTester
 
 
 if is_torch_available():
@@ -48,6 +49,8 @@ if is_torch_available():
         ProphetNetForCausalLM,
         RobertaForCausalLM,
         RobertaModel,
+        GPTNeoForCausalLM,
+        GPTNeoModel,
     )
     from transformers.modeling_outputs import BaseModelOutput
 
@@ -967,6 +970,87 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
+
+@require_torch
+class GPTNeoEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = BertModel(config)
+        decoder_model = GPTNeoForCausalLM(decoder_config)
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = BertModelTester(self, batch_size=13)
+        model_tester_decoder = GPTNeoModelTester(self, batch_size=13)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_input_mask,
+            decoder_head_mask,
+            decoder_token_type_ids,
+            decoder_sequence_labels,
+            decoder_token_labels,
+            decoder_choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        #  disable cache for now
+        decoder_config.use_cache = False
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_token_type_ids": decoder_token_type_ids,
+            "decoder_attention_mask": decoder_input_mask,
+            "decoder_sequence_labels": decoder_sequence_labels,
+            "decoder_token_labels": decoder_token_labels,
+            "decoder_choice_labels": decoder_choice_labels,
+            "encoder_hidden_states": encoder_hidden_states,
+            "labels": decoder_token_labels,
+        }
+
+    def get_pretrained_model(self):
+        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "EleutherAI/gpt-neo-125m")
+
+    def test_encoder_decoder_model_shared_weights(self):
+        pass
+
+    @slow
+    def test_bert2gptneo_summarization(self):
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "bert-base-cased", "EleutherAI/gpt-neo-125m")
+
+
+        model.to(torch_device)
+        tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer_out = AutoTokenizer.from_pretrained(
+            "EleutherAI/gpt-neo-125m")
+
+        ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
+
+        EXPECTED_SUMMARY_STUDENTS = """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption."""
+
+        input_dict = tokenizer_in(ARTICLE_STUDENTS, return_tensors="pt")
+        output_ids = model.generate(input_dict["input_ids"].to(torch_device))
+        summary = tokenizer_out.batch_decode(
+            output_ids, skip_special_tokens=True)
+
+        self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
 @require_torch
 class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
