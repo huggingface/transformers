@@ -14,10 +14,10 @@
 # limitations under the License.
 """ PyTorch Whisper model."""
 
+import copy
 import math
 import random
 from typing import List, Optional, Tuple, Union
-import copy
 
 import numpy as np
 import torch
@@ -1466,8 +1466,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[List[int]] = None,
-        always_use_initial_prompt = False,
-        condition_on_previous_text = True,
+        always_use_initial_prompt=False,
+        condition_on_previous_text=None,
         **kwargs,
     ):
         """
@@ -1532,12 +1532,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 word correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this
                 value.
             always_use_initial_prompt (`bool`, *optional*):
-                Specifies whether or not to use the prompt initially specified in `prompt_ids` as context for all chunks.
-                Defaults to False as it cannot be used in conjunction with `condition_on_previous_text`, which is by
-                default True.
+                Specifies whether or not to use the prompt initially specified in `prompt_ids` as context for all
+                chunks. Defaults to False as it cannot be used in conjunction with `condition_on_previous_text`, which
+                is by default True.
             condition_on_previous_text (`bool`, *optional*):
-                Defaults to True, determines whether to use the previous text to condition the outputs of the subsequent 
-                chunk(s).
+                Defaults to True, determines whether to use the previous text to condition the outputs of the
+                subsequent chunk(s).
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1631,18 +1631,67 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        if prompt_ids is not None and len(prompt_ids) > 1:
+        def _get_forced_decoder_ids_with_prompt(text_prompt_ids: List[int]) -> List[Tuple[int, int]]:
+            text_prompt_ids = text_prompt_ids[-200:]  # slice by context length here once known
+            forced_decoder_ids = [*text_prompt_ids, generation_config.decoder_start_token_id]
+            forced_decoder_ids.extend([id for _, id in non_prompt_forced_decoder_ids])
+            return [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
+
+        non_prompt_forced_decoder_ids = copy.deepcopy(
+            kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
+        )
+        if condition_on_previous_text and kwargs.get("temperature", 0) <= 0.5:
+            if prompt_ids is None:
+                raise ValueError("When specifying `condition_on_previous_text`=True, `prompt_ids` must be provided.")
             if kwargs.get("decoder_start_token_id") is not None:
                 raise ValueError(
                     "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
-            # Set <|startofprev|> to the decoder_start_token_id
-            kwargs.update({"decoder_start_token_id": prompt_ids[0]})
-            forced_decoder_ids = [*prompt_ids[1:], generation_config.decoder_start_token_id]
-            additional_decoder_ids = kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
-            forced_decoder_ids.extend([id for _, id in additional_decoder_ids])
-            forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
-            kwargs.update({"forced_decoder_ids": forced_decoder_ids})
+            decoder_start_token_id, *text_prompt_ids = prompt_ids
+            kwargs.update(
+                {"decoder_start_token_id": decoder_start_token_id}
+            )  # Set decoder_start_token_id to <|startofprev|>
+            kwargs.update({"forced_decoder_ids": _get_forced_decoder_ids_with_prompt(text_prompt_ids)})
+
+        if condition_on_previous_text and not always_use_initial_prompt and inputs is not None:
+            # TODO: make compatible with inputs when provided as a kwarg, such as input_ids, input_values, pixel_values, or encoder_outputs
+            # TODO: make compatible with return_timestamps
+            # TODO: make compatible with return_dict_in_generate
+            accumulator = []
+            max_token_len = 0
+            for chunk_idx in range(inputs.shape[0]):
+                tokens = super().generate(
+                    inputs[chunk_idx : chunk_idx + 1, :, :],
+                    generation_config,
+                    logits_processor,
+                    stopping_criteria,
+                    prefix_allowed_tokens_fn,
+                    synced_gpus,
+                    **kwargs,
+                )
+                accumulator.append(tokens)
+
+                # Update the forced_decoder_ids to add the generated text to the prompt
+                gen_start_idx = len(kwargs.get("forced_decoder_ids")) + 1
+                new_tokens = tokens[0, gen_start_idx:].tolist()
+                gen_text_prompt_ids = [id for id in new_tokens if id != generation_config.pad_token_id]
+                text_prompt_ids.extend(gen_text_prompt_ids)
+                forced_decoder_ids = _get_forced_decoder_ids_with_prompt(text_prompt_ids)
+                kwargs.update({"forced_decoder_ids": forced_decoder_ids})
+                max_token_len = max(max_token_len, tokens.shape[1])
+
+            padded_accumulator = []
+            for tokens in accumulator:
+                pad_size = max_token_len - tokens.shape[1]
+                if pad_size > 0:
+                    padded_tokens = torch.nn.functional.pad(
+                        tokens, (0, pad_size), value=generation_config.pad_token_id
+                    )
+                else:
+                    padded_tokens = tokens
+                padded_accumulator.append(padded_tokens)
+
+            return torch.cat(padded_accumulator, dim=0)
 
         return super().generate(
             inputs,
@@ -1663,14 +1712,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
-        # print('-------------')
-        # print('decoder_input_ids', decoder_input_ids)
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
-        # print('decoder_input_ids', decoder_input_ids)
-        # print('decoder_input_ids.shape', decoder_input_ids.shape)
-        # print('-------------')
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,

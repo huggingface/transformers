@@ -588,7 +588,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         token_ids = to_py_obj(token_ids)
         prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_prompt = not isinstance(token_ids, int) and len(token_ids) > 0 and (token_ids[0] == prompt_token_id)
+        has_prompt = isinstance(token_ids, list) and prompt_token_id in token_ids
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
@@ -807,7 +807,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             if token in all_special_ids:
                 # If we reach a special token and it isn't the first one, we've passed the prompt
                 if i > 0:
-                    passed_prompt = True 
+                    passed_prompt = True
                 # Either language code or other
                 text = tokenizer.decode([token])
                 # Removing outer shell <|XX|>

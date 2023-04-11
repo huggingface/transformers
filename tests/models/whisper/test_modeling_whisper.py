@@ -1026,7 +1026,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        input_speech = load_datasamples(4)
+        input_speech = load_datasamples(4)[-1]
         input_features = processor(input_speech, return_tensors="pt").input_features
 
         # Generate without initial prompt
@@ -1034,9 +1034,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         decoded_without_prompt = processor.decode(output_without_prompt_ids[0], skip_special_tokens=False)
 
         # Generate with initial prompt
-        prompt = "Sir Frederick Leighton"
+        prompt = "Leighton"
         prompt_ids = processor.get_prompt_ids(prompt)
-        output_with_prompt_ids = model.generate(input_features, prompt_ids=prompt_ids, max_new_tokens=128)
+        output_with_prompt_ids = model.generate(
+            input_features, condition_on_previous_text=True, prompt_ids=prompt_ids, max_new_tokens=128
+        )
         decoded_with_prompt = processor.decode(output_with_prompt_ids[0], skip_special_tokens=False)
 
         self.assertTrue(prompt not in decoded_without_prompt)

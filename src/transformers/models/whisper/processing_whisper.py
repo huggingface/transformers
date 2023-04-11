@@ -95,5 +95,5 @@ class WhisperProcessor(ProcessorMixin):
     def get_prompt_ids(self, text: str):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
         prompt_token_id = self.tokenizer.convert_tokens_to_ids("<|startofprev|>")
-        tokenized_text = self.tokenizer(" " + text.strip(), add_special_tokens=False)
-        return [prompt_token_id, *tokenized_text["input_ids"]]
+        tokenized_text = self.tokenizer(" " + text.strip(), add_special_tokens=False)["input_ids"] if len(text) else []
+        return [prompt_token_id, *tokenized_text]

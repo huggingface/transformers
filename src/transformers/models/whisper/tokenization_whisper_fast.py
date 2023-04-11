@@ -298,7 +298,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         """
         token_ids = to_py_obj(token_ids)
         prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_prompt = len(token_ids) > 0 and (token_ids[0] == prompt_token_id)
+        has_prompt = isinstance(token_ids, list) and prompt_token_id in token_ids
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
