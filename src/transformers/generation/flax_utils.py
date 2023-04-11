@@ -587,7 +587,10 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
-        vocab_size = self.config.vocab_size
+        if not self.config.is_encoder_decoder:
+            vocab_size = self.config.vocab_size
+        else:
+            vocab_size = self.config.decoder.vocab_size
         scores = jnp.float16(jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7))
 
         # per batch-item state bit indicating if sentence has finished.
