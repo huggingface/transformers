@@ -162,13 +162,15 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.
    
-   Depending on your OS, you may need to install some external libraries as well if the `pip` installation fails.
-   
-   For macOS, you will likely need [MeCab](https://taku910.github.io/mecab/) which can be installed from Homebrew:
-   
+   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+   (PyTorch, TensorFlow and/or Flax) then do:
+
    ```bash
-   brew install mecab
+   pip install -e ".[quality]"
    ```
+
+   which should be enough for most use cases.
 
 5. Develop the features on your branch.
 
