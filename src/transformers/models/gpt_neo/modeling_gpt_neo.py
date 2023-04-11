@@ -129,7 +129,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
 
 class GPTNeoSelfAttention(nn.Module):
-    def __init__(self, config, attention_type):
+    def __init__(self, config, attention_type, is_cross_attention=False):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -142,6 +142,7 @@ class GPTNeoSelfAttention(nn.Module):
         # all other tokens are masked except the previous window_size tokens.
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
+    
 
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
@@ -157,6 +158,8 @@ class GPTNeoSelfAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
+    
+        self.is_cross_attention = is_cross_attention
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -186,13 +189,15 @@ class GPTNeoSelfAttention(nn.Module):
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-        query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-        mask_value = torch.finfo(attn_weights.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+        if not self.is_cross_attention:
+            # if only "normal" attention layer implements causal mask
+            query_length, key_length = query.size(-2), key.size(-2)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            mask_value = torch.finfo(attn_weights.dtype).min
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -212,16 +217,23 @@ class GPTNeoSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        layer_past=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:                
         query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
+        if encoder_hidden_states is not None and self.is_cross_attention:
+            key = self.k_proj(encoder_hidden_states)
+            value = self.v_proj(encoder_hidden_states)
+            attention_mask = encoder_attention_mask
+        else:
+            key = self.k_proj(hidden_states)
+            value = self.v_proj(hidden_states)
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
@@ -252,14 +264,17 @@ class GPTNeoSelfAttention(nn.Module):
 
 
 class GPTNeoAttention(nn.Module):
-    def __init__(self, config, layer_id=0):
+    def __init__(self, config, layer_id=0, is_cross_attention=False):
         super().__init__()
         self.layer_id = layer_id
         self.attention_layers = config.attention_layers
         self.attention_type = self.attention_layers[layer_id]
+        self.is_cross_attention = is_cross_attention
 
         if self.attention_type in ["global", "local"]:
-            self.attention = GPTNeoSelfAttention(config, self.attention_type)
+            self.attention = GPTNeoSelfAttention(config, self.attention_type, is_cross_attention=False)
+        elif self.is_cross_attention and self.attention_type in ["global", "local"]:
+            self.attention = GPTNeoSelfAttention(config, self.attention_type, is_cross_attention=True)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -272,6 +287,8 @@ class GPTNeoAttention(nn.Module):
         layer_past=None,
         attention_mask=None,
         head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         use_cache=False,
         output_attentions=False,
     ):
@@ -280,6 +297,8 @@ class GPTNeoAttention(nn.Module):
             attention_mask=attention_mask,
             layer_past=layer_past,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -308,6 +327,9 @@ class GPTNeoBlock(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        if config.add_cross_attention:
+            self.crossattention = GPTNeoAttention(config, layer_id, is_cross_attention=True)
+            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPTNeoMLP(inner_dim, config)
@@ -318,6 +340,8 @@ class GPTNeoBlock(nn.Module):
         layer_past=None,
         attention_mask=None,
         head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         use_cache=False,
         output_attentions=False,
     ):
@@ -328,6 +352,8 @@ class GPTNeoBlock(nn.Module):
             layer_past=layer_past,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states, 
+            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -335,6 +361,29 @@ class GPTNeoBlock(nn.Module):
         outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
+
+        if encoder_hidden_states is not None:
+            # add one self-attention block for cross-attention
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
+                    "cross-attention layers by setting `config.add_cross_attention=True`"
+                )
+            residual = hidden_states
+            hidden_states = self.ln_cross_attn(hidden_states)
+            cross_attn_outputs = self.crossattention(
+                hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
+            attn_output = cross_attn_outputs[0]
+            # residual connection
+            hidden_states = residual + attn_output
+            # add cross attentions if we output attention weights
+            outputs = outputs + cross_attn_outputs[2:]
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
@@ -506,6 +555,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -568,6 +619,17 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.add_cross_attention and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_attention_mask = None
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x num_heads x N x N
@@ -596,6 +658,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
@@ -623,6 +686,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
@@ -633,6 +698,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -642,13 +709,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions] if v is not None)
 
-        return BaseModelOutputWithPast(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -723,6 +791,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -745,6 +815,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -777,12 +849,13 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+            cross_attentions=transformer_outputs.cross_attentions,
         )
 
     @staticmethod
@@ -841,6 +914,8 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -863,6 +938,8 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
