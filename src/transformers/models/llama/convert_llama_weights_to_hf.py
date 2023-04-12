@@ -241,7 +241,7 @@ def write_model(model_path, input_base_path, model_size):
     shutil.rmtree(tmp_model_path)
 
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path, use_fast=True):
+def write_tokenizer(tokenizer_path, input_tokenizer_path):
     # Initialize the tokenizer based on the `spm` model
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     tokenizer = tokenizer_class(input_tokenizer_path)
