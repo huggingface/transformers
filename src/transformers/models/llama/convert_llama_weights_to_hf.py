@@ -271,8 +271,7 @@ def main():
             model_size=args.model_size,
         )
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    write_tokenizer(args.output_dir,spm_path)
-
+    write_tokenizer(args.output_dir, spm_path)
 
 
 if __name__ == "__main__":
