@@ -1,6 +1,8 @@
 from copy import deepcopy
 
-from .import_utils import is_accelerate_available, is_bitsandbytes_available
+from packaging import version
+
+from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -64,7 +66,14 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None, fp
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
                     # TODO: @younesbelkada check bnb version
-                    pass
+                    is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
+                        "0.37.2"
+                    )
+                    if not is_8bit_serializable:
+                        raise ValueError(
+                            "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
+                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                        )
             else:
                 new_value = torch.tensor(value, device="cpu")
             new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
