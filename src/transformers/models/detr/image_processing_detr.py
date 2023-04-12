@@ -807,7 +807,6 @@ class DetrImageProcessor(BaseImageProcessor):
         logger.warning(
             "The `max_size` parameter is deprecated and will be removed in v4.27. "
             "Please specify in `size['longest_edge'] instead`.",
-            FutureWarning,
         )
         return self.size["longest_edge"]
 
@@ -893,7 +892,6 @@ class DetrImageProcessor(BaseImageProcessor):
             logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
             )
             max_size = kwargs.pop("max_size")
         else:
@@ -974,9 +972,7 @@ class DetrImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        logger.warning_once(
-            "This method is deprecated and will be removed in v4.27.0. Please use pad instead.", FutureWarning
-        )
+        logger.warning_once("This method is deprecated and will be removed in v4.27.0. Please use pad instead.")
         # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
         images = [to_numpy_array(image) for image in pixel_values_list]
         return self.pad(
@@ -1114,8 +1110,7 @@ class DetrImageProcessor(BaseImageProcessor):
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead.",
-                FutureWarning,
+                "use `do_pad` instead."
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -1123,8 +1118,7 @@ class DetrImageProcessor(BaseImageProcessor):
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead.",
-                FutureWarning,
+                " `size['longest_edge']` instead."
             )
             size = kwargs.pop("max_size")
 
@@ -1273,7 +1267,6 @@ class DetrImageProcessor(BaseImageProcessor):
         logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection`",
-            FutureWarning,
         )
 
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
@@ -1316,7 +1309,6 @@ class DetrImageProcessor(BaseImageProcessor):
         logger.warning_once(
             "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_semantic_segmentation`.",
-            FutureWarning,
         )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         empty_label = out_logits.shape[-1] - 1
@@ -1368,7 +1360,6 @@ class DetrImageProcessor(BaseImageProcessor):
         logger.warning_once(
             "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_instance_segmentation`.",
-            FutureWarning,
         )
 
         if len(orig_target_sizes) != len(max_target_sizes):
@@ -1415,7 +1406,6 @@ class DetrImageProcessor(BaseImageProcessor):
         logger.warning_once(
             "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_panoptic_segmentation`.",
-            FutureWarning,
         )
         if target_sizes is None:
             target_sizes = processed_sizes
