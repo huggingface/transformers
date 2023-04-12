@@ -17,7 +17,7 @@ import os
 import unittest
 
 from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
-from transformers.testing_utils import require_jieba
+from transformers.testing_utils import require_jieba, tooslow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -52,6 +52,7 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
+    @tooslow
     def test_pre_tokenization(self):
         tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"

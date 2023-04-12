@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch
+from transformers.testing_utils import is_torch_available, require_torch, tooslow
 
 from ...generation.test_utils import torch_device
 from ...test_configuration_common import ConfigTester
@@ -174,7 +174,7 @@ class CpmAntModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class CpmAntModelIntegrationTest(unittest.TestCase):
-    @unittest.skip("skip this test as the model is very large for our daily runner")
+    @tooslow
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
@@ -191,7 +191,7 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
-    @unittest.skip("skip this test as the model is very large for our daily runner")
+    @tooslow
     def test_inference_casual(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
@@ -205,7 +205,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(hidden_states[:, :3, :3], expected_slice, atol=1e-2))
 
-    @unittest.skip("skip this test as the model is very large for our daily runner")
+    @tooslow
     def test_simple_generation(self):
         model_path = "openbmb/cpm-ant-10b"
         model = CpmAntForCausalLM.from_pretrained(model_path)
@@ -217,7 +217,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
         output_texts = tokenizer.batch_decode(token_ids)
         self.assertEqual(expected_output, output_texts)
 
-    @unittest.skip("skip this test as the model is very large for our daily runner")
+    @tooslow
     def test_batch_generation(self):
         model_path = "openbmb/cpm-ant-10b"
         model = CpmAntForCausalLM.from_pretrained(model_path)
