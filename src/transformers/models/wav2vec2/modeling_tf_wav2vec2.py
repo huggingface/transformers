@@ -1597,14 +1597,18 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.wav2vec2 = TFWav2Vec2Model(config)
-        num_layers = config.num_hidden_layers + 1
-        if config.use_weighted_layer_sum:
-            self.layer_weights = tf.Variable(tf.ones(shape=(num_layers,)) / num_layers)
-        self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, input_shape=(config.hidden_size,))
-        self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels, input_shape=(config.classifier_proj_size,), activation=None
-        )
+        self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
+        self.num_layers = config.num_hidden_layers + 1
+        self.config = config
+        self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, name="projector")
+        self.classifier = tf.keras.layers.Dense(units=config.num_labels, activation=None, name="classifier")
+
+    def build(self, input_shape):
+        if self.config.use_weighted_layer_sum:
+            self.layer_weights = self.add_weight(
+                shape=(self.num_layers,), initializer="ones", trainable=True, name="layer_weights"
+            )
+        super().build(input_shape)
 
     def freeze_feature_extractor(self):
         """
