@@ -2250,6 +2250,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if low_cpu_mem_usage is None:
                     low_cpu_mem_usage = True
+        elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            logger.warning(
+                "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
+                " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
+                " `pip install --upgrade bitsandbytes`."
+            )
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
