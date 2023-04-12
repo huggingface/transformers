@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
@@ -776,9 +776,10 @@ class DetrImageProcessor(BaseImageProcessor):
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
+        # to ensure backwards compatibility
         if "max_size" in kwargs and isinstance(size, int):
             size = {"shortest_edge": size, "longest_edge": kwargs.pop("max_size")}
-        elif "max_size" in kwargs and isinstance(size, tuple):
+        elif "max_size" in kwargs and isinstance(size, (list, tuple)):
             size = {"width": size[0], "height": size[1]}
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
@@ -876,16 +877,6 @@ class DetrImageProcessor(BaseImageProcessor):
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
         int, smaller edge of the image will be matched to this number.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
         elif "height" in size and "width" in size:
@@ -1106,18 +1097,8 @@ class DetrImageProcessor(BaseImageProcessor):
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        max_size = None
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead.",
-                FutureWarning,
-            )
-            size = kwargs.pop("max_size")
-
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1203,7 +1184,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 resized_images, resized_annotations = [], []
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image)
-                    resized_image = self.resize(image, size=size, max_size=max_size, resample=resample)
+                    resized_image = self.resize(image, size=size, resample=resample)
                     resized_annotation = self.resize_annotation(target, orig_size, get_image_size(resized_image))
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
