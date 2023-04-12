@@ -81,10 +81,10 @@ If you want to iterate over a whole dataset, or want to use it for inference in 
 In general you can specify parameters anywhere you want:
 
 ```py
-generator(model="openai/whisper-large", my_parameter=1)
-out = generate(...)  # This will use `my_parameter=1`.
-out = generate(..., my_parameter=2)  # This will override and use `my_parameter=2`.
-out = generate(...)  # This will go back to using `my_parameter=1`.
+generator = pipeline(model="openai/whisper-large", my_parameter=1)
+out = generator(...)  # This will use `my_parameter=1`.
+out = generator(..., my_parameter=2)  # This will override and use `my_parameter=2`.
+out = generator(...)  # This will go back to using `my_parameter=1`.
 ```
 
 Let's check out 3 important ones:
@@ -95,14 +95,14 @@ If you use `device=n`, the pipeline automatically puts the model on the specifie
 This will work regardless of whether you are using PyTorch or Tensorflow.
 
 ```py
-generator(model="openai/whisper-large", device=0)
+generator = pipeline(model="openai/whisper-large", device=0)
 ```
 
 If the model is too large for a single GPU, you can set `device_map="auto"` to allow 🤗 [Accelerate](https://huggingface.co/docs/accelerate) to automatically determine how to load and store the model weights.
 
 ```py
 #!pip install accelerate
-generator(model="openai/whisper-large", device_map="auto")
+generator = pipeline(model="openai/whisper-large", device_map="auto")
 ```
 
 Note that if  `device_map="auto"` is passed, there is no need to add the argument `device=device` when instantiating your `pipeline` as you may encounter some unexpected behavior!
@@ -114,7 +114,7 @@ By default, pipelines will not batch inference for reasons explained in detail [
 But if it works in your use case, you can use:
 
 ```py
-generator(model="openai/whisper-large", device=0, batch_size=2)
+generator = pipeline(model="openai/whisper-large", device=0, batch_size=2)
 audio_filenames = [f"audio_{i}.flac" for i in range(10)]
 texts = generator(audio_filenames)
 ```
