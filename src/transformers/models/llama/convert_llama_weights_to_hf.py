@@ -270,10 +270,7 @@ def main():
             model_size=args.model_size,
         )
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    print(f"Saving slow tokenizer at {args.output_dir}.")
-    write_tokenizer(args.output_dir,spm_path,use_fast=False)
-    print(f"Saving fast tokenizer at {args.output_dir}.")
-    write_tokenizer(args.output_dir,spm_path,use_fast=True)
+    write_tokenizer(args.output_dir,spm_path)
 
 
 
