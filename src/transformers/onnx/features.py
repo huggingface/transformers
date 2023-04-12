@@ -363,6 +363,11 @@ class FeaturesManager:
         "levit": supported_features_mapping(
             "default", "image-classification", onnx_config_cls="models.levit.LevitOnnxConfig"
         ),
+        "llama": supported_features_mapping(
+            "default",
+            "causal-lm",
+            onnx_config_cls="models.llama.LlamaOnnxConfig",
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",

@@ -224,6 +224,7 @@ PYTORCH_EXPORT_WITH_PAST_MODELS = {
     ("bloom", "hf-internal-testing/tiny-random-BloomModel"),
     ("gpt2", "hf-internal-testing/tiny-random-GPT2Model"),
     ("gpt-neo", "hf-internal-testing/tiny-random-GPTNeoModel"),
+    ("llama", "trl-internal-testing/tiny-random-LlamaForCausalLM"),
 }
 
 PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
