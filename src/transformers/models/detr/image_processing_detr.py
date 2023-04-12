@@ -16,7 +16,6 @@
 
 import io
 import pathlib
-import warnings
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -60,6 +59,7 @@ from ...utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    logging,
 )
 
 
@@ -76,6 +76,8 @@ if is_scipy_available():
     import scipy.special
     import scipy.stats
 
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
@@ -777,10 +779,9 @@ class DetrImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.info(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
             )
             max_size = kwargs.pop("max_size")
         else:
@@ -803,7 +804,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
     @property
     def max_size(self):
-        warnings.warn(
+        logger.warning(
             "The `max_size` parameter is deprecated and will be removed in v4.27. "
             "Please specify in `size['longest_edge'] instead`.",
             FutureWarning,
@@ -850,7 +851,7 @@ class DetrImageProcessor(BaseImageProcessor):
         return target
 
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        warnings.warn(
+        logger.warning_once(
             "The `prepare` method is deprecated and will be removed in a future version. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
@@ -859,15 +860,21 @@ class DetrImageProcessor(BaseImageProcessor):
         return image, target
 
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        warnings.warn("The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
+        )
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     def prepare_coco_detection(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_detection` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     def prepare_coco_panoptic(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -883,7 +890,7 @@ class DetrImageProcessor(BaseImageProcessor):
         int, smaller edge of the image will be matched to this number.
         """
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
@@ -967,7 +974,7 @@ class DetrImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        warnings.warn(
+        logger.warning_once(
             "This method is deprecated and will be removed in v4.27.0. Please use pad instead.", FutureWarning
         )
         # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
@@ -1105,7 +1112,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead.",
                 FutureWarning,
@@ -1114,7 +1121,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         max_size = None
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead.",
                 FutureWarning,
@@ -1263,7 +1270,7 @@ class DetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        warnings.warn(
+        logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection`",
             FutureWarning,
@@ -1306,7 +1313,7 @@ class DetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
-        warnings.warn(
+        logger.warning_once(
             "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_semantic_segmentation`.",
             FutureWarning,
@@ -1358,7 +1365,7 @@ class DetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
-        warnings.warn(
+        logger.warning_once(
             "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_instance_segmentation`.",
             FutureWarning,
@@ -1405,7 +1412,7 @@ class DetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
-        warnings.warn(
+        logger.warning_once(
             "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_panoptic_segmentation`.",
             FutureWarning,
@@ -1751,7 +1758,7 @@ class DetrImageProcessor(BaseImageProcessor):
         """
 
         if label_ids_to_fuse is None:
-            warnings.warn("`label_ids_to_fuse` unset. No instance will be fused.")
+            logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
 
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
