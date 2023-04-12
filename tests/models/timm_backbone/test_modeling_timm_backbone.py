@@ -93,10 +93,10 @@ class TimmBackboneModelTester:
         return config, inputs_dict
 
 
-@require_timm
 @require_torch
+@require_timm
 class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.TestCase):
-    all_model_classes = (TimmBackbone,)
+    all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     test_resize_embeddings = False
     test_head_masking = False
     test_pruning = False
@@ -171,6 +171,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
 
     @unittest.skip("TimmBackbone doesn't have hidden size info in its configuration.")
     def test_channels(self):
+        pass
+
+    @unittest.skip("Safetensors is not supported by timm.")
+    def test_can_use_safetensors(self):
         pass
 
     def test_forward_signature(self):
