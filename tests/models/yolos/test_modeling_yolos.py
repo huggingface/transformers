@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -160,13 +161,16 @@ class YolosModelTester:
 
 
 @require_torch
-class YolosModelTest(ModelTesterMixin, unittest.TestCase):
+class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as YOLOS does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (YolosModel, YolosForObjectDetection) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": YolosModel, "object-detection": YolosForObjectDetection} if is_torch_available() else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
@@ -356,7 +360,7 @@ class YolosModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(inputs.pixel_values)
 
-        # verify the logits
+        # verify outputs
         expected_shape = torch.Size((1, 100, 92))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
@@ -369,3 +373,16 @@ class YolosModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        # verify postprocessing
+        results = feature_extractor.post_process_object_detection(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.9994, 0.9790, 0.9964, 0.9972, 0.9861]).to(torch_device)
+        expected_labels = [75, 75, 17, 63, 17]
+        expected_slice_boxes = torch.tensor([335.0609, 79.3848, 375.4216, 187.2495]).to(torch_device)
+
+        self.assertEqual(len(results["scores"]), 5)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))

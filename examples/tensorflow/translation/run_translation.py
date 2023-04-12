@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 # region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+check_min_version("4.28.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -471,9 +471,18 @@ def main():
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.
-        embedding_size = model.get_input_embeddings().weight.shape[0]
+        embeddings = model.get_input_embeddings()
+
+        # Matt: This is a temporary workaround as we transition our models to exclusively using Keras embeddings.
+        #       As soon as the transition is complete, all embeddings should be keras.Embeddings layers, and
+        #       the weights will always be in embeddings.embeddings.
+        if hasattr(embeddings, "embeddings"):
+            embedding_size = embeddings.embeddings.shape[0]
+        else:
+            embedding_size = embeddings.weight.shape[0]
         if len(tokenizer) > embedding_size:
             model.resize_token_embeddings(len(tokenizer))
+
         if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
             model.config.forced_bos_token_id = forced_bos_token_id
         # endregion
@@ -624,9 +633,8 @@ def main():
             callbacks.append(
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )

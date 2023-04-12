@@ -133,7 +133,7 @@ class GPTNeoSelfAttention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
-        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
             1, 1, max_positions, max_positions
         )
 
@@ -187,7 +187,7 @@ class GPTNeoSelfAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -589,7 +589,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning(
+                logger.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -757,6 +757,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
             # Compute loss in fp32 to match with mesh-tf version
             # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
             lm_logits = lm_logits.to(torch.float32)

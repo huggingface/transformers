@@ -50,6 +50,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
@@ -79,6 +80,7 @@ def _generate_supported_model_class_names(
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
@@ -169,13 +171,13 @@ _SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPOR
 
 
 def torch_nn_embedding(self, input):
-    return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, self.weight.shape[-1], device="meta", dtype=self.weight.dtype)
 
 
 def torch_nn_functional_embedding(
     input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
 ):
-    return torch.empty(*input.shape, weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=weight.dtype)
 
 
 def torch_nn_layernorm(self, input):
@@ -361,6 +363,26 @@ def torch_tensor_repeat(self, *sizes):
     return torch.empty(shape, device="meta")
 
 
+def torch_repeat_interleave(*args, dim=None, output_size=None):
+    num_args = len(args)
+    if num_args == 1:
+        shape = [output_size if output_size is not None else args[0].sum()]
+    else:
+        shape = list(args[0].shape)
+        if dim is None:
+            if num_args > 2:
+                dim = args[2]
+            else:
+                shape = [sum(shape)]
+                dim = 0
+        repeats = args[1]
+        if isinstance(repeats, int) or torch.numel(repeats) == 1:
+            shape[dim] *= int(repeats)
+        else:
+            shape[dim] = output_size if output_size is not None else repeats.sum()
+    return torch.empty(*shape, device="meta")
+
+
 def torch_index_select(input, dim, index, *, out=None):
     shape = list(input.shape)
     shape[dim] = len(index)
@@ -369,6 +391,16 @@ def torch_index_select(input, dim, index, *, out=None):
 
 def torch_tensor_index_select(self, dim, index):
     return torch_index_select(self, dim, index)
+
+
+def torch_gather(input, dim, index, *, sparse_grad=False, out=None):
+    shape = list(input.shape)
+    shape[dim] = index.shape[dim]
+    return torch.empty(*shape, device="meta")
+
+
+def torch_tensor_gather(self, dim, index):
+    return torch_gather(self, dim, index)
 
 
 def torch_roll(input, shifts, dims=None):
@@ -537,11 +569,14 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.baddbmm: torch_tensor_baddbmm,
     torch.einsum: torch_einsum,
     torch.Tensor.repeat: torch_tensor_repeat,
+    torch.repeat_interleave: torch_repeat_interleave,
     torch.roll: torch_roll,
     torch.flip: torch_flip,
     torch.Tensor.flip: torch_tensor_flip,
     torch.index_select: torch_index_select,
     torch.Tensor.index_select: torch_tensor_index_select,
+    torch.gather: torch_gather,
+    torch.Tensor.gather: torch_tensor_gather,
     torch.nn.Conv1d: torch_nn_conv1d,
     torch.nn.Conv2d: torch_nn_conv2d,
     torch.squeeze: torch_squeeze,
@@ -984,7 +1019,13 @@ class HFTracer(Tracer):
                     continue
                 if param.default is inspect.Parameter.empty:
                     raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
-            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+            concrete_args.update(
+                {
+                    p.name: p.default
+                    for p in sig.parameters.values()
+                    if (p.name not in dummy_inputs and p.name not in concrete_args)
+                }
+            )
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 

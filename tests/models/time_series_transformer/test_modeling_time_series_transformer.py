@@ -19,12 +19,14 @@ import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 TOLERANCE = 1e-4
@@ -112,7 +114,7 @@ class TimeSeriesTransformerModelTester:
 
         past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
         past_values = floats_tensor([self.batch_size, _past_length])
-        past_observed_mask = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         # decoder inputs
         future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
@@ -172,11 +174,12 @@ class TimeSeriesTransformerModelTester:
 
 
 @require_torch
-class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
+class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TimeSeriesTransformerModel, TimeSeriesTransformerForPrediction) if is_torch_available() else ()
     )
     all_generative_model_classes = (TimeSeriesTransformerForPrediction,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TimeSeriesTransformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -366,6 +369,90 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
         )
 
+    @parameterized.expand(
+        [
+            (1, 5, [1]),
+            (1, 5, [1, 10, 15]),
+            (1, 5, [3, 6, 9, 10]),
+            (2, 5, [1, 2, 7]),
+            (2, 5, [2, 3, 4, 6]),
+            (4, 5, [1, 5, 9, 11]),
+            (4, 5, [7, 8, 13, 14]),
+        ],
+    )
+    def test_create_network_inputs(self, prediction_length, context_length, lags_sequence):
+        history_length = max(lags_sequence) + context_length
+
+        config = TimeSeriesTransformerConfig(
+            prediction_length=prediction_length,
+            context_length=context_length,
+            lags_sequence=lags_sequence,
+            scaling=False,
+            num_parallel_samples=10,
+            num_static_categorical_features=1,
+            cardinality=[1],
+            embedding_dimension=[2],
+            num_static_real_features=1,
+        )
+        model = TimeSeriesTransformerModel(config)
+
+        batch = {
+            "static_categorical_features": torch.tensor([[0]], dtype=torch.int64),
+            "static_real_features": torch.tensor([[0.0]], dtype=torch.float32),
+            "past_time_features": torch.arange(history_length, dtype=torch.float32).view(1, history_length, 1),
+            "past_values": torch.arange(history_length, dtype=torch.float32).view(1, history_length),
+            "past_observed_mask": torch.arange(history_length, dtype=torch.float32).view(1, history_length),
+        }
+
+        # test with no future_target (only one step prediction)
+        batch["future_time_features"] = torch.arange(history_length, history_length + 1, dtype=torch.float32).view(
+            1, 1, 1
+        )
+        transformer_inputs, loc, scale, _ = model.create_network_inputs(**batch)
+
+        self.assertTrue((scale == 1.0).all())
+        assert (loc == 0.0).all()
+
+        ref = torch.arange(max(lags_sequence), history_length, dtype=torch.float32)
+
+        for idx, lag in enumerate(lags_sequence):
+            assert torch.isclose(ref - lag, transformer_inputs[0, :, idx]).all()
+
+        # test with all future data
+        batch["future_time_features"] = torch.arange(
+            history_length, history_length + prediction_length, dtype=torch.float32
+        ).view(1, prediction_length, 1)
+        batch["future_values"] = torch.arange(
+            history_length, history_length + prediction_length, dtype=torch.float32
+        ).view(1, prediction_length)
+        transformer_inputs, loc, scale, _ = model.create_network_inputs(**batch)
+
+        assert (scale == 1.0).all()
+        assert (loc == 0.0).all()
+
+        ref = torch.arange(max(lags_sequence), history_length + prediction_length, dtype=torch.float32)
+
+        for idx, lag in enumerate(lags_sequence):
+            assert torch.isclose(ref - lag, transformer_inputs[0, :, idx]).all()
+
+        # test for generation
+        batch.pop("future_values")
+        transformer_inputs, loc, scale, _ = model.create_network_inputs(**batch)
+
+        lagged_sequence = model.get_lagged_subsequences(
+            sequence=batch["past_values"],
+            subsequences_length=1,
+            shift=1,
+        )
+        # assert that the last element of the lagged sequence is the one after the encoders input
+        assert transformer_inputs[0, ..., 0][-1] + 1 == lagged_sequence[0, ..., 0][-1]
+
+        future_values = torch.arange(history_length, history_length + prediction_length, dtype=torch.float32).view(
+            1, prediction_length
+        )
+        # assert that the first element of the future_values is offset by lag after the decoders input
+        assert lagged_sequence[0, ..., 0][-1] + lags_sequence[0] == future_values[0, ..., 0]
+
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
@@ -401,7 +488,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.6322, -1.5771, -0.9340], [-0.1011, -1.0263, -0.7208], [0.4979, -0.6487, -0.7189]], device=torch_device
+            [[0.8196, -1.5131, 1.4620], [1.1268, -1.3238, 1.5997], [1.5098, -1.0715, 1.7359]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -423,7 +510,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.8177, -1.7989, -0.3127], [1.6964, -1.0607, -0.1749], [1.8395, 0.1110, 0.0263]], device=torch_device
+            [[-1.2957, -1.0280, -0.6045], [-0.7017, -0.8193, -0.3717], [-1.0449, -0.8149, 0.1405]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -444,6 +531,6 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([3883.5037, 4630.2251, 7562.1338], device=torch_device)
+        expected_slice = torch.tensor([2825.2749, 3584.9207, 6763.9951], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
