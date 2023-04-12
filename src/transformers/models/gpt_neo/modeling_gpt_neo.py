@@ -142,7 +142,6 @@ class GPTNeoSelfAttention(nn.Module):
         # all other tokens are masked except the previous window_size tokens.
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
-    
 
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
@@ -158,7 +157,7 @@ class GPTNeoSelfAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-    
+
         self.is_cross_attention = is_cross_attention
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -225,7 +224,7 @@ class GPTNeoSelfAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:                
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         query = self.q_proj(hidden_states)
         if encoder_hidden_states is not None and self.is_cross_attention:
             key = self.k_proj(encoder_hidden_states)
@@ -353,7 +352,7 @@ class GPTNeoBlock(nn.Module):
             layer_past=layer_past,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states, 
+            encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -710,7 +709,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                if v is not None
+            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
