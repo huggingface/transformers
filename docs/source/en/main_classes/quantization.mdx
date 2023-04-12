@@ -52,6 +52,37 @@ Note that once a model has been loaded in 8-bit it is currently not possible to 
 
 </Tip>
 
+### Push quantized models on the 🤗 Hub
+
+You can push a quantized model on the Hub by naively using `push_to_hub` method. This will first push the quantization configuration file, then push the quantized model weights.
+Make sure to use `bitsandbytes>0.37.2` (at this time of writing, we tested it on `bitsandbytes==0.38.0.post1`) to be able to use this feature. 
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", device_map="auto", load_in_8bit=True)
+tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
+
+model.push_to_hub("bloom-560m-8bit")
+```
+
+<Tip warning={true}>
+
+Pushing 8bit models on the Hub is strongely encouraged for large models. This will allow the community to benefit from the memory footprint reduction and loading for example large models on a Google Colab.
+
+</Tip>
+
+### Load a quantized model from the 🤗 Hub
+
+You can load a quantized model from the Hub by using `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit")
+```
+Note that in this case, you don't need to specify the arguments `load_in_8bit=True` and `device_map="auto"`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
+
 ### Advanced usecases
 
 This section is intended to advanced users, that want to explore what it is possible to do beyond loading and running 8-bit models.

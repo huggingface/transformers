@@ -14,7 +14,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+import json
+import os
 from dataclasses import dataclass
+from typing import Any, Dict, Union
+
+from ..utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -49,6 +58,8 @@ class BitsAndBytesConfig:
             your model in different parts and run some parts in int8 on GPU and some parts in fp32 on CPU, you can use
             this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
             operations will not be run on CPU.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
     """
 
     def __init__(
@@ -57,6 +68,7 @@ class BitsAndBytesConfig:
         llm_int8_threshold=6.0,
         llm_int8_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
+        **kwargs,
     ):
         self.load_in_8bit = load_in_8bit
         self.llm_int8_threshold = llm_int8_threshold
@@ -81,17 +93,19 @@ class BitsAndBytesConfig:
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
         """
-        Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
+        Instantiates a [`BitsAndBytesConfig`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+                Dictionary that will be used to instantiate the configuration object.
+            return_unused_kwargs (`bool`):
+                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
+                `PreTrainedModel`.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            [`PretrainedConfig`]: The configuration object instantiated from those parameters.
+            [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
         """
         config = cls(**config_dict)
 
@@ -107,3 +121,28 @@ class BitsAndBytesConfig:
             return config, kwargs
         else:
             return config
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default
+                `BitsAndBytesConfig()` is serialized to JSON file.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+            writer.write(json_string)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        return output

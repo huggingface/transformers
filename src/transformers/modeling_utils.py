@@ -697,7 +697,15 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
+            if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
+                fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
+            else:
+                fp16_statistics = None
+
+            if "SCB" not in param_name:
+                set_module_8bit_tensor_to_device(
+                    model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
+                )
 
     return error_msgs, offload_index, state_dict_index
 
@@ -1700,10 +1708,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. ",
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
                 UserWarning,
             )
 
@@ -2165,6 +2173,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
+        if is_bitsandbytes_available():
+            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        else:
+            is_8bit_serializable = False
+
         if trust_remote_code is True:
             logger.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
@@ -2206,6 +2219,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
+
+            # in the case a user loads an 8bit model from the Hub and assigns a new quantization_config
+            if device_map is None:
+                device_map = "auto"
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
 
         if load_in_8bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
@@ -2264,6 +2283,43 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         else:
             model_kwargs = kwargs
+
+        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
+            if hasattr(config, "quantization_config"):
+                logger.warning(
+                    "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
+                    " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
+                    " one you passed to `from_pretrained`."
+                )
+            config.quantization_config = quantization_config
+        elif is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            quantization_config = config.quantization_config
+            if isinstance(quantization_config, dict):
+                quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
+            elif isinstance(quantization_config, BitsAndBytesConfig):
+                pass
+            else:
+                raise ValueError(
+                    f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
+                    " `BitsAndBytesConfig` instance."
+                )
+
+            load_in_8bit = quantization_config.load_in_8bit
+
+            if load_in_8bit:
+                torch_dtype = torch.float16
+
+                if device_map is None:
+                    device_map = "auto"
+
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
+        elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            logger.warning(
+                "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
+                " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
+                " `pip install --upgrade bitsandbytes`."
+            )
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
@@ -2620,6 +2676,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._is_int8_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
+
+            model.config.quantization_config = quantization_config
+            model.is_8bit_serializable = is_8bit_serializable
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -3112,6 +3171,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        if load_in_8bit:
+            unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
+            missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
             logger.warning(

@@ -801,6 +801,13 @@ class PretrainedConfig(PushToHubMixin):
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
 
+        if hasattr(self, "quantization_config"):
+            output["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
+
         self.dict_torch_dtype_to_str(output)
 
         return output
