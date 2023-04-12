@@ -1238,7 +1238,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         >>> outputs = model.generate(**inputs)
         >>> print(processor.decode(outputs[0], skip_special_tokens=True))
-        two cats are laying on a couch
+        two cats sleeping on a couch
         ```
         """
 
