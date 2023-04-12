@@ -136,12 +136,6 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_subword_regularization_tokenizer(self):
         pass
 
-    def test_special_tokens_mask(self):
-        pass
-
-    def test_special_tokens_mask_input_pairs(self):
-        pass
-
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
