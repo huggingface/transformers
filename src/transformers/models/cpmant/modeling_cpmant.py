@@ -47,10 +47,7 @@ class CpmAntLayerNorm(nn.Module):
     We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
     """
 
-    def __init__(
-        self,
-        config: CpmAntConfig,
-    ):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
 
         self.eps = config.eps
@@ -425,10 +422,7 @@ class CpmAntIntermediate(nn.Module):
 
 
 class CpmAntSegmentPositionEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: CpmAntConfig,
-    ):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
 
         self.num_heads = config.num_attention_heads
