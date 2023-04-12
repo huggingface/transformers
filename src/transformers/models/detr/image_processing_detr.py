@@ -776,18 +776,12 @@ class DetrImageProcessor(BaseImageProcessor):
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
+        if "max_size" in kwargs and isinstance(size, int):
+            size = {"shortest_edge": size, "longest_edge": kwargs.pop("max_size")}
+        elif "max_size" in kwargs and isinstance(size, tuple):
+            size = {"width": size[0], "height": size[1]}
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         super().__init__(**kwargs)
         self.format = format
