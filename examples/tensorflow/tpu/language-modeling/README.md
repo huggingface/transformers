@@ -64,7 +64,7 @@ python prepare_tfrecord_shards.py \
 Once that's done, the model is ready for training. By default, training takes place on TPU, but you can use the `--no_tpu` flag to train on CPU for testing purposes. An example command is:
 
 ```bash
-python3 train_model.py \
+python3 run_mlm.py \
   --train_dataset gs://tf-tpu-training-resources/train/ \
   --eval_dataset gs://tf-tpu-training-resources/validation/ \
   --tokenizer tf-tpu/unigram-tokenizer-wikitext \
