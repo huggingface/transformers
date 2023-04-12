@@ -78,6 +78,11 @@ if is_torch_neuroncore_available(check_device=False):
                 "will fail otherwise."
             )
         else:
+            logger.warning(
+                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "training on AWS Trainium instances. More information here: "
+                "https://github.com/huggingface/optimum-neuron"
+            )
             import torch_xla.distributed.xla_backend as xbn
 
             if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
@@ -90,20 +95,6 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     smp.init()
-
-
-TORCH_COMPILE_BACKENDS = [
-    "eager",
-    "aot_eager",
-    "inductor",
-    "nvfuser",
-    "aot_nvfuser",
-    "aot_cudagraphs",
-    "ofi",
-    "fx2trt",
-    "onnxrt",
-    "ipex",
-]
 
 
 def default_logdir() -> str:
