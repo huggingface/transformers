@@ -327,12 +327,13 @@ class GPTNeoBlock(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        if config.add_cross_attention:
-            self.crossattention = GPTNeoAttention(config, layer_id, is_cross_attention=True)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPTNeoMLP(inner_dim, config)
+        self.add_cross_attention = config.add_cross_attention
+        if config.add_cross_attention:
+            self.crossattention = GPTNeoAttention(config, layer_id, is_cross_attention=True)
+            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
@@ -362,7 +363,7 @@ class GPTNeoBlock(nn.Module):
         # residual connection
         hidden_states = attn_output + residual
 
-        if encoder_hidden_states is not None:
+        if encoder_hidden_states is not None and self.add_cross_attention:
             # add one self-attention block for cross-attention
             if not hasattr(self, "crossattention"):
                 raise ValueError(
