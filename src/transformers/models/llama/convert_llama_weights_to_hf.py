@@ -29,7 +29,7 @@ try:
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizer` library and re-run the tokenizer conversion"
+        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
     LlamaTokenizerFast = None
 
