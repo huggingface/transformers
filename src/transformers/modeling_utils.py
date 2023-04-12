@@ -2111,8 +2111,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
-        # TODO: uncomment this after the next release of bitsandbytes
-        is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        if is_bitsandbytes_available():
+            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        else:
+            is_8bit_serializable = False
 
         if trust_remote_code is True:
             logger.warning(
