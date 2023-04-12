@@ -110,6 +110,7 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
