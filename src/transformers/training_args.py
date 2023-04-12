@@ -53,6 +53,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.import_utils import is_optimum_neuron_available
 
 
 if is_torch_available():
@@ -65,7 +66,7 @@ if is_torch_tpu_available(check_device=False):
 if is_torch_neuroncore_available(check_device=False):
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
-    if os.environ.get("TORCHELASTIC_RUN_ID"):
+    if os.environ.get("TORCHELASTIC_RUN_ID") and not is_optimum_neuron_available():
         import torch_xla.distributed.xla_backend as xbn
 
         if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):

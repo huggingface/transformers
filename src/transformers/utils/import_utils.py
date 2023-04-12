@@ -582,6 +582,10 @@ def is_optimum_available():
     return importlib.util.find_spec("optimum") is not None
 
 
+def is_optimum_neuron_available():
+    return importlib.util.find_spec("optimum.neuron") is not None
+
+
 def is_safetensors_available():
     return importlib.util.find_spec("safetensors") is not None
 
