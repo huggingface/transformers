@@ -2542,7 +2542,7 @@ def _generate_speech(
     minlenratio: float = 0.0,
     maxlenratio: float = 20.0,
     vocoder: Optional[nn.Module] = None,
-    output_cross_attentions: Optional[bool] = None,
+    output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
     encoder_attention_mask = torch.ones_like(input_values)
 
@@ -2789,7 +2789,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
         vocoder: Optional[nn.Module] = None,
-        output_cross_attentions: Optional[bool] = None,
+        output_cross_attentions: bool = False,
     ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
         r"""
         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
@@ -2814,7 +2814,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             vocoder (`nn.Module`, *optional*, defaults to `None`):
                 The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
                 spectrogram.
-            output_cross_attentions (`bool`, *optional*):
+            output_cross_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
 
         Returns:
@@ -2998,7 +2998,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
         vocoder: Optional[nn.Module] = None,
-        output_cross_attentions: Optional[bool] = None,
+        output_cross_attentions: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Converts a raw speech waveform into a sequence of mel spectrograms, which are subsequently turned back into a
@@ -3023,7 +3023,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             vocoder (`nn.Module`, *optional*, defaults to `None`):
                 The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
                 spectrogram.
-            output_cross_attentions (`bool`, *optional*):
+            output_cross_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
 
         Returns:
