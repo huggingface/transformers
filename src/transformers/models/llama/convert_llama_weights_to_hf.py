@@ -17,11 +17,20 @@ import json
 import math
 import os
 import shutil
+import warnings
 
 import torch
 
 from transformers import LlamaConfig, LlamaForCausalLM, LlamaTokenizer
 
+
+try:
+    from transformers import LlamaTokenizerFast
+except ValueError as e:
+    warnings.warn(e)
+    warnings.warn(
+        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizer` library and re-run the tokenizer conversion"
+    )
 
 """
 Sample usage:
@@ -231,10 +240,16 @@ def write_model(model_path, input_base_path, model_size):
     shutil.rmtree(tmp_model_path)
 
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path):
+def write_tokenizer(tokenizer_path, input_tokenizer_path, use_fast=True):
     print(f"Fetching the tokenizer from {input_tokenizer_path}.")
     # Initialize the tokenizer based on the `spm` model
-    tokenizer = LlamaTokenizer(input_tokenizer_path)
+    tokenizer_class = LlamaTokenizer
+    if use_fast:
+        try:
+            tokenizer_class = LlamaTokenizerFast
+        except ValueError:
+            pass
+    tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)
 
 
@@ -252,6 +267,11 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
+    parser.add_argument(
+        "--use_fast_tokenizer",
+        default=True,
+        help="Location to write HF model and tokenizer",
+    )
     args = parser.parse_args()
     if args.model_size != "tokenizer_only":
         write_model(
@@ -262,6 +282,7 @@ def main():
     write_tokenizer(
         tokenizer_path=args.output_dir,
         input_tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        use_fast=args.use_fast_tokenizer,
     )
 
 
