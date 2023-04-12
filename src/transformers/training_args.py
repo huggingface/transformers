@@ -56,6 +56,10 @@ from .utils import (
 from .utils.import_utils import is_optimum_neuron_available
 
 
+logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
+
 if is_torch_available():
     import torch
     import torch.distributed as dist
@@ -66,24 +70,25 @@ if is_torch_tpu_available(check_device=False):
 if is_torch_neuroncore_available(check_device=False):
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
-    if os.environ.get("TORCHELASTIC_RUN_ID") and not is_optimum_neuron_available():
-        import torch_xla.distributed.xla_backend as xbn
+    if os.environ.get("TORCHELASTIC_RUN_ID"):
+        if is_optimum_neuron_available():
+            logger.info(
+                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "will fail otherwise."
+            )
+        else:
+            import torch_xla.distributed.xla_backend as xbn
 
-        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-            torch.distributed.init_process_group(backend="xla")
             if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
+                torch.distributed.init_process_group(backend="xla")
+                if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                    raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     smp.init()
-
-
-logger = logging.get_logger(__name__)
-log_levels = logging.get_log_levels_dict().copy()
-trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 TORCH_COMPILE_BACKENDS = [
