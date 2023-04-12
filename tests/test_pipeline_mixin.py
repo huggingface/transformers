@@ -93,7 +93,14 @@ for task, task_info in pipeline_test_mapping.items():
     }
 
 
-TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
+# The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
+# For debugging purpose, we can specify a local path which is the `output_path` argument of a previous run of
+# `utils/create_dummy_models.py`.
+TRANSFORMERS_TINY_MODEL_PATH = os.environ.get("TRANSFORMERS_TINY_MODEL_PATH", "hf-internal-testing")
+if TRANSFORMERS_TINY_MODEL_PATH == "hf-internal-testing":
+    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
+else:
+    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, "reports", "tiny_model_summary.json")
 with open(TINY_MODEL_SUMMARY_FILE_PATH) as fp:
     tiny_model_summary = json.load(fp)
 
@@ -146,12 +153,15 @@ class PipelineTesterMixin:
             if model_arch_name in tiny_model_summary:
                 tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
                 processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
-                commit = tiny_model_summary[model_arch_name]["sha"]
+                if "sha" in tiny_model_summary[model_arch_name]:
+                    commit = tiny_model_summary[model_arch_name]["sha"]
             # Adding `None` (if empty) so we can generate tests
             tokenizer_names = [None] if len(tokenizer_names) == 0 else tokenizer_names
             processor_names = [None] if len(processor_names) == 0 else processor_names
 
             repo_name = f"tiny-random-{model_arch_name}"
+            if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
+                repo_name = model_arch_name
 
             self.run_model_pipeline_tests(
                 task, repo_name, model_architecture, tokenizer_names, processor_names, commit
@@ -210,7 +220,10 @@ class PipelineTesterMixin:
             processor_name (`str`):
                 The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
         """
-        repo_id = f"hf-internal-testing/{repo_name}"
+        repo_id = f"{TRANSFORMERS_TINY_MODEL_PATH}/{repo_name}"
+        if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
+            model_type = model_architecture.config_class.model_type
+            repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
 
         tokenizer = None
         if tokenizer_name is not None:

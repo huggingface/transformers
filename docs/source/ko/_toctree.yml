@@ -7,10 +7,12 @@
     title: 설치방법
   title: 시작하기
 - sections:
+  - local: pipeline_tutorial
+    title: 추론을 위한 Pipeline
   - local: in_translation
     title: (번역중) Pipelines for inference
-  - local: in_translation
-    title: (번역중) Load pretrained instances with an AutoClass
+  - local: autoclass_tutorial
+    title: 자동 클래스로 사전 학습된 인스턴스 로드하기
   - local: in_translation
     title: (번역중) Preprocess
   - local: in_translation
@@ -41,7 +43,7 @@
     title: (번역중) 일반적인 사용방법
   - sections:
     - local: fast_tokenizers
-      title: (번역중) Use tokenizers from 🤗 Tokenizers
+      title: (번역중) 🤗 Tokenizers 라이브러리의 토크나이저 사용하기
     - local: in_translation
       title: (번역중) Inference for multilingual models
     - local: in_translation
