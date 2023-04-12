@@ -410,7 +410,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs,
     ) -> BatchEncoding:
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
             raise TypeError(
