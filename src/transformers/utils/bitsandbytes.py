@@ -65,7 +65,6 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None, fp
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
-                    # TODO: @younesbelkada check bnb version
                     is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
                         "0.37.2"
                     )

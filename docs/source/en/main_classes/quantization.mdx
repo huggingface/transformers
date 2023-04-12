@@ -79,7 +79,7 @@ You can load a quantized model from the Hub by using `from_pretrained` method. M
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("ybelkada/bloom-560m-8bit")
+model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit")
 ```
 Note that in this case, you don't need to specify the arguments `load_in_8bit=True` and `device_map="auto"`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
 
