@@ -15,7 +15,6 @@
 """Image processor class for YOLOS."""
 
 import pathlib
-import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -707,10 +706,9 @@ class YolosImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
             )
             max_size = kwargs.pop("max_size")
         else:
@@ -734,10 +732,9 @@ class YolosImageProcessor(BaseImageProcessor):
     @property
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.max_size
     def max_size(self):
-        warnings.warn(
+        logger.warning(
             "The `max_size` parameter is deprecated and will be removed in v4.27. "
             "Please specify in `size['longest_edge'] instead`.",
-            FutureWarning,
         )
         return self.size["longest_edge"]
 
@@ -784,7 +781,7 @@ class YolosImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
     def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
-        warnings.warn(
+        logger.warning_once(
             "The `prepare` method is deprecated and will be removed in a future version. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
@@ -794,17 +791,23 @@ class YolosImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        warnings.warn("The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
+        )
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->Yolos
     def prepare_coco_detection(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_detection` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize
@@ -821,10 +824,9 @@ class YolosImageProcessor(BaseImageProcessor):
         int, smaller edge of the image will be matched to this number.
         """
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
             )
             max_size = kwargs.pop("max_size")
         else:
@@ -1007,19 +1009,17 @@ class YolosImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead.",
-                FutureWarning,
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         max_size = None
         if "max_size" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead.",
-                FutureWarning,
             )
             size = kwargs.pop("max_size")
 
@@ -1164,10 +1164,9 @@ class YolosImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        warnings.warn(
+        logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection`",
-            FutureWarning,
         )
 
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes

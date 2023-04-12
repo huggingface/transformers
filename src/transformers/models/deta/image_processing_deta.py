@@ -15,7 +15,6 @@
 """Image processor class for Deformable DETR."""
 
 import pathlib
-import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -56,6 +55,7 @@ from ...utils import (
     is_torch_tensor,
     is_torchvision_available,
     is_vision_available,
+    logging,
 )
 from ...utils.generic import ExplicitEnum, TensorType
 
@@ -69,6 +69,9 @@ if is_torchvision_available():
 
 if is_vision_available():
     import PIL
+
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class AnnotionFormat(ExplicitEnum):
@@ -540,7 +543,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        warnings.warn(
+        logger.warning_once(
             "The `prepare` method is deprecated and will be removed in a future version. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
@@ -550,17 +553,23 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        warnings.warn("The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
+        )
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
     def prepare_coco_detection(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_detection` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        warnings.warn("The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. ")
+        logger.warning_once(
+            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
+        )
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -656,9 +665,7 @@ class DetaImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        warnings.warn(
-            "This method is deprecated and will be removed in v4.27.0. Please use pad instead.", FutureWarning
-        )
+        logger.warning_once("This method is deprecated and will be removed in v4.27.0. Please use pad instead.")
         # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
         images = [to_numpy_array(image) for image in pixel_values_list]
         return self.pad(
@@ -796,10 +803,9 @@ class DetaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead.",
-                FutureWarning,
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
