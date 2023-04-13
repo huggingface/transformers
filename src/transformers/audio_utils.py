@@ -190,6 +190,33 @@ def mel_filter_bank(
     return mel_filters
 
 
+def apply_mel_filters(
+    spectrogram: np.ndarray,
+    mel_filters: np.ndarray,
+    mel_floor: float = 1e-10,
+) -> np.ndarray:
+    """
+    Applies a mel filter bank to a spectrogram to create a mel spectrogram.
+
+    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. Note: This doesn't convert to
+    true decibels; use `amplitude_to_db()` or `power_to_db()` for that, depending on whether this is an amplitude or
+    power spectrogram.
+
+    Args:
+        spectrogram (`np.ndarray` of shape `(num_freq_bins, length)`):
+            The input amplitude or power spectrogram.
+        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`):
+            The mel filter bank.
+        mel_floor (`float`, *optional*, defaults to 1e-10):
+            Minimum value of mel frequency banks.
+
+    Returns:
+        `np.ndarray` of shape `(num_mel_filters, length)`: The mel spectrogram.
+    """
+    mel = np.maximum(mel_floor, np.dot(spectrogram.T, mel_filters)).T
+    return mel
+
+
 def window_function(length: int, name: str = "hann") -> np.ndarray:
     """
     Returns an array containing the specified window.
@@ -222,8 +249,6 @@ def window_function(length: int, name: str = "hann") -> np.ndarray:
 
 
 # TODO This method does not support batching yet as we are mainly focus on inference.
-
-
 def stft(
     waveform: np.ndarray,
     frame_length: int,
@@ -335,31 +360,71 @@ def stft(
     return spectrogram.T
 
 
-def apply_mel_filters(
-    spectrogram: np.ndarray,
-    mel_filters: np.ndarray,
+def spectrogram(
+    waveform: np.ndarray,
+    frame_length: int,
+    hop_length: int,
+    window: np.ndarray,
+    power: Optional[float] = 1.0,
+    center: bool = True,
+    pad_mode: str = "reflect",
+    onesided: bool = True,
+    mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
+    log_mel: Optional[str] = None,
+    dtype: np.dtype = np.float32,
 ) -> np.ndarray:
     """
-    Applies a mel filter bank to a spectrogram to create a mel spectrogram.
+    Convenience function that creates a spectrogram from a waveform.
 
-    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. Note: This doesn't convert to
-    true decibels; use `amplitude_to_db()` or `power_to_db()` for that, depending on whether this is an amplitude or
-    power spectrogram.
+    This function can create the following kinds of spectrograms:
+
+      - amplitude spectrogram (`power = 1.0`)
+      - power spectrogram (`power = 2.0`)
+      - complex-valued spectrogram (`power = None`)
+      - log spectrogram (use `log_mel` argument)
+      - mel spectrogram (provide `mel_filters`)
+      - log-mel spectrogram (provide `mel_filters` and `log_mel`)
 
     Args:
-        spectrogram (`np.ndarray` of shape `(num_freq_bins, length)`):
-            The input amplitude or power spectrogram.
-        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`):
-            The mel filter bank.
-        mel_floor (`float`, *optional*, defaults to 1e-10):
-            Minimum value of mel frequency banks.
+        log_mel (`str`, *optional*):
+            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log10"`
+            (only take the log), `"dB"` (convert to decibels). Can only be used when `power` is not `None`.
+        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
+            Data type of the spectrogram tensor.
 
-    Returns:
-        `np.ndarray` of shape `(num_mel_filters, length)`: The mel spectrogram.
+    See the arguments of `stft` and `apply_mel_filters` for more information.
     """
-    mel = np.maximum(mel_floor, np.dot(spectrogram.T, mel_filters)).T
-    return mel
+    spectrogram = stft(
+        waveform,
+        frame_length,
+        hop_length,
+        window,
+        power,
+        center,
+        pad_mode,
+        onesided,
+    )
+
+    if mel_filters is not None:
+        spectrogram = apply_mel_filters(spectrogram, mel_filters, mel_floor)
+
+    if power is not None and log_mel is not None:
+        if log_mel == "log10":
+            spectrogram = np.log10(spectrogram)
+        elif log_mel == "dB":
+            if power == 1.0:
+                spectrogram = amplitude_to_db(spectrogram)
+            elif power == 2.0:
+                spectrogram = power_to_db(spectrogram)
+            else:
+                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+        spectrogram = np.asarray(spectrogram, dtype)
+
+    return spectrogram
 
 
 def power_to_db(

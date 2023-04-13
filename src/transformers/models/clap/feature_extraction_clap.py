@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import apply_mel_filters, mel_filter_bank, power_to_db, stft, window_function
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -162,15 +162,15 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.
         """
-        spectrogram = stft(
+        log_mel_spectrogram = spectrogram(
             waveform,
             frame_length=self.fft_window_size,
             hop_length=self.hop_length,
             window=window_function(self.fft_window_size, "hann"),
             power=2.0,
+            mel_filters=mel_filters,
+            log_mel="dB",
         )
-        log_mel_spectrogram = power_to_db(apply_mel_filters(spectrogram, mel_filters))
-        log_mel_spectrogram = np.asarray(log_mel_spectrogram, np.float32)
         return log_mel_spectrogram
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
