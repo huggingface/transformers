@@ -2314,10 +2314,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if saved_model:
             # If `torch_dtype` is in the config with a torch dtype class as the value, we need to change it to string.
-            # Although TF doesn't care about this attribute, we can't just remove it or set it to `None`, as the config
-            # will still be saved below this `if` block. (If we change it, things may break if the TF model is uploaded
-            # to a Hub repo where a PT checkpoint is there that expects this attribute).
-            # This logic is copied from `dict_torch_dtype_to_str` in `configuration_utils.py`.
+            # (Although TF doesn't care about this attribute, we can't just remove it or set it to `None`.)
             if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
