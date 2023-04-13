@@ -603,6 +603,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
 
+    @slow
+    @require_torch
+    def test_whisper_with_prompt(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        pipe = pipeline(model="openai/whisper-small")
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
+        prompt = "Leighton"
+        prompt_ids = processor.get_prompt_ids(prompt)
+
+        output_without_prompt = pipe(ds[3]["audio"])
+        output_with_prompt = pipe(
+            ds[3]["audio"], generate_kwargs={"condition_on_previous_text": True, "prompt_ids": prompt_ids}
+        )
+
+        self.assertTrue(prompt not in output_without_prompt["text"])
+        self.assertTrue(prompt in output_with_prompt["text"])
+
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):

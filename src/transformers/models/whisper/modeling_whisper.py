@@ -1642,21 +1642,24 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
         if condition_on_previous_text and kwargs.get("temperature", 0) <= 0.5:
             if prompt_ids is None:
+                # The prompt_ids are needed in order to extract the correct `decoder_start_token_id`
                 raise ValueError("When specifying `condition_on_previous_text`=True, `prompt_ids` must be provided.")
             if kwargs.get("decoder_start_token_id") is not None:
                 raise ValueError(
                     "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
             decoder_start_token_id, *text_prompt_ids = prompt_ids
-            kwargs.update(
-                {"decoder_start_token_id": decoder_start_token_id}
-            )  # Set decoder_start_token_id to <|startofprev|>
+            kwargs.update({"decoder_start_token_id": decoder_start_token_id})  # Set to <|startofprev|>
             kwargs.update({"forced_decoder_ids": _get_forced_decoder_ids_with_prompt(text_prompt_ids)})
+
+        if generation_config.return_timestamps:
+            forced_decoder_ids_kwarg = kwargs.get("forced_decoder_ids")
+            if forced_decoder_ids_kwarg is not None:
+                generation_config.forced_decoder_ids = forced_decoder_ids_kwarg
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
         if condition_on_previous_text and not always_use_initial_prompt and inputs is not None:
             # TODO: make compatible with inputs when provided as a kwarg, such as input_ids, input_values, pixel_values, or encoder_outputs
-            # TODO: make compatible with return_timestamps
-            # TODO: make compatible with return_dict_in_generate
             accumulator = []
             max_token_len = 0
             for chunk_idx in range(inputs.shape[0]):
@@ -1670,6 +1673,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     **kwargs,
                 )
                 accumulator.append(tokens)
+                max_token_len = max(max_token_len, tokens.shape[1])
 
                 # Update the forced_decoder_ids to add the generated text to the prompt
                 gen_start_idx = len(kwargs.get("forced_decoder_ids")) + 1
@@ -1678,7 +1682,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 text_prompt_ids.extend(gen_text_prompt_ids)
                 forced_decoder_ids = _get_forced_decoder_ids_with_prompt(text_prompt_ids)
                 kwargs.update({"forced_decoder_ids": forced_decoder_ids})
-                max_token_len = max(max_token_len, tokens.shape[1])
+                if generation_config.return_timestamps:
+                    generation_config.forced_decoder_ids = forced_decoder_ids
+                    logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
             padded_accumulator = []
             for tokens in accumulator:

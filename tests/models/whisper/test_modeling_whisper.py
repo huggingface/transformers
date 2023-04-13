@@ -1021,29 +1021,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
-    @slow
-    def test_generate_with_prompt(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = load_datasamples(4)[-1]
-        input_features = processor(input_speech, return_tensors="pt").input_features
-
-        # Generate without initial prompt
-        output_without_prompt_ids = model.generate(input_features, max_new_tokens=128)
-        decoded_without_prompt = processor.decode(output_without_prompt_ids[0], skip_special_tokens=False)
-
-        # Generate with initial prompt
-        prompt = "Leighton"
-        prompt_ids = processor.get_prompt_ids(prompt)
-        output_with_prompt_ids = model.generate(
-            input_features, condition_on_previous_text=True, prompt_ids=prompt_ids, max_new_tokens=128
-        )
-        decoded_with_prompt = processor.decode(output_with_prompt_ids[0], skip_special_tokens=False)
-
-        self.assertTrue(prompt not in decoded_without_prompt)
-        self.assertTrue(prompt in decoded_with_prompt)
-
 
 @require_torch
 @require_torchaudio
@@ -1452,6 +1429,51 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_generate_with_prompt(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        input_speech = load_datasamples(3)
+        input_features = processor(input_speech, return_tensors="pt").input_features
+
+        prompt = "Example prompt"
+        prompt_ids = processor.get_prompt_ids(prompt)
+        output = model.generate(
+            input_features, condition_on_previous_text=True, prompt_ids=prompt_ids, max_new_tokens=128
+        )
+        decoded_with_special_tokens = processor.batch_decode(output, skip_special_tokens=False)
+        decoded_without_special_tokens = processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertTrue(decoded_without_special_tokens[0] in decoded_with_special_tokens[1])
+        self.assertTrue(decoded_without_special_tokens[0] in decoded_with_special_tokens[2])
+        self.assertTrue(decoded_without_special_tokens[1] in decoded_with_special_tokens[2])
+        self.assertTrue(all([prompt in chunk for chunk in decoded_with_special_tokens]))
+
+    @slow
+    def test_generate_with_always_use_initial_prompt(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        input_speech = load_datasamples(3)
+        input_features = processor(input_speech, return_tensors="pt").input_features
+
+        prompt = "Always just use this prompt."
+        prompt_ids = processor.get_prompt_ids(prompt)
+        output = model.generate(
+            input_features,
+            condition_on_previous_text=True,
+            always_use_initial_prompt=True,
+            prompt_ids=prompt_ids,
+            max_new_tokens=128,
+        )
+        decoded_with_special_tokens = processor.batch_decode(output, skip_special_tokens=False)
+        decoded_without_special_tokens = processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertTrue(decoded_without_special_tokens[0] not in decoded_with_special_tokens[1])
+        self.assertTrue(decoded_without_special_tokens[1] not in decoded_with_special_tokens[2])
+        self.assertTrue(all([prompt in chunk for chunk in decoded_with_special_tokens]))
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
