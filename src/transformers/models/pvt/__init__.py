@@ -68,6 +68,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pvt import (
+            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             PvtForImageClassification,
             PvtModel,
             PvtPreTrainedModel,
