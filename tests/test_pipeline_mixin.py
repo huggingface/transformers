@@ -428,9 +428,19 @@ class PipelineTesterMixin:
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
+    # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
+        # No fix is required for this case.
+        if (
+            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `DocumentQuestionAnsweringPipelineTests` requires a fast tokenizer.
+            return True
+
         return False
 
 
