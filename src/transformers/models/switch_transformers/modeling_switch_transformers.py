@@ -1700,6 +1700,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
 
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
             if output_router_logits and labels is not None:
