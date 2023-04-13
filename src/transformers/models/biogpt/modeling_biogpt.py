@@ -28,8 +28,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    TokenClassifierOutput,
     SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -841,7 +841,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-        
+
 @add_start_docstrings(
     """
     The BioGpt Model transformer with a sequence classification head on top (linear layer).

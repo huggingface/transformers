@@ -1103,14 +1103,14 @@ class BioGptForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BioGptForTokenClassification(metaclass=DummyObject):
+class BioGptForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class BioGptForSequenceClassification(metaclass=DummyObject):
+class BioGptForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
