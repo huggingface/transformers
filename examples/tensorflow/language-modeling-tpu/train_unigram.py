@@ -33,6 +33,15 @@ logger = logging.getLogger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a unigram tokenizer on the wikitext dataset.")
     parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="wikitext",
+        help="Name of the training. Explore datasets at: hf.co/datasets.",
+    )
+    parser.add_argument(
+        "--dataset_config", type=str, default="wikitext-103-raw-v1", help="Configuration name of the dataset."
+    )
+    parser.add_argument(
         "--batch_size",
         type=int,
         default=1000,
@@ -59,24 +68,8 @@ def parse_args():
     return args
 
 
-def get_unigram_tokenizer() -> Tokenizer:
-    tokenizer = Tokenizer(Unigram())
-    tokenizer.normalizer = normalizers.Sequence([normalizers.Replace("``", '"'), normalizers.Replace("''", '"')])
-    tokenizer.pre_tokenizer = pre_tokenizers.Metaspace()
-    return tokenizer
-
-
-def get_unigram_trainer(vocab_size: int) -> UnigramTrainer:
-    trainer = UnigramTrainer(
-        unk_token="<unk>",
-        special_tokens=["[CLS]", "[SEP]", "<unk>", "<pad>", "[MASK]"],
-        vocab_size=vocab_size,
-    )
-    return trainer
-
-
 def main(args):
-    wikitext = datasets.load_dataset("wikitext", "wikitext-103-raw-v1", split="train")
+    wikitext = datasets.load_dataset(args.dataset_name, args.dataset_config, split="train")
 
     if args.limit is not None:
         max_train_samples = min(len(wikitext), args.limit)
@@ -87,9 +80,19 @@ def main(args):
         for i in range(0, len(wikitext), args.batch_size):
             yield wikitext[i : i + args.batch_size]["text"]
 
+    # Prepare the tokenizer.
+    tokenizer = Tokenizer(Unigram())
+    tokenizer.normalizer = normalizers.Sequence([normalizers.Replace("``", '"'), normalizers.Replace("''", '"')])
+    tokenizer.pre_tokenizer = pre_tokenizers.Metaspace()
+
+    # Prepare the trainer.
+    trainer = UnigramTrainer(
+        unk_token="<unk>",
+        special_tokens=["[CLS]", "[SEP]", "<unk>", "<pad>", "[MASK]"],
+        vocab_size=args.vocab_size,
+    )
+
     logger.info("Training the tokenizer.")
-    tokenizer = get_unigram_tokenizer()
-    trainer = get_unigram_trainer(args.vocab_size)
     tokenizer.train_from_iterator(batch_iterator(), trainer=trainer)
     logger.info("Tokenizer training complete!")
 

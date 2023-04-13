@@ -79,24 +79,6 @@ def tokenize_function(tokenizer):
     return fn
 
 
-def group_texts(block_size):
-    def fn(examples):
-        # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-        total_length = len(concatenated_examples[list(examples.keys())[0]])
-        # We drop the small remainder, though you could add padding instead if the model supports it
-        # In this, as in all things, we advise you to follow your heart 🫀
-        total_length = (total_length // block_size) * block_size
-        # Split by chunks of max_len.
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-        return result
-
-    return fn
-
-
 def get_serialized_examples(tokenized_data):
     records = []
     for i in range(len(tokenized_data["input_ids"])):
@@ -147,8 +129,22 @@ def main(args):
     # This allows us to create our new fixed-length samples. The advantage of this
     # method is that we don't lose a whole lot of content from the dataset compared to the
     # case where we simply tokenize with a pre-defined max_length.
-    group_texts_fn = group_texts(block_size=args.max_length)
-    grouped_dataset = wikitext_tokenized.map(group_texts_fn, batched=True, batch_size=1000, num_proc=4)
+
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, though you could add padding instead if the model supports it
+        # In this, as in all things, we advise you to follow your heart 🫀
+        total_length = (total_length // args.max_length) * args.max_length
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + args.max_length] for i in range(0, total_length, args.max_length)]
+            for k, t in concatenated_examples.items()
+        }
+        return result
+
+    grouped_dataset = wikitext_tokenized.map(group_texts, batched=True, batch_size=1000, num_proc=4)
 
     shard_count = 0
     total_records = 0
