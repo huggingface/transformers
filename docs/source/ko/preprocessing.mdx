@@ -378,7 +378,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 다른 데이터 증강 라이브러리를 사용하는 방법이 알고 싶다면, [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) 또는 [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb)에서 배울 수 있습니다.
 
 1. [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html)로  [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html)와 [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) 등의 변환을 몇 가지 연결하세요.
-참고로, 크기 조정에 대해서는 `image_processor`에서 이미지 크기 요구사항을 가져올 수 있습니다. 
+참고로 크기 조정에 필요한 이미지의 크기 요구사항은 `image_processor`에서 가져올 수 있습니다. 
 일부 모델은 정확한 높이와 너비를 요구하지만, 제일 짧은 변의 길이(`shortest_edge`)만 정의된 모델도 있습니다.
 
 ```py
