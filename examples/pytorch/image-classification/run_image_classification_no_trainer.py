@@ -51,6 +51,15 @@ check_min_version("4.29.0")
 
 logger = get_logger(__name__)
 
+# use relaxed_fp32 option
+try: 
+    from moreh.driver.common.config import set_backend_config
+    set_backend_config("allow_relaxed_fp32", True)
+    print("Setting `allow_relaxed_fp32` in the backend")
+except ImportError:
+    logger.warning("Cannot set `allow_relaxed_fp32` option")
+
+
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
 

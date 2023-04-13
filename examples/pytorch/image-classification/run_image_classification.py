@@ -54,6 +54,14 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 
+# use relaxed_fp32 option
+try: 
+    from moreh.driver.common.config import set_backend_config
+    set_backend_config("allow_relaxed_fp32", True)
+    print("Setting `allow_relaxed_fp32` in the backend")
+except ImportError:
+    logger.warning("Cannot set `allow_relaxed_fp32` option")
+
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.29.0")
 
