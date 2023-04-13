@@ -374,7 +374,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-먼저, 이미지 증강을 추가해 봅시다. 어떤 라이브러리를 사용하셔도 좋지만, 이번 튜토리얼에서는 torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하겠습니다. 
+먼저 이미지 증강 단계를 추가해 봅시다. 아무 라이브러리나 사용해도 괜찮지만, 이번 튜토리얼에서는 torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하겠습니다.
 다른 데이터 증강 라이브러리를 사용하는 방법이 알고 싶다면, [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) 또는 [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb)에서 배울 수 있습니다.
 
 1. [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html)를 사용하여  [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) 및 [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html)와 같은 몇 가지 변환을 연결합니다.
