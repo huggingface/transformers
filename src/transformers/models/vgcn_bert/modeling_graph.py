@@ -60,8 +60,8 @@ class WordGraph:
                 self.vocab,
                 self.vocab_indices,
                 self.wgraph_id_to_tokenizer_id_map,
-                self.tokenizer_id_to_wgraph_id_map,
-                self.tokenizer_id_to_wgraph_id_array,
+                # self.tokenizer_id_to_wgraph_id_map,
+                # self.tokenizer_id_to_wgraph_id_array,
             ) = _build_predefined_graph(rows, tokenizer)
         else:
             (
@@ -69,18 +69,18 @@ class WordGraph:
                 self.vocab,
                 self.vocab_indices,
                 self.wgraph_id_to_tokenizer_id_map,
-                self.tokenizer_id_to_wgraph_id_map,
-                self.tokenizer_id_to_wgraph_id_array,
+                # self.tokenizer_id_to_wgraph_id_map,
+                # self.tokenizer_id_to_wgraph_id_array,
             ) = _build_pmi_graph(rows, tokenizer, window_size, algorithm, threshold)
 
     def normalized(self):
-        return _normalize_adj(self.adjacency_matrix) if self.adjacency_matrix else None
+        return _normalize_adj(self.adjacency_matrix) if self.adjacency_matrix is not None else None
 
     def to_torch_sparse(self):
         if self.adjacency_matrix is None:
             return None
         adj = _normalize_adj(self.adjacency_matrix)
-        return _sparse_scipy2torch(adj.tocoo())
+        return _scipy_to_torch(adj)
 
 
 def _normalize_adj(adj):
@@ -93,11 +93,11 @@ def _normalize_adj(adj):
     return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt)
 
 
-def _sparse_scipy2torch(coo_sparse):
-    # coo_sparse=coo_sparse.tocoo()
-    i = torch.LongTensor(np.vstack((coo_sparse.row, coo_sparse.col)))
-    v = torch.from_numpy(coo_sparse.data)
-    return torch.sparse.FloatTensor(i, v, torch.Size(coo_sparse.shape))
+def _scipy_to_torch(sparse):
+    sparse = sparse.tocoo() if sparse.getformat() != "coo" else sparse
+    i = torch.LongTensor(np.vstack((sparse.row, sparse.col)))
+    v = torch.from_numpy(sparse.data)
+    return torch.sparse_coo_tensor(i, v, torch.Size(sparse.shape)).coalesce()
 
 
 def _delete_special_terms(words: list, terms: list):
@@ -207,24 +207,26 @@ def _build_pmi_graph(
     vocab_adj.setdiag(1.0)
     assert vocab_adj[0, :].sum() == 1
     assert vocab_adj[:, 0].sum() == 1
+    vocab_adj[:, 0] = 0
+    vocab_adj[0, :] = 0
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
     wgraph_id_to_tokenizer_id_map = dict(sorted(wgraph_id_to_tokenizer_id_map.items()))
-    tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
-    tokenizer_id_to_wgraph_id_map = dict(sorted(tokenizer_id_to_wgraph_id_map.items()))
-    assert len(wgraph_id_to_tokenizer_id_map) == len(tokenizer_id_to_wgraph_id_map)
+    # tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
+    # tokenizer_id_to_wgraph_id_map = dict(sorted(tokenizer_id_to_wgraph_id_map.items()))
+    # assert len(wgraph_id_to_tokenizer_id_map) == len(tokenizer_id_to_wgraph_id_map)
 
-    tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
-    for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
-        tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
+    # tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
+    # for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
+    #     tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
 
     return (
         vocab_adj,
         vocab,
         vocab_indices,
         wgraph_id_to_tokenizer_id_map,
-        tokenizer_id_to_wgraph_id_map,
-        tokenizer_id_to_wgraph_id_array,
+        # tokenizer_id_to_wgraph_id_map,
+        # tokenizer_id_to_wgraph_id_array,
     )
 
 
@@ -272,25 +274,29 @@ def _build_predefined_graph(
     vocab_adj.setdiag(1.0)
     assert vocab_adj[0, :].sum() == 1
     assert vocab_adj[:, 0].sum() == 1
+    vocab_adj[:, 0] = 0
+    vocab_adj[0, :] = 0
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
-    tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
+    # tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
 
-    tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
-    for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
-        tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
+    # tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
+    # for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
+    #     tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
 
     return (
         vocab_adj,
         vocab,
         vocab_indices,
         wgraph_id_to_tokenizer_id_map,
-        tokenizer_id_to_wgraph_id_map,
-        tokenizer_id_to_wgraph_id_array,
+        # tokenizer_id_to_wgraph_id_map,
+        # tokenizer_id_to_wgraph_id_array,
     )
 
 
-def build_knowledge_graph(rdf_list: List[str], tokenizer: PreTrainedTokenizerBase) -> Tuple[sp.csr_matrix, List, dict]:
+def _build_knowledge_graph(
+    rdf_list: List[str], tokenizer: PreTrainedTokenizerBase
+) -> Tuple[sp.csr_matrix, List, dict]:
     """
     Build word level adjacency matrix from a knowledge graph
 
@@ -324,21 +330,21 @@ if __name__ == "__main__":
         ("comeabc", "gobefbef", 0.2),
     ]
     wgraph = WordGraph(words_relations, tokenizer)
-    vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
-    print(len(vocab))
-    print(wgraph.tokenizer_id_to_wgraph_id_array)
-    print_matrix(vocab_adj.todense())
+    # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
+    print(len(wgraph.vocab))
+    # print(wgraph.tokenizer_id_to_wgraph_id_array)
+    print_matrix(wgraph.adjacency_matrix.todense())
 
     # texts = [" I am here", "He is here", "here i am, gobefbef"]
     texts = [" I am here!", "He is here", "You are also here, gobefbef!", "What is interpribility"]
     wgraph = WordGraph(texts, tokenizer, window_size=4)
-    vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
+    # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
 
-    print(len(vocab))
-    print(wgraph.tokenizer_id_to_wgraph_id_array)
-    print_matrix(vocab_adj.todense())
+    print(len(wgraph.vocab))
+    # print(wgraph.tokenizer_id_to_wgraph_id_array)
+    print_matrix(wgraph.adjacency_matrix.todense())
     print()
-    norm_adj = _normalize_adj(vocab_adj)
+    norm_adj = _normalize_adj(wgraph.adjacency_matrix)
     print_matrix(norm_adj.todense())
 
     # print(vocab_indices[vocab[3]])

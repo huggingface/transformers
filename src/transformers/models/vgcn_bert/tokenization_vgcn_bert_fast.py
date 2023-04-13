@@ -135,6 +135,7 @@ class VGCNBertTokenizerFast(PreTrainedTokenizerFast):
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
+        graph_sep_token="[SEP]",
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
@@ -155,6 +156,7 @@ class VGCNBertTokenizerFast(PreTrainedTokenizerFast):
             strip_accents=strip_accents,
             **kwargs,
         )
+        self.graph_sep_token = graph_sep_token
 
         normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
         if (

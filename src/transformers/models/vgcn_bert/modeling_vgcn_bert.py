@@ -149,7 +149,7 @@ class VocabGraphConvolution(nn.Module):
 
     def _prepare_inversion_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
-        assert wgraph_id_to_tokenizer_id_maps.keys()[-1] == len(wgraph_id_to_tokenizer_id_maps) - 1
+        assert all([list(m.keys())[-1] == len(m) - 1 for m in wgraph_id_to_tokenizer_id_maps])
         # self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
         # self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = tokenizer_id_to_wgraph_id_arrays
         # self.max_tokenizer_id_for_wgraph_list = [len(m) for m in self.tokenizer_id_to_wgraph_id_arrays]
@@ -231,10 +231,10 @@ class VocabGraphConvolution(nn.Module):
             #     position_embeddings_in_g*=position_ids_in_g>0
             #     positon_embeddings_in_gvocab_order_list.append(position_embeddings_in_g)
 
-            gx_ids_list.append(torch.unique(tmp_ids)[0])
+            gx_ids_list.append(torch.unique(tmp_ids, dim=1))
 
         # G_embedding=(act(V1*A1_sub*W1_vh)+act(V2*A2_sub*W2_vh)）*W_hg
-        # H_eh = torch.zeros((self.word_embeddings.))
+        fused_H = torch.zeros((input_ids.shape[0], self.word_embeddings.weight.shape[1], self.hid_dim), device=device)
         for gv_ids, g, gx_ids, W_vh in zip(  # , position_in_gvocab_ev
             self.gvocab_order_tokenizer_id_arrays,
             self.wgraphs,
@@ -259,7 +259,7 @@ class VocabGraphConvolution(nn.Module):
             if self.dropout:
                 H_eh = self.dropout(H_eh)
 
-            fused_H = H_eh if not fused_H else fused_H + H_eh  # TODO: H_eh+=...
+            fused_H += H_eh
 
         # fused_H=LayerNorm(fused_H) # embedding assemble layer will do LayerNorm
         out_ge = self.fc_hg(fused_H).transpose(1, 2)
@@ -306,7 +306,6 @@ class VGCNEmbeddings(nn.Module):
         self.vgcn = VocabGraphConvolution(
             vgcn_graphs,
             wgraph_id_to_tokenizer_id_maps,
-            tokenizer_id_to_wgraph_id_maps,
             self.word_embeddings,
             self.position_embeddings,
             config.vgcn_hidden_dim,
