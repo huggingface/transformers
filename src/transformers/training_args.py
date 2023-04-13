@@ -1553,26 +1553,25 @@ class TrainingArguments:
             self.local_rank = self.distributed_state.local_process_index
         if self.no_cuda or is_torch_tpu_available():
             self._n_gpu = 0
-        # Check on `SMDATAPARALLEL_LOCAL_RANK`
         elif is_sagemaker_dp_enabled() or self.deepspeed:
             self._n_gpu = 1
         elif self.local_rank == -1:
             if self.use_mps_device:
                 self._n_gpu = 1
-            else:
-                # if n_gpu is > 1 we'll use nn.DataParallel.
-                # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
-                # Explicitly set CUDA to the first (index 0) CUDA device, otherwise `set_device` will
-                # trigger an error that a device index is missing. Index 0 takes into account the
-                # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
-                # will use the first GPU in that env, i.e. GPU#1
-                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-                # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
-                # the default value.
-                self._n_gpu = torch.cuda.device_count()
-                if device.type == "cuda":
-                    torch.cuda.set_device(device)
-                return device
+            # else:
+            #     # if n_gpu is > 1 we'll use nn.DataParallel.
+            #     # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
+            #     # Explicitly set CUDA to the first (index 0) CUDA device, otherwise `set_device` will
+            #     # trigger an error that a device index is missing. Index 0 takes into account the
+            #     # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
+            #     # will use the first GPU in that env, i.e. GPU#1
+            #     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            #     # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
+            #     # the default value.
+            #     self._n_gpu = torch.cuda.device_count()
+            #     if device.type == "cuda":
+            #         torch.cuda.set_device(device)
+            #     return device
         else:
             self._n_gpu = 1
 
