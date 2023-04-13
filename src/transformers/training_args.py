@@ -1528,9 +1528,9 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
-        if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == -1:
+        if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == 0:
             logger.warning(
-                "torch.distributed process group is initialized, but local_rank == -1. "
+                "torch.distributed process group is initialized, but local_rank == 0. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
         if self.no_cuda:
@@ -1545,8 +1545,10 @@ class TrainingArguments:
         elif self.deepspeed:
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self._n_gpu = 1
+            device = self.distributed_state.device
         else:
-            self.distributed_state = PartialState()
+            self.distributed_state = PartialState(backend=self.xpu_backend)
+            device = self.distributed_state.device
             self._n_gpu = 1
 
         if is_torch_tpu_available():
@@ -1554,7 +1556,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled():
             self._n_gpu = 1
-        elif self.local_rank == -1:
+        elif self.local_rank == 0:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
                     if not torch.backends.mps.is_built():
@@ -1592,18 +1594,6 @@ class TrainingArguments:
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = self.distributed_state.num_processes
-        else:
-            # Here, we'll use torch.distributed.
-            # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            if not torch.distributed.is_initialized():
-                if self.xpu_backend and self.xpu_backend in ("mpi", "gloo"):
-                    torch.distributed.init_process_group(backend=self.xpu_backend, timeout=self.ddp_timeout_delta)
-                else:
-                    torch.distributed.init_process_group(backend="nccl", timeout=self.ddp_timeout_delta)
-            device = torch.device("cuda", self.local_rank)
-            self._n_gpu = 1
-            torch.cuda.set_device(device)
-
         return device
 
     @property
@@ -1646,7 +1636,7 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif self.local_rank != -1:
+        elif self.local_rank > 0:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
@@ -1666,7 +1656,7 @@ class TrainingArguments:
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
             return dist.get_world_size()
-        elif self.local_rank != -1:
+        elif self.local_rank > 0:
             return torch.distributed.get_world_size()
         return 1
 
@@ -1682,7 +1672,7 @@ class TrainingArguments:
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
             return dist.get_rank()
-        elif self.local_rank != -1:
+        elif self.local_rank > 0:
             return torch.distributed.get_rank()
         return 0
 
@@ -1698,7 +1688,7 @@ class TrainingArguments:
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
             return dist.get_rank()
-        elif self.local_rank != -1:
+        elif self.local_rank > 0:
             return self.local_rank
         return 0
 
