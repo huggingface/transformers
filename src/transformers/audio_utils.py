@@ -213,7 +213,7 @@ def apply_mel_filters(
     Returns:
         `np.ndarray` of shape `(num_mel_filters, length)`: The mel spectrogram.
     """
-    mel = np.maximum(mel_floor, np.dot(spectrogram.T, mel_filters)).T
+    mel = np.maximum(mel_floor, np.dot(mel_filters.T, spectrogram))
     return mel
 
 
