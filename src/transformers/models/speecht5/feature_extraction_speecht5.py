@@ -14,11 +14,11 @@
 # limitations under the License.
 """Feature extractor class for SpeechT5."""
 
+import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-import warnings
 
 from ...audio_utils import get_mel_filter_banks
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -128,11 +128,13 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         if frame_signal_scale != 1.0:
             warnings.warn(
-                "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers", FutureWarning
+                "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers",
+                FutureWarning,
             )
         if reduction_factor != 2.0:
             warnings.warn(
-                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers", FutureWarning
+                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
+                FutureWarning,
             )
 
     @staticmethod
