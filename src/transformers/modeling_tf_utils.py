@@ -2318,7 +2318,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             # will still be saved below this `if` block. (If we change it, things may break if the TF model is uploaded
             # to a Hub repo where a PT checkpoint is there that expects this attribute).
             # This logic is copied from `dict_torch_dtype_to_str` in `configuration_utils.py`.
-            if self.config.getattr("torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
+            if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
                 self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
                 if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
