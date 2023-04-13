@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
