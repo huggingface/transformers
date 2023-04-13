@@ -1665,12 +1665,11 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-base")
-        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-base")
+        >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
+        >>> model = Pix2StructForConditionalGeneration.from_pretrained("google/pix2struct-textcaps-base")
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "A stop sign is on the street corner."
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
