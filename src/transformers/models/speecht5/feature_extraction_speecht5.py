@@ -132,7 +132,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             )
         if reduction_factor != 2.0:
             warnings.warn(
-                "The argument `reduction_factor` is deprecated and will be removed in a future version of Transformers", FutureWarning
+                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers", FutureWarning
             )
 
     @staticmethod
