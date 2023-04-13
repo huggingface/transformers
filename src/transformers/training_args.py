@@ -54,7 +54,12 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.import_utils import is_optimum_neuron_available
 
+
+logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
 
 if is_torch_available():
     import torch
@@ -67,23 +72,29 @@ if is_torch_neuroncore_available(check_device=False):
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
     if os.environ.get("TORCHELASTIC_RUN_ID"):
-        import torch_xla.distributed.xla_backend as xbn
+        if is_optimum_neuron_available():
+            logger.info(
+                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "will fail otherwise."
+            )
+        else:
+            logger.warning(
+                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "training on AWS Trainium instances. More information here: "
+                "https://github.com/huggingface/optimum-neuron"
+            )
+            import torch_xla.distributed.xla_backend as xbn
 
-        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-            torch.distributed.init_process_group(backend="xla")
             if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
+                torch.distributed.init_process_group(backend="xla")
+                if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                    raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     smp.init()
-
-
-logger = logging.get_logger(__name__)
-log_levels = logging.get_log_levels_dict().copy()
-trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 def default_logdir() -> str:

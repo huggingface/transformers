@@ -131,6 +131,7 @@ src/transformers/models/mobilenet_v1/modeling_mobilenet_v1.py
 src/transformers/models/mobilenet_v2/modeling_mobilenet_v2.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
+src/transformers/models/mvp/configuration_mvp.py
 src/transformers/models/nat/configuration_nat.py
 src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
@@ -284,6 +285,7 @@ src/transformers/models/layoutxlm/tokenization_layoutxlm_fast.py
 src/transformers/models/llama/tokenization_llama.py
 src/transformers/models/lxmert/tokenization_lxmert.py
 src/transformers/models/lxmert/tokenization_lxmert_fast.py
+src/transformers/models/m2m_100/configuration_m2m_100.py
 src/transformers/models/markuplm/tokenization_markuplm.py
 src/transformers/models/markuplm/tokenization_markuplm_fast.py
 src/transformers/models/mbart/tokenization_mbart.py
