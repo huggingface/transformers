@@ -438,7 +438,7 @@ class PipelineTesterMixin:
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
-            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
+            # `DocumentQuestionAnsweringPipelineTests` requires a fast tokenizer.
             return True
 
         return False
