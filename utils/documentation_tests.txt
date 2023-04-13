@@ -306,6 +306,7 @@ src/transformers/models/pegasus/tokenization_pegasus.py
 src/transformers/models/pegasus/tokenization_pegasus_fast.py
 src/transformers/models/perceiver/tokenization_perceiver.py
 src/transformers/models/phobert/tokenization_phobert.py
+src/transformers/models/pix2struct/modeling_pix2struct.py
 src/transformers/models/plbart/tokenization_plbart.py
 src/transformers/models/prophetnet/tokenization_prophetnet.py
 src/transformers/models/rag/tokenization_rag.py
