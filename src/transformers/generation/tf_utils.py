@@ -1099,7 +1099,7 @@ class TFGenerationMixin:
         model_kwargs: Dict[str, tf.Tensor],
         decoder_start_token_id: int = None,
         bos_token_id: int = None,
-    ) -> tf.Tensor:
+    ) -> Tuple[tf.Tensor, Dict[str, tf.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
         # 1. Check whether the user has defined `decoder_input_ids` manually. To facilitate in terms of input naming,
         # we also allow the user to pass it under `input_ids`, if the encoder does not use it as the main input.
