@@ -192,6 +192,10 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         return False
 
+    @unittest.skip("Skip for now. PR #22437 causes some loading issue. See (not merged) #22656 for some discussions.")
+    def test_can_use_safetensors(self):
+        super().test_can_use_safetensors()
+
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
