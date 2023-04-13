@@ -171,7 +171,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_filters=mel_filters,
             log_mel="dB",
         )
-        return log_mel_spectrogram
+        return log_mel_spectrogram.T
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
