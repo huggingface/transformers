@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pvt"] = [
+        "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PvtForImageClassification",
         "PvtModel",
         "PvtPreTrainedModel",
