@@ -379,7 +379,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 1. [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html)로  [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html)와 [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) 등의 변환을 몇 가지 연결하세요.
 참고로, 크기 조정에 대해서는 `image_processor`에서 이미지 크기 요구사항을 가져올 수 있습니다. 
-일부 모델은 정확한 높이와 너비가 필요하지만, 다른 모델에서는 `shortest_edge`만 정의됩니다.
+일부 모델은 정확한 높이와 너비를 요구하지만, 제일 짧은 변의 길이(`shortest_edge`)만 정의된 모델도 있습니다.
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
