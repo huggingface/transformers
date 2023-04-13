@@ -43,7 +43,7 @@ def translate_fn(module_text: str):
     - TensorFlow Embedding layers do not have a padding_idx argument. Please remove this argument from the constructor.
     - You can use tensor.shape.rank as a TensorFlow replacement for tensor.ndim.
     - Please use the Hugging Face function shape_list(), which returns a list, instead of tensor.shape or tf.shape(tensor) unless you need to treat the output as a tensor.
-    - Keras layers do not have a register_buffer() method. Instead just set the attribute with that name on the layer directly.
+    - Keras layers do not have a register_buffer() method. Instead just set the attribute with that name on the layer directly. 
     """
     module_name = get_module_name(module_text)
     if "load_tf_weights" in module_name:
@@ -63,7 +63,8 @@ def translate_fn(module_text: str):
     for chunk in tqdm(response, desc=f"Translating {module_name}", dynamic_ncols=True, unit=" tokens"):
         chunk_message = chunk['choices'][0]['delta']
         chunks.append(chunk_message)
-    return ''.join([m.get('content', '') for m in chunks])
+    translated_function = ''.join([m.get('content', '') for m in chunks])
+    return translated_function
 
 
 def split_file(source_file: Path):
