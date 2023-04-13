@@ -575,9 +575,9 @@ class TrainingArguments:
             [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/).
 
             This will use the best defaults for the [`torch.compile`
-            API](https://pytorch.org/docs/2.0/generated/torch.compile.html?highlight=torch+compile#torch.compile). You
-            can customize the defaults with the argument `torch_compile_backend` and `torch_compile_mode` but we don't
-            guarantee any of them will work as the support is progressively rolled in in PyTorch.
+            API](https://pytorch.org/docs/stable/generated/torch.compile.html?highlight=torch+compile#torch.compile).
+            You can customize the defaults with the argument `torch_compile_backend` and `torch_compile_mode` but we
+            don't guarantee any of them will work as the support is progressively rolled in in PyTorch.
 
             This flag and the whole compile API is experimental and subject to change in future releases.
         torch_compile_backend (`str`, *optional*):
