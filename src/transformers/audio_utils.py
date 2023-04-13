@@ -20,7 +20,6 @@ import warnings
 from typing import Optional, Union
 
 import numpy as np
-from numpy.fft import fft
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -191,118 +190,176 @@ def mel_filter_bank(
     return mel_filters
 
 
-# TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
-def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
+def window_function(length: int, name: str = "hann") -> np.ndarray:
     """
-    In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
-    segments called `frames`.
+    Returns an array containing the specified window.
 
-    The window length (window_length) defines how much of the signal is contained in each frame, while the hop length
-    defines the step between the beginning of each new frame.
+    The window is periodic, not symmetric, and is intended to be used with `stft`.
 
+    The following window types are supported:
+
+        - `"boxcar"`: a rectangular window
+        - `"hamming"`: the Hamming window
+        - `"hann"`: the Hann window
 
     Args:
-        waveform (`np.array` of shape `(sample_length,)`):
-            The raw waveform which will be split into smaller chunks.
-        hop_length (`int`, *optional*, defaults to 160):
-            Step between each window of the waveform.
-        fft_window_size (`int`, *optional*, defaults to 400):
-            Defines the size of the window.
-        center (`bool`, defaults to `True`):
-            Whether or not to center each frame around the middle of the frame. Centering is done by reflecting the
-            waveform on the left and on the right.
-
-    Return:
-        framed_waveform (`np.array` of shape `(waveform.shape // hop_length , fft_window_size)`):
-            The framed waveforms that can be fed to `np.fft`.
-    """
-    frames = []
-    for i in range(0, waveform.shape[0] + 1, hop_length):
-        if center:
-            half_window = (fft_window_size - 1) // 2 + 1
-            start = i - half_window if i > half_window else 0
-            end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-            frame = waveform[start:end]
-            if start == 0:
-                padd_width = (-i + half_window, 0)
-                frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            elif end == waveform.shape[0]:
-                padd_width = (0, (i - waveform.shape[0] + half_window))
-                frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-        else:
-            frame = waveform[i : i + fft_window_size]
-            frame_width = frame.shape[0]
-            if frame_width < waveform.shape[0]:
-                frame = np.lib.pad(
-                    frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0
-                )
-        frames.append(frame)
-
-    frames = np.stack(frames, 0)
-    return frames
-
-
-# TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
-
-
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
-    """
-    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
-    as `torch.stft`.
-
-    Args:
-        frames (`np.array` of dimension `(num_frames, fft_window_size)`):
-            A framed audio signal obtained using `audio_utils.fram_wav`.
-        windowing_function (`np.array` of dimension `(nb_frequency_bins, nb_mel_filters)`:
-            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
-            boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function.
-            For more information on the discontinuities, called *Spectral leakage*, refer to [this
-            tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
-        fft_window_size (`int`, *optional*):
-            Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the
-            spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples. The number of
-            frequency bins (`nb_frequency_bins`) used to divide the window into equal strips is equal to
-            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
-
-    Example:
-
-    ```python
-    >>> from transformers.audio_utils import stft, fram_wave
-    >>> import numpy as np
-
-    >>> audio = np.random.rand(50)
-    >>> fft_window_size = 10
-    >>> hop_length = 2
-    >>> framed_audio = fram_wave(audio, hop_length, fft_window_size)
-    >>> spectrogram = stft(framed_audio, np.hanning(fft_window_size + 1))
-    ```
+        length (`int`):
+            The length of the window in samples.
+        name (`str`, *optional*, defaults to `"hann"`):
+            The name of the window function.
 
     Returns:
-        spectrogram (`np.ndarray`):
-            A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
+        `np.ndarray` of shape `(length,)` containing the window.
     """
-    frame_size = frames.shape[1]
+    if name == "boxcar":
+        return np.ones(length)
+    elif name == "hamming":
+        return np.hamming(length + 1)[:-1]
+    elif name == "hann":
+        return np.hanning(length + 1)[:-1]
+    else:
+        raise ValueError(f"Unknown window function '{name}'")
 
-    if fft_window_size is None:
-        fft_window_size = frame_size
 
-    if fft_window_size < frame_size:
-        raise ValueError("FFT size must greater or equal the frame size")
-    # number of FFT bins to store
-    nb_frequency_bins = (fft_window_size >> 1) + 1
+# TODO This method does not support batching yet as we are mainly focus on inference.
 
-    spectrogram = np.empty((len(frames), nb_frequency_bins), dtype=np.complex64)
-    fft_signal = np.zeros(fft_window_size)
 
-    for f, frame in enumerate(frames):
-        if windowing_function is not None:
-            np.multiply(frame, windowing_function, out=fft_signal[:frame_size])
-        else:
-            fft_signal[:frame_size] = frame
-        spectrogram[f] = fft(fft_signal, axis=0)[:nb_frequency_bins]
+def stft(
+    waveform: np.ndarray,
+    frame_length: int,
+    hop_length: int,
+    window: np.ndarray,
+    power: Optional[float] = 1.0,
+    center: bool = True,
+    pad_mode: str = "reflect",
+    onesided: bool = True,
+) -> np.ndarray:
+    """
+    Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
+
+    How this works:
+
+      1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
+         - hop_length` samples.
+      2. If the window is smaller than `frame_length`, it is centered and zero-padded.
+      3. Each frame is multiplied by the window.
+      4. The DFT is taken of each windowed frame.
+      5. The results are stacked into a spectrogram.
+
+    This function is not optimized for speed yet. It should be mostly compatible with `librosa.stft` and
+    `torchaudio.functional.transforms.Spectrogram`.
+
+    Args:
+        waveform (`np.ndarray` of shape `(length,)`):
+            The input waveform. This must be a single real-valued, mono waveform.
+        frame_length (`int`):
+            The length of the FFT frames. For optimal speed, this should be a power of two. If `-1`, this will
+            automatically set `frame_length` based on the window length.
+        hop_length (`int`):
+            The stride between successive FFT frames in samples.
+        window (`np.ndarray` of shape `(window_length,)`):
+            The windowing function to apply. The `window_length` may not be larger than `frame_length`. If it's
+            smaller, the remainder of the FFT frame will be zero-padded.
+        power (`float`, *optional*, defaults to 1.0):
+            If 1.0, returns the amplitude spectrogram. If 2.0, returns the power spectrogram. If `None`, returns
+            complex numbers.
+        center (`bool`, *optional*, defaults to `True`):
+            Whether to pad the waveform so that so that frame `t` is centered around time `t * hop_length`. If `False`,
+            frame `t` will start at time `t * hop_length`.
+        pad_mode (`str`, *optional*, defaults to `"reflect"`):
+            Padding mode used when `center` is `True`. Possible values are: `"constant"` (pad with zeros), `"edge"`,
+            `"reflect"`.
+        onesided (`bool`, *optional*, defaults to `True`):
+            If True, only computes the positive frequencies and returns a spectrogram containing `frame_length // 2 +
+            1` frequency bins. If False, also computes the negative frequencies and returns `frame_length` frequency
+            bins.
+
+    Returns:
+        `np.ndarray` of shape `(num_frequency_bins, num_frames)` containing the spectrogram; its dtype is
+        `np.complex64` when `power` is None or `np.float64` otherwise.
+    """
+    window_length = len(window)
+
+    if frame_length == -1:
+        frame_length = 2 ** int(np.ceil(np.log2(window_length)))
+
+    if window_length > frame_length:
+        raise ValueError(
+            f"Length of the window ({window_length}) may not be larger than frame_length ({frame_length})"
+        )
+
+    if waveform.ndim != 1:
+        raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
+
+    if np.iscomplexobj(waveform):
+        raise ValueError("Complex-valued input waveforms are not currently supported")
+
+    if hop_length <= 0:
+        raise ValueError("hop_length must be greater than zero")
+
+    # center pad the waveform
+    if center:
+        padding = [(int(frame_length // 2), int(frame_length // 2))]
+        waveform = np.pad(waveform, padding, mode=pad_mode)
+
+    # promote to float64, since np.fft uses float64 internally
+    waveform = waveform.astype(np.float64)
+    window = window.astype(np.float64)
+
+    # center the window in the FFT frame
+    if frame_length != window_length:
+        offset = (frame_length - window_length) // 2
+        padded_window = np.zeros(frame_length)
+        padded_window[offset : offset + window_length] = window
+        window = padded_window
+
+    # split waveform into frames of frame_length size
+    num_frames = int(1 + np.floor((waveform.size - frame_length) / hop_length))
+    num_frequency_bins = (frame_length // 2) + 1 if onesided else frame_length
+
+    spectrogram = np.empty((num_frames, num_frequency_bins), dtype=np.complex64)
+
+    # rfft is faster than fft
+    fft_func = np.fft.rfft if onesided else np.fft.fft
+
+    timestep = 0
+    for frame_idx in range(num_frames):
+        frame = waveform[timestep : timestep + frame_length]
+        spectrogram[frame_idx] = fft_func(frame * window)
+        timestep += hop_length
+
+    # note: ** is much faster than np.power
+    if power is not None:
+        spectrogram = np.abs(spectrogram, dtype=np.float64) ** power
+
     return spectrogram.T
+
+
+def apply_mel_filters(
+    spectrogram: np.ndarray,
+    mel_filters: np.ndarray,
+    mel_floor: float = 1e-10,
+) -> np.ndarray:
+    """
+    Applies a mel filter bank to a spectrogram to create a mel spectrogram.
+
+    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. Note: This doesn't convert to
+    true decibels; use `amplitude_to_db()` or `power_to_db()` for that, depending on whether this is an amplitude or
+    power spectrogram.
+
+    Args:
+        spectrogram (`np.ndarray` of shape `(num_freq_bins, length)`):
+            The input amplitude or power spectrogram.
+        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`):
+            The mel filter bank.
+        mel_floor (`float`, *optional*, defaults to 1e-10):
+            Minimum value of mel frequency banks.
+
+    Returns:
+        `np.ndarray` of shape `(num_mel_filters, length)`: The mel spectrogram.
+    """
+    mel = np.maximum(mel_floor, np.dot(spectrogram.T, mel_filters)).T
+    return mel
 
 
 def power_to_db(

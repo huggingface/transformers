@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import fram_wave, mel_filter_bank, power_to_db, stft
+from ...audio_utils import apply_mel_filters, mel_filter_bank, power_to_db, stft, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -153,22 +153,23 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In CLAP, two different
-        filter banks are used depending on the truncation pattern:
-            - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
+        Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
+        banks are used depending on the truncation pattern:
+            - `self.mel_filters`: they correspond to the default parameters of `torchaudio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
               is set to `"fusion"`.
-            - `self.mel_filteres_slaney` : they correspond to the defaults parameters of `torchlibrosa` which used
+            - `self.mel_filteres_slaney` : they correspond to the default parameters of `librosa` which used
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.
         """
-        window = np.hanning(self.fft_window_size + 1)[:-1]
-        frames = fram_wave(waveform, self.hop_length, self.fft_window_size)
-        spectrogram = stft(frames, window, fft_window_size=self.fft_window_size)
-
-        magnitudes = np.abs(spectrogram) ** 2
-        mel_spectrogram = np.matmul(mel_filters.T, magnitudes)
-        log_mel_spectrogram = power_to_db(mel_spectrogram).T
+        spectrogram = stft(
+            waveform,
+            frame_length=self.fft_window_size,
+            hop_length=self.hop_length,
+            window=window_function(self.fft_window_size, "hann"),
+            power=2.0,
+        )
+        log_mel_spectrogram = power_to_db(apply_mel_filters(spectrogram, mel_filters))
         log_mel_spectrogram = np.asarray(log_mel_spectrogram, np.float32)
         return log_mel_spectrogram
 
