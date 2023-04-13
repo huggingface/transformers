@@ -17,13 +17,13 @@ specific language governing permissions and limitations under the License.
 모델을 학습하려면 데이터셋을 모델에 맞는 입력 형식으로 전처리 해야 합니다. 데이터가 텍스트, 이미지 또는 오디오인지 여부에 관계없이 데이터를 텐서 배치로 변환하고 조립할 필요가 있습니다. 🤗 Transformers는 모델에 대한 데이터를 준비하는 데 도움이 되는 일련의 전처리 클래스를 제공합니다. 이 튜토리얼에서는 다음 내용을 배울 수 있습니다.
 
 * 텍스트는 [Tokenizer](./main_classes/tokenizer)를 사용하여 텍스트를 토큰 시퀀스로 변환하고 토큰의 숫자 표현을 만든 후 텐서로 조립합니다.
-* 음성 및 오디오는 [Feature extractor](./main_classes/feature_extractor)를 사용하여 오디오 파형에서 시퀀스 특징을 파악하여 텐서로 변환합니다.
+* 음성 및 오디오는 [Feature extractor](./main_classes/feature_extractor)를 사용하여 오디오 파형에서 시퀀스 특성을 파악하여 텐서로 변환합니다.
 * 이미지 입력은 [ImageProcessor](./main_classes/image)을 사용하여 이미지를 텐서로 변환합니다.
-* 멀티모달 입력은 [Processor](./main_classes/processors)을 사용하여 토크나이저와 특징 추출기 또는 이미지 프로세서를 결합합니다.
+* 멀티모달 입력은 [Processor](./main_classes/processors)을 사용하여 토크나이저와 특성 추출기 또는 이미지 프로세서를 결합합니다.
 
 <Tip>
 
-`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 프로세서, 특징 추출기 또는 프로세서 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
+`AutoProcessor`는 **항상** 작동하며 토크나이저, 이미지 프로세서, 특성 추출기 또는 프로세서 등 사용 중인 모델에 맞는 클래스를 자동으로 선택합니다.
 
 </Tip>
 
@@ -45,7 +45,7 @@ pip install datasets
 
 </Tip>
 
-시작하려면 [`AutoTokenizer.from_pretrained`] 메서드를 사용하여 사전 훈련된 토크나이저를 불러오세요. 모델과 함께 사전 훈련된 *vocab*을 다운로드합니다:
+시작하려면 [`AutoTokenizer.from_pretrained`] 메소드를 사용하여 사전 훈련된 토크나이저를 불러오세요. 모델과 함께 사전 훈련된 *vocab*을 다운로드합니다:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -76,7 +76,7 @@ pip install datasets
 '[CLS] Do not meddle in the affairs of wizards, for they are subtle and quick to anger. [SEP]'
 ```
 
-토크나이저가 두 개의 특수한 토큰(분류 토큰 CLS와 구분 토큰 SEP)을 문장에 추가했습니다.
+토크나이저가 두 개의 특수한 토큰(분류 토큰 CLS와 분할 토큰 SEP)을 문장에 추가했습니다.
 모든 모델에 특수한 토큰이 필요한 것은 아니지만, 필요한 경우 토크나이저가 자동으로 추가합니다.
 
 전처리할 문장이 여러 개 있는 경우 이를 리스트로 토크나이저에 전달합니다:
@@ -214,9 +214,9 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 ## 오디오[[audio]]
 
-오디오 작업에는 데이터셋을 모델에 준비하기 위해 [특징 추출기](main_classes/feature_extractor)가 필요합니다. 특징 추출기는 원시 오디오 데이터에서 피처를 추출하고 이를 텐서로 변환하는 것이 목적입니다.
+오디오 작업에는 데이터셋을 모델에 준비하기 위해 [특성 추출기](main_classes/feature_extractor)가 필요합니다. 특성 추출기는 원시 오디오 데이터에서 특성를 추출하고 이를 텐서로 변환하는 것이 목적입니다.
 
-오디오 데이터셋에 특징 추출기를 사용하는 방법을 보려면 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터셋을 가져오세요. (데이터셋을 가져오는 방법은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다.)
+오디오 데이터셋에 특성 추출기를 사용하는 방법을 보려면 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터셋을 가져오세요. (데이터셋을 가져오는 방법은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다.)
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -243,7 +243,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 이 튜토리얼에서는 [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) 모델을 사용합니다. 모델 카드를 보면 Wav2Vec2가 16kHz 샘플링된 음성 오디오를 기반으로 사전 학습된 것을 알 수 있습니다. 
 모델을 사전 학습하는 데 사용된 데이터셋의 샘플링 레이트와 오디오 데이터의 샘플링 레이트가 일치해야 합니다. 데이터의 샘플링 레이트가 다르면 데이터를 리샘플링해야 합니다.
 
-1. 🤗 Datasets의 [`~datasets.Dataset.cast_column`] 메서드를 사용하여 샘플링 레이트를 16kHz로 업샘플링하세요:
+1. 🤗 Datasets의 [`~datasets.Dataset.cast_column`] 메소드를 사용하여 샘플링 레이트를 16kHz로 업샘플링하세요:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
@@ -259,10 +259,10 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
  'sampling_rate': 16000}
 ```
 
-다음으로, 입력을 정규화하고 패딩하는 특징 추출기를 가져오세요. 텍스트 데이터의 경우, 더 짧은 시퀀스에 대해 `0`이 추가됩니다. 오디오 데이터에도 같은 개념이 적용됩니다. 
-특징 추출기는 배열에 대해 `0`(묵음으로 해석)을 추가합니다.
+다음으로, 입력을 정규화하고 패딩하는 특성 추출기를 가져오세요. 텍스트 데이터의 경우, 더 짧은 시퀀스에 대해 `0`이 추가됩니다. 오디오 데이터에도 같은 개념이 적용됩니다. 
+특성 추출기는 배열에 대해 `0`(묵음으로 해석)을 추가합니다.
 
-[`AutoFeatureExtractor.from_pretrained`]를 사용하여 특징 추출기를 가져오세요:
+[`AutoFeatureExtractor.from_pretrained`]를 사용하여 특성 추출기를 가져오세요:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -270,7 +270,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-오디오 `array`를 특징 추출기에 전달하세요. 또한, 특징 추출기에 `sampling_rate` 인자를 추가하여 발생할 수 있는 조용한 오류(silent errors)를 더 잘 디버깅하는 것을 권장합니다.
+오디오 `array`를 특성 추출기에 전달하세요. 또한, 특성 추출기에 `sampling_rate` 인수를 추가하여 발생할 수 있는 조용한 오류(silent errors)를 더 잘 디버깅하는 것을 권장합니다.
 
 ```py
 >>> audio_input = [dataset[0]["audio"]["array"]]
@@ -289,7 +289,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 (106496,)
 ```
 
-오디오 샘플의 길이가 동일하도록 데이터셋을 전처리하는 함수를 만들어 보세요. 최대 샘플 길이를 지정하면, 특징 추출기가 해당 길이에 맞춰 시퀀스를 패딩하거나 생략합니다:
+오디오 샘플의 길이가 동일하도록 데이터셋을 전처리하는 함수를 만들어 보세요. 최대 샘플 길이를 지정하면, 특성 추출기가 해당 길이에 맞춰 시퀀스를 패딩하거나 생략합니다:
 
 ```py
 >>> def preprocess_function(examples):
@@ -335,7 +335,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 밝기와 색상 조정, 자르기, 회전, 크기 조정, 확대/축소 등 다양한 방법으로 데이터를 증강할 수 있습니다. 
 그러나 증강으로 이미지의 의미가 바뀌지 않도록 주의해야 합니다.
 * 이미지 전처리는 이미지가 모델이 예상하는 입력 형식과 일치하도록 보장합니다. 
-컴퓨터 비전 모델을 미세 튜닝할 때 이미지는 모델이 초기에 훈련될 때와 정확히 같은 방식으로 전처리되어야 합니다.
+컴퓨터 비전 모델을 미세 조정할 때 이미지는 모델이 초기에 훈련될 때와 정확히 같은 방식으로 전처리되어야 합니다.
 
 이미지 증강에는 원하는 라이브러리를 사용할 수 있습니다. 이미지 전처리에는 모델과 연결된 `ImageProcessor`를 사용합니다.
 
@@ -469,7 +469,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 ## 멀티모달[[multimodal]]
 
 멀티모달 입력이 필요한 작업의 경우, 모델에 데이터셋을 준비하기 위한 [프로세서](main_classes/processors)가 필요합니다. 
-프로세서는 토크나이저와 특징 추출기와 같은 두 가지 처리 객체를 결합합니다.
+프로세서는 토크나이저와 특성 추출기와 같은 두 가지 처리 객체를 결합합니다.
 
 [LJ Speech](https://huggingface.co/datasets/lj_speech) 데이터셋을 로드하여 자동 음성 인식(ASR)을 위한 프로세서를 사용하는 방법을 확인하세요. 
 (데이터셋을 로드하는 방법에 대한 자세한 내용은 🤗 [데이터셋 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 볼 수 있습니다.)
