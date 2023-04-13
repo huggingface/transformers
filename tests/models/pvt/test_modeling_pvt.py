@@ -33,12 +33,15 @@ from ...test_modeling_common import floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from PIL import Image
 
     from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
     from transformers.models.pvt.modeling_pvt import (
         PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 class PvtModelTester:

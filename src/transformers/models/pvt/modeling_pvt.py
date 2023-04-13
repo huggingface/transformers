@@ -50,10 +50,7 @@ _IMAGE_CLASS_CHECKPOINT = "Xrenya/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Xrenya/pvt-tiny-224",
-    "Xrenya/pvt-small-224",
-    "Xrenya/pvt-medium-224",
-    "Xrenya/pvt-large-224",
+    "Xrenya/pvt-tiny-224"
     # See all PVT models at https://huggingface.co/models?filter=pvt
 ]
 
