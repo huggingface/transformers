@@ -94,8 +94,8 @@ class GenerationIntegrationTestsMixin:
 
         # Decoder only call
         outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
-        # 29 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 32])
+        # 1 BOS + 29 (input length) + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 33])
 
         # Encoder decoder call > 20
         outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20)
