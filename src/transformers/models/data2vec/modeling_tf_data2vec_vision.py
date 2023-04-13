@@ -931,7 +931,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
+    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
