@@ -1689,3 +1689,17 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(input_values=inputs)
+
+        return self.serving_output(output)
