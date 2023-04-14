@@ -14,19 +14,35 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The SwiftFormer model was proposed in [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications
-](https://arxiv.org/abs/2303.15446) by <Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan
->.
-<INSERT SHORT SUMMARY HERE>
+The SwiftFormer model was proposed in [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications](https://arxiv.org/abs/2303.15446) by Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan.
+
+SwiftFormer paper introduces a novel efficient additive attention mechanism that effectively replaces the quadratic matrix multiplication operations in the self-attention computation with linear element-wise multiplications. A series of models called 'SwiftFormer' is built based on this, which achieves state-of-the-art performance in terms of both accuracy and mobile inference speed. Even their small variant achieves 78.5% top-1 ImageNet1K accuracy with only 0.8 ms latency on iPhone 14, which is more accurate and 2× faster compared to MobileViT-v2.
 
 The abstract from the paper is the following:
 
-*Self-attention has become a defacto choice for capturing global context in various vision applications. However, its quadratic computational complexity with respect to image resolution limits its use in real-time applications, especially for deployment on resource-constrained mobile devices. Although hybrid approaches have been proposed to combine the advantages of convolutions and self-attention for a better speed-accuracy trade-off, the expensive matrix multiplication operations in self-attention remain a bottleneck. In this work, we introduce a novel efficient additive attention mechanism that effectively replaces the quadratic matrix multiplication operations with linear element-wise multiplications. Our design shows that the key-value interaction can be replaced with a linear layer without sacrificing any accuracy. Unlike previous state-of-the-art methods, our efficient formulation of self-attention enables its usage at all stages of the network. Using our proposed efficient additive attention, we build a series of models called "SwiftFormer" which achieves state-of-the-art performance in terms of both accuracy and mobile inference speed. Our small variant achieves 78.5% top-1 ImageNet-1K accuracy with only 0.8 ms latency on iPhone 14, which is more accurate and 2x faster compared to MobileViT-v2.
-*
+*Self-attention has become a defacto choice for capturing global context in various vision applications. However, its quadratic computational complexity with respect to image resolution limits its use in real-time applications, especially for deployment on resource-constrained mobile devices. Although hybrid approaches have been proposed to combine the advantages of convolutions and self-attention for a better speed-accuracy trade-off, the expensive matrix multiplication operations in self-attention remain a bottleneck. In this work, we introduce a novel efficient additive attention mechanism that effectively replaces the quadratic matrix multiplication operations with linear element-wise multiplications. Our design shows that the key-value interaction can be replaced with a linear layer without sacrificing any accuracy. Unlike previous state-of-the-art methods, our efficient formulation of self-attention enables its usage at all stages of the network. Using our proposed efficient additive attention, we build a series of models called "SwiftFormer" which achieves state-of-the-art performance in terms of both accuracy and mobile inference speed. Our small variant achieves 78.5% top-1 ImageNet-1K accuracy with only 0.8 ms latency on iPhone 14, which is more accurate and 2x faster compared to MobileViT-v2.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+    import requests
+    from PIL import Image
+
+    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    image = Image.open(requests.get(url, stream=True).raw)
+
+    from transformers import ViTImageProcessor
+    processor = ViTImageProcessor.from_pretrained('shehan97/swiftformer-xs')
+    inputs = processor(images=image, return_tensors="pt")
+
+
+    from transformers.models.swiftformer import SwiftFormerForImageClassification
+    new_model = SwiftFormerForImageClassification.from_pretrained('shehan97/swiftformer-xs')
+
+    output = new_model(inputs['pixel_values'], output_hidden_states=True)
+    logits = output.logits
+    predicted_class_idx = logits.argmax(-1).item()
+    print("Predicted class:", new_model.config.id2label[predicted_class_idx])
+
 
 This model was contributed by [shehan97](https://huggingface.co/shehan97).
 The original code can be found [here](https://github.com/Amshaker/SwiftFormer).
@@ -39,11 +55,6 @@ The original code can be found [here](https://github.com/Amshaker/SwiftFormer).
 ## SwiftFormerModel
 
 [[autodoc]] SwiftFormerModel
-    - forward
-
-## SwiftFormerForMaskedImageModeling
-
-[[autodoc]] SwiftFormerForMaskedImageModeling
     - forward
 
 ## SwiftFormerForImageClassification
