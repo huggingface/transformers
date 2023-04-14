@@ -1547,6 +1547,7 @@ class TrainingArguments:
             local_rank = smp.local_rank()
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
+            torch.cuda.set_device(device)
         elif self.deepspeed:
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self._n_gpu = 1
