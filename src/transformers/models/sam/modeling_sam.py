@@ -439,7 +439,7 @@ class SamMaskDecoder(nn.Module):
         # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upsacle_layer_norm = SamLayerNorm(self.hidden_size // 4)
+        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4)
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -522,7 +522,7 @@ class SamMaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
 
         upscaled_embedding = self.upscale_conv1(src)
-        upscaled_embedding = self.activation(self.upsacle_layer_norm(upscaled_embedding))
+        upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
 
         # let's define a class for this: probably the dynamic_prediction_head?
@@ -568,7 +568,7 @@ class SamMaskEmbedding(nn.Module):
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
         self.layer_norm1 = SamLayerNorm(self.mask_input_channels)
-        self.layer_norm2 = SamLayerNorm(self.mask_input_channels)
+        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4)
 
     def forward(self, masks):
         hidden_states = self.conv1(masks)
@@ -679,6 +679,7 @@ class SamVisionAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
+        self.dropout = config.attention_dropout
 
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -819,7 +820,7 @@ class SamVisionLayer(nn.Module):
         self.mlp = SamMLPBlock(config)
         self.window_size = window_size
 
-    def window_partition(hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
@@ -842,7 +843,7 @@ class SamVisionLayer(nn.Module):
         return windows, (Hp, Wp)
 
     def window_unpartition(
-        windows: torch.Tensor, window_size: int, pad_hw: Tuple[int, int], hw: Tuple[int, int]
+        self, windows: torch.Tensor, window_size: int, pad_hw: Tuple[int, int], hw: Tuple[int, int]
     ) -> torch.Tensor:
         """
         Args:
@@ -877,7 +878,7 @@ class SamVisionLayer(nn.Module):
             H, W = hidden_states.shape[1], hidden_states.shape[2]
             hidden_states, pad_hw = self.window_partition(hidden_states, self.window_size)
 
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
             output_attentions=output_attentions,
         )
@@ -926,11 +927,12 @@ class SamVisionEncoder(nn.Module):
             self.layers.append(layer)
 
         self.neck_conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.neck_layer_norm1 = SamLayerNorm(config.output_channels)
+        self.neck_layer_norm1 = SamLayerNorm(config.output_channels, data_format="channels_first")
         self.neck_conv2 = nn.Conv2d(
             config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False
         )
-        self.neck_layer_norm2 = SamLayerNorm(config.output_channels)
+        self.neck_layer_norm2 = SamLayerNorm(config.output_channels, data_format="channels_first")
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -997,7 +999,7 @@ class SamVisionEncoder(nn.Module):
                     hidden_states,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
