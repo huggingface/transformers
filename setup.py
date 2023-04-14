@@ -307,7 +307,6 @@ extras["testing"] = (
         "timeout-decorator",
         "parameterized",
         "psutil",
-        "accelerate",
         "datasets",
         "dill",
         "evaluate",
