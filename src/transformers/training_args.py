@@ -1550,7 +1550,7 @@ class TrainingArguments:
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and self.parallel_mode == ParallelMode.DISTRIBUTED
+            and getattr(self.distributed_state, "distributed_type", DistributedType.NO) != DistributedType.NO
         ):
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
@@ -1562,7 +1562,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled():
             self._n_gpu = 1
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
+        elif self.distributed_state.distributed_type != DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
                     if not torch.backends.mps.is_built():
