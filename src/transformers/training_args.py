@@ -24,8 +24,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from accelerate import PartialState
-from accelerate.utils import DistributedType
 from packaging import version
 
 from .debug_utils import DebugOption
@@ -64,6 +62,10 @@ trainer_log_levels = dict(**log_levels, passive=-1)
 if is_torch_available():
     import torch
     import torch.distributed as dist
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
