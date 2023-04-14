@@ -1550,7 +1550,7 @@ class TrainingArguments:
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and getattr(self.distributed_state, "distributed_type", DistributedType.NO) != DistributedType.NO
+            and self.distributed_state.distributed_type != DistributedType.NO
         ):
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
