@@ -221,7 +221,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
-        self.condition_on_previous_text = None
 
     def __call__(
         self,
@@ -444,31 +443,24 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # `generate` magic to create the mask automatically won't work, we basically need to help
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
-            condition_on_previous_text = generate_kwargs.get("condition_on_previous_text")
 
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
-            # update generate_kwargs to use previous tokens at first non-special token from end to next special token
+
+            condition_on_previous_text = generate_kwargs.get("condition_on_previous_text")
             if condition_on_previous_text and not generate_kwargs.get("always_use_initial_prompt"):
-                next_prompt_ids = []
-                in_previous_text = False
-                for token in reversed(tokens.flatten().tolist()):
-                    if token in self.tokenizer.all_special_ids:
-                        if in_previous_text:
-                            break
-                        else:
-                            continue
-                    in_previous_text = True
-                    next_prompt_ids.insert(0, token)
-                # The below line will not be staying like this don't worry
-                # Also, will update indexing to use proper context length
-                generate_kwargs["prompt_ids"] = [generate_kwargs["prompt_ids"][0]] + [
-                    *generate_kwargs["prompt_ids"][1:],
-                    *next_prompt_ids,
-                ][-200:]
+                # Update the prompt_ids to add the generated text to the prompt for the next generation
+                prompt_len = len(generate_kwargs["prompt_ids"])
+                tokens_after_prompt = tokens.flatten().tolist()[prompt_len:]
+                generated_text_ids = [tok for tok in tokens_after_prompt if tok not in self.tokenizer.all_special_ids]
+                decoder_start_token_id, *prev_text_prompt_ids = generate_kwargs["prompt_ids"]
+                next_prompt_text_ids = [*prev_text_prompt_ids, *generated_text_ids]
+                max_prompt_len = self.model.config.max_length // 2 - 1
+                prompt_ids = [decoder_start_token_id, *next_prompt_text_ids[-max_prompt_len:]]
+                generate_kwargs["prompt_ids"] = prompt_ids
 
             out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
