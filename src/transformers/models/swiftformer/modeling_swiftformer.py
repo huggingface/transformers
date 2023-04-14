@@ -523,7 +523,6 @@ class SwiftFormerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->SwiftFormer,vit->swiftformer
 class SwiftFormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -585,7 +584,6 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
     "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
     SWIFTFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->SWIFTFORMER,ViT->SwiftFormer
 class SwiftFormerModel(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
@@ -650,7 +648,6 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     """,
     SWIFTFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->SWIFTFORMER,ViT->SwiftFormer,vit->swiftformer
 class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__(config)
