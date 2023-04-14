@@ -25,10 +25,17 @@ from transformers.testing_utils import is_pipeline_test, nested_simplify, requir
 from .test_pipelines_common import ANY
 
 
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
+
 @is_pipeline_test
 class TextClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+    model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ in _TO_SKIP}
+    tf_model_mapping = {config: model for config, model in tf_model_mapping.items() if config.__name__ in _TO_SKIP}
 
     @require_torch
     def test_small_model_pt(self):

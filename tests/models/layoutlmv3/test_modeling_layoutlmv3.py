@@ -289,10 +289,6 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "document-question-answering": LayoutLMv3ForQuestionAnswering,
             "feature-extraction": LayoutLMv3Model,
-            "question-answering": LayoutLMv3ForQuestionAnswering,
-            "text-classification": LayoutLMv3ForSequenceClassification,
-            "token-classification": LayoutLMv3ForTokenClassification,
-            "zero-shot": LayoutLMv3ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -302,6 +298,10 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
+        # `DocumentQuestionAnsweringPipeline` is expected to work with this model, but it combines the text and visual
+        # embedding along the sequence dimension (dim 1), which causes an error during post-processing as `p_mask` has
+        # the sequence dimension of the text embedding only.
+        # (see the line `embedding_output = torch.cat([embedding_output, visual_embeddings], dim=1)`)
         return True
 
     def setUp(self):
