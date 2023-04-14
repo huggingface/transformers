@@ -1111,7 +1111,6 @@ class GroupViTTextTransformer(nn.Module):
         causal_attention_mask = self._build_causal_attention_mask(
             bsz, seq_len, hidden_states.dtype, device=hidden_states.device
         )
-
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1151,7 +1150,7 @@ class GroupViTTextTransformer(nn.Module):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
         mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype, device=device)
-        mask.fill_(torch.tensor(torch.finfo(dtype).min))
+        mask.fill_(torch.finfo(dtype).min)
         mask.triu_(1)  # zero out the lower diagonal
         mask = mask.unsqueeze(1)  # expand mask
         return mask

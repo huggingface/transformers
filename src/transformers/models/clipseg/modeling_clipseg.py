@@ -729,7 +729,6 @@ class CLIPSegTextTransformer(nn.Module):
         causal_attention_mask = self._build_causal_attention_mask(
             bsz, seq_len, hidden_states.dtype, device=hidden_states.device
         )
-
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
