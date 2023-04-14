@@ -343,6 +343,7 @@ class SamTwoWayAttentionBlock(nn.Module):
 class SamTwoWayTransformer(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
+        self.config = config
 
         self.num_hidden_layers = config.num_hidden_layers
         self.layers = nn.ModuleList()
@@ -439,7 +440,7 @@ class SamMaskDecoder(nn.Module):
         # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4)
+        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -588,7 +589,9 @@ class SamPromptEncoder(nn.Module):
         self.shared_embedding = shared_patch_embedding
         self.mask_embed = SamMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
-        self.image_embedding_size = (None, None)
+
+        self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+
         self.point_embed = nn.ModuleList(
             [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
         )
@@ -642,14 +645,15 @@ class SamPromptEncoder(nn.Module):
             Bx(hidden_size)x(embed_H)x(embed_W)
         """
         sparse_embeddings = None
+        target_device = self.shared_embedding.positional_embedding.device
         if points is not None:
-            batch_size = points.shape[0]
+            batch_size = points[0].shape[0]
             if labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             coords = points
             point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
             sparse_embeddings = torch.empty(
-                (batch_size, 0, self.hidden_size), device=self.shared_embedding.weight.device
+                (batch_size, 0, self.hidden_size), device=target_device
             )
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
@@ -657,15 +661,19 @@ class SamPromptEncoder(nn.Module):
             box_embeddings = self._embed_boxes(boxes)
             if sparse_embeddings is None:
                 sparse_embeddings = torch.empty(
-                    (batch_size, 0, self.hidden_size), device=self.shared_embedding.weight.device
+                    (batch_size, 0, self.hidden_size), device=target_device
                 )
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
         if masks is not None:
             dense_embeddings = self.mask_embed(masks)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
+
+        if sparse_embeddings is None:
+            sparse_embeddings = torch.empty((dense_embeddings.shape[0], 0, self.hidden_size), device=target_device)
+        
         return sparse_embeddings, dense_embeddings
 
 
@@ -1160,19 +1168,19 @@ class SamForImageSegmentation(SamPreTrainedModel):
         self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
-    def get_image_wide_positional_embeddings(self, size):
-        height, width = size
+    def get_image_wide_positional_embeddings(self):
+        size = self.config.prompt_encoder_config.image_embedding_size
         target_device = self.shared_image_embedding.positional_embedding.device
         target_dtype = self.shared_image_embedding.positional_embedding.dtype
-        grid = torch.ones((height, width), device=target_device, dtype=target_dtype)
+        grid = torch.ones((size, size), device=target_device, dtype=target_dtype)
         y_embed = grid.cumsum(dim=0) - 0.5
         x_embed = grid.cumsum(dim=1) - 0.5
-        y_embed = y_embed / height
-        x_embed = x_embed / width
+        y_embed = y_embed / size
+        x_embed = x_embed / size
 
-        image_embedding_size = (self.config.prompt_encoder_config.image_embedding_size, self.config.prompt_encoder_config.image_embedding_size)
+        image_embedding_size = (size, size)
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1), image_embedding_size)
-        return positional_embedding.permute(2, 0, 1)  # C x H x W
+        return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # C x H x W
 
     def forward(
         self,
@@ -1185,7 +1193,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
         original_sizes=None,
         multimask_output: bool = True,
     ) -> List[Dict[str, torch.Tensor]]:
-        image_position_embedding = self.get_image_wide_positional_embeddings(pixel_values.shape[2:])
+        image_position_embedding = self.get_image_wide_positional_embeddings()
         image_embeddings = self.vision_encoder(pixel_values)[0]
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
