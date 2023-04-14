@@ -586,6 +586,8 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                 )
 
+                print(layer_outputs)
+
             hidden_states = layer_outputs[0]
 
             if use_cache:
