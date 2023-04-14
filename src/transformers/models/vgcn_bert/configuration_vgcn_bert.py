@@ -39,10 +39,10 @@ class VGCNBertConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vgcn_hidden_dim (`int`, *optional*, defaults to 128):
-            Dimensionality of the VGCN model hidden layer.
         vgcn_graph_embedding_dim (`int`, *optional*, defaults to 16):
             Dimensionality of the number of output embedding from VGCN model.
+        vgcn_hidden_dim (`int`, *optional*, defaults to 128):
+            Dimensionality of the VGCN model hidden layer.
         vgcn_activation (`str` or `Callable`, *optional*, defaults to `"None"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -102,8 +102,8 @@ class VGCNBertConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vgcn_hidden_dim=128,
         vgcn_graph_embds_dim=16,
+        vgcn_hidden_dim=128,
         vgcn_activation="relu",
         vgcn_dropout=0.1,
         vocab_size=30522,
@@ -122,8 +122,8 @@ class VGCNBertConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs,
     ):
-        self.vgcn_hidden_dim = vgcn_hidden_dim
         self.vgcn_graph_embds_dim = vgcn_graph_embds_dim
+        self.vgcn_hidden_dim = vgcn_hidden_dim
         self.vgcn_activation = vgcn_activation
         self.vgcn_dropout = vgcn_dropout
         self.vocab_size = vocab_size

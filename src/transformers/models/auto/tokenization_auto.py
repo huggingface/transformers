@@ -132,7 +132,7 @@ else:
                 ),
             ),
             ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
-            ("vgcn-bert", ("VGCNBertTokenizer", "VGCNBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("vgcn-bert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (

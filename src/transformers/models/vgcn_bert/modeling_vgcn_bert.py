@@ -87,11 +87,13 @@ class VocabGraphConvolution(nn.Module):
     """Vocabulary GCN module.
 
     Params:
-        `vgcn_graphs`: List of vocabulary graph, normally adjacency matrix
-        `hid_dim`: The hidden dimension after XAW
-        `out_dim`: The output dimension after Relu(XAW)W
-        `dropout_rate`: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
+        `wgraphs`: List of vocabulary graph, normally adjacency matrix
+        `wgraph_id_to_tokenizer_id_maps`: wgraph.vocabulary to tokenizer.vocabulary id-mapping
+        `word_embeddings`: word_emeddings from VGCNEmbeddings class
+        `hid_dim`: The hidden dimension after `GCN=XAW` (GCN layer)
+        `out_dim`: The output dimension after `out=Relu(XAW)W`  (GCN output)
+        `activation`: The activation function in `out=act(XAW)W`
+        `dropout_rate`: The dropout probabilitiy in `out=dropout(act(XAW))W`.
 
     Inputs:
         `X_dv`: the feature of mini batch document, can be TF-IDF (batch, vocab), or word embedding (batch, word_embedding_dim, vocab)
@@ -106,7 +108,7 @@ class VocabGraphConvolution(nn.Module):
         wgraphs: list,
         wgraph_id_to_tokenizer_id_maps: List[dict],
         word_embeddings: nn.Embedding,
-        position_embeddings: nn.Embedding,
+        # position_embeddings: nn.Embedding,
         hid_dim: int,
         out_dim: int,
         activation=None,
@@ -114,7 +116,7 @@ class VocabGraphConvolution(nn.Module):
     ):
         super().__init__()
         self.word_embeddings = word_embeddings
-        self.position_embeddings = position_embeddings
+        # self.position_embeddings = position_embeddings
 
         self._check_wgraphs(wgraphs)
         self.wgraphs = wgraphs  # List[torch.sparse.FloatTensor]
@@ -181,6 +183,7 @@ class VocabGraphConvolution(nn.Module):
 
     def get_subgraphs(self, adj_matrix: torch.Tensor, gx_ids: torch.LongTensor):
         # assert adj_matrix.layout is torch.sparse_coo
+        device = gx_ids.device
         batch_size = gx_ids.shape[0]
         batch_masks = torch.any(
             torch.any(
@@ -193,7 +196,7 @@ class VocabGraphConvolution(nn.Module):
         batch_values = adj_matrix.values().unsqueeze(0).repeat(batch_size, 1)
         batch_values = batch_values.view(-1)[batch_masks.view(-1)]
 
-        batch_positions = torch.arange(batch_size).unsqueeze(1).repeat(1, nnz_len)
+        batch_positions = torch.arange(batch_size, device=device).unsqueeze(1).repeat(1, nnz_len)
         indices = torch.cat([batch_positions.view(1, -1), adj_matrix.indices().repeat(1, batch_size)], dim=0)
         indices = indices[batch_masks.view(-1).expand(3, -1)].view(3, -1)
 
@@ -202,18 +205,13 @@ class VocabGraphConvolution(nn.Module):
             values=batch_values.view(-1),
             size=(batch_size, adj_matrix.size(0), adj_matrix.size(1)),
             dtype=adj_matrix.dtype,
-            device=adj_matrix.device,
+            device=device,
         )
 
         return batch_sub_adj_matrix.coalesce()
 
-    def forward(self, input_ids: torch.Tensor, position_ids: torch.Tensor = None):
+    def forward(self, input_ids: torch.Tensor):  # , position_ids: torch.Tensor = None):
         device = input_ids.device
-        # TODO: for batch
-        # gx_ids_in_sentence_order_list = [
-        #     torch.LongTensor(list(map(lambda x: m.get(x, -1), input_ids.numpy())), device=device)
-        #     for m in self.tokenizer_id_to_wgraph_id_maps
-        # ]
         gx_ids_list = []
         # positon_embeddings_in_gvocab_order_list=[]
         for m in self.tokenizer_id_to_wgraph_id_arrays:
@@ -271,30 +269,7 @@ class VocabGraphConvolution(nn.Module):
 
 
 class VGCNEmbeddings(nn.Module):
-    """Construct the embeddings from word, VGCN graph, position and token_type embeddings.
-
-    Params:
-        `config`: a BertConfig class instance with the configuration to build a new model
-        `vgcn_graphs`: List of vocabulary graph
-        `vgcn_embedding_dim`: The output dimension after VGCN
-
-    Inputs:
-        `gcn_swop_eye`: The transform matrix for transform the token sequence (sentence) to the Vocabulary order (BoW order)
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
-            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
-        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
-            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
-            a `sentence B` token (see BERT paper for more details).
-        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
-            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
-            a batch has varying length sentences.
-
-    Outputs:
-        the word embeddings fused by VGCN embedding, position embedding and token_type embeddings.
-
-    """
+    """Construct the embeddings from word, VGCN graph, position and token_type embeddings."""
 
     def __init__(self, config: PretrainedConfig, vgcn_graphs: list, wgraph_id_to_tokenizer_id_maps: List[dict]):
         super().__init__()
@@ -307,7 +282,7 @@ class VGCNEmbeddings(nn.Module):
             vgcn_graphs,
             wgraph_id_to_tokenizer_id_maps,
             self.word_embeddings,
-            self.position_embeddings,
+            # self.position_embeddings,
             config.vgcn_hidden_dim,
             config.vgcn_graph_embds_dim,
             config.vgcn_activation,
@@ -330,23 +305,21 @@ class VGCNEmbeddings(nn.Module):
         Parameters:
             input_ids (torch.Tensor):
                 torch.tensor(bs, max_seq_length) The token ids to embed.
-            input_embeds (*optional*, torch.Tensor):
-                The pre-computed word embeddings. Can only be passed if the input ids are `None`.
-
+                input_ids is mandatory in vgcn-bert.
 
         Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
         embeddings)
         """
 
-        if input_ids is not None:  # TODO: input_ids is mandatory in vgcn-bert
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+        # input_ids is mandatory in vgcn-bert
+        input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
-        device = input_embeds.device
-        input_lengths = (
-            (input_ids > 0).sum(-1)
-            if input_ids is not None
-            else torch.ones(input_embeds.size(0), device=device, dtype=torch.int64) * input_embeds.size(1)
-        )
+        # device = input_embeds.device
+        # input_lengths = (
+        #     (input_ids > 0).sum(-1)
+        #     if input_ids is not None
+        #     else torch.ones(input_embeds.size(0), device=device, dtype=torch.int64) * input_embeds.size(1)
+        # )
 
         seq_length = input_embeds.size(1)
 
@@ -359,23 +332,22 @@ class VGCNEmbeddings(nn.Module):
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
 
-        if self.vgcn_graph_embds_dim > 0:
-            # TODO: check input_ids/position_ids donot include [CLS], [SEP][SEP]
-            vgcn_out = self.vgcn(input_ids, position_ids)
-
-            vgcn_words_embeddings = input_embeds.clone()
-            for i in range(self.vgcn_graph_embds_dim):
-                tmp_pos = (input_lengths - 2 - self.vgcn_graph_embds_dim + 1 + i) + torch.arange(
-                    0, input_embeds.shape[0]
-                ).to(device) * input_embeds.shape[1]
-                vgcn_words_embeddings.flatten(start_dim=0, end_dim=1)[tmp_pos, :] = vgcn_out[:, :, i]
-
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
+        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+
         if self.vgcn_graph_embds_dim > 0:
-            embeddings = vgcn_words_embeddings + position_embeddings
-        else:
-            embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+            # TODO: check input_ids/position_ids donot include [CLS], [SEP][SEP]
+            graph_embeds = self.vgcn(input_ids)  # , position_ids)
+
+            # vgcn_words_embeddings = input_embeds.clone()
+            # for i in range(self.vgcn_graph_embds_dim):
+            #     tmp_pos = (input_lengths - 2 - self.vgcn_graph_embds_dim + 1 + i) + torch.arange(
+            #         0, input_embeds.shape[0]
+            #     ).to(device) * input_embeds.shape[1]
+            #     vgcn_words_embeddings.flatten(start_dim=0, end_dim=1)[tmp_pos, :] = graph_embeds[:, :, i]
+
+            embeddings = torch.cat([embeddings, graph_embeds], dim=1)  # (bs, max_seq_length+graph_emb_dim_size, dim)
 
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
@@ -825,6 +797,12 @@ class VGCNBertModel(VGCNBertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
+
+        if self.embeddings.vgcn_graph_embds_dim > 0:
+            attention_mask = torch.cat(
+                [attention_mask, torch.ones((input_shape[0], self.embeddings.vgcn_graph_embds_dim), device=device)],
+                dim=1,
+            )
 
         return self.transformer(
             x=embeddings,
