@@ -1564,7 +1564,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled():
             self._n_gpu = 1
-        elif self.distributed_state.distributed_type != DistributedType.NO:
+        elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
                     if not torch.backends.mps.is_built():
@@ -1597,11 +1597,13 @@ class TrainingArguments:
                 # trigger an error that a device index is missing. Index 0 takes into account the
                 # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
                 # will use the first GPU in that env, i.e. GPU#1
-                device = self.distributed_state.device
-                # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                # device = self.distributed_state.device
+                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
-                self._n_gpu = self.distributed_state.num_processes
+                self._n_gpu = torch.cuda.device_count()
+                if device.type == "cuda":
+                    torch.cuda.set_device(device)
         return device
 
     @property
