@@ -27,9 +27,7 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    logging,
-)
+from ...utils import ModelOutput, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -44,8 +42,90 @@ SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class SamVisionModelOutput:
-    pass
+class SamVisionEncoderOutput(ModelOutput):
+    """
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+
+    Args:
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class SamPromptEncoderOutput(ModelOutput):
+    """
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The text embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    text_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class SamMaskEncoderOutput(ModelOutput):
+    """
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The text embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    text_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from src.models.modeling_vit_mae.ViTMAEPatchEmbeddings with ViTMAEPatchEmbeddings->SamVisionEmbeddings,x->embeddings
@@ -489,12 +569,13 @@ class SamPromptEncoder(nn.Module):
         super().__init__()
         self.shared_emebdding = shared_patch_embedding
         self.mask_embed = SamMaskEmbedding(config)
-        self.no_mask_embed = nn.Embedding(1, self.hidden_size)
-
+        self.no_mask_embed = nn.Embedding(1, config.hidden_size)
+        self.image_embedding_size = (None, None)
         self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, self.hidden_size) for i in range(config.num_point_embeddings)]
+            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
         )
-        self.not_a_point_embed = nn.Embedding(1, self.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         """Embeds point prompts."""
@@ -507,8 +588,8 @@ class SamPromptEncoder(nn.Module):
         point_embedding = self.shared_emebdding(points)
         point_embedding[labels == -1] = 0.0
         point_embedding[labels == -1] += self.not_a_point_embed.weight
-        point_embedding[labels == 0] += self.point_embeddings[0].weight
-        point_embedding[labels == 1] += self.point_embeddings[1].weight
+        point_embedding[labels == 0] += self.point_embed[0].weight
+        point_embedding[labels == 1] += self.point_embed[1].weight
         return point_embedding
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
@@ -516,12 +597,13 @@ class SamPromptEncoder(nn.Module):
         boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.reshape(-1, 2, 2)
         corner_embedding = self.shared_emebdding(coords)
-        corner_embedding[:, 0, :] += self.point_embeddings[2].weight
-        corner_embedding[:, 1, :] += self.point_embeddings[3].weight
+        corner_embedding[:, 0, :] += self.point_embed[2].weight
+        corner_embedding[:, 1, :] += self.point_embed[3].weight
         return corner_embedding
 
     def forward(
         self,
+        batch_size: int,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor],
@@ -542,22 +624,28 @@ class SamPromptEncoder(nn.Module):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(hidden_size)x(embed_H)x(embed_W)
         """
-        bs = self._get_batch_size(points, boxes, masks)
-        sparse_embeddings = torch.empty((bs, 0, self.hidden_size), device=self._get_device())
+        sparse_embeddings = None
         if points is not None:
             if labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             coords = points
-            point_embeddings = self.point_embedding(coords, labels, pad=(boxes is None))
+            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
+            sparse_embeddings = torch.empty(
+                (batch_size, 0, self.hidden_size), device=self.shared_emebdding.weight.device
+            )
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
-            box_embeddings = self.box_emebdding(boxes)
+            box_embeddings = self._embed_boxes(boxes)
+            if sparse_embeddings is None:
+                sparse_embeddings = torch.empty(
+                    (batch_size, 0, self.hidden_size), device=self.shared_emebdding.weight.device
+                )
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
         if masks is not None:
             dense_embeddings = self.mask_embed(masks)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                bs, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
         return sparse_embeddings, dense_embeddings
 
@@ -565,23 +653,21 @@ class SamPromptEncoder(nn.Module):
 class SamVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(
-        self,
-        dim: int,
-        num_attention_heads: int = 8,
-        qkv_bias: bool = True,
-        use_rel_pos: bool = False,
-        input_size: Optional[Tuple[int, int]] = None,
-    ) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
-        self.num_attention_heads = num_attention_heads
-        head_dim = dim // num_attention_heads
+        window_size = config.window_size
+        input_size = None
+        input_size = (input_size if window_size == 0 else (window_size, window_size),)
+        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
+
+        self.num_attention_heads = config.num_attention_heads
+        head_dim = config.mlp_dim // config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
+        self.qkv = nn.Linear(config.mlp_dim, config.mlp_dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.mlp_dim, config.mlp_dim)
 
-        self.use_rel_pos = use_rel_pos
+        self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
             assert input_size is not None, "Input size must be provided if using relative positional encoding."
             # initialize relative positional embeddings
@@ -681,20 +767,7 @@ class SamVisionAttention(nn.Module):
 
 
 class SamVisionLayer(nn.Module):
-    def __init__(
-        self,
-        config,
-        window_size,
-        # dim: int,
-        # num_attention_heads: int,
-        # mlp_ratio: float = 4.0,
-        # qkv_bias: bool = True,
-        # activation: str = "gelu",
-        # use_rel_pos: bool = False,
-        # window_size: int = 0,
-        # input_size: Optional[Tuple[int, int]] = None,
-        # layer_norm_eps: float = 1e-6,
-    ) -> None:
+    def __init__(self, config, window_size) -> None:
         """
         Args:
             dim (int): Number of input channels.
@@ -710,25 +783,14 @@ class SamVisionLayer(nn.Module):
                 parameter size.
         """
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
-
-        self.attn = SamVisionAttention(
-            config.hidden_size,
-            num_attention_heads=config.num_attention_heads,
-            qkv_bias=config.qkv_bias,
-            use_rel_pos=config.use_rel_pos,
-            input_size=input_size if window_size == 0 else (window_size, window_size),
-        )
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = SamVisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SamMLPBlock(
             hidden_size=config.hidden_size,
             mlp_dim=int(config.hidden_size * config.mlp_ratio),
             hidden_act=config.hidden_act,
         )
-
         self.window_size = window_size
 
     def window_partition(hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
@@ -776,70 +838,40 @@ class SamVisionLayer(nn.Module):
             hidden_states = hidden_states[:, :H, :W, :].contiguous()
         return hidden_states
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        shortcut = hidden_states
-        hidden_states = self.norm1(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
         # Window partition
         if self.window_size > 0:
             H, W = hidden_states.shape[1], hidden_states.shape[2]
             hidden_states, pad_hw = self.window_partition(hidden_states, self.window_size)
 
-        hidden_states = self.attn(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            output_attentions=output_attentions,
+        )
         # Reverse window partition
         if self.window_size > 0:
             hidden_states = self.window_unpartition(hidden_states, self.window_size, pad_hw, (H, W))
 
-        hidden_states = shortcut + hidden_states
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        hidden_states = residual + hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
 
-        return hidden_states
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (attn_weights,)
 
-
-# class SamVisionLayer(nn.Module):
-#     """This corresponds to the Block class in the timm implementation."""
-
-#     def __init__(self, config: SamVisionConfig) -> None:
-#         super().__init__()
-#         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-#         self.seq_len_dim = 1
-#         self.attention = SamVisionAttention(config)
-#         self.intermediate = nn.Linear(config.hidden_size, config.intermediate_size)
-#         self.out_proj = nn.Linear(config.intermediate_size, config.hidden_size)
-#         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-#         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-#         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-#     def forward(
-#         self,
-#         hidden_states: torch.Tensor,
-#         head_mask: Optional[torch.Tensor] = None,
-#         output_attentions: bool = False,
-#     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-#         self_attention_outputs = self.attention(
-#             self.layernorm_before(hidden_states),  # in ViTMAE, layernorm is applied before self-attention
-#             head_mask,
-#             output_attentions=output_attentions,
-#         )
-#         attention_output = self_attention_outputs[0]
-#         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-#         # first residual connection
-#         hidden_states = attention_output + hidden_states
-
-#         # in ViTMAE, layernorm is also applied after self-attention
-#         layer_output = self.layernorm_after(hidden_states)
-
-#         layer_output = self.intermediate(layer_output)
-
-#         # second residual connection
-#         layer_output = self.out_proj(layer_output)
-#         layer_output = self.dropout(layer_output)
-#         layer_output = layer_output + hidden_states
-
-#         outputs = (layer_output,) + outputs
-
-#         return outputs
+        return outputs
 
 
 class SamVisionEncoder(nn.Module):
@@ -867,13 +899,6 @@ class SamVisionEncoder(nn.Module):
             layer = SamVisionLayer(
                 config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
-                # dim=self.config.hidden_size,
-                # num_attention_heads=self.config.num_attention_heads,
-                # mlp_ratio=self.config.mlp_ratio,
-                # qkv_bias=self.config.qkv_bias,
-                # activation=self.config.hidden_act,
-                # use_rel_pos=self.config.use_rel_pos,
-                # input_size=(self.config.image_size // self.config.patch_size, self.config.image_size // self.config.patch_size),
             )
             self.layers.append(layer)
 
@@ -885,7 +910,7 @@ class SamVisionEncoder(nn.Module):
         self.neck_layer_norm2 = SamLayerNorm(config.output_channels)
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        return self.patch_embed
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -903,7 +928,7 @@ class SamVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionModelOutput]:
+    ) -> Union[Tuple, SamVisionEncoderOutput]:
         r"""
         Returns:
 
@@ -989,7 +1014,7 @@ class SamVisionEncoder(nn.Module):
         if not return_dict:
             return (hidden_states, mask, ids_restore) + all_hidden_states
 
-        return SamVisionModelOutput(
+        return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             mask=mask,
             ids_restore=ids_restore,
