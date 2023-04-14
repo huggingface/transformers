@@ -12,7 +12,8 @@ specific language governing permissions and limitations under the License.
 
 # AutoClass로 사전 학습된 인스턴스 로드[[Load pretrained instances with an AutoClass]]
 
-트랜스포머 아키텍처가 매우 다양하기 때문에 체크포인트에 맞는 아키텍처를 생성하는 것이 어려울 수 있습니다. 라이브러리를 쉽고 간단하며 유연하게 사용하기 위한 Transformer 핵심 철학의 일환으로, `AutoClass`는 주어진 체크포인트에서 올바른 아키텍처를 자동으로 추론하여 로드합니다. `from_pretrained()` 메서드를 사용하면 모든 아키텍처에 대해 사전 학습된 모델을 빠르게 로드할 수 있으므로 모델을 처음부터 학습하는 데 시간과 리소스를 투입할 필요가 없습니다. 이러한 유형의 체크포인트에 구애받지 않는 코드를 생성한다는 것은 코드가 한 체크포인트에서 작동한다면 아키텍처가 다르더라도 유사한 작업에 대해 학습된 것이라면 다른 체크포인트에서도 작동한다는 것을 의미합니다.
+트랜스포머 아키텍처가 매우 다양하기 때문에 체크포인트에 맞는 아키텍처를 생성하는 것이 어려울 수 있습니다. 라이브러리를 쉽고 간단하며 유연하게 사용하기 위한 Transformer 핵심 철학의 일환으로, `AutoClass`는 주어진 체크포인트에서 올바른 아키텍처를 자동으로 추론하여 로드합니다. `from_pretrained()` 메서드를 사용하면 모든 아키텍처에 대해 사전 학습된 모델을 빠르게 로드할 수 있으므로 모델을 처음부터 학습하는 데 시간과 리소스를 투입할 필요가 없습니다. 
+체크포인트에 구애받지 않는 코드를 생성한다는 것은 코드가 한 체크포인트에서 작동하면 아키텍처가 다르더라도 다른 체크포인트(유사한 작업에 대해 학습된 경우)에서도 작동한다는 것을 의미합니다.
 
 <Tip>
 
@@ -23,7 +24,7 @@ specific language governing permissions and limitations under the License.
 이 튜토리얼에서는 다음을 학습합니다:
 
 * 사전 학습된 토크나이저 로드하기.
-* 사전 학습된 이미지 프로세서 로드하기
+* 사전 학습된 이미지 프로세서 로드하기.
 * 사전 학습된 특징 추출기 로드하기.
 * 사전 훈련된 프로세서 로드하기.
 * 사전 학습된 모델 로드하기.
@@ -39,7 +40,7 @@ specific language governing permissions and limitations under the License.
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 ```
 
-그리고 다음 아래와 같이 입력을 토큰화합니다:
+그리고 아래와 같이 입력을 토큰화합니다:
 
 ```py
 >>> sequence = "In a hole in the ground there lived a hobbit."

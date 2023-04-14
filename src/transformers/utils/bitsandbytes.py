@@ -1,6 +1,8 @@
 from copy import deepcopy
 
-from .import_utils import is_accelerate_available, is_bitsandbytes_available
+from packaging import version
+
+from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -13,7 +15,7 @@ if is_accelerate_available():
     from accelerate.utils import find_tied_parameters
 
 
-def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
+def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -29,6 +31,8 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             The device on which to set the tensor.
         value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
+        fp16_statistics (`torch.HalfTensor`, *optional*):
+            The list of fp16 statistics to set on the module, used for serialization.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -61,14 +65,21 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
-                    raise ValueError(
-                        "You cannot load weights that are saved in int8 using `load_in_8bit=True`, make sure you are",
-                        " using `load_in_8bit=True` on float32/float16/bfloat16 weights.",
+                    is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
+                        "0.37.2"
                     )
+                    if not is_8bit_serializable:
+                        raise ValueError(
+                            "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
+                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                        )
             else:
                 new_value = torch.tensor(value, device="cpu")
             new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
             module._parameters[tensor_name] = new_value
+
+            if fp16_statistics is not None:
+                setattr(module.weight, "SCB", fp16_statistics.to(device))
     else:
         if value is None:
             new_value = old_value.to(device)

@@ -13,10 +13,10 @@
     title: (번역중) Pipelines for inference
   - local: autoclass_tutorial
     title: 자동 클래스로 사전 학습된 인스턴스 로드하기
-  - local: in_translation
-    title: (번역중) Preprocess
-  - local: in_translation
-    title: (번역중) Fine-tune a pretrained model
+  - local: preprocessing
+    title: 전처리
+  - local: training
+    title: 사전 학습된 모델 미세 조정하기
   - local: in_translation
     title: (번역중) Distributed training with 🤗 Accelerate
   - local: in_translation
@@ -49,8 +49,8 @@
     - local: in_translation
       title: (번역중) Text generation strategies
     - sections:
-      - local: in_translation
-        title: (번역중) Text classification
+      - local: tasks/sequence_classification
+        title: 텍스트 분류
       - local: in_translation
         title: (번역중) Token classification
       - local: in_translation
@@ -146,7 +146,7 @@
     - local: in_translation
       title: (번역중) Checks on a Pull Request
     title: (번역중) 기여하기
-  - local: in_translation
+  - local: notebooks
     title: (번역중) 🤗 Transformers Notebooks
   - local: in_translation
     title: (번역중) Community resources
