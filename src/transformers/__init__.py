@@ -3091,6 +3091,16 @@ else:
             "TFFunnelPreTrainedModel",
         ]
     )
+    _import_structure["models.gpt_neo"].extend(
+        [
+            "TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGPTNeoForCausalLM",
+            "TFGPTNeoForSequenceClassification",
+            "TFGPTNeoModel",
+            "TFGPTNeoMainLayer",
+            "TFGPTNeoPreTrainedModel",
+        ]
+    )
     _import_structure["models.gpt2"].extend(
         [
             "TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -6310,6 +6320,14 @@ if TYPE_CHECKING:
             TFFunnelForTokenClassification,
             TFFunnelModel,
             TFFunnelPreTrainedModel,
+        )
+        from .models.gpt_neo import (
+            TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGPTNeoForCausalLM,
+            TFGPTNeoForSequenceClassification,
+            TFGPTNeoModel,
+            TFGPTNeoPreTrainedModel,
+            TFGPTNeoMainLayer,
         )
         from .models.gpt2 import (
             TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,

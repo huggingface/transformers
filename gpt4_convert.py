@@ -1,13 +1,6 @@
 # What are the steps in conversion?
 
-# 1) Convert all functions and classes in the model file
-# 2) Add the new classes to the module __init__
-# 3) Add the new classes to the module autodoc
-# 4) Update the root __init__ to import the new classes
-# 5) Add the missing Auto classes
-# 6) Add the module file to the doctest list
-#   - Happens automatically: Update the model support checklist
-#   - Happens automatically: Update the dummies
+
 
 # TODO 1: Get GPT to generate the input shapes when it converts a module (not at top-level class!)
 # TODO 2: Port weights from PT to TF versions and do equivalence testing
@@ -33,17 +26,18 @@ def translate_fn(module_text: str):
     There are some guidelines you should follow when translating the code:
     
     - When creating layers, please pass their attribute name as the name kwarg.
-    - If the class inherits from PreTrainedModel it should instead inherit from TFPreTrainedModel. It should also be renamed by adding "TF" to the start of its name.
+    - If the class inherits from PreTrainedModel it should instead inherit from TFPreTrainedModel.
     - Retain any docstrings attached to methods like forward and translate them, even when the method is being renamed to call.
-    - If the new class inherits from tf.keras.layers.Layer or TFPreTrainedModel, it should accept **kwargs and pass these to super.init . It should also be renamed by adding "TF" to the start of its name.
-    - You don't need to add any extra imports, you can assume that any other functions or classes you call will be imported for you.
-    - If the class calls other classes in the same module, you can assume that these have already been converted. Please add "TF" to the start of their name if required.
+    - Layer and model classes should accept **kwargs and pass these to super.init. They should also be renamed by adding "TF" to the start of their name.
+    - You don't need to import anything.
+    - If the class calls other classes in the same module, please add "TF" to the start of their name if required.
     - TensorFlow layers do not require input shape arguments in the same way as PyTorch layers. As a result, the first
       argument to the constructor of layers like Dense or Conv2D (but not Embedding) can usually be removed.
     - TensorFlow Embedding layers do not have a padding_idx argument. Please remove this argument from the constructor.
-    - You can use tensor.shape.rank as a TensorFlow replacement for tensor.ndim.
-    - Please use the Hugging Face function shape_list(), which returns a list, instead of tensor.shape or tf.shape(tensor) unless you need to treat the output as a tensor.
-    - Keras layers do not have a register_buffer() method. Instead just set the attribute with that name on the layer directly. 
+    - Prefer the function shape_list(), which returns a list, over methods like tensor.shape or tf.shape(tensor).
+    - Keras layers do not have a register_buffer() method. Instead just set the attribute with that name on the layer directly.
+    - Output classes like BaseModelOutput or SequenceClassifierOutput should have "TF" added to the start of their name.
+    - NumPy operations and calls to .numpy() must be avoided! Use TensorFlow operations instead.
     """
     module_name = get_module_name(module_text)
     if "load_tf_weights" in module_name:
@@ -85,6 +79,8 @@ def main():
     path = Path("src/transformers/models/gpt_neo/modeling_gpt_neo.py")
     out_path = Path("src/transformers/models/gpt_neo/modeling_tf_gpt_neo.py")
     split_fns = split_file(path)
+    module_names = [get_module_name(fn) for fn in split_fns[1:]]
+    module_names = [name for name in module_names if "load_tf_weights" not in name]
     translated_fns = [split_fns[0]]
     translated_fns += [translate_fn(fn) for fn in split_fns[1:]]
     output = '\n'.join(translated_fns)

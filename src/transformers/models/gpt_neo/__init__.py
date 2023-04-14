@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available, is_tf_available
 
 
 _import_structure = {
@@ -33,6 +33,21 @@ else:
         "GPTNeoModel",
         "GPTNeoPreTrainedModel",
         "load_tf_weights_in_gpt_neo",
+    ]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_gpt_neo"] = [
+        "TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST"
+        "TFGPTNeoForCausalLM",
+        "TFGPTNeoForSequenceClassification",
+        "TFGPTNeoModel",
+        "TFGPTNeoMainLayer",
+        "TFGPTNeoPreTrainedModel",
     ]
 
 try:
@@ -64,6 +79,20 @@ if TYPE_CHECKING:
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
+        )
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_gpt_neo import (
+            TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGPTNeoForCausalLM,
+            TFGPTNeoForSequenceClassification,
+            TFGPTNeoModel,
+            TFGPTNeoPreTrainedModel,
+            TFGPTNeoMainLayer,
         )
 
     try:

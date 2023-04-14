@@ -18,20 +18,17 @@
 import os
 from typing import Optional, Tuple, Union
 
-import torch
-import torch.utils.checkpoint
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import tensorflow as tf
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
+from ...modeling_tf_outputs import (
+    TFBaseModelOutputWithPast,
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFCausalLMOutputWithCrossAttentions,
+    TFCausalLMOutputWithPast,
+    TFSequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_gpt_neo import GPTNeoConfig
 
@@ -55,9 +52,6 @@ class TFGPTNeoSelfAttention(tf.keras.layers.Layer):
         bias = tf.linalg.band_part(tf.ones((max_positions, max_positions), dtype=tf.bool), -1, 0)
         bias = tf.reshape(bias, (1, 1, max_positions, max_positions))
 
-        # local causal self attention is a sliding window where each token can only attend to the previous
-        # window_size tokens. This is implemented by updating the causal mask such that for each token
-        # all other tokens are masked except the previous window_size tokens.
         if attention_type == "local":
             bias = tf.math.logical_xor(bias, tf.linalg.band_part(bias, -config.window_size, 0))
 
@@ -82,23 +76,16 @@ class TFGPTNeoSelfAttention(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(self.embed_dim, use_bias=True, name="out_proj")
 
     def _split_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Splits hidden_size dim into attn_head_size and num_heads
-        """
-        new_shape = shape_list(tensor)[:-1] + [num_heads, attn_head_size]
+        new_shape = tensor.shape[:-1] + (num_heads, attn_head_size)
         tensor = tf.reshape(tensor, new_shape)
-        return tf.transpose(tensor, perm=[0, 2, 1, 3])  # (batch, head, seq_length, head_features)
+        return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden_size
-        """
         tensor = tf.transpose(tensor, perm=[0, 2, 1, 3])
-        new_shape = shape_list(tensor)[:-2] + [num_heads * attn_head_size]
+        new_shape = tensor.shape[:-2] + (num_heads * attn_head_size,)
         return tf.reshape(tensor, new_shape)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        # Keep the attention weights computation in fp32 to avoid overflow issues
         query = tf.cast(query, tf.float32)
         key = tf.cast(key, tf.float32)
 
@@ -111,14 +98,12 @@ class TFGPTNeoSelfAttention(tf.keras.layers.Layer):
         attn_weights = tf.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
-            # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
-        # Mask heads if we want to
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
@@ -188,6 +173,7 @@ class TFGPTNeoAttention(tf.keras.layers.Layer):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        **kwargs
     ):
         return self.attention(
             hidden_states,
@@ -267,7 +253,6 @@ class TFGPTNeoPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = GPTNeoConfig
-    load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TFGPTNeoBlock"]
@@ -280,15 +265,14 @@ class TFGPTNeoPreTrainedModel(TFPreTrainedModel):
         if isinstance(module, (tf.keras.layers.Dense,)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.kernel.assign(tf.random.normal(module.kernel.shape, mean=0.0, stddev=self.config.initializer_range))
+            module.kernel.assign(tf.random.normal(shape=module.kernel.shape, mean=0.0, stddev=self.config.initializer_range))
             if module.bias is not None:
-                module.bias.assign(tf.zeros(module.bias.shape))
+                module.bias.assign(tf.zeros(shape=module.bias.shape))
         elif isinstance(module, tf.keras.layers.Embedding):
-            module.embeddings.assign(tf.random.normal(module.embeddings.shape, mean=0.0, stddev=self.config.initializer_range))
-            # TensorFlow Embedding layers do not have a padding_idx argument
+            module.embeddings.assign(tf.random.normal(shape=module.embeddings.shape, mean=0.0, stddev=self.config.initializer_range))
         elif isinstance(module, tf.keras.layers.LayerNormalization):
-            module.bias.assign(tf.zeros(module.bias.shape))
-            module.gamma.assign(tf.ones(module.gamma.shape))
+            module.bias.assign(tf.zeros(shape=module.bias.shape))
+            module.gamma.assign(tf.ones(shape=module.gamma.shape))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, TFGPTNeoModel):
@@ -301,8 +285,8 @@ GPT_NEO_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a TensorFlow [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) subclass.
-    Use it as a regular TensorFlow Layer and refer to the TensorFlow documentation for all matter related to general usage
+    This model is also a TensorFlow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
+    Use it as a regular TensorFlow Model and refer to the TensorFlow documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -437,8 +421,6 @@ class TFGPTNeoModel(TFGPTNeoPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if token_type_ids is not None:
             token_type_ids = tf.reshape(token_type_ids, (-1, input_shape[-1]))
         if position_ids is not None:
@@ -446,7 +428,7 @@ class TFGPTNeoModel(TFGPTNeoPreTrainedModel):
 
         if past_key_values is None:
             past_length = 0
-            past_key_values = tuple([None] * len(self.h))
+            past_key_values = [None] * len(self.h)
         else:
             past_length = past_key_values[0][0].shape[-2]
 
@@ -558,7 +540,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
-        self.transformer = TFGPTNeoModel(config)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
 
         # Initialize weights and apply final processing
@@ -601,7 +583,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
+        output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -619,7 +601,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple[tf.Tensor], TFCausalLMOutputWithCrossAttentions]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -666,7 +648,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return TFCausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
@@ -708,7 +690,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
-        self.transformer = TFGPTNeoModel(config)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
         self.score = tf.keras.layers.Dense(config.hidden_size, self.num_labels, use_bias=False, name="score")
 
         # Initialize weights and apply final processing
@@ -734,6 +716,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -755,6 +738,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -770,7 +754,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (tf.not_equal(input_ids, self.config.pad_token_id).numpy().sum(-1) - 1).tolist()
+                sequence_lengths = (tf.math.not_equal(input_ids, self.config.pad_token_id).numpy().sum(-1) - 1)
             else:
                 sequence_lengths = -1
                 logger.warning(
@@ -778,7 +762,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits.numpy()[np.arange(batch_size), sequence_lengths]
+        pooled_logits = logits[tf.range(batch_size), sequence_lengths]
 
         loss = None
         if labels is not None:
@@ -793,7 +777,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
             if self.config.problem_type == "regression":
                 loss_fct = tf.keras.losses.MeanSquaredError()
                 if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(pooled_logits[:, tf.newaxis], labels[:, tf.newaxis])
                 else:
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
