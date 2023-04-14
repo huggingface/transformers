@@ -1700,8 +1700,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
-        >>> print(loss.item())
-        5.239729881286621
+        >>> print(f"{loss.item():.5f}")
+        5.23973
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
