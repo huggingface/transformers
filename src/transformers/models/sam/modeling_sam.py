@@ -772,6 +772,10 @@ class SamVisionAttention(nn.Module):
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(attn_weights, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
+
+        
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
+        
         if output_attentions:
             # this operation is a bit akward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -781,10 +785,10 @@ class SamVisionAttention(nn.Module):
             attn_weights = attn_weights_reshaped.view(B * self.num_attention_heads, H, W)
         else:
             attn_weights_reshaped = None
-            
-        attn_scores = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
+        
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         hidden_states = (
-            (attn_scores @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+            (attn_probs @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         )
         hidden_states = self.proj(hidden_states)
 
