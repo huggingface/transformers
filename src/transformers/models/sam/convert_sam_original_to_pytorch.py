@@ -16,6 +16,7 @@
 Convert SAM checkpoints from the original repository.
 """
 import argparse
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,11 +61,48 @@ def show_box(box, ax):
     ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2))
 
 
+KEYS_TO_MODIFY_MAPPING = {
+    "iou_prediction_head.layers.1": "iou_prediction_head.proj_in",
+    "iou_prediction_head.layers.2": "iou_prediction_head.proj_out",
+    "mask_decoder.output_upscaling.0": "mask_decoder.upscale_conv1",
+    "mask_decoder.output_upscaling.1": "mask_decoder.upscale_layer_norm",
+    "mask_decoder.output_upscaling.3": "mask_decoder.upscale_conv2",
+    "mask_downscaling.0": "mask_embed.conv1",
+    "mask_downscaling.1": "mask_embed.layer_norm1",
+    "mask_downscaling.3": "mask_embed.conv2",
+    "mask_downscaling.4": "mask_embed.layer_norm2",
+    "mask_downscaling.6": "mask_embed.conv3",
+    "point_embeddings": "point_embed",
+    "pe_layer.positional_encoding_gaussian_matrix": "shared_emebdding.positional_embedding"
+}
+
 def replace_keys(state_dict):
+    model_state_dict = {}
     state_dict.pop("pixel_mean", None)
     state_dict.pop("pixel_std", None)
 
-    return state_dict
+    output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
+    layer_norm_pattern = r".*norm(\d+).*"
+
+    for key, value in state_dict.items():
+        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+            if key_to_modify in key:
+                key = key.replace(key_to_modify, new_key)
+
+        if re.match(output_hypernetworks_mlps_pattern, key):
+            layer_nb = int(re.match(output_hypernetworks_mlps_pattern, key).group(2))
+            if layer_nb == 1:
+                key = key.replace("layers.1", "proj_in")
+            elif layer_nb == 2:
+                key = key.replace("layers.2", "proj_out")
+        elif re.match(layer_norm_pattern, key) and "mask_decoder" in key:
+            layer_nb = int(re.match(layer_norm_pattern, key).group(1))
+            key = key.replace(f"norm{layer_nb}", f"layer_norm{layer_nb}")
+
+        model_state_dict[key] = value
+        
+
+    return model_state_dict
 
 
 def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):

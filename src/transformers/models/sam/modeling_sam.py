@@ -439,7 +439,7 @@ class SamMaskDecoder(nn.Module):
         # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upsacle_layer_norm = SamLayerNorm(self.hidden_size // 4)
+        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4)
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -522,7 +522,7 @@ class SamMaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
 
         upscaled_embedding = self.upscale_conv1(src)
-        upscaled_embedding = self.activation(self.upsacle_layer_norm(upscaled_embedding))
+        upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
 
         # let's define a class for this: probably the dynamic_prediction_head?
@@ -568,7 +568,7 @@ class SamMaskEmbedding(nn.Module):
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
         self.layer_norm1 = SamLayerNorm(self.mask_input_channels)
-        self.layer_norm2 = SamLayerNorm(self.mask_input_channels)
+        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4)
 
     def forward(self, masks):
         hidden_states = self.conv1(masks)

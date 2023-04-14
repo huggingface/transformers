@@ -188,7 +188,7 @@ class SamVisionConfig(PretrainedConfig):
         rel_pos_zero_init=False,
         window_size=14,
         global_attn_indexes=[2, 5, 8, 11],
-        num_pos_feats=64,
+        num_pos_feats=128,
         mlp_dim=None,
         **kwargs,
     ):
