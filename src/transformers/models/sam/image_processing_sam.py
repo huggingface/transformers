@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import convert_to_rgb, normalize, rescale, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -30,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging, is_torchvision_available
+from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -106,7 +106,7 @@ class SamImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
         self.target_size = target_size
-    
+
     def get_preprocess_shape(self, oldh: int, oldw: int, long_side_length: int):
         """
         Compute the output size given input size and target long side length.
@@ -123,9 +123,7 @@ class SamImageProcessor(BaseImageProcessor):
         original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = self.get_preprocess_shape(
-            original_size[0], original_size[1], self.target_size
-        )
+        new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_size)
         coords = deepcopy(coords).astype(float)
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
@@ -148,7 +146,7 @@ class SamImageProcessor(BaseImageProcessor):
     def pad_to_target_size(
         self,
         image: np.ndarray,
-        target_size: int=None,
+        target_size: int = None,
     ):
         requires_backends(self, "torch")
 
@@ -169,7 +167,7 @@ class SamImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        target_size: int=None,
+        target_size: int = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -317,7 +315,7 @@ class SamImageProcessor(BaseImageProcessor):
             input_labels = [np.array([label]) for label in input_labels]
         else:
             input_labels = None
-    
+
         if input_boxes is not None:
             if not isinstance(input_boxes, tuple):
                 raise ValueError("Input boxes must be a tuple of tuple of floating integers.")
@@ -344,18 +342,21 @@ class SamImageProcessor(BaseImageProcessor):
         original_sizes = [image.shape[:2] for image in images]
 
         if input_points is not None:
-            input_points = [self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)]
+            input_points = [
+                self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)
+            ]
 
         if input_boxes is not None:
-            input_boxes = [self.apply_coords(box, original_size) for box, original_size in zip(input_boxes, original_sizes)]
+            input_boxes = [
+                self.apply_coords(box, original_size) for box, original_size in zip(input_boxes, original_sizes)
+            ]
 
         if do_resize:
             images = [self.resize(image=image) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=scale) for image in images]
-   
-        
+
         input_image_sizes = [image.shape[:2] for image in images]
 
         if do_normalize:
@@ -372,17 +373,17 @@ class SamImageProcessor(BaseImageProcessor):
             data["input_points"] = input_points
         if input_boxes is not None:
             data["input_boxes"] = input_boxes
-        
+
         encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
 
     def generate_mask(self):
         pass
-    
+
     def process_crop(self):
         pass
-    
+
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`SamForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.

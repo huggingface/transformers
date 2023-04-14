@@ -17,44 +17,48 @@ Convert SAM checkpoints from the original repository.
 """
 import argparse
 
+import matplotlib.pyplot as plt
+import numpy as np
 import requests
 import torch
-
+from huggingface_hub import hf_hub_download
 from PIL import Image
-
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
 
 from transformers import (
     SamConfig,
     SamForImageSegmentation,
+    SamImageProcessor,
     SamProcessor,
     SamVisionConfig,
-    SamProcessor,
-    SamImageProcessor,
 )
-from huggingface_hub import hf_hub_download
+
 
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
     else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
+        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
-    
+
+
 def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels==1]
-    neg_points = coords[labels==0]
-    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)   
-    
+    pos_points = coords[labels == 1]
+    neg_points = coords[labels == 0]
+    ax.scatter(
+        pos_points[:, 0], pos_points[:, 1], color="green", marker="*", s=marker_size, edgecolor="white", linewidth=1.25
+    )
+    ax.scatter(
+        neg_points[:, 0], neg_points[:, 1], color="red", marker="*", s=marker_size, edgecolor="white", linewidth=1.25
+    )
+
+
 def show_box(box, ax):
     x0, y0 = box[0], box[1]
     w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))   
+    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2))
+
 
 def replace_keys(state_dict):
     state_dict.pop("pixel_mean", None)
@@ -98,7 +102,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
     processor = SamProcessor(image_processor=image_processor)
     hf_model = SamForImageSegmentation(config)
-    
+
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to("cuda")
 
@@ -117,7 +121,9 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     if model_name == "sam_vit_h_4b8939":
         assert scores[-1].item() == 0.579890251159668
 
-        inputs = processor(images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt").to("cuda")
+        inputs = processor(
+            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to("cuda")
 
         with torch.no_grad():
             output = hf_model(**inputs)
@@ -156,11 +162,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = [
-        "sam_vit_b_01ec64",
-        "sam_vit_h_4b8939",
-        "sam_vit_l_0b3195"
-    ]
+    choices = ["sam_vit_b_01ec64", "sam_vit_h_4b8939", "sam_vit_l_0b3195"]
     parser.add_argument(
         "--model_name",
         default="sam_vit_h_4b8939",

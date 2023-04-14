@@ -16,10 +16,10 @@
 Processor class for SAM.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType
 
 
@@ -59,9 +59,14 @@ class SamProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         # add pixel_values
-        encoding_image_processor = self.image_processor(images, input_points=input_points, input_labels=input_labels, input_boxes=input_boxes, return_tensors=return_tensors)
+        encoding_image_processor = self.image_processor(
+            images,
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            return_tensors=return_tensors,
+        )
         return encoding_image_processor
-
 
     @property
     def model_input_names(self):

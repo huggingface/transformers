@@ -25,7 +25,7 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, SamProcessor, SamImageProcessor, SamTokenizer, PreTrainedTokenizerFast
+    from transformers import AutoProcessor, PreTrainedTokenizerFast, SamImageProcessor, SamProcessor, SamTokenizer
 
 
 @require_vision

@@ -58,10 +58,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_sam import (
-            SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SamForImageSegmentation
-        )
+        from .modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST, SamForImageSegmentation
 
     try:
         if not is_vision_available():

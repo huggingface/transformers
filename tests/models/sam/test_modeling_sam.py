@@ -19,7 +19,6 @@ import inspect
 import tempfile
 import unittest
 
-import numpy as np
 import requests
 
 from transformers import CONFIG_MAPPING, SamConfig, SamVisionConfig
@@ -32,7 +31,6 @@ from ...test_modeling_common import (
     _config_zero_init,
     floats_tensor,
     ids_tensor,
-    random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -146,9 +144,7 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SamVisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=SamVisionConfig, has_text_modality=False, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -400,7 +396,6 @@ class SamForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Test
             config.save_pretrained(tmp_dir_name)
             vision_config = SamVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
-
 
     @slow
     def test_model_from_pretrained(self):
@@ -734,9 +729,9 @@ def prepare_img():
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_opt(self):
         processor = SamProcessor.from_pretrained("facebook/sam-vit-h")
-        model = SamForConditionalGeneration.from_pretrained(
-            "facebook/sam-vit-h", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = SamForConditionalGeneration.from_pretrained("facebook/sam-vit-h", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -765,9 +760,9 @@ class SamModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt_batched_beam_search(self):
         processor = SamProcessor.from_pretrained("facebook/sam-vit-h")
-        model = SamForConditionalGeneration.from_pretrained(
-            "facebook/sam-vit-h", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = SamForConditionalGeneration.from_pretrained("facebook/sam-vit-h", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()

@@ -19,9 +19,7 @@ import os
 from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -29,6 +27,7 @@ logger = logging.get_logger(__name__)
 SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/sam-vit-h": "https://huggingface.co/facebook/sam-vit-h/resolve/main/config.json",
 }
+
 
 class SamPromptEncoderConfig(PretrainedConfig):
     r"""
@@ -43,8 +42,9 @@ class SamPromptEncoderConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1408):
             Dimensionality of the encoder layers and the pooler layer.
-    
+
     """
+
     def __init__(
         self,
         hidden_size=256,
@@ -59,10 +59,11 @@ class SamPromptEncoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.input_image_size = input_image_size
         self.patch_size = patch_size
-        self.image_embedding_size = (input_image_size // patch_size) 
+        self.image_embedding_size = input_image_size // patch_size
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
+
 
 class SamMaskDecoderConfig(PretrainedConfig):
     r"""
@@ -77,8 +78,9 @@ class SamMaskDecoderConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1408):
             Dimensionality of the encoder layers and the pooler layer.
-    
+
     """
+
     def __init__(
         self,
         hidden_size=256,
@@ -287,7 +289,7 @@ class SamConfig(PretrainedConfig):
             vision_config = vision_config.to_dict()
         if isinstance(prompt_encoder_config, SamPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, SamMaskDecoderConfig):   
+        if isinstance(mask_decoder_config, SamMaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
 
         self.vision_config = SamVisionConfig(**vision_config)
