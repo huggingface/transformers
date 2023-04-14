@@ -20,7 +20,6 @@ import math
 import warnings
 from typing import Optional, Tuple, Union
 
-import einops
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -304,7 +303,7 @@ class EfficientAdditiveAttnetion(nn.Module):
 
         G = torch.sum(A * query, dim=1)
 
-        G = einops.repeat(G, "b d -> b repeat d", repeat=key.shape[1])
+        G = G.unsqueeze(1).repeat(1, key.shape[1], 1)
 
         out = self.Proj(G * key) + query
 
