@@ -1642,7 +1642,10 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif self.distributed_state.distributed_type != DistributedType.NO:
+        elif hasattr(self, "distributed_state") and (self.distributed_state.distributed_type != DistributedType.NO):
+            return ParallelMode.DISTRIBUTED
+        # Required for tf tests
+        elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
