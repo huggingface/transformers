@@ -73,7 +73,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_downscaling.4": "mask_embed.layer_norm2",
     "mask_downscaling.6": "mask_embed.conv3",
     "point_embeddings": "point_embed",
-    "pe_layer.positional_encoding_gaussian_matrix": "shared_emebdding.positional_embedding",
+    "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
     "image_encoder":"vision_encoder",
     "neck.0":"neck_conv1",
     "neck.1":"neck_layer_norm1",
@@ -90,7 +90,7 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
-    layer_norm_pattern = r".*norm(\d+).*"
+
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -103,12 +103,10 @@ def replace_keys(state_dict):
                 key = key.replace("layers.1", "proj_in")
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
-        elif re.match(layer_norm_pattern, key) and "mask_decoder" in key:
-            layer_nb = int(re.match(layer_norm_pattern, key).group(1))
-            key = key.replace(f"norm{layer_nb}", f"layer_norm{layer_nb}")
 
         model_state_dict[key] = value
         
+    model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict["prompt_encoder.shared_embedding.positional_embedding"]
 
     return model_state_dict
 
@@ -142,7 +140,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         )
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
-    state_dict = rename_state_dict(state_dict)
+    state_dict = replace_keys(state_dict)
 
     image_processor = SamImageProcessor()
 
