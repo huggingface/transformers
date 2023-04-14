@@ -134,7 +134,7 @@ class SamImageProcessor(BaseImageProcessor):
     # def apply_coords_torch(self, coords, original_size):
     #     """
     # Expects a torch tensor with length 2 in the last dimension. Requires the # original image size in (H, W) format.
-    #"""
+    # """
     #     old_h, old_w = original_size
     #     new_h, new_w = self.get_preprocess_shape(
     #         original_size[0], original_size[1], self.target_size

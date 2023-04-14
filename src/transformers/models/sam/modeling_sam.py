@@ -28,6 +28,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, logging
+from ...modeling_outputs import BaseModelOutput
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -209,6 +210,60 @@ class SamLayerNorm(nn.Module):
         return x
 
 
+class SamTwoWayTransformerAttention(nn.Module):
+    """
+    An attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
+
+    def __init__(self, config, downsample_rate: int = 1) -> None:
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.internal_dim = config.hidden_size // downsample_rate
+        self.num_attention_heads = config.num_attention_heads
+        if self.internal_dim % config.num_attention_heads != 0:
+            raise ValueError("num_attention_heads must divide hidden_size.")
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
+        b, n, c = hidden_states.shape
+        hidden_states = hidden_states.reshape(b, n, num_attention_heads, c // num_attention_heads)
+        return hidden_states.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+
+    def _recombine_heads(self, hidden_states: Tensor) -> Tensor:
+        b, n_heads, n_tokens, c_per_head = hidden_states.shape
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+
+    def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # SamAttention
+        _, _, _, c_per_head = query.shape
+        attn = query @ key.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
+        attn = attn / math.sqrt(c_per_head)
+        attn = torch.softmax(attn, dim=-1)
+
+        # Get output
+        out = attn @ value
+        out = self._recombine_heads(out)
+        out = self.out_proj(out)
+
+        return out
+
+
 class SamTwoWayAttentionBlock(nn.Module):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
         """
@@ -280,58 +335,6 @@ class SamTwoWayAttentionBlock(nn.Module):
         return queries, keys
 
 
-class SamTwoWayTransformerAttention(nn.Module):
-    """
-    An attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
-    """
-
-    def __init__(self, config, downsample_rate: int = 1) -> None:
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.internal_dim = config.hidden_size // downsample_rate
-        self.num_attention_heads = config.num_attention_heads
-        if self.internal_dim % config.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        b, n, c = hidden_states.shape
-        hidden_states = hidden_states.reshape(b, n, num_attention_heads, c // num_attention_heads)
-        return hidden_states.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
-
-    def _recombine_heads(self, hidden_states: Tensor) -> Tensor:
-        b, n_heads, n_tokens, c_per_head = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
-
-    def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # SamAttention
-        _, _, _, c_per_head = query.shape
-        attn = query @ key.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
-        attn = attn / math.sqrt(c_per_head)
-        attn = torch.softmax(attn, dim=-1)
-
-        # Get output
-        out = attn @ value
-        out = self._recombine_heads(out)
-        out = self.out_proj(out)
-
-        return out
 
 
 class SamTwoWayTransformer(nn.Module):
@@ -345,14 +348,26 @@ class SamTwoWayTransformer(nn.Module):
             self.layers.append(SamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
         self.final_attn_token_to_image = SamTwoWayTransformerAttention(config)
-        self.norm_final_attn = nn.LayerNorm(self.hidden_size)
+        self.norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
         image_embedding: Tensor,
         image_position_embedding: Tensor,
         point_embedding: Tensor,
-    ):
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    )-> Union[Tuple, BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if image_embedding is None:
+            raise ValueError("You have to specify image_embedding")
+
         image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
         image_position_embedding = image_position_embedding.flatten(2).permute(0, 2, 1)
 
