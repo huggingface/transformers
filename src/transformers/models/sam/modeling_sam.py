@@ -632,14 +632,13 @@ class SamVisionAttention(nn.Module):
         """
         Args:
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+        https:
+            //github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
         # noqa B950
-            attn (Tensor): attention map.
-            q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-            rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-            rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-            q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-            k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
+            attn (Tensor): attention map. q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
+            rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis. rel_pos_w (Tensor): relative
+            position embeddings (Lw, C) for width axis. q_size (Tuple): spatial sequence size of query q with (q_h,
+            q_w). k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
 
         Returns:
             attn (Tensor): attention map with added relative positional embeddings.
@@ -736,8 +735,7 @@ class SamVisionLayer(nn.Module):
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
-            hidden_states (tensor): input tokens with [B, H, W, C].
-            window_size (int): window size.
+            hidden_states (tensor): input tokens with [B, H, W, C]. window_size (int): window size.
 
         Returns:
             windows: windows after partition with [B * num_windows, window_size, window_size, C]. (Hp, Wp): padded
@@ -761,10 +759,9 @@ class SamVisionLayer(nn.Module):
         """
         Args:
         Window unpartition into original sequences and removing padding.
-            hidden_states (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-            window_size (int): window size.
-            pad_hw (Tuple): padded height and width (Hp, Wp).
-            hw (Tuple): original height and width (H, W) before padding.
+            hidden_states (tensor): input tokens with [B * num_windows, window_size, window_size, C]. window_size
+            (int): window size. pad_hw (Tuple): padded height and width (Hp, Wp). hw (Tuple): original height and width
+            (H, W) before padding.
 
         Returns:
             hidden_states: unpartitioned sequences with [B, H, W, C].

@@ -25,23 +25,16 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, PreTrainedTokenizerFast, SamImageProcessor, SamProcessor, SamTokenizer
+    from transformers import AutoProcessor, SamImageProcessor, SamProcessor
 
 
 @require_vision
 class SamProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-
         image_processor = SamImageProcessor()
-        tokenizer = SamTokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
-
-        processor = SamProcessor(image_processor, tokenizer)
-
+        processor = SamProcessor(image_processor)
         processor.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
@@ -61,27 +54,20 @@ class SamProcessorTest(unittest.TestCase):
         return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = SamProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = SamProcessor(image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = SamProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
+        processor = SamProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, SamImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
 
-        processor = SamProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = SamProcessor(image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -91,61 +77,29 @@ class SamProcessorTest(unittest.TestCase):
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = SamProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tok = tokenizer(input_str, return_token_type_ids=False)
-
-        for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
-
     def test_processor(self):
         image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
 
-        processor = SamProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = SamProcessor(image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "prompt", "attention_mask"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
 
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = SamProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
-
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
 
-        processor = SamProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = SamProcessor(image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
-
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "prompt", "attention_mask"])
