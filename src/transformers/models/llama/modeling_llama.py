@@ -313,6 +313,8 @@ class LlamaDecoderLayer(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
+        print(outputs.shape)
+
         return outputs
 
 
