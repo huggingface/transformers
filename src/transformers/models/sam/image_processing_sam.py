@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for SAM."""
 from copy import deepcopy
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
