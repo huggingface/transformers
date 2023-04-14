@@ -1024,6 +1024,9 @@ class FlaxModelTesterMixin:
             # Check if we can do a forward pass
             inputs_dict["output_hidden_states"] = True
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            # test regular __call__ with params as input
+            model(**inputs, params=params)
+            # test using apply
             model.apply({"params": {"_module": params}}, **inputs)
 
     def test_from_pretrained_with_no_automatic_init(self):

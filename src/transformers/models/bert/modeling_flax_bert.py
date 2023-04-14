@@ -971,12 +971,12 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
                 )
             
             # add updated cache to model output
-            if past_key_values is not None and return_dict:
-                outputs, past_key_values = outputs
-                outputs["past_key_values"] = unfreeze(past_key_values["cache"])
-            elif past_key_values is not None and not return_dict:
-                outputs, past_key_values = outputs
-                outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+            if past_key_values is not None:
+                outputs, updates = outputs
+                if return_dict:
+                    outputs["past_key_values"] = unfreeze(updates["cache"])
+                else:
+                    outputs = outputs[:1] + (unfreeze(updates["cache"]),) + outputs[1:]
         else:
             if params is not None:
                 raise ValueError(
