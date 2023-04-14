@@ -32,7 +32,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
-from accelerate import DistributedType, PartialState
 from tqdm.auto import tqdm
 
 
@@ -417,7 +416,7 @@ class Trainer:
                 raise ValueError(
                     "Using --sharded_ddp xxx together with --fsdp is not possible, deactivate one of those flags."
                 )
-            if PartialState().distributed_type == DistributedType.NO:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
@@ -439,7 +438,7 @@ class Trainer:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and PartialState().distributed_type == DistributedType.NO:
+            if not args.fsdp_config["xla"] and self.args.parallel_mode == ParallelMode.NOT_DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
             # dep_version_check("torch>=1.12.0")
@@ -2319,7 +2318,7 @@ class Trainer:
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+            if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
                 torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
             else:
                 try:
@@ -2413,7 +2412,7 @@ class Trainer:
             "cpu": torch.random.get_rng_state(),
         }
         if torch.cuda.is_available():
-            if PartialState().distributed_type == DistributedType.NO:
+            if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
                 # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
@@ -2895,7 +2894,7 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+        if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
             self.state.total_flos += (
                 distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
             )
