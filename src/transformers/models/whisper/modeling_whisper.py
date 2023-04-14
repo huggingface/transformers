@@ -1640,7 +1640,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         non_prompt_forced_decoder_ids = copy.deepcopy(
             kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
         )
-        if condition_on_previous_text and kwargs.get("temperature", 0) <= 0.5:
+        if condition_on_previous_text and kwargs.get("temperature", 0) > 0.5:
             logger.warning("Overriding `condition_on_previous_text` to be False since `temperature` > 0.5")
             condition_on_previous_text = False
         if condition_on_previous_text or always_use_initial_prompt:
