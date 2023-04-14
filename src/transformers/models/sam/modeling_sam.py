@@ -920,6 +920,7 @@ class SamVisionEncoder(nn.Module):
             config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False
         )
         self.neck_layer_norm2 = SamLayerNorm(config.output_channels)
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -986,7 +987,7 @@ class SamVisionEncoder(nn.Module):
                     hidden_states,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
