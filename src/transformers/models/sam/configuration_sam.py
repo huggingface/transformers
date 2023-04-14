@@ -176,7 +176,7 @@ class SamVisionConfig(PretrainedConfig):
         image_size=1024,
         patch_size=16,
         hidden_act="gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-06,
         dropout=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,

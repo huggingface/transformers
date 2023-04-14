@@ -62,7 +62,8 @@ def show_box(box, ax):
 
 
 KEYS_TO_MODIFY_MAPPING = {
-    "iou_prediction_head.layers.1": "iou_prediction_head.proj_in",
+    "iou_prediction_head.layers.0": "iou_prediction_head.proj_in",
+    "iou_prediction_head.layers.1": "iou_prediction_head.layers.0",
     "iou_prediction_head.layers.2": "iou_prediction_head.proj_out",
     "mask_decoder.output_upscaling.0": "mask_decoder.upscale_conv1",
     "mask_decoder.output_upscaling.1": "mask_decoder.upscale_layer_norm",
@@ -99,8 +100,10 @@ def replace_keys(state_dict):
 
         if re.match(output_hypernetworks_mlps_pattern, key):
             layer_nb = int(re.match(output_hypernetworks_mlps_pattern, key).group(2))
-            if layer_nb == 1:
-                key = key.replace("layers.1", "proj_in")
+            if layer_nb == 0:
+                key = key.replace("layers.0", "proj_in")
+            elif layer_nb == 1:
+                key = key.replace("layers.1", "layers.0")
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
 

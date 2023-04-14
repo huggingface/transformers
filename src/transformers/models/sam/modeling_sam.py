@@ -414,7 +414,7 @@ class SamFeedForward(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.proj_in(hidden_states)
         hidden_states = self.activation(hidden_states)
-        for _, layer in enumerate(self.layers):
+        for i, layer in enumerate(self.layers):
             hidden_states = self.activation(layer(hidden_states))
 
         hidden_states = self.proj_out(hidden_states)
@@ -546,11 +546,14 @@ class SamPositionalEmbedding(nn.Module):
         self.scale = config.hidden_size // 2
         self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
-    def forward(self, input_coords, image_size):
+    def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
         coordinates = input_coords.clone()
-        coordinates[:, :, 0] = coordinates[:, :, 0] / image_size[1]
-        coordinates[:, :, 1] = coordinates[:, :, 1] / image_size[0]
+        
+        if input_shape is not None:
+            coordinates[:, :, 0] = coordinates[:, :, 0] / input_shape[1]
+            coordinates[:, :, 1] = coordinates[:, :, 1] / input_shape[0]
+        
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
         coordinates = coordinates.to(self.positional_embedding.dtype)
@@ -591,6 +594,7 @@ class SamPromptEncoder(nn.Module):
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+        self.input_image_size = config.input_image_size
 
         self.point_embed = nn.ModuleList(
             [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
@@ -606,7 +610,8 @@ class SamPromptEncoder(nn.Module):
             padding_label = -torch.ones((labels.shape[0], 1), device=labels.device)
             points = torch.cat([points, padding_point], dim=1)
             labels = torch.cat([labels, padding_label], dim=1)
-        point_embedding = self.shared_embedding(points)
+        input_shape = (self.input_image_size, self.input_image_size)
+        point_embedding = self.shared_embedding(points, input_shape)
         point_embedding[labels == -1] = 0.0
         point_embedding[labels == -1] += self.not_a_point_embed.weight
         point_embedding[labels == 0] += self.point_embed[0].weight
@@ -895,8 +900,8 @@ class SamVisionLayer(nn.Module):
             hidden_states = self.window_unpartition(hidden_states, self.window_size, pad_hw, (H, W))
 
         hidden_states = residual + hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        layernorm_output = self.layer_norm2(hidden_states)
+        hidden_states = hidden_states + self.mlp(layernorm_output)
 
         outputs = (hidden_states,)
         if output_attentions:
@@ -1179,7 +1184,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
         x_embed = x_embed / size
 
         image_embedding_size = (size, size)
-        positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1), image_embedding_size)
+        positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # C x H x W
 
     def forward(
