@@ -2400,7 +2400,6 @@ else:
         [
             "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SwiftFormerForImageClassification",
-            "SwiftFormerForMaskedImageModeling",
             "SwiftFormerModel",
             "SwiftFormerPreTrainedModel",
         ]
@@ -5764,7 +5763,6 @@ if TYPE_CHECKING:
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwiftFormerForImageClassification,
-            SwiftFormerForMaskedImageModeling,
             SwiftFormerModel,
             SwiftFormerPreTrainedModel,
         )

@@ -37,7 +37,6 @@ else:
     _import_structure["modeling_swiftformer"] = [
         "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwiftFormerForImageClassification",
-        "SwiftFormerForMaskedImageModeling",
         "SwiftFormerModel",
         "SwiftFormerPreTrainedModel",
     ]
@@ -58,7 +57,6 @@ if TYPE_CHECKING:
         from .modeling_swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwiftFormerForImageClassification,
-            SwiftFormerForMaskedImageModeling,
             SwiftFormerModel,
             SwiftFormerPreTrainedModel,
         )

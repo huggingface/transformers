@@ -405,7 +405,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
         ("deit", "DeiTForMaskedImageModeling"),
-        ("swiftformer", "SwiftFormerForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
