@@ -98,7 +98,7 @@ class EsmTokenizer(PreTrainedTokenizer):
                 return cls + token_ids_0
             else:
                 return cls + token_ids_0 + sep
-        elif sep is None:
+        elif self.eos_token_id is None:
             raise ValueError("Cannot tokenize multiple sequences when EOS token is not set!")
         return cls + token_ids_0 + sep + token_ids_1 + sep  # Multiple inputs always have an EOS token
 
