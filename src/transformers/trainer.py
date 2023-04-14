@@ -438,7 +438,7 @@ class Trainer:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and self.args.parallel_mode == ParallelMode.NOT_DISTRIBUTED:
+            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
             # dep_version_check("torch>=1.12.0")
