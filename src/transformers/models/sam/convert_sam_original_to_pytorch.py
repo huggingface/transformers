@@ -73,7 +73,15 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_downscaling.4": "mask_embed.layer_norm2",
     "mask_downscaling.6": "mask_embed.conv3",
     "point_embeddings": "point_embed",
-    "pe_layer.positional_encoding_gaussian_matrix": "shared_emebdding.positional_embedding"
+    "pe_layer.positional_encoding_gaussian_matrix": "shared_emebdding.positional_embedding",
+    "image_encoder":"vision_encoder",
+    "neck.0":"neck_conv1",
+    "neck.1":"neck_layer_norm1",
+    "neck.2":"neck_conv2",
+    "neck.3":"neck_layer_norm2",
+    "patch_embed.proj":"patch_embed.projection",
+    ".norm":".layer_norm",
+    "blocks":"layers",
 }
 
 def replace_keys(state_dict):
@@ -134,7 +142,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         )
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
-    state_dict = replace_keys(state_dict)
+    state_dict = rename_state_dict(state_dict)
 
     image_processor = SamImageProcessor()
 
