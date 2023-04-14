@@ -439,7 +439,7 @@ class SamMaskDecoder(nn.Module):
         # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4)
+        self.upsacle_layer_norm = SamLayerNorm(self.hidden_size // 4)
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -522,7 +522,7 @@ class SamMaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
 
         upscaled_embedding = self.upscale_conv1(src)
-        upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
+        upscaled_embedding = self.activation(self.upsacle_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
 
         # let's define a class for this: probably the dynamic_prediction_head?
@@ -568,7 +568,7 @@ class SamMaskEmbedding(nn.Module):
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
         self.layer_norm1 = SamLayerNorm(self.mask_input_channels)
-        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4)
+        self.layer_norm2 = SamLayerNorm(self.mask_input_channels)
 
     def forward(self, masks):
         hidden_states = self.conv1(masks)
@@ -760,25 +760,35 @@ class SamVisionAttention(nn.Module):
 
         return attn
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         B, H, W, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = self.qkv(hidden_states).reshape(B, H * W, 3, self.num_attention_heads, -1).permute(2, 0, 3, 1, 4)
         # q, k, v with shape (B * nHead, H * W, C)
         q, k, v = qkv.reshape(3, B * self.num_attention_heads, H * W, -1).unbind(0)
 
-        attn = (q * self.scale) @ k.transpose(-2, -1)
+        attn_weights = (q * self.scale) @ k.transpose(-2, -1)
 
         if self.use_rel_pos:
-            attn = self.add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+            attn_weights = self.add_decomposed_rel_pos(attn_weights, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
-        attn = torch.nn.functional.softmax(attn, dtype=torch.float32, dim=-1).to(q.dtype)
+        if output_attentions:
+            # this operation is a bit akward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(B, self.num_attention_heads, H, W)
+            attn_weights = attn_weights_reshaped.view(B * self.num_attention_heads, H, W)
+        else:
+            attn_weights_reshaped = None
+            
+        attn_scores = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
         hidden_states = (
-            (attn @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+            (attn_scores @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         )
         hidden_states = self.proj(hidden_states)
 
-        return hidden_states
+        return hidden_states, attn_weights_reshaped
 
 
 class SamVisionLayer(nn.Module):
@@ -852,8 +862,6 @@ class SamVisionLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         residual = hidden_states
@@ -866,8 +874,6 @@ class SamVisionLayer(nn.Module):
 
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
         # Reverse window partition
