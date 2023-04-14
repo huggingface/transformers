@@ -31,9 +31,9 @@ SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SamPromptEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a
-    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration defaults will yield a similar configuration to that of the SAM
+    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM
     [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -67,9 +67,9 @@ class SamPromptEncoderConfig(PretrainedConfig):
 
 class SamMaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a
-    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration defaults will yield a similar configuration to that of the SAM
+    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM
     [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -108,9 +108,9 @@ class SamMaskDecoderConfig(PretrainedConfig):
 
 class SamVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a
-    SAM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration defaults will yield a similar configuration to that of the SAM
+    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM
     [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -233,9 +233,9 @@ class SamVisionConfig(PretrainedConfig):
 class SamConfig(PretrainedConfig):
     r"""
     [`SamConfig`] is the configuration class to store the configuration of a [`SamForConditionalGeneration`]. It is
-    used to instantiate a SAM model according to the specified arguments, defining the vision model, Q-Former model
-    and language model configs. Instantiating a configuration with the defaults will yield a similar configuration to
-    that of the SAM [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
+    used to instantiate a SAM model according to the specified arguments, defining the vision model, Q-Former model and
+    language model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the SAM [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

@@ -30,12 +30,15 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_tensor, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -119,8 +122,7 @@ class SamImageProcessor(BaseImageProcessor):
 
     def apply_coords(self, coords: np.ndarray, original_size) -> np.ndarray:
         """
-        Expects a numpy array of length 2 in the final dimension. Requires the
-        original image size in (H, W) format.
+        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
         old_h, old_w = original_size
         new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_size)
@@ -131,9 +133,8 @@ class SamImageProcessor(BaseImageProcessor):
 
     # def apply_coords_torch(self, coords, original_size):
     #     """
-    #     Expects a torch tensor with length 2 in the last dimension. Requires the
-    #     original image size in (H, W) format.
-    #     """
+    # Expects a torch tensor with length 2 in the last dimension. Requires the # original image size in (H, W) format.
+    #"""
     #     old_h, old_w = original_size
     #     new_h, new_w = self.get_preprocess_shape(
     #         original_size[0], original_size[1], self.target_size

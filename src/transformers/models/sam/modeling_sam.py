@@ -132,10 +132,8 @@ class SamLayerNorm(nn.Module):
 class SamTwoWayAttentionBlock(nn.Module):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
         """
-        A transformer block with four layers: (1) self-attention of sparse
-        inputs, (2) cross attention of sparse inputs to dense inputs, (3) mlp
-        block on sparse inputs, and (4) cross attention of dense inputs to sparse
-        inputs.
+        A transformer block with four layers: (1) self-attention of sparse inputs, (2) cross attention of sparse inputs
+        to dense inputs, (3) mlp block on sparse inputs, and (4) cross attention of dense inputs to sparse inputs.
 
         Arguments:
           hidden_size (int): the channel dimension of the embeddings
@@ -204,8 +202,8 @@ class SamTwoWayAttentionBlock(nn.Module):
 
 class SamTwoWayTransformerAttention(nn.Module):
     """
-    An attention layer that allows for downscaling the size of the embedding
-    after projection to queries, keys, and values.
+    An attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
     """
 
     def __init__(self, config, downsample_rate: int = 1) -> None:
@@ -377,8 +375,7 @@ class SamMaskDecoder(nn.Module):
             mask.
 
         Returns:
-          torch.Tensor: batched predicted masks
-          torch.Tensor: batched predictions of mask quality
+          torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
         """
         masks, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
@@ -531,8 +528,7 @@ class SamPromptEncoder(nn.Module):
         masks: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Embeds different types of prompts, returning both sparse and dense
-        embeddings.
+        Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Arguments:
           points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
@@ -542,8 +538,7 @@ class SamPromptEncoder(nn.Module):
 
         Returns:
           torch.Tensor: sparse embeddings for the points and boxes, with shape
-            BxNx(hidden_size), where N is determined by the number of input points
-            and boxes.
+            BxNx(hidden_size), where N is determined by the number of input points and boxes.
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(hidden_size)x(embed_H)x(embed_W)
         """
@@ -593,7 +588,7 @@ class SamVisionAttention(nn.Module):
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-    def get_rel_pos(q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
         """
         Get relative positional embeddings according to the relative positions of
             query and key sizes.
@@ -626,6 +621,7 @@ class SamVisionAttention(nn.Module):
         return rel_pos_resized[relative_coords.long()]
 
     def add_decomposed_rel_pos(
+        self,
         attn: torch.Tensor,
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
@@ -634,9 +630,10 @@ class SamVisionAttention(nn.Module):
         k_size: Tuple[int, int],
     ) -> torch.Tensor:
         """
-        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
         Args:
+        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+        # noqa B950
             attn (Tensor): attention map.
             q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
             rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
@@ -737,14 +734,14 @@ class SamVisionLayer(nn.Module):
 
     def window_partition(hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
         """
-        Partition into non-overlapping windows with padding if needed.
         Args:
+        Partition into non-overlapping windows with padding if needed.
             hidden_states (tensor): input tokens with [B, H, W, C].
             window_size (int): window size.
 
         Returns:
-            windows: windows after partition with [B * num_windows, window_size, window_size, C].
-            (Hp, Wp): padded height and width before partition
+            windows: windows after partition with [B * num_windows, window_size, window_size, C]. (Hp, Wp): padded
+            height and width before partition
         """
         B, H, W, C = hidden_states.shape
 
@@ -762,8 +759,8 @@ class SamVisionLayer(nn.Module):
         windows: torch.Tensor, window_size: int, pad_hw: Tuple[int, int], hw: Tuple[int, int]
     ) -> torch.Tensor:
         """
-        Window unpartition into original sequences and removing padding.
         Args:
+        Window unpartition into original sequences and removing padding.
             hidden_states (tensor): input tokens with [B * num_windows, window_size, window_size, C].
             window_size (int): window size.
             pad_hw (Tuple): padded height and width (Hp, Wp).
@@ -949,6 +946,8 @@ class SamVisionEncoder(nn.Module):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
         embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
 
@@ -1132,8 +1131,6 @@ class SamForImageSegmentation(SamPreTrainedModel):
 
     def __init__(self, config) -> None:
         super().__init__(config)
-        if scale is None or scale <= 0.0:
-            pass
         self.shared_image_embedding = SamPositionalEmbedding(config)
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
