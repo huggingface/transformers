@@ -1529,15 +1529,6 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
-        if (
-            torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-            and self.parallel_mode == ParallelMode.DISTRIBUTED
-        ):
-            logger.warning(
-                "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
-                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
-            )
         if self.no_cuda:
             self.distributed_state = PartialState(cpu=True)
             device = self.distributed_state.device
@@ -1556,6 +1547,15 @@ class TrainingArguments:
             self.distributed_state = PartialState(backend=self.xpu_backend)
             device = self.distributed_state.device
             self._n_gpu = 1
+        if (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and self.parallel_mode == ParallelMode.DISTRIBUTED
+        ):
+            logger.warning(
+                "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
+                "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
+            )
 
         if is_torch_tpu_available():
             device = self.distributed_state.device
