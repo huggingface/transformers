@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -142,34 +143,8 @@ class MaskFormerSwinConfig(PretrainedConfig):
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
 
-        if out_features is not None and out_indices is not None:
-            if len(out_features) != len(out_indices):
-                raise ValueError("out_features and out_indices should have the same length if both are set")
-            elif out_features != [self.stage_names[idx] for idx in out_indices]:
-                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
-
-        if out_features is None and out_indices is not None:
-            out_features = [self.stage_names[idx] for idx in out_indices]
-        elif out_features is not None and out_indices is None:
-            out_indices = [self.stage_names.index(feature) for feature in out_features]
-        elif out_features is None and out_indices is None:
-            out_features = [self.stage_names[-1]]
-            out_indices = [len(self.stage_names) - 1]
-
-        if out_features is not None:
-            if not isinstance(out_features, list):
-                raise ValueError("out_features should be a list")
-            for feature in out_features:
-                if feature not in self.stage_names:
-                    raise ValueError(
-                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
-                    )
-        if out_indices is not None:
-            if not isinstance(out_indices, (list, tuple)):
-                raise ValueError("out_indices should be a list or tuple")
-            for idx in out_indices:
-                if idx >= len(self.stage_names):
-                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
-
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
         self.out_features = out_features
         self.out_indices = out_indices
