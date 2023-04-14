@@ -53,8 +53,11 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available, is_peft_available
 from ..utils.versions import importlib_metadata
+
+if is_peft_available():
+    from peft import PeftModel, PeftModelForCausalLM
 
 
 logger = logging.get_logger(__name__)
@@ -724,6 +727,7 @@ class HFTracer(Tracer):
         "clamp",
         "finfo",
     ]
+    supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
@@ -794,6 +798,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
+                "PeftModelForCausalLM",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
@@ -1044,7 +1049,7 @@ class HFTracer(Tracer):
                 continue
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith("_deserialize_graph_module"):
                 inputs.update(self._generate_dummy_input(root, input_name, shape))
             else:
                 raise RuntimeError(
