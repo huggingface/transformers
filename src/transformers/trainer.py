@@ -2318,7 +2318,7 @@ class Trainer:
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
             else:
                 try:
@@ -2412,7 +2412,7 @@ class Trainer:
             "cpu": torch.random.get_rng_state(),
         }
         if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
@@ -2894,7 +2894,7 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self.args.parallel_mode == ParallelMode.NOT_PARALLEL:
+        if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             self.state.total_flos += (
                 distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
             )
