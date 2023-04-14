@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from queue import Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 
 if TYPE_CHECKING:
@@ -38,6 +38,12 @@ class BaseStreamer:
 class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
+
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -128,11 +134,20 @@ class TextIteratorStreamer(TextStreamer):
     useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
+
     Parameters:
         tokenizer (`AutoTokenizer`):
             The tokenized used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        timeout (`float`, *optional*):
+            The timeout for the text queue. If `None`, the queue will block indefinitely. Useful to handle exceptions
+            in `.generate()`, when it is called in a separate thread.
         decode_kwargs (`dict`, *optional*):
             Additional keyword arguments to pass to the tokenizer's `decode` method.
 
@@ -159,22 +174,25 @@ class TextIteratorStreamer(TextStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+    def __init__(
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+    ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
         self.stop_signal = None
+        self.timeout = timeout
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
-        self.text_queue.put(text)
+        self.text_queue.put(text, timeout=self.timeout)
         if stream_end:
-            self.text_queue.put(self.stop_signal)
+            self.text_queue.put(self.stop_signal, timeout=self.timeout)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        value = self.text_queue.get()
+        value = self.text_queue.get(timeout=self.timeout)
         if value == self.stop_signal:
             raise StopIteration()
         else:

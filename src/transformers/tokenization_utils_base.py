@@ -2163,6 +2163,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # remove private information
         if "name_or_path" in tokenizer_config:
             tokenizer_config.pop("name_or_path")
+            tokenizer_config.pop("special_tokens_map_file", None)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

@@ -864,7 +864,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         else:
             self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(num_channels) for num_channels in self.channels])
+        self.hidden_states_norms = nn.ModuleList(
+            [nn.LayerNorm(num_channels) for num_channels in self.num_features[1:]]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -889,10 +891,10 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         # we skip the stem
         hidden_states = outputs.hidden_states[1:]
 
-        feature_maps = ()
         # we need to reshape the hidden states to their original spatial dimensions
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = outputs.hidden_states_spatial_dimensions
+        feature_maps = ()
         for i, (hidden_state, stage, (height, width)) in enumerate(
             zip(hidden_states, self.stage_names[1:], spatial_dimensions)
         ):
