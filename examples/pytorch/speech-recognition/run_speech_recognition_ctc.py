@@ -30,7 +30,7 @@ import datasets
 import evaluate
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset, Audio
+from datasets import Audio, DatasetDict, load_dataset
 
 import transformers
 from transformers import (
@@ -591,7 +591,7 @@ def main():
     # via the `feature_extractor`
 
     # If audio_column_name is the file path, open the files and convert them to Audio
-    if next(iter(raw_datasets.values())).features[data_args.audio_column_name].dtype == 'string':
+    if next(iter(raw_datasets.values())).features[data_args.audio_column_name].dtype == "string":
         for dataset_division in raw_datasets:
             raw_datasets[dataset_division] = raw_datasets[dataset_division].cast_column(
                 data_args.audio_column_name, Audio(sampling_rate=feature_extractor.sampling_rate)
