@@ -216,9 +216,12 @@ class SamTwoWayTransformerAttention(nn.Module):
     values.
     """
 
-    def __init__(self, config, downsample_rate: int = 1) -> None:
+    def __init__(self, config, downsample_rate=None) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
+
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
+
         self.internal_dim = config.hidden_size // downsample_rate
         self.num_attention_heads = config.num_attention_heads
         if self.internal_dim % config.num_attention_heads != 0:
@@ -282,7 +285,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = SamTwoWayTransformerAttention(config)
+        self.self_attn = SamTwoWayTransformerAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.cross_attn_token_to_image = SamTwoWayTransformerAttention(
@@ -423,7 +426,7 @@ class SamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
 
-        self.hidden_size = self.hidden_size
+        self.hidden_size = config.hidden_size
 
         self.num_multimask_outputs = config.num_multimask_outputs
         self.num_mask_tokens = config.num_multimask_outputs + 1
@@ -536,10 +539,10 @@ class SamMaskDecoder(nn.Module):
         return masks, iou_pred
 
 
-class SamPositionalEmbedding(nn.Embedding):
+class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.scale = config.embed_dim // 2
+        self.scale = config.hidden_size // 2
         self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, image_size):
@@ -679,8 +682,8 @@ class SamVisionAttention(nn.Module):
         head_dim = config.mlp_dim // config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(config.mlp_dim, config.mlp_dim * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(config.mlp_dim, config.mlp_dim)
+        self.qkv = nn.Linear(config.mlp_dim, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.mlp_dim, config.hidden_size)
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -801,11 +804,7 @@ class SamVisionLayer(nn.Module):
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = SamVisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = SamMLPBlock(
-            hidden_size=config.hidden_size,
-            mlp_dim=int(config.hidden_size * config.mlp_ratio),
-            hidden_act=config.hidden_act,
-        )
+        self.mlp = SamMLPBlock(config)
         self.window_size = window_size
 
     def window_partition(hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
@@ -1168,7 +1167,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
 
     def __init__(self, config) -> None:
         super().__init__(config)
-        self.shared_image_embedding = SamPositionalEmbedding(config)
+        self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)

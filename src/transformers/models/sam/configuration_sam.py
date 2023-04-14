@@ -92,6 +92,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
+        layer_norm_eps=1e-6,
         **kwargs,
     ):
         super().__init__()
@@ -104,6 +105,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
+        self.layer_norm_eps = layer_norm_eps
 
 
 class SamVisionConfig(PretrainedConfig):
@@ -186,6 +188,8 @@ class SamVisionConfig(PretrainedConfig):
         rel_pos_zero_init=False,
         window_size=14,
         global_attn_indexes=[2, 5, 8, 11],
+        num_pos_feats=64,
+        mlp_dim=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -212,6 +216,8 @@ class SamVisionConfig(PretrainedConfig):
         self.rel_pos_zero_init = rel_pos_zero_init
         self.window_size = window_size
         self.global_attn_indexes = global_attn_indexes
+        self.num_pos_feats = num_pos_feats
+        self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
