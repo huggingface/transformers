@@ -671,19 +671,16 @@ class SamPromptEncoder(nn.Module):
 class SamVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config, window_size) -> None:
         super().__init__()
-        window_size = config.window_size
-        input_size = None
-        input_size = (input_size if window_size == 0 else (window_size, window_size),)
-        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
+        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)if window_size == 0 else (window_size, window_size)
 
         self.num_attention_heads = config.num_attention_heads
-        head_dim = config.mlp_dim // config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(config.mlp_dim, config.hidden_size * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -802,7 +799,7 @@ class SamVisionLayer(nn.Module):
         """
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = SamVisionAttention(config)
+        self.attn = SamVisionAttention(config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SamMLPBlock(config)
         self.window_size = window_size

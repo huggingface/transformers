@@ -60,12 +60,31 @@ def show_box(box, ax):
     ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2))
 
 
-def replace_keys(state_dict):
+KEYS_TO_MODIFY_MAPPING = {
+    "image_encoder":"vision_encoder",
+    "neck.0":"neck_conv1",
+    "neck.1":"neck_layer_norm1",
+    "neck.2":"neck_conv2",
+    "neck.3":"neck_layer_norm2",
+    "patch_embed.proj":"patch_embed.projection",
+    ".norm":".layer_norm",
+    "blocks":"layers",
+}
+
+
+def rename_state_dict(state_dict):
+    model_state_dict = {}
     state_dict.pop("pixel_mean", None)
     state_dict.pop("pixel_std", None)
 
-    return state_dict
+    for key, value in state_dict.items():
+        # check if any key needs to be modified
+        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+            if key_to_modify in key:
+                key = key.replace(key_to_modify, new_key)
+        model_state_dict[key] = value
 
+    return model_state_dict
 
 def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{model_name}.pth")
@@ -96,7 +115,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         )
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
-    state_dict = replace_keys(state_dict)
+    state_dict = rename_state_dict(state_dict)
 
     image_processor = SamImageProcessor()
 
