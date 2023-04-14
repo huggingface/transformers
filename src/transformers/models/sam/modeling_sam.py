@@ -621,7 +621,6 @@ class SamPromptEncoder(nn.Module):
 
     def forward(
         self,
-        batch_size: int,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor],
@@ -644,6 +643,7 @@ class SamPromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         if points is not None:
+            batch_size = points.shape[0]
             if labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             coords = points
@@ -653,6 +653,7 @@ class SamPromptEncoder(nn.Module):
             )
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
+            batch_size = boxes.shape[0]
             box_embeddings = self._embed_boxes(boxes)
             if sparse_embeddings is None:
                 sparse_embeddings = torch.empty(
@@ -787,12 +788,12 @@ class SamVisionAttention(nn.Module):
             attn_weights_reshaped = None
         
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        hidden_states = (
+        attn_output = (
             (attn_probs @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         )
-        hidden_states = self.proj(hidden_states)
+        attn_output = self.proj(attn_output)
 
-        return hidden_states, attn_weights_reshaped
+        return attn_output, attn_weights_reshaped
 
 
 class SamVisionLayer(nn.Module):
