@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from accelerate import PartialState
+from accelerate.utils import DistributedType
 from packaging import version
 
 from .debug_utils import DebugOption
@@ -1528,9 +1529,13 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
-        if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == 0:
+        if (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and self.parallel_mode == ParallelMode.DISTRIBUTED
+        ):
             logger.warning(
-                "torch.distributed process group is initialized, but local_rank == 0. "
+                "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
         if self.no_cuda:
@@ -1556,7 +1561,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled():
             self._n_gpu = 1
-        elif self.local_rank == 0:
+        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
                     if not torch.backends.mps.is_built():
@@ -1636,7 +1641,7 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif self.local_rank > 0:
+        elif self.distributed_state.distributed_type != DistributedType.NO:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
@@ -1656,7 +1661,7 @@ class TrainingArguments:
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
             return dist.get_world_size()
-        elif self.local_rank > 0:
+        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
             return torch.distributed.get_world_size()
         return 1
 
@@ -1672,7 +1677,7 @@ class TrainingArguments:
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
             return dist.get_rank()
-        elif self.local_rank > 0:
+        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
             return torch.distributed.get_rank()
         return 0
 
@@ -1688,7 +1693,7 @@ class TrainingArguments:
             return smp.local_rank()
         elif is_sagemaker_dp_enabled():
             return dist.get_rank()
-        elif self.local_rank > 0:
+        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
             return self.local_rank
         return 0
 
