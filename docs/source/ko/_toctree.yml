@@ -49,8 +49,8 @@
     - local: in_translation
       title: (번역중) Text generation strategies
     - sections:
-      - local: in_translation
-        title: (번역중) Text classification
+      - local: tasks/sequence_classification
+        title: 텍스트 분류
       - local: in_translation
         title: (번역중) Token classification
       - local: in_translation
