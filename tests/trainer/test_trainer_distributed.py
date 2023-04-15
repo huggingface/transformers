@@ -67,7 +67,7 @@ class TestTrainerDistributedNeuronCore(TestCasePlus):
     @require_torch_neuroncore
     def test_trainer(self):
         distributed_args = f"""
-            -m torch.distributed.launch
+            -m torch.distributed.run
             --nproc_per_node=2
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_trainer_distributed.py
@@ -83,7 +83,7 @@ class TestTrainerDistributed(TestCasePlus):
     @require_torch_multi_gpu
     def test_trainer(self):
         distributed_args = f"""
-            -m torch.distributed.launch
+            -m torch.distributed.run
             --nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_trainer_distributed.py
@@ -98,7 +98,7 @@ class TestTrainerDistributed(TestCasePlus):
 if __name__ == "__main__":
     # The script below is meant to be run under torch.distributed, on a machine with multiple GPUs:
     #
-    # PYTHONPATH="src" python -m torch.distributed.launch --nproc_per_node 2 --output_dir output_dir ./tests/test_trainer_distributed.py
+    # PYTHONPATH="src" python -m torch.distributed.run --nproc_per_node 2 --output_dir output_dir ./tests/test_trainer_distributed.py
 
     parser = HfArgumentParser((TrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
