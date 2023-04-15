@@ -1179,8 +1179,6 @@ SAM_INPUTS_DOCSTRING = r"""
 
 
 class SamForImageSegmentation(SamPreTrainedModel):
-    mask_threshold: float = 0.0
-    image_format: str = "RGB"
 
     def __init__(self, config) -> None:
         super().__init__(config)
