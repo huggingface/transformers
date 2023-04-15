@@ -424,7 +424,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokens_to_add.append(token)
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
-            elif token == self.unk_token and self.convert_tokens_to_ids(self.unk_token) is None:
+            elif token == self.unk_token and self.convert_tokens_to_ids(self.unk_token) is None and token not in tokens_to_add:
                 tokens_to_add.append(token)
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
