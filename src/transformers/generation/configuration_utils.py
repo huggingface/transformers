@@ -681,7 +681,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config.
-        for decoder_name in ("decoder", "generator"):
+        for decoder_name in ("decoder", "generator", "text_config"):
             if decoder_name in config_dict:
                 default_generation_config = GenerationConfig()
                 decoder_config = config_dict[decoder_name]
