@@ -71,7 +71,7 @@ deps = {
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
     "tensorflow-cpu": "tensorflow-cpu>=2.4,<2.13",
-    "tensorflow-macos": "tensorflow-macos>=2.4,<2.13",
+    "tensorflow": "tensorflow>=2.4,<2.13",
     "tensorflow-text": "tensorflow-text<2.13",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
