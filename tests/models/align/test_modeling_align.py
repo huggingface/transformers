@@ -40,6 +40,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -420,8 +421,9 @@ class AlignModelTester:
 
 
 @require_torch
-class AlignModelTest(ModelTesterMixin, unittest.TestCase):
+class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

@@ -37,10 +37,18 @@
     title: Addestramento efficiente su CPU
   - local: perf_train_cpu_many
     title: Addestramento efficiente su multiple CPU
+  - local: perf_train_tpu
+    title: Addestramento su TPU
+  - local: perf_train_special
+    title: Addestramento su Hardware Specializzato
   - local: perf_infer_cpu
     title: Inferenza Efficiente su CPU
   - local: perf_infer_gpu_one
     title: Inferenza su una GPU
+  - local: perf_infer_gpu_many
+    title: Inferenza Efficiente su GPU Multiple
+  - local: perf_infer_special
+    title: Inferenza su Hardware Specializzato
   - local: big_models
     title: Istanziare un big model
   - local: migration

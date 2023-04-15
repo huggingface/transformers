@@ -242,8 +242,9 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "conversational": PegasusForConditionalGeneration,
             "feature-extraction": PegasusModel,
             "summarization": PegasusForConditionalGeneration,
-            "text2text-generation": PegasusForConditionalGeneration,
             "text-generation": PegasusForCausalLM,
+            "text2text-generation": PegasusForConditionalGeneration,
+            "translation": PegasusForConditionalGeneration,
         }
         if is_torch_available()
         else {}

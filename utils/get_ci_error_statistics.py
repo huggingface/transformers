@@ -66,12 +66,12 @@ def get_artifacts_links(worflow_run_id, token=None):
 def download_artifact(artifact_name, artifact_url, output_dir, token):
     """Download a GitHub Action artifact from a URL.
 
-    The URL is of the from `https://api.github.com/repos/huggingface/transformers/actions/artifacts/{ARTIFACT_ID}/zip`,
+    The URL is of the form `https://api.github.com/repos/huggingface/transformers/actions/artifacts/{ARTIFACT_ID}/zip`,
     but it can't be used to download directly. We need to get a redirect URL first.
     See https://docs.github.com/en/rest/actions/artifacts#download-an-artifact
     """
     # Get the redirect URL first
-    cmd = f'curl -v -H "Accept: application/vnd.github+json" -H "Authorization: token {token}" {artifact_url}'
+    cmd = f'curl -v -H "Accept: application/vnd.github+json" -H "Authorization: Bearer {token}" {artifact_url}'
     output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     o = output.stdout.decode("utf-8")
     lines = o.splitlines()
