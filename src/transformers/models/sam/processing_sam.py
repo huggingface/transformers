@@ -72,3 +72,6 @@ class SamProcessor(ProcessorMixin):
     def model_input_names(self):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names))
+
+    def postprocess_masks(self, *args):
+        return self.image_processor.postprocess_masks(*args)

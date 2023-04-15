@@ -129,6 +129,22 @@ class SamMaskEncoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
+class SamImageSegmentationOutput(ModelOutput):
+    """
+    Base class for Segment-Anything model's output
+
+    Args:
+        iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
+            The iou scores of the predicted masks.
+        low_resolution_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+            The predicted low resolutions masks. Needs to be post-processed by the processor
+    """
+
+    iou_scores: torch.FloatTensor = None
+    low_resolution_masks: torch.FloatTensor = None
+
+
 # Copied from src.models.modeling_vit_mae.ViTMAEPatchEmbeddings with ViTMAEPatchEmbeddings->SamVisionEmbeddings,x->embeddings
 class SamPatchEmbeddings(nn.Module):
     """
@@ -1192,11 +1208,10 @@ class SamForImageSegmentation(SamPreTrainedModel):
         pixel_values,
         input_points=None,
         input_labels=None,
-        input_image_sizes=None,
         input_boxes=None,
         mask_inputs=None,
-        original_sizes=None,
         multimask_output: bool = True,
+        return_dict=True,
     ) -> List[Dict[str, torch.Tensor]]:
         image_position_embedding = self.get_image_wide_positional_embeddings()
         image_embeddings = self.vision_encoder(pixel_values)[0]
@@ -1214,59 +1229,12 @@ class SamForImageSegmentation(SamPreTrainedModel):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
         )
-        masks = self.postprocess_masks(
-            low_res_masks,
-            input_size=pixel_values.shape[-2:] if input_image_sizes is None else input_image_sizes[0],
-            original_size=original_sizes,
+
+        if not return_dict:
+            output = (iou_predictions, low_res_masks)
+            return output
+        
+        return SamImageSegmentationOutput(
+            iou_scores=iou_predictions,
+            low_resolution_masks=low_res_masks,
         )
-        masks = masks > self.mask_threshold
-        outputs = {
-            "masks": masks,
-            "iou_predictions": iou_predictions,
-            "low_res_logits": low_res_masks,
-        }
-        return outputs
-
-    def postprocess_masks(
-        self,
-        masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: torch.Tensor,
-    ):
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Arguments:
-          masks (torch.Tensor): Batched masks from the mask_decoder,
-            in BxCxHxW format.
-          input_size (tuple(int, int)): The size of the image input to the
-            model, in (H, W) format. Used to remove padding.
-          original_size (tuple(int, int)): The original size of the image
-            before resizing for input to the model, in (H, W) format.
-
-        Returns:
-          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
-            is given by original_size.
-        """
-        image_size = (self.vision_encoder.image_size, self.vision_encoder.image_size)
-        masks = F.interpolate(masks, image_size, mode="bilinear", align_corners=False)
-        masks = masks[..., : input_size[0], : input_size[1]]
-
-        # check if original size is not the same across batches
-        output_masks = []
-        if original_size.shape[0] > 1:
-            for i in range(original_size.shape[0]):
-                output_masks.append(
-                    F.interpolate(
-                        masks[i].unsqueeze(0),
-                        (original_size[i][0], original_size[i][1]),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                )
-            output_masks = torch.cat(output_masks, dim=0)
-        else:
-            output_masks = F.interpolate(
-                masks, (original_size[0][0], original_size[0][1]), mode="bilinear", align_corners=False
-            )
-        return output_masks

@@ -163,7 +163,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
     with torch.no_grad():
         output = hf_model(**inputs)
-    scores = output["iou_predictions"].squeeze()
+    scores = output.iou_scores.squeeze()
 
     if model_name == "sam_vit_h_4b8939":
         assert scores[-1].item() == 0.579890251159668
@@ -174,7 +174,18 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output["iou_predictions"].squeeze()
+        scores = output.iou_scores.squeeze()
+        masks = processor.postprocess_masks(raw_image, output.low_resolution_masks)
+
+        for i, (mask, score) in enumerate(zip(masks.squeeze(), scores)):
+            mask = mask.cpu().detach()
+            plt.imshow(np.array(raw_image))
+            show_mask(mask, plt.gca())
+            plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
+            plt.axis('off')
+            plt.show()
+
+            plt.savefig(f"temp_{i}.png")
 
         assert scores[-1].item() == 0.9712603092193604
 
@@ -184,20 +195,12 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output["iou_predictions"].squeeze()
+        scores = output.iou_scores.squeeze()
 
         # TODO: verify logits here
         print(scores)
 
-    # for i, (mask, score) in enumerate(zip(masks, scores)):
-    #     mask = mask.cpu().detach()
-    #     plt.imshow(np.array(raw_image))
-    #     show_mask(mask, plt.gca())
-    #     plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-    #     plt.axis('off')
-    #     plt.show()
 
-    #     plt.savefig(f"temp_{i}.png")
 
     # hf_model.save_pretrained(pytorch_dump_folder)
     # processor.save_pretrained(pytorch_dump_folder)

@@ -358,8 +358,6 @@ class SamImageProcessor(BaseImageProcessor):
         if do_rescale:
             images = [self.rescale(image=image, scale=scale) for image in images]
 
-        input_image_sizes = [image.shape[:2] for image in images]
-
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
@@ -367,7 +365,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        data = {"pixel_values": images, "input_image_sizes": input_image_sizes, "original_sizes": original_sizes}
+        data = {"pixel_values": images}
         if input_labels is not None:
             data["input_labels"] = input_labels
         if input_points is not None:
@@ -385,43 +383,63 @@ class SamImageProcessor(BaseImageProcessor):
     def process_crop(self):
         pass
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def postprocess_masks(self, images, masks: torch.Tensor,  mask_threshold=0.0):
         """
-        Converts the output of [`SamForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Remove padding and upscale masks to the original image size.
 
-        Args:
-            outputs ([`SamForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If left to
-                None, predictions will not be resized.
+        Arguments:
+          masks (torch.Tensor): Batched masks from the mask_decoder,
+            in BxCxHxW format.
+          input_size (tuple(int, int)): The size of the image input to the
+            model, in (H, W) format. Used to remove padding.
+          original_size (tuple(int, int)): The original size of the image
+            before resizing for input to the model, in (H, W) format.
+
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
+            is given by original_size.
         """
-        logits = outputs.logits
+        requires_backends(self, "torch")
+        import torch.nn.functional as F
 
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+        if not isinstance(images, list):
+            images = [images]
+
+        images = [to_numpy_array(image) for image in images]
+
+        original_sizes = torch.LongTensor([image.shape[:2] for image in images])
+
+        # TODO: potentially remove this for batched decoding
+        if self.do_resize:
+            images = [self.resize(image=image) for image in images]
+
+        input_sizes = images[0].shape[:2] # they all have the same shape
+
+        image_size = (self.target_size, self.target_size)
+
+        if len(masks.shape) == 3:
+            masks = masks.unsqueeze(0)
+
+        masks = F.interpolate(masks, image_size, mode="bilinear", align_corners=False)
+        masks = masks[..., : input_sizes[0], : input_sizes[1]]
+
+        # check if original size is not the same across batches
+        output_masks = []
+        if original_sizes.shape[0] > 1:
+            for i in range(original_sizes.shape[0]):
+                output_masks.append(
+                    F.interpolate(
+                        masks[i].unsqueeze(0),
+                        (original_sizes[i][0].item(), original_sizes[i][1].item()),
+                        mode="bilinear",
+                        align_corners=False,
+                    )
                 )
-
-            if is_torch_tensor(target_sizes):
-                target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+            output_masks = torch.cat(output_masks, dim=0)
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            output_masks = F.interpolate(
+                masks, (original_sizes[0][0].item(), original_sizes[0][1].item()), mode="bilinear", align_corners=False
+            )
 
-        return semantic_segmentation
+        output_masks = output_masks > mask_threshold
+        return output_masks
