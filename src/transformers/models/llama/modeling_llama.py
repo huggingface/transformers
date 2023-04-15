@@ -438,7 +438,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
-        print("LLaMa says hello!!!!")
+        print("LLaMa says Hi!!!!")
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
