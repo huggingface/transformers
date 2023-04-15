@@ -4298,9 +4298,7 @@ class GenerationMixin:
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
-                    new_logits[:, i, :] = logits_processor(
-                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :]
-                    )
+                    new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
             max_logits = new_logits.argmax(dim=-1)[:, -candidate_length - 1 : -1]
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
@@ -4322,7 +4320,7 @@ class GenerationMixin:
             # 6.1. Ensure we don't generate beyond max_len or an EOS token (remember: one token will be added below)
             if n_matches >= max_len - cur_len:
                 n_matches = max_len - cur_len - 1
-            if (last_assistant_token_is_eos and n_matches == candidate_length):
+            if last_assistant_token_is_eos and n_matches == candidate_length:
                 n_matches -= 1
             input_ids = candidate_input_ids[:, 0 : cur_len + n_matches]
             new_cur_len = input_ids.shape[-1]
@@ -4362,15 +4360,33 @@ class GenerationMixin:
 
                 if output_attentions:
                     if self.config.is_encoder_decoder:
-                        cross_attentions = _split_model_outputs(cross_attentions, outputs.cross_attentions, prompt_length, last_matching_idx)
-                        decoder_attentions = _split_model_outputs(decoder_attentions, outputs.decoder_attentions, prompt_length, last_matching_idx, is_decoder_attention=True)
+                        cross_attentions = _split_model_outputs(
+                            cross_attentions, outputs.cross_attentions, prompt_length, last_matching_idx
+                        )
+                        decoder_attentions = _split_model_outputs(
+                            decoder_attentions,
+                            outputs.decoder_attentions,
+                            prompt_length,
+                            last_matching_idx,
+                            is_decoder_attention=True,
+                        )
                     else:
-                        decoder_attentions = _split_model_outputs(decoder_attentions, outputs.attentions, prompt_length, last_matching_idx, is_decoder_attention=True)
+                        decoder_attentions = _split_model_outputs(
+                            decoder_attentions,
+                            outputs.attentions,
+                            prompt_length,
+                            last_matching_idx,
+                            is_decoder_attention=True,
+                        )
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
-                        decoder_hidden_states = _split_model_outputs(decoder_hidden_states, outputs.decoder_hidden_states, prompt_length, last_matching_idx)
+                        decoder_hidden_states = _split_model_outputs(
+                            decoder_hidden_states, outputs.decoder_hidden_states, prompt_length, last_matching_idx
+                        )
                     else:
-                        decoder_hidden_states = _split_model_outputs(decoder_hidden_states, outputs.hidden_states, prompt_length, last_matching_idx)
+                        decoder_hidden_states = _split_model_outputs(
+                            decoder_hidden_states, outputs.hidden_states, prompt_length, last_matching_idx
+                        )
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -4472,7 +4488,7 @@ def _split_model_outputs(outputs, new_outputs, prompt_length, last_matching_idx,
         new_tuple = ()
         for layer in new_outputs:
             last_dim_size = i + 1 if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., i:i + 1, :last_dim_size],)
+            new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
 
