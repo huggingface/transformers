@@ -199,6 +199,16 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         assert scores[-1].item() == 0.8686015605926514
 
+        crop_boxes, points_per_crop, cropped_images = processor.generate_crop_boxes(raw_image)
+
+        inputs = processor(images=cropped_images, return_tensors="pt").to("cuda")
+        image_embeddings = hf_model.get_image_embeddings(inputs["pixel_values"])
+
+        # loop over the points batch per batch and retrieve the masks
+
+        # post process the masks
+
+
 
 
     # hf_model.save_pretrained(pytorch_dump_folder)

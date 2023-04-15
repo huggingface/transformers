@@ -75,3 +75,6 @@ class SamProcessor(ProcessorMixin):
 
     def postprocess_masks(self, *args):
         return self.image_processor.postprocess_masks(*args)
+
+    def generate_crop_boxes(self, *args):
+        return self.image_processor.generate_crop_boxes(*args)

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
+import math
+from itertools import product
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -93,6 +95,10 @@ class SamImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
+        n_layers: int = 0,
+        overlap_ratio: float=512 / 1500,
+        points_per_crop: Optional[int] = 32,
+        scale_per_layer: Optional[List[int]] = 1,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -109,6 +115,10 @@ class SamImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
         self.target_size = target_size
+        self.n_layers = n_layers
+        self.overlap_ratio = overlap_ratio
+        self.points_per_crop = points_per_crop
+        self.scale_per_layer = scale_per_layer
 
     def get_preprocess_shape(self, oldh: int, oldw: int, long_side_length: int):
         """
@@ -374,11 +384,107 @@ class SamImageProcessor(BaseImageProcessor):
 
         return encoded_outputs
 
-    def generate_mask(self):
-        pass
+    def build_point_grid(self, n_per_side: int) -> np.ndarray:
+        """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
+        offset = 1 / (2 * n_per_side)
+        points_one_side = np.linspace(offset, 1 - offset, n_per_side)
+        points_x = np.tile(points_one_side[None, :], (n_per_side, 1))
+        points_y = np.tile(points_one_side[:, None], (1, n_per_side))
+        points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
+        return points
 
-    def process_crop(self):
-        pass
+
+    def build_all_layer_point_grids(
+        self, points_per_crop: int = None, n_layers: int = None, scale_per_layer: int = None
+    ) -> List[np.ndarray]:
+        """Generates point grids for all crop layers."""
+        points_per_crop = points_per_crop if points_per_crop is not None else self.points_per_crop
+        n_layers = n_layers if n_layers is not None else self.n_layers
+        scale_per_layer = scale_per_layer if scale_per_layer is not None else self.scale_per_layer
+
+        points_by_layer = []
+        for i in range(n_layers + 1):
+            n_points = int(points_per_crop / (scale_per_layer**i))
+            points_by_layer.append(self.build_point_grid(n_points))
+        return points_by_layer
+
+    def generate_crop_boxes(
+        self, 
+        image, 
+        n_layers: int=None, 
+        overlap_ratio: float=None,
+        points_per_crop: int=None,
+        scale_per_layer: int=None,
+        return_tensors="pt",
+    ) -> Tuple[List[List[int]], List[int]]:
+        """
+        Generates a list of crop boxes of different sizes. Each layer
+        has (2**i)**2 boxes for the ith layer.
+        """
+        points_per_crop = points_per_crop if points_per_crop is not None else self.points_per_crop
+        scale_per_layer = scale_per_layer if scale_per_layer is not None else self.scale_per_layer
+        
+        if isinstance(image, list):
+            raise ValueError("Only one image is allowed for crop generation.")
+        image = to_numpy_array(image)
+
+        points_grid = self.build_all_layer_point_grids(
+            points_per_crop=points_per_crop, n_layers=n_layers, scale_per_layer=scale_per_layer
+        )
+
+        n_layers = n_layers if n_layers is not None else self.n_layers
+        overlap_ratio = overlap_ratio if overlap_ratio is not None else self.overlap_ratio
+
+        crop_boxes, layer_idxs = [], []
+        im_h, im_w = image.shape[:2]
+        short_side = min(im_h, im_w)
+
+        # Original image
+        crop_boxes.append([0, 0, im_w, im_h])
+        layer_idxs.append(0)
+
+        def crop_len(orig_len, n_crops, overlap):
+            return int(math.ceil((overlap * (n_crops - 1) + orig_len) / n_crops))
+
+        for i_layer in range(n_layers):
+            n_crops_per_side = 2 ** (i_layer + 1)
+            overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
+
+            crop_w = crop_len(im_w, n_crops_per_side, overlap)
+            crop_h = crop_len(im_h, n_crops_per_side, overlap)
+
+            crop_box_x0 = [int((crop_w - overlap) * i) for i in range(n_crops_per_side)]
+            crop_box_y0 = [int((crop_h - overlap) * i) for i in range(n_crops_per_side)]
+
+            # Crops in XYWH format
+            for x0, y0 in product(crop_box_x0, crop_box_y0):
+                box = [x0, y0, min(x0 + crop_w, im_w), min(y0 + crop_h, im_h)]
+                crop_boxes.append(box)
+                layer_idxs.append(i_layer + 1)
+
+        # generate cropped images
+        cropped_images = []
+        points_per_crop = []
+        for i, crop_box in enumerate(crop_boxes):
+            x0, y0, x1, y1 = crop_box
+            cropped_im = image[y0:y1, x0:x1, :]
+            cropped_images.append(cropped_im)
+
+            cropped_im_size = cropped_im.shape[:2]
+            points_scale = np.array(cropped_im_size)[None, ::-1]
+
+            points_per_crop.append(points_grid[layer_idxs[i]] * points_scale)
+
+        if return_tensors == "pt":
+            import torch
+
+            crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32)
+            points_per_crop = torch.cat([torch.tensor(p).unsqueeze(0) for p in points_per_crop], dim=0)
+        else:
+            raise ValueError("Only 'pt' is supported for return_tensors.")
+
+
+        return crop_boxes, points_per_crop, cropped_images
 
     def postprocess_masks(self, images, masks: torch.Tensor,  mask_threshold=0.0):
         """

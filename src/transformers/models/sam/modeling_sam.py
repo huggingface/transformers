@@ -1204,18 +1204,45 @@ class SamForImageSegmentation(SamPreTrainedModel):
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # C x H x W
 
+    @torch.no_grad()
+    def get_image_embeddings(
+        self, 
+        pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        vision_output = self.vision_encoder(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        image_embeddings = vision_output[0]
+        return image_embeddings
+
+
     def forward(
         self,
-        pixel_values,
+        pixel_values=None,
         input_points=None,
         input_labels=None,
         input_boxes=None,
         mask_inputs=None,
+        image_embeddings=None,
         multimask_output: bool = True,
         return_dict=True,
     ) -> List[Dict[str, torch.Tensor]]:
+        if pixel_values is None and image_embeddings is None:
+            raise ValueError("Either pixel_values or image_embeddings must be provided.")
+            
         image_position_embedding = self.get_image_wide_positional_embeddings()
-        image_embeddings = self.vision_encoder(pixel_values)[0]
+        
+        if pixel_values is not None:
+            image_embeddings = self.vision_encoder(pixel_values)[0]
+
+        if input_points is not None and input_labels is None:
+            input_labels = torch.ones(input_points.shape[0], dtype=torch.int, device=input_points.device)
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             points=input_points,
