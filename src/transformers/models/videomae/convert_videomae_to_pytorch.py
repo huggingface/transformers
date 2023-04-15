@@ -248,7 +248,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
     elif model_name == "videomae-huge-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
-        expected_slice = torch.tensor([0.2433,  0.1632, -0.4894])
+        expected_slice = torch.tensor([0.2433, 0.1632, -0.4894])
     elif model_name == "videomae-base-short-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.6588, 0.0990, -0.2493])
