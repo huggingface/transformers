@@ -24,24 +24,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-    import requests
-    from PIL import Image
-
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-    image = Image.open(requests.get(url, stream=True).raw)
-
-    from transformers import ViTImageProcessor
-    processor = ViTImageProcessor.from_pretrained('shehan97/swiftformer-xs')
-    inputs = processor(images=image, return_tensors="pt")
-
-
-    from transformers.models.swiftformer import SwiftFormerForImageClassification
-    new_model = SwiftFormerForImageClassification.from_pretrained('shehan97/swiftformer-xs')
-
-    output = new_model(inputs['pixel_values'], output_hidden_states=True)
-    logits = output.logits
-    predicted_class_idx = logits.argmax(-1).item()
-    print("Predicted class:", new_model.config.id2label[predicted_class_idx])
+    -
 
 
 This model was contributed by [shehan97](https://huggingface.co/shehan97).
