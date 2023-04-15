@@ -638,7 +638,8 @@ class SamPromptEncoder(nn.Module):
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.reshape(-1, 2, 2)
-        corner_embedding = self.shared_embedding(coords)
+        input_shape = (self.input_image_size, self.input_image_size)
+        corner_embedding = self.shared_embedding(coords, input_shape)
         corner_embedding[:, 0, :] += self.point_embed[2].weight
         corner_embedding[:, 1, :] += self.point_embed[3].weight
         return corner_embedding

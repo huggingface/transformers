@@ -120,29 +120,26 @@ class SamImageProcessor(BaseImageProcessor):
         newh = int(newh + 0.5)
         return (newh, neww)
 
-    def apply_coords(self, coords: np.ndarray, original_size) -> np.ndarray:
+    def apply_coords(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
         """
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
         old_h, old_w = original_size
         new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_size)
         coords = deepcopy(coords).astype(float)
+
+        if is_bounding_box:
+            # reshape to .reshape(-1, 2, 2)
+            coords = coords.reshape(-1, 2, 2)
+
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
-        return coords
 
-    # def apply_coords_torch(self, coords, original_size):
-    #     """
-    # Expects a torch tensor with length 2 in the last dimension. Requires the # original image size in (H, W) format.
-    # """
-    #     old_h, old_w = original_size
-    #     new_h, new_w = self.get_preprocess_shape(
-    #         original_size[0], original_size[1], self.target_size
-    #     )
-    #     coords = np.astype(deepcopy(coords), np.float32)
-    #     coords[..., 0] = coords[..., 0] * (new_w / old_w)
-    #     coords[..., 1] = coords[..., 1] * (new_h / old_h)
-    #     return coords
+        if is_bounding_box:
+            # reshape back to .reshape(-1, 4)   
+            coords = coords.reshape(-1, 4)
+
+        return coords
 
     def pad_to_target_size(
         self,
@@ -349,7 +346,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         if input_boxes is not None:
             input_boxes = [
-                self.apply_coords(box, original_size) for box, original_size in zip(input_boxes, original_sizes)
+                self.apply_coords(box, original_size, is_bounding_box=True) for box, original_size in zip(input_boxes, original_sizes)
             ]
 
         if do_resize:

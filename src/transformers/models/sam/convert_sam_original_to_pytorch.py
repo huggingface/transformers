@@ -197,8 +197,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
 
-        # TODO: verify logits here
-        print(scores)
+        assert scores[-1].item() == 0.8686015605926514
 
 
 
