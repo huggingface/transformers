@@ -384,12 +384,10 @@ class DebertaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(
-            token,
-            self.encoder.get(self.unk_token)
-            if self.encoder.get(self.unk_token)
-            else self.added_tokens_encoder.get(self.unk_token),
-        )
+        default = self.encoder.get(self.unk_token, self.added_tokens_encoder.get(self.unk_token))
+        # if default is None:
+        # this means OOV + UNK not in either vocabs
+        return self.encoder.get(token,default)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
