@@ -313,8 +313,6 @@ class LlamaDecoderLayer(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
-        print(outputs.shape)
-
         return outputs
 
 
@@ -494,6 +492,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        save_path: Optional[str] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -586,7 +585,10 @@ class LlamaModel(LlamaPreTrainedModel):
                     use_cache=use_cache,
                 )
 
-                print(layer_outputs.size())
+                if save_path:
+                    print(layer_outputs.size())
+                    torch.save(layer_outputs[0], save_path + f"/layer_{idx}.pt")
+
 
             hidden_states = layer_outputs[0]
 
@@ -655,6 +657,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        save_path: Optional[str] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -699,6 +702,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            save_path=save_path,
         )
 
         hidden_states = outputs[0]
