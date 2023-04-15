@@ -313,7 +313,7 @@ class LlamaDecoderLayer(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
-        # print(outputs.shape)
+        print(outputs.shape)
 
         return outputs
 
@@ -440,7 +440,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
-        print("LLaMa says hi!!!!")
+        print("LLaMa says hello!!!!")
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
