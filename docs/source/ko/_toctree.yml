@@ -61,8 +61,8 @@
         title: (번역중) Masked language modeling
       - local: tasks/translation
         title: 번역
-      - local: in_translation
-        title: (번역중) Summarization
+      - local: tasks/summarization
+        title: 요약
       - local: in_translation
         title: (번역중) Multiple choice
       title: (번역중) 태스크별 가이드
