@@ -249,9 +249,9 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
                     input_labels=input_labels,
                 )
             iou_scores = model_output.iou_scores.flatten(0, 1)
-            masks = processor.postprocess_masks(
-                raw_image, model_output.low_resolution_masks, binarize=False
-            ).flatten(0, 1)
+            masks = processor.postprocess_masks(raw_image, model_output.low_resolution_masks, binarize=False).flatten(
+                0, 1
+            )
 
             masks, iou_scores, boxes = processor.filter_masks_for_amg(
                 masks, iou_scores, original_height, original_width, crop_boxes[0]
