@@ -28,8 +28,8 @@
       title: (번역중) Create a custom architecture
     - local: custom_models
       title: 사용자 정의 모델 공유하기
-    - local: in_translation
-      title: (번역중) Train with a script
+    - local: run_scripts
+      title: 스크립트로 학습하기
     - local: sagemaker
       title: Amazon SageMaker에서 학습 실행하기
     - local: in_translation
