@@ -73,8 +73,15 @@ class SamProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names))
 
-    def postprocess_masks(self, *args):
-        return self.image_processor.postprocess_masks(*args)
+    def postprocess_masks(self, *args, **kwargs):
+        return self.image_processor.postprocess_masks(*args, **kwargs)
 
-    def generate_crop_boxes(self, *args):
-        return self.image_processor.generate_crop_boxes(*args)
+    def generate_crop_boxes(self, *args, **kwargs):
+        return self.image_processor.generate_crop_boxes(*args, **kwargs)
+
+    def filter_masks_for_amg(self, *args, **kwargs):
+        return self.image_processor.filter_masks_for_amg(*args, **kwargs)
+
+    def postprocess_masks_for_amg(self, *args, **kwargs):
+        return self.image_processor.postprocess_masks_for_amg(*args, **kwargs)
+    
