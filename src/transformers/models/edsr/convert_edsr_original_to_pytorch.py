@@ -19,6 +19,8 @@ import argparse
 
 import requests
 import torch
+import torchvision
+import numpy as np
 from PIL import Image
 
 from transformers import EDSRConfig, EDSRForImageSuperResolution, EDSRImageProcessor
@@ -68,10 +70,29 @@ def rename_key(name):
 
     return name
 
+# def load_sample_image():
+#     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
+#     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+#     return image
+
 def load_sample_image():
-    url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    return image
+    SAMPLE_IMAGE_PATH = "/home/sri/Music/Set14/image_SRF_2/"
+    bicubic_path = SAMPLE_IMAGE_PATH + "img_001_SRF_2_bicubic.png"
+    gt_path = SAMPLE_IMAGE_PATH + "img_001_SRF_2_HR.png"
+
+    bicubic_image = torchvision.io.read_image(bicubic_path).float().unsqueeze(0)
+    bicubic_image = torch.nn.functional.interpolate(bicubic_image, scale_factor=0.5, mode="bilinear")
+    # print(bicubic_image.shape)
+    return bicubic_image.float()
+
+def save_image(out_tensor):
+    numpy_image = out_tensor.squeeze(0).cpu().detach().numpy().transpose(1,2,0)
+    out_image = torchvision.transforms.functional.to_pil_image(np.uint8(numpy_image))
+    save_path = "model_out_pil.png"
+    out_image.save()
+    print
+
+
 
 @torch.no_grad()
 def convert_edsr_checkpoint(checkpoint_url: str, pytorch_dump_folder_path: str, push_to_hub: bool):
@@ -90,12 +111,22 @@ def convert_edsr_checkpoint(checkpoint_url: str, pytorch_dump_folder_path: str, 
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
+    # for key in state_dict.copy().keys():
+    #     val = state_dict.pop(key)
+    #     new_key_name = key if "upsampler" in key else "model."+key
+    #     state_dict[rename_key(new_key_name)] = val
+
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
+    # add prefix to all keys except the head
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        if not key.startswith("upsampler"):
+            key = "edsr_model." + key
+        state_dict[key] = val
 
-
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=True)
 
     print("Missing:", missing_keys)
     print("Unexpected:", unexpected_keys)
@@ -108,21 +139,30 @@ def convert_edsr_checkpoint(checkpoint_url: str, pytorch_dump_folder_path: str, 
 
     # verify values
     processor = EDSRImageProcessor()
-    url = "https://github.com/sanghyun-son/EDSR-PyTorch/blob/master/test/0853x4.png"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    pixel_values = load_sample_image()
 
-    pixel_values = processor(image).pixel_values
+    # pixel_values = processor(image).pixel_values
 
+    # pixel_values = torchvision.transforms.functional.to_tensor(image).unsqueeze(0)
+    print(pixel_values.shape)
     outputs = model(pixel_values)
-
+    print(outputs)
+    save_image(outputs.reconstruction)
     # assert values
-    if "r16f64x2" in checkpoint_url:
-        expected_shape = torch.Size([1, 3, 512, 512])
+    expected_slice = torch.tensor(
+        [[65.5774, 47.5999, 34.9567],
+        [79.2120, 63.8901, 49.3842],
+        [86.0216, 82.4572, 69.4604]]
+    )
+    expected_shape = torch.Size([1, 3, pixel_values.shape[-2] * config.upscale, pixel_values.shape[-1] * config.upscale])
+    if "edsr_baseline_x2" in checkpoint_url:
         expected_slice = torch.tensor(
-            [[-0.7087, -0.7138, -0.6721], [-0.8340, -0.8095, -0.7298], [-0.9149, -0.8414, -0.7940]]
+            [[65.5774, 47.5999, 34.9567],
+            [79.2120, 63.8901, 49.3842],
+            [86.0216, 82.4572, 69.4604]]
         )
     print("Shape of reconstruction:", outputs.reconstruction.shape)
-    print("Actual values of the reconstruction:", outputs.reconstruction[0, 0, :3, :3])
+    print("Actual values of the reconstruction:\n", outputs.reconstruction[0, 0, :3, :3])
 
     assert (
         outputs.reconstruction.shape == expected_shape
