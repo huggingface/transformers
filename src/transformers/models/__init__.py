@@ -162,6 +162,7 @@ from . import (
     roc_bert,
     roformer,
     sam,
+    rwkv,
     segformer,
     sew,
     sew_d,

@@ -162,7 +162,11 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
         ("roc_bert", "RoCBertConfig"),
         ("roformer", "RoFormerConfig"),
+<<<<<<< HEAD
         ("sam", "SamConfig"),
+=======
+        ("rwkv", "RwkvConfig"),
+>>>>>>> First draft of RWKV-4
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
@@ -341,7 +345,11 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roc_bert", "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+<<<<<<< HEAD
         ("sam", "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+=======
+        ("rwkv", "RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+>>>>>>> First draft of RWKV-4
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -543,6 +551,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roc_bert", "RoCBert"),
         ("roformer", "RoFormer"),
         ("sam", "SAM"),
+        ("rwkv", "RWKV"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),

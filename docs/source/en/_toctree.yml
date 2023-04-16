@@ -397,6 +397,8 @@
         title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
