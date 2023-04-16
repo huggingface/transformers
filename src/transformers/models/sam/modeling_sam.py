@@ -653,11 +653,10 @@ class SamPromptEncoder(nn.Module):
         sparse_embeddings = None
         target_device = self.shared_embedding.positional_embedding.device
         if points is not None:
-            batch_size = points[0].shape[0]
+            batch_size = points[0].shape[0] if len(points.shape) == 2 else points.shape[0]
             if labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
-            coords = points
-            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
+            point_embeddings = self._embed_points(points, labels, pad=(boxes is None))
             sparse_embeddings = torch.empty(
                 (batch_size, 0, self.hidden_size), device=target_device
             )
@@ -1163,7 +1162,6 @@ SAM_INPUTS_DOCSTRING = r"""
 
 
 class SamForImageSegmentation(SamPreTrainedModel):
-
     def __init__(self, config) -> None:
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)

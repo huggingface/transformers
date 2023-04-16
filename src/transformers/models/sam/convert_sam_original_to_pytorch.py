@@ -156,8 +156,8 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = ((400, 650),)
-    input_labels = (1,)
+    input_points = [[[400, 650]]]
+    input_labels = [[1]]
 
     inputs = processor(images=np.array(raw_image), return_tensors="pt").to("cuda")
 
@@ -199,6 +199,34 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         assert scores[-1].item() == 0.8686015605926514
 
+        # TODO: 2 points and 1 image
+        input_points = [[[400, 650], [800, 650]]]
+        input_labels = [[1, 1]]
+
+        inputs = processor(
+            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to("cuda")
+
+        with torch.no_grad():
+            output = hf_model(**inputs)
+        scores = output.iou_scores.squeeze()
+        masks = processor.postprocess_masks(raw_image, output.low_resolution_masks)
+
+        assert scores[-1].item() == 0.9936047792434692
+
+        for i, (mask, score) in enumerate(zip(masks.squeeze(), scores)):
+            mask = mask.cpu().detach()
+            plt.imshow(np.array(raw_image))
+            show_mask(mask, plt.gca())
+            plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
+            plt.axis('off')
+            plt.show()
+
+            plt.savefig(f"temp_{i}.png")
+        
+
+
+        # AMG
         crop_boxes, points_per_crop, cropped_images = processor.generate_crop_boxes(raw_image)
 
         inputs = processor(images=cropped_images, return_tensors="pt").to("cuda")
@@ -207,16 +235,6 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         # loop over the points batch per batch and retrieve the masks
 
         # post process the masks
-
-
-
-
-    # hf_model.save_pretrained(pytorch_dump_folder)
-    # processor.save_pretrained(pytorch_dump_folder)
-
-    # if push_to_hub:
-    #    hf_model.push_to_hub()
-    #    processor.push_to_hub()
 
 
 if __name__ == "__main__":

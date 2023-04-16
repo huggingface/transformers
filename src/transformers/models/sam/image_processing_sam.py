@@ -311,16 +311,16 @@ class SamImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
 
         if input_points is not None:
-            if not isinstance(input_points, tuple):
-                raise ValueError("Input points must be a tuple of tuple of floating integers.")
-            input_points = [np.array([point]) for point in input_points]
+            if not isinstance(input_points, list) and not isinstance(input_points[0], list):
+                raise ValueError("Input points must be a list of list of floating integers.")
+            input_points = [np.array(input_point) for input_point in input_points]
         else:
             input_points = None
 
         if input_points is not None:
-            if not isinstance(input_labels, tuple):
-                raise ValueError("Input labels must be a tuple of integers.")
-            input_labels = [np.array([label]) for label in input_labels]
+            if not isinstance(input_labels, list) and not isinstance(input_labels[0], list):
+                raise ValueError("Input labels must be a list of list integers.")
+            input_labels = [np.array(label) for label in input_labels]
         else:
             input_labels = None
 
@@ -350,14 +350,22 @@ class SamImageProcessor(BaseImageProcessor):
         original_sizes = [image.shape[:2] for image in images]
 
         if input_points is not None:
-            input_points = [
-                self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)
-            ]
+            if len(original_sizes) != len(input_points):
+                # TODO deal better with this case
+                input_points = [self.apply_coords(point, original_sizes[0]) for point in input_points]
+            else:
+                input_points = [
+                    self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)
+                ]
 
         if input_boxes is not None:
-            input_boxes = [
-                self.apply_coords(box, original_size, is_bounding_box=True) for box, original_size in zip(input_boxes, original_sizes)
-            ]
+            if len(original_sizes) != len(input_boxes):
+                # TODO deal better with this case
+                input_boxes = [self.apply_coords(box, original_sizes[0], is_bounding_box=True) for box in input_boxes]
+            else:
+                input_boxes = [
+                    self.apply_coords(box, original_size, is_bounding_box=True) for box, original_size in zip(input_boxes, original_sizes)
+                ]
 
         if do_resize:
             images = [self.resize(image=image) for image in images]
