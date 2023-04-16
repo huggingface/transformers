@@ -83,7 +83,7 @@ class OpenLlamaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
+        vocab_size=100000,
         hidden_size=4096,
         intermediate_size=11008,
         num_hidden_layers=32,
@@ -98,10 +98,10 @@ class OpenLlamaConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         use_memorry_efficient_attention=True,
-        hidden_dropout_prob=0,
-        attention_dropout_prob=0,
-        use_stable_embedding=False,
-        shared_input_output_embedding=False,
+        hidden_dropout_prob=0.1,
+        attention_dropout_prob=0.1,
+        use_stable_embedding=True,
+        shared_input_output_embedding=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -1,13 +1,3 @@
-"""
-Author: LiangSong(sl12160010@gmail.com)
-Date: 2023-04-16 19:11:10
-LastEditors: LiangSong(sl12160010@gmail.com)
-LastEditTime: 2023-04-16 21:05:32
-FilePath: /transformers/src/transformers/models/open_llama/__init__.py
-Description: 
-
-Copyright (c) 2023 by LiangSong(sl12160010@gmail.com), All Rights Reserved. 
-"""
 # Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
