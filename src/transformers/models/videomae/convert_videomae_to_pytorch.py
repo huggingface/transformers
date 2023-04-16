@@ -84,6 +84,8 @@ def set_architecture_configs(model_name, config):
         config.decoder_num_attention_heads = 8
         config.decoder_hidden_size = 640
         config.decoder_intermediate_size = 2560
+    elif "base" not in model_name:
+        raise ValueError('Model name should include either "small", "base", "large", or "huge"')
 
 
 def rename_key(name):
