@@ -14,9 +14,9 @@
 # limitations under the License.
 """Image processor class for SAM."""
 import math
-from itertools import product
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple, Union, Any
+from itertools import product
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -32,7 +32,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -96,7 +96,7 @@ class SamImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         n_layers: int = 0,
-        overlap_ratio: float=512 / 1500,
+        overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
         scale_per_layer: Optional[List[int]] = 1,
         amg_pred_iou_thresh: Optional[float] = 0.88,
@@ -156,7 +156,7 @@ class SamImageProcessor(BaseImageProcessor):
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
 
         if is_bounding_box:
-            # reshape back to .reshape(-1, 4)   
+            # reshape back to .reshape(-1, 4)
             coords = coords.reshape(-1, 4)
 
         return coords
@@ -365,7 +365,8 @@ class SamImageProcessor(BaseImageProcessor):
                 input_points = [self.apply_coords(point, original_sizes[0]) for point in input_points]
             else:
                 input_points = [
-                    self.apply_coords(point, original_size) for point, original_size in zip(input_points, original_sizes)
+                    self.apply_coords(point, original_size)
+                    for point, original_size in zip(input_points, original_sizes)
                 ]
 
         if input_boxes is not None:
@@ -374,7 +375,8 @@ class SamImageProcessor(BaseImageProcessor):
                 input_boxes = [self.apply_coords(box, original_sizes[0], is_bounding_box=True) for box in input_boxes]
             else:
                 input_boxes = [
-                    self.apply_coords(box, original_size, is_bounding_box=True) for box, original_size in zip(input_boxes, original_sizes)
+                    self.apply_coords(box, original_size, is_bounding_box=True)
+                    for box, original_size in zip(input_boxes, original_sizes)
                 ]
 
         if do_resize:
@@ -411,7 +413,6 @@ class SamImageProcessor(BaseImageProcessor):
         points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
         return points
 
-
     def build_all_layer_point_grids(
         self, points_per_crop: int = None, n_layers: int = None, scale_per_layer: int = None
     ) -> List[np.ndarray]:
@@ -427,22 +428,21 @@ class SamImageProcessor(BaseImageProcessor):
         return points_by_layer
 
     def generate_crop_boxes(
-        self, 
-        image, 
-        n_layers: int=None, 
-        overlap_ratio: float=None,
-        points_per_crop: int=None,
-        scale_per_layer: int=None,
-        do_normalize: bool=None,
+        self,
+        image,
+        n_layers: int = None,
+        overlap_ratio: float = None,
+        points_per_crop: int = None,
+        scale_per_layer: int = None,
+        do_normalize: bool = None,
         return_tensors="pt",
     ) -> Tuple[List[List[int]], List[int]]:
         """
-        Generates a list of crop boxes of different sizes. Each layer
-        has (2**i)**2 boxes for the ith layer.
+        Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
         """
         points_per_crop = points_per_crop if points_per_crop is not None else self.points_per_crop
         scale_per_layer = scale_per_layer if scale_per_layer is not None else self.scale_per_layer
-        
+
         if isinstance(image, list):
             raise ValueError("Only one image is allowed for crop generation.")
         image = to_numpy_array(image)
@@ -497,16 +497,19 @@ class SamImageProcessor(BaseImageProcessor):
 
         normalized_total_points_per_crop = []
         for points_per_crop in total_points_per_crop:
-            normalized_total_points_per_crop.append([self.apply_coords(point, original_size) for point in points_per_crop])
+            normalized_total_points_per_crop.append(
+                [self.apply_coords(point, original_size) for point in points_per_crop]
+            )
 
         if return_tensors == "pt":
             import torch
 
             crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32)
-            points_per_crop = torch.cat([torch.tensor(p).unsqueeze(0) for p in np.array(normalized_total_points_per_crop)], dim=0)
+            points_per_crop = torch.cat(
+                [torch.tensor(p).unsqueeze(0) for p in np.array(normalized_total_points_per_crop)], dim=0
+            )
         else:
             raise ValueError("Only 'pt' is supported for return_tensors.")
-
 
         return crop_boxes, points_per_crop, cropped_images
 
@@ -514,23 +517,16 @@ class SamImageProcessor(BaseImageProcessor):
         self, masks: torch.Tensor, mask_threshold: float, threshold_offset: float
     ) -> torch.Tensor:
         """
-        Computes the stability score for a batch of masks. The stability
-        score is the IoU between the binary masks obtained by thresholding
-        the predicted mask logits at high and low values.
+        Computes the stability score for a batch of masks. The stability score is the IoU between the binary masks
+        obtained by thresholding the predicted mask logits at high and low values.
         """
         requires_backends(self, "torch")
         # One mask is always contained inside the other.
         # Save memory by preventing unnecesary cast to torch.int64
         intersections = (
-            (masks > (mask_threshold + threshold_offset))
-            .sum(-1, dtype=torch.int16)
-            .sum(-1, dtype=torch.int32)
+            (masks > (mask_threshold + threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
         )
-        unions = (
-            (masks > (mask_threshold - threshold_offset))
-            .sum(-1, dtype=torch.int16)
-            .sum(-1, dtype=torch.int32)
-        )
+        unions = (masks > (mask_threshold - threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
         return intersections / unions
 
     def uncrop_boxes_xyxy(self, boxes: torch.Tensor, crop_box: List[int]) -> torch.Tensor:
@@ -541,10 +537,8 @@ class SamImageProcessor(BaseImageProcessor):
         if len(boxes.shape) == 3:
             offset = offset.unsqueeze(1)
         return boxes + offset
-    
-    def uncrop_masks(
-        self, masks: torch.Tensor, crop_box: List[int], orig_h: int, orig_w: int
-    ) -> torch.Tensor:
+
+    def uncrop_masks(self, masks: torch.Tensor, crop_box: List[int], orig_h: int, orig_w: int) -> torch.Tensor:
         requires_backends(self, "torch")
         x0, y0, x1, y1 = crop_box
         if x0 == 0 and y0 == 0 and x1 == orig_w and y1 == orig_h:
@@ -554,7 +548,6 @@ class SamImageProcessor(BaseImageProcessor):
         pad = (x0, pad_x - x0, y0, pad_y - y0)
         return torch.nn.functional.pad(masks, pad, value=0)
 
-    
     def is_box_near_crop_edge(
         self, boxes: torch.Tensor, crop_box: List[int], orig_box: List[int], atol: float = 20.0
     ) -> torch.Tensor:
@@ -567,11 +560,10 @@ class SamImageProcessor(BaseImageProcessor):
         near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
         return torch.any(near_crop_edge, dim=1)
 
-    
     def batched_mask_to_box(self, masks: torch.Tensor) -> torch.Tensor:
         """
-        Calculates boxes in XYXY format around masks. Return [0,0,0,0] for
-        an empty mask. For input shape C1xC2x...xHxW, the output shape is C1xC2x...x4.
+        Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape
+        C1xC2x...xHxW, the output shape is C1xC2x...x4.
         """
         # torch.max below raises an error on empty inputs, just skip in this case
         requires_backends(self, "torch")
@@ -617,8 +609,7 @@ class SamImageProcessor(BaseImageProcessor):
 
     def mask_to_rle_pytorch(self, tensor: torch.Tensor) -> List[Dict[str, Any]]:
         """
-        Encodes masks to an uncompressed RLE, in the format expected by
-        pycoco tools.
+        Encodes masks to an uncompressed RLE, in the format expected by pycoco tools.
         """
         requires_backends(self, "torch")
         # Put in fortran order and flatten h,w
@@ -646,7 +637,6 @@ class SamImageProcessor(BaseImageProcessor):
             out.append({"size": [h, w], "counts": counts})
         return out
 
-
     def rle_to_mask(self, rle: Dict[str, Any]) -> np.ndarray:
         """Compute a binary mask from an uncompressed RLE."""
         h, w = rle["size"]
@@ -660,7 +650,6 @@ class SamImageProcessor(BaseImageProcessor):
         mask = mask.reshape(w, h)
         return mask.transpose()  # Put in C order
 
-    
     def postprocess_masks_for_amg(
         self,
         rle_masks,
@@ -684,10 +673,9 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, rle_masks, iou_scores, mask_boxes
 
-
     def filter_masks_for_amg(
-        self, 
-        masks, 
+        self,
+        masks,
         iou_scores,
         original_height,
         original_width,
@@ -705,7 +693,7 @@ class SamImageProcessor(BaseImageProcessor):
             iou_scores = iou_scores.to(masks.device)
 
         batch_size = masks.shape[0]
-        
+
         keep_mask = torch.ones(batch_size, dtype=torch.bool, device=masks.device)
 
         if self.amg_pred_iou_thresh > 0.0:
@@ -725,8 +713,10 @@ class SamImageProcessor(BaseImageProcessor):
         masks = masks > self.mask_threshold
         converted_boxes = self.batched_mask_to_box(masks)
 
-        keep_mask = ~self.is_box_near_crop_edge(converted_boxes, cropped_box_image, [0, 0, original_width, original_height])
-        
+        keep_mask = ~self.is_box_near_crop_edge(
+            converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
+        )
+
         scores = scores[keep_mask]
         masks = masks[keep_mask]
         converted_boxes = converted_boxes[keep_mask]
@@ -736,8 +726,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, scores, converted_boxes
 
-
-    def postprocess_masks(self, images, masks: torch.Tensor,  mask_threshold=0.0, binarize=True):
+    def postprocess_masks(self, images, masks: torch.Tensor, mask_threshold=0.0, binarize=True):
         """
         Remove padding and upscale masks to the original image size.
 
@@ -767,7 +756,7 @@ class SamImageProcessor(BaseImageProcessor):
         if self.do_resize:
             images = [self.resize(image=image) for image in images]
 
-        input_sizes = images[0].shape[:2] # they all have the same shape
+        input_sizes = images[0].shape[:2]  # they all have the same shape
 
         image_size = (self.target_size, self.target_size)
 

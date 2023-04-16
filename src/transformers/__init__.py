@@ -2322,6 +2322,7 @@ else:
         [
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SamForImageSegmentation",
+            "SamPreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -5694,6 +5695,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamForImageSegmentation,
+            SamPreTrainedModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -75,15 +75,16 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_downscaling.6": "mask_embed.conv3",
     "point_embeddings": "point_embed",
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
-    "image_encoder":"vision_encoder",
-    "neck.0":"neck_conv1",
-    "neck.1":"neck_layer_norm1",
-    "neck.2":"neck_conv2",
-    "neck.3":"neck_layer_norm2",
-    "patch_embed.proj":"patch_embed.projection",
-    ".norm":".layer_norm",
-    "blocks":"layers",
+    "image_encoder": "vision_encoder",
+    "neck.0": "neck_conv1",
+    "neck.1": "neck_layer_norm1",
+    "neck.2": "neck_conv2",
+    "neck.3": "neck_layer_norm2",
+    "patch_embed.proj": "patch_embed.projection",
+    ".norm": ".layer_norm",
+    "blocks": "layers",
 }
+
 
 def replace_keys(state_dict):
     model_state_dict = {}
@@ -91,7 +92,6 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
-
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -108,8 +108,10 @@ def replace_keys(state_dict):
                 key = key.replace("layers.2", "proj_out")
 
         model_state_dict[key] = value
-        
-    model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict["prompt_encoder.shared_embedding.positional_embedding"]
+
+    model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
+        "prompt_encoder.shared_embedding.positional_embedding"
+    ]
 
     return model_state_dict
 
@@ -182,7 +184,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
             plt.imshow(np.array(raw_image))
             show_mask(mask, plt.gca())
             plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-            plt.axis('off')
+            plt.axis("off")
             plt.show()
 
             plt.savefig(f"temp_{i}.png")
@@ -199,7 +201,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
 
         assert scores[-1].item() == 0.8686015605926514
 
-        # TODO: 2 points and 1 image
+        # Test with 2 points and 1 image.
         input_points = [[[400, 650], [800, 650]]]
         input_labels = [[1, 1]]
 
@@ -219,12 +221,10 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
             plt.imshow(np.array(raw_image))
             show_mask(mask, plt.gca())
             plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-            plt.axis('off')
+            plt.axis("off")
             plt.show()
 
             plt.savefig(f"temp_{i}.png")
-        
-
 
         # AMG
         crop_boxes, points_per_crop, cropped_images = processor.generate_crop_boxes(raw_image)
@@ -249,9 +249,13 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
                     input_labels=input_labels,
                 )
             iou_scores = model_output.iou_scores.flatten(0, 1)
-            masks = processor.postprocess_masks(raw_image, model_output.low_resolution_masks.cpu(), binarize=False).flatten(0, 1)
+            masks = processor.postprocess_masks(
+                raw_image, model_output.low_resolution_masks, binarize=False
+            ).flatten(0, 1)
 
-            masks, iou_scores, boxes = processor.filter_masks_for_amg(masks, iou_scores, original_height, original_width, crop_boxes[0])
+            masks, iou_scores, boxes = processor.filter_masks_for_amg(
+                masks, iou_scores, original_height, original_width, crop_boxes[0]
+            )
             total_iou_scores.append(iou_scores)
             total_masks.extend(masks)
             total_boxes.append(boxes)
@@ -259,20 +263,17 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         total_iou_scores = torch.cat(total_iou_scores)
         total_boxes = torch.cat(total_boxes)
 
-        final_masks, final_rle_masks, final_iou_scores, final_boxes = processor.postprocess_masks_for_amg(total_masks, total_iou_scores, total_boxes)
+        final_masks, final_rle_masks, final_iou_scores, final_boxes = processor.postprocess_masks_for_amg(
+            total_masks, total_iou_scores, total_boxes
+        )
         plt.imshow(np.array(raw_image))
         ax = plt.gca()
         for mask in final_masks:
             show_mask(mask, ax=ax, random_color=True)
-        plt.axis('off')
+        plt.axis("off")
         plt.show()
 
-        plt.savefig(f"amg.png")
-
-
-        # loop over the points batch per batch and retrieve the masks
-
-        # post process the masks
+        plt.savefig("amg.png")
 
 
 if __name__ == "__main__":

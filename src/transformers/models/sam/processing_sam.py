@@ -84,4 +84,3 @@ class SamProcessor(ProcessorMixin):
 
     def postprocess_masks_for_amg(self, *args, **kwargs):
         return self.image_processor.postprocess_masks_for_amg(*args, **kwargs)
-    

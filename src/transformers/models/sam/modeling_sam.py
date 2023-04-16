@@ -17,7 +17,7 @@
 import collections
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -26,9 +26,9 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, logging
-from ...modeling_outputs import BaseModelOutput
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -354,8 +354,6 @@ class SamTwoWayAttentionBlock(nn.Module):
         return queries, keys
 
 
-
-
 class SamTwoWayTransformer(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
@@ -378,7 +376,7 @@ class SamTwoWayTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    )-> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -523,7 +521,9 @@ class SamMaskDecoder(nn.Module):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
         batch_size, num_channels, height, width = upscaled_embedding.shape
-        masks = (hyper_in @ upscaled_embedding.view(batch_size, num_channels, height * width)).view(batch_size, -1, height, width)
+        masks = (hyper_in @ upscaled_embedding.view(batch_size, num_channels, height * width)).view(
+            batch_size, -1, height, width
+        )
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
@@ -549,11 +549,11 @@ class SamPositionalEmbedding(nn.Module):
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
         coordinates = input_coords.clone()
-        
+
         if input_shape is not None:
             coordinates[:, :, 0] = coordinates[:, :, 0] / input_shape[1]
             coordinates[:, :, 1] = coordinates[:, :, 1] / input_shape[0]
-        
+
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
         coordinates = coordinates.to(self.positional_embedding.dtype)
@@ -657,17 +657,13 @@ class SamPromptEncoder(nn.Module):
             if labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(points, labels, pad=(boxes is None))
-            sparse_embeddings = torch.empty(
-                (batch_size, 0, self.hidden_size), device=target_device
-            )
+            sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
             batch_size = boxes.shape[0]
             box_embeddings = self._embed_boxes(boxes)
             if sparse_embeddings is None:
-                sparse_embeddings = torch.empty(
-                    (batch_size, 0, self.hidden_size), device=target_device
-                )
+                sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
         if masks is not None:
             dense_embeddings = self.mask_embed(masks)
@@ -678,7 +674,7 @@ class SamPromptEncoder(nn.Module):
 
         if sparse_embeddings is None:
             sparse_embeddings = torch.empty((dense_embeddings.shape[0], 0, self.hidden_size), device=target_device)
-        
+
         return sparse_embeddings, dense_embeddings
 
 
@@ -687,7 +683,11 @@ class SamVisionAttention(nn.Module):
 
     def __init__(self, config, window_size) -> None:
         super().__init__()
-        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)if window_size == 0 else (window_size, window_size)
+        input_size = (
+            (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            if window_size == 0
+            else (window_size, window_size)
+        )
 
         self.num_attention_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
@@ -708,6 +708,7 @@ class SamVisionAttention(nn.Module):
         """
         Get relative positional embeddings according to the relative positions of
             query and key sizes.
+
         Args:
             q_size (int): size of query q.
             k_size (int): size of key k.
@@ -787,10 +788,8 @@ class SamVisionAttention(nn.Module):
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(attn_weights, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
-
-        
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
-        
+
         if output_attentions:
             # this operation is a bit akward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -800,7 +799,7 @@ class SamVisionAttention(nn.Module):
             attn_weights = attn_weights_reshaped.view(B * self.num_attention_heads, H, W)
         else:
             attn_weights_reshaped = None
-        
+
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = (
             (attn_probs @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
@@ -994,7 +993,6 @@ class SamVisionEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-
         for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1031,13 +1029,14 @@ class SamVisionEncoder(nn.Module):
         hidden_states = self.neck_layer_norm2(hidden_states)
 
         if not return_dict:
-            return (hidden_states, ) + all_hidden_states
+            return (hidden_states,) + all_hidden_states
 
         return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
@@ -1180,13 +1179,12 @@ class SamForImageSegmentation(SamPreTrainedModel):
         y_embed = y_embed / size
         x_embed = x_embed / size
 
-        image_embedding_size = (size, size)
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # C x H x W
 
     @torch.no_grad()
     def get_image_embeddings(
-        self, 
+        self,
         pixel_values,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1201,7 +1199,6 @@ class SamForImageSegmentation(SamPreTrainedModel):
         image_embeddings = vision_output[0]
         return image_embeddings
 
-
     def forward(
         self,
         pixel_values=None,
@@ -1215,9 +1212,9 @@ class SamForImageSegmentation(SamPreTrainedModel):
     ) -> List[Dict[str, torch.Tensor]]:
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
-            
+
         image_position_embedding = self.get_image_wide_positional_embeddings()
-        
+
         if pixel_values is not None:
             image_embeddings = self.vision_encoder(pixel_values)[0]
 
@@ -1241,7 +1238,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
         if not return_dict:
             output = (iou_predictions, low_res_masks)
             return output
-        
+
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
             low_resolution_masks=low_res_masks,
