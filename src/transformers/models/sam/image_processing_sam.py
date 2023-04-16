@@ -259,9 +259,9 @@ class SamImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        input_points: Optional[tuple[int]] = None,
-        input_labels: Optional[tuple[int]] = None,
-        input_boxes: Optional[tuple[int]] = None,
+        input_points: Optional[List[int]] = None,
+        input_labels: Optional[List[int]] = None,
+        input_boxes: Optional[List[int]] = None,
         target_size: Optional[int] = None,
         do_resize: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
