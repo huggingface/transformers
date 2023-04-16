@@ -1700,8 +1700,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
-        >>> print(loss.item())
-        5.239729881286621
+        >>> print(f"{loss.item():.5f}")
+        5.23973
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1776,35 +1776,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
-        if isinstance(input_ids, torch.Tensor):
-            # check if the first element of `input_ids` is equal to `input_ids`:
-            if (input_ids[:, 0] != self.config.decoder_start_token_id).all().item():
-                # add `input_ids` as first token to `input_ids`
-                input_ids = torch.cat(
-                    [
-                        torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
-                        * self.config.decoder_start_token_id,
-                        input_ids,
-                    ],
-                    dim=-1,
-                )
-
-                if decoder_attention_mask is not None:
-                    decoder_attention_mask = torch.cat(
-                        [
-                            torch.ones(
-                                (decoder_attention_mask.shape[0], 1),
-                                dtype=torch.long,
-                                device=decoder_attention_mask.device,
-                            ),
-                            decoder_attention_mask,
-                        ],
-                        dim=-1,
-                    )
-        elif input_ids is None:
-            batch_size = flattened_patches.shape[0]
-            input_ids = torch.LongTensor([[self.input_ids]]).repeat(batch_size, 1).to(input_ids.device)
-
         if decoder_attention_mask is None:
             decoder_attention_mask = torch.ones_like(input_ids).to(input_ids.device)
 
