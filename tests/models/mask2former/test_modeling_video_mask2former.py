@@ -60,8 +60,8 @@ class VideoVideoMask2FormerModelTester:
         use_auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
-        min_size=32 * 8,
-        max_size=32 * 8,
+        min_size=480,
+        max_size=640,
         num_labels=4,
         hidden_dim=64,
     ):
@@ -84,10 +84,10 @@ class VideoVideoMask2FormerModelTester:
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
-        mask_labels = (
-            torch.rand([self.batch_size, self.num_labels, self.min_size, self.max_size], device=torch_device) > 0.5
-        ).float()
-        class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).long()
+        mask_labels = [(
+            torch.zeros([self.num_labels, self.batch_size, self.min_size, self.max_size], device=torch_device) > 0.5
+        ).float()]
+        class_labels = [(torch.zeros((self.num_labels), device=torch_device)).long()]
 
         config = self.get_config()
         return config, pixel_values, pixel_mask, mask_labels, class_labels
@@ -250,11 +250,12 @@ class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             self.assertIsNotNone(model)
 
     def test_model_with_labels(self):
-        size = (self.model_tester.min_size,) * 2
+        size = (self.model_tester.min_size, self.model_tester.max_size)
+        
         inputs = {
             "pixel_values": torch.randn((2, 3, *size), device=torch_device),
-            "mask_labels": torch.randn((2, 10, *size), device=torch_device),
-            "class_labels": torch.zeros(2, 10, device=torch_device).long(),
+            "mask_labels": [torch.zeros((10, 2, *size), device=torch_device)],
+            "class_labels": [torch.zeros(10, device=torch_device).long()],
         }
         config = self.model_tester.get_config()
 
@@ -441,8 +442,9 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
 
         video_inputs = image_processor(
-            [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
-            segmentation_maps=[np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32)],
+            [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)) ],
+            segmentation_maps=[np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32)],
+            is_train=True,
             return_tensors="pt",
         )
 
