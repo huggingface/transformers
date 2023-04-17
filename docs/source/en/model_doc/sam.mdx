@@ -14,20 +14,30 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The SAM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+SAM (Segment Anything Model) was proposed in [Segment Anything](https://ai.facebook.com/research/publications/segment-anything/) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+
+The model can be used to predict segmentation masks of any object of interest given an input image. 
+
+[example image!](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We introduce the Segment Anything (SA) project: a new task, model, and dataset for image segmentation. Using our efficient model in a data collection loop, we built the largest segmentation dataset to date (by far), with over 1 billion masks on 11M licensed and privacy respecting images. The model is designed and trained to be promptable, so it can transfer zero-shot to new image distributions and tasks. We evaluate its capabilities on numerous tasks and find that its zero-shot performance is impressive -- often competitive with or even superior to prior fully supervised results. We are releasing the Segment Anything Model (SAM) and corresponding dataset (SA-1B) of 1B masks and 11M images at \href{https://segment-anything.com}{https://segment-anything.com} to foster research into foundation models for computer vision.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- The model predicts binary masks that states the presence or not of the object of interest given an image.
+- The model predicts much better results if input 2D points and/or input bounding boxes are provided
+- You can prompt multiple points for the same image, and predict a single mask. 
+- Fine-tuning the model is not supported yet
+- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
 
+Resources:
+
+- Demo notebook for using the model
+- Demo notebook for running Automatic Mask Generation (AMG) pipeline.
 
 ## SamConfig
 
