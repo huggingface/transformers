@@ -473,7 +473,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         # fmt: off
         expected_start_tensor = torch.tensor([1.4199, 1.6599, 2.2599, 3.0, 3.24, 3.5999, 3.7999, 4.0999, 4.26, 4.94, 5.28, 5.6599, 5.78, 5.94, 6.32, 6.5399, 6.6599])
-        expected_end_tensor = torch.tensor([1.4199, 1.6599, 2.2599, 3.0, 3.24, 3.5999, 3.7999, 4.0999, 4.26, 4.94, 5.28, 5.6599, 5.78, 5.94, 6.32, 6.5399, 6.6599])
+        expected_end_tensor = torch.tensor([1.5399, 1.8999, 2.9, 3.16, 3.5399, 3.72, 4.0199, 4.1799, 4.76, 5.1599, 5.5599, 5.6999, 5.86, 6.1999, 6.38, 6.6199, 6.94])
         # fmt: on
 
         self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))
