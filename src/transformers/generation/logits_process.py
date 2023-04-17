@@ -106,12 +106,12 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
     def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
         if not isinstance(min_length, int) or min_length < 0:
-            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+            raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
-            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -148,7 +148,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
-            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens

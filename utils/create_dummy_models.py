@@ -18,6 +18,7 @@ import collections.abc
 import copy
 import inspect
 import json
+import multiprocessing
 import os
 import shutil
 import tempfile
@@ -405,7 +406,11 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             for _tester_classes in models_to_model_testers.values():
                 tester_classes.extend(_tester_classes)
         if len(tester_classes) > 0:
-            model_tester_class = sorted(tester_classes, key=lambda x: x.__name__)[0]
+            # sort with the length of the class names first, then the alphabetical order
+            # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
+            # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
+            # TODO: More fine grained control of the desired tester class.
+            model_tester_class = sorted(tester_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
     except ModuleNotFoundError:
         error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
         raise ValueError(error)
@@ -484,22 +489,68 @@ def convert_processors(processors, tiny_config, output_folder, result):
     This method should not fail: we catch the errors and put them in `result["warnings"]` with descriptive messages.
     """
 
+    def _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=False):
+        """Set tokenizer(s) to `None` if the fast/slow tokenizers have different values for `vocab_size` or `length`.
+
+        If `keep_fast_tokenizer=True`, the fast tokenizer will be kept.
+        """
+        # sanity check 1: fast and slow tokenizers should be compatible (vocab_size)
+        if fast_tokenizer is not None and slow_tokenizer is not None:
+            if fast_tokenizer.vocab_size != slow_tokenizer.vocab_size:
+                warning_messagae = (
+                    "The fast/slow tokenizers "
+                    f"({fast_tokenizer.__class__.__name__}/{slow_tokenizer.__class__.__name__}) have different "
+                    "vocabulary size: "
+                    f"fast_tokenizer.vocab_size = {fast_tokenizer.vocab_size} and "
+                    f"slow_tokenizer.vocab_size = {slow_tokenizer.vocab_size}."
+                )
+                result["warnings"].append(warning_messagae)
+                if not keep_fast_tokenizer:
+                    fast_tokenizer = None
+                slow_tokenizer = None
+
+        # sanity check 2: fast and slow tokenizers should be compatible (length)
+        if fast_tokenizer is not None and slow_tokenizer is not None:
+            if len(fast_tokenizer) != len(slow_tokenizer):
+                warning_messagae = (
+                    f"The fast/slow tokenizers () have different length: "
+                    f"len(fast_tokenizer) = {len(fast_tokenizer)} and "
+                    f"len(slow_tokenizer) = {len(slow_tokenizer)}."
+                )
+                result["warnings"].append(warning_messagae)
+                if not keep_fast_tokenizer:
+                    fast_tokenizer = None
+                slow_tokenizer = None
+
+        return fast_tokenizer, slow_tokenizer
+
     tokenizers = []
     feature_extractors = []
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
-            tokenizers.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in tokenizers}:
+                tokenizers.append(processor)
         elif isinstance(processor, BaseImageProcessor):
-            feature_extractors.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in feature_extractors}:
+                feature_extractors.append(processor)
         elif isinstance(processor, FeatureExtractionMixin):
-            feature_extractors.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in feature_extractors}:
+                feature_extractors.append(processor)
         elif isinstance(processor, ProcessorMixin):
+            if hasattr(processor, "tokenizer"):
+                if processor.tokenizer.__class__.__name__ not in {x.__class__.__name__ for x in tokenizers}:
+                    tokenizers.append(processor.tokenizer)
             # Currently, we only have these 2 possibilities
-            tokenizers.append(processor.tokenizer)
             if hasattr(processor, "image_processor"):
-                feature_extractors.append(processor.image_processor)
+                if processor.image_processor.__class__.__name__ not in {
+                    x.__class__.__name__ for x in feature_extractors
+                }:
+                    feature_extractors.append(processor.image_processor)
             elif hasattr(processor, "feature_extractor"):
-                feature_extractors.append(processor.feature_extractor)
+                if processor.feature_extractor.__class__.__name__ not in {
+                    x.__class__.__name__ for x in feature_extractors
+                }:
+                    feature_extractors.append(processor.feature_extractor)
 
     # check the built processors have the unique type
     num_types = len({x.__class__.__name__ for x in feature_extractors})
@@ -511,30 +562,55 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
     fast_tokenizer = None
     slow_tokenizer = None
+
     for tokenizer in tokenizers:
         if isinstance(tokenizer, PreTrainedTokenizerFast):
-            if fast_tokenizer is None:
-                fast_tokenizer = tokenizer
+            fast_tokenizer = tokenizer
+        else:
+            slow_tokenizer = tokenizer
+
+    # If the (original) fast/slow tokenizers don't correspond, keep only the fast tokenizer.
+    # This doesn't necessarily imply the fast/slow tokenizers in a single Hub repo. has issues.
+    # It's more of an issue in `build_processor` which tries to get a checkpoint with as much effort as possible.
+    # For `YosoModel` (which uses `AlbertTokenizer(Fast)`), its real (Hub) checkpoint doesn't contain valid files to
+    # load the slower tokenizer (`AlbertTokenizer`), and it ends up finding the (canonical) checkpoint of `AlbertModel`,
+    # which has different vocabulary.
+    # TODO: Try to improve `build_processor`'s definition and/or usage to avoid the above situation in the first place.
+    fast_tokenizer, slow_tokenizer = _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=True)
+    original_fast_tokenizer, original_slow_tokenizer = fast_tokenizer, slow_tokenizer
+
+    if fast_tokenizer:
+        try:
+            # Wav2Vec2ForCTC , ByT5Tokenizer etc. all are already small enough and have no fast version that can
+            # be retrained
+            if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
+                fast_tokenizer = convert_tokenizer(fast_tokenizer)
+        except Exception:
+            result["warnings"].append(
+                (
+                    f"Failed to convert the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                    traceback.format_exc(),
+                )
+            )
+
+    # If `fast_tokenizer` exists, `slow_tokenizer` should correspond to it.
+    if fast_tokenizer:
+        # Make sure the fast tokenizer can be saved
+        try:
+            # We don't save it to `output_folder` at this moment - only at the end of this function.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                fast_tokenizer.save_pretrained(tmpdir)
                 try:
-                    # Wav2Vec2ForCTC , ByT5Tokenizer etc. all are already small enough and have no fast version that can
-                    # be retrained
-                    if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
-                        fast_tokenizer = convert_tokenizer(tokenizer)
+                    slow_tokenizer = AutoTokenizer.from_pretrained(tmpdir, use_fast=False)
                 except Exception:
                     result["warnings"].append(
                         (
-                            f"Failed to convert the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                            f"Failed to load the slow tokenizer saved from {fast_tokenizer.__class__.__name__}.",
                             traceback.format_exc(),
                         )
                     )
-                    continue
-        elif slow_tokenizer is None:
-            slow_tokenizer = tokenizer
-
-    # Make sure the fast tokenizer can be saved
-    if fast_tokenizer:
-        try:
-            fast_tokenizer.save_pretrained(output_folder)
+                    # Let's just keep the fast version
+                    slow_tokenizer = None
         except Exception:
             result["warnings"].append(
                 (
@@ -544,32 +620,51 @@ def convert_processors(processors, tiny_config, output_folder, result):
             )
             fast_tokenizer = None
 
-    # Make sure the slow tokenizer (if any) corresponds to the fast version (as it might be converted above)
-    if fast_tokenizer:
-        try:
-            slow_tokenizer = AutoTokenizer.from_pretrained(output_folder, use_fast=False)
-        except Exception:
-            result["warnings"].append(
-                (
-                    f"Failed to load the slow tokenizer saved from {fast_tokenizer.__class__.__name__}.",
-                    traceback.format_exc(),
-                )
-            )
-            # Let's just keep the fast version
-            slow_tokenizer = None
+    # If the (possibly converted) fast/slow tokenizers don't correspond, set them to `None`, and use the original
+    # tokenizers.
+    fast_tokenizer, slow_tokenizer = _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=False)
 
-    # If the fast version can't be created and saved, let's use the slow version
-    if not fast_tokenizer and slow_tokenizer:
-        try:
-            slow_tokenizer.save_pretrained(output_folder)
-        except Exception:
-            result["warnings"].append(
-                (
-                    f"Failed to save the slow tokenizer for {slow_tokenizer.__class__.__name__}.",
-                    traceback.format_exc(),
+    # If there is any conversion failed, we keep the original tokenizers.
+    if (original_fast_tokenizer is not None and fast_tokenizer is None) or (
+        original_slow_tokenizer is not None and slow_tokenizer is None
+    ):
+        warning_messagae = (
+            "There are some issues when converting the fast/slow tokenizers. The original tokenizers from the Hub "
+            " will be used instead."
+        )
+        result["warnings"].append(warning_messagae)
+        # Let's use the original version at the end (`original_fast_tokenizer` and `original_slow_tokenizer`)
+        fast_tokenizer = original_fast_tokenizer
+        slow_tokenizer = original_slow_tokenizer
+
+    # Make sure the fast tokenizer can be saved
+    if fast_tokenizer:
+        # We don't save it to `output_folder` at this moment - only at the end of this function.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                fast_tokenizer.save_pretrained(tmpdir)
+            except Exception:
+                result["warnings"].append(
+                    (
+                        f"Failed to save the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                        traceback.format_exc(),
+                    )
                 )
-            )
-            slow_tokenizer = None
+                fast_tokenizer = None
+    # Make sure the slow tokenizer can be saved
+    if slow_tokenizer:
+        # We don't save it to `output_folder` at this moment - only at the end of this function.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                slow_tokenizer.save_pretrained(tmpdir)
+            except Exception:
+                result["warnings"].append(
+                    (
+                        f"Failed to save the slow tokenizer for {slow_tokenizer.__class__.__name__}.",
+                        traceback.format_exc(),
+                    )
+                )
+                slow_tokenizer = None
 
     # update feature extractors using the tiny config
     try:
@@ -585,12 +680,22 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
     if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
         if fast_tokenizer is not None:
-            if fast_tokenizer.__class__.__name__ in ["RobertaTokenizerFast", "XLMRobertaTokenizerFast"]:
+            if fast_tokenizer.__class__.__name__ in [
+                "RobertaTokenizerFast",
+                "XLMRobertaTokenizerFast",
+                "LongformerTokenizerFast",
+                "MPNetTokenizerFast",
+            ]:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings
         if slow_tokenizer is not None:
-            if slow_tokenizer.__class__.__name__ in ["RobertaTokenizer", "XLMRobertaTokenizer"]:
+            if slow_tokenizer.__class__.__name__ in [
+                "RobertaTokenizer",
+                "XLMRobertaTokenizer",
+                "LongformerTokenizer",
+                "MPNetTokenizer",
+            ]:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings
@@ -883,7 +988,15 @@ def get_config_overrides(config_class, processors):
         return config_overrides
 
     # Get some properties of the (already converted) tokenizer (smaller vocab size, special token ids, etc.)
-    vocab_size = tokenizer.vocab_size
+    # We use `len(tokenizer)` instead of `tokenizer.vocab_size` to avoid potential issues for tokenizers with non-empty
+    # `added_tokens_encoder`. One example is the `DebertaV2Tokenizer` where the mask token is the extra token.
+    vocab_size = len(tokenizer)
+
+    # The original checkpoint has length `35998`, but it doesn't have ids `30400` and `30514` but instead `35998` and
+    # `35999`.
+    if config_class.__name__ == "GPTSanJapaneseConfig":
+        vocab_size += 2
+
     config_overrides["vocab_size"] = vocab_size
 
     # Used to create a new model tester with `tokenizer.vocab_size` in order to get the (updated) special token ids.
@@ -951,6 +1064,10 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
+    if data["training_ds"] is None or data["testing_ds"] is None:
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+        data["training_ds"] = ds["train"]
+        data["testing_ds"] = ds["test"]
 
     if config_class.model_type in [
         "encoder-decoder",
@@ -1218,6 +1335,33 @@ def build_simple_report(results):
     return text, failed_text
 
 
+def update_tiny_model_summary_file(report_path):
+    with open(os.path.join(report_path, "tiny_model_summary.json")) as fp:
+        new_data = json.load(fp)
+    with open("tests/utils/tiny_model_summary.json") as fp:
+        data = json.load(fp)
+    for key, value in new_data.items():
+        if key not in data:
+            data[key] = value
+        else:
+            for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
+                # we might get duplication here. We will remove them below when creating `updated_data`.
+                data[key][attr].extend(value[attr])
+            new_sha = value.get("sha", None)
+            if new_sha is not None:
+                data[key]["sha"] = new_sha
+
+    updated_data = {}
+    for key in sorted(data.keys()):
+        updated_data[key] = {}
+        for attr, value in data[key].items():
+            # deduplication and sort
+            updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
+
+    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
+        json.dump(updated_data, fp, indent=4, ensure_ascii=False)
+
+
 def create_tiny_models(
     output_path,
     all,
@@ -1227,6 +1371,7 @@ def create_tiny_models(
     upload,
     organization,
     token,
+    num_workers=1,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -1247,10 +1392,6 @@ def create_tiny_models(
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
     tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    data["training_ds"] = ds["train"]
-    data["testing_ds"] = ds["test"]
-
     config_classes = CONFIG_MAPPING.values()
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
@@ -1267,11 +1408,19 @@ def create_tiny_models(
             to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
 
     results = {}
-    for c, models_to_create in list(to_create.items()):
-        print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
-        results[c.__name__] = result
-        print("=" * 40)
+    if num_workers <= 1:
+        for c, models_to_create in list(to_create.items()):
+            print(f"Create models for {c.__name__} ...")
+            result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
+            results[c.__name__] = result
+            print("=" * 40)
+    else:
+        all_build_args = []
+        for c, models_to_create in list(to_create.items()):
+            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(build, all_build_args)
+            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:
@@ -1328,11 +1477,12 @@ def create_tiny_models(
     with open(os.path.join(report_path, "simple_failed_report.txt"), "w") as fp:
         fp.write(failed_report)
 
+    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))
+
 
 if __name__ == "__main__":
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    training_ds = ds["train"]
-    testing_ds = ds["test"]
+    # This has to be `spawn` to avoid hanging forever!
+    multiprocessing.set_start_method("spawn")
 
     def list_str(values):
         return values.split(",")
@@ -1369,6 +1519,7 @@ if __name__ == "__main__":
         "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
     )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
+    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
 
     args = parser.parse_args()
 
@@ -1384,4 +1535,5 @@ if __name__ == "__main__":
         args.upload,
         args.organization,
         args.token,
+        args.num_workers,
     )
