@@ -1863,3 +1863,23 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
+
+    def test_text_target(self):
+        # TODO update organization everywhere
+        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
+
+        text = "hello world"
+        expected_decoding = "hello world</s>"
+
+        # should raise an error if we don't provide it using the `text_target` argument
+        with self.assertRaises(ValueError):
+            tokenizer_p(text)
+
+        encoding_p = tokenizer_p(text_target=text)
+        encoding_r = tokenizer_r(text_target=text)
+
+        self.assertListEqual(encoding_p["input_ids"], [21820, 296, 1])
+        self.assertListEqual(encoding_p["attention_mask"], [1, 1, 1])
+        self.assertDictEqual(dict(encoding_p), dict(encoding_r))
+        self.assertEqual(tokenizer_p.decode(encoding_p["input_ids"]), expected_decoding)

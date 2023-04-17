@@ -60,6 +60,10 @@ class UdopProcessor(ProcessorMixin):
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -101,44 +105,68 @@ class UdopProcessor(ProcessorMixin):
         if return_overflowing_tokens is True and return_offsets_mapping is False:
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
-        # first, apply the image processor
-        features = self.image_processor(images=images, return_tensors=return_tensors)
+        if text_target is not None:
+            # use the processor to prepare the targets of UDOP
+            return self.tokenizer(
+                text_target=text_target,
+                text_pair_target=text_pair_target,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
 
-        # second, apply the tokenizer
-        if text is not None and self.image_processor.apply_ocr and text_pair is None:
-            if isinstance(text, str):
-                text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
-            text_pair = features["words"]
+        else:
+            # use the processor to prepare the inputs of UDOP
+            # first, apply the image processor
+            features = self.image_processor(images=images, return_tensors=return_tensors)
 
-        encoded_inputs = self.tokenizer(
-            text=text if text is not None else features["words"],
-            text_pair=text_pair if text_pair is not None else None,
-            boxes=boxes if boxes is not None else features["boxes"],
-            word_labels=word_labels,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
+            # second, apply the tokenizer
+            if text is not None and self.image_processor.apply_ocr and text_pair is None:
+                if isinstance(text, str):
+                    text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
+                text_pair = features["words"]
 
-        # add pixel values
-        pixel_values = features.pop("pixel_values")
-        if return_overflowing_tokens is True:
-            pixel_values = self.get_overflowing_images(pixel_values, encoded_inputs["overflow_to_sample_mapping"])
-        encoded_inputs["pixel_values"] = pixel_values
+            encoded_inputs = self.tokenizer(
+                text=text if text is not None else features["words"],
+                text_pair=text_pair if text_pair is not None else None,
+                boxes=boxes if boxes is not None else features["boxes"],
+                word_labels=word_labels,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
 
-        return encoded_inputs
+            # add pixel values
+            pixel_values = features.pop("pixel_values")
+            if return_overflowing_tokens is True:
+                pixel_values = self.get_overflowing_images(pixel_values, encoded_inputs["overflow_to_sample_mapping"])
+            encoded_inputs["pixel_values"] = pixel_values
+
+            return encoded_inputs
 
     def get_overflowing_images(self, images, overflow_to_sample_mapping):
         # in case there's an overflow, ensure each `input_ids` sample is mapped to its corresponding image

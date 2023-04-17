@@ -83,6 +83,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
     "SpeechT5HifiGanConfig": ["sampling_rate"],
+    # used internally in the configuration class file
+    "UdopConfig": ["feed_forward_proj"],
 }
 
 
