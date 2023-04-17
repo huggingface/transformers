@@ -23,10 +23,9 @@ logger = logging.get_logger(__name__)
 
 class GPTNeoXAlibiConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GPTNeoXAlibiModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the GPTNeoX
-    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
+    with the defaults will yield a similar configuration to that of a 1.4b GPTNeoXAlibi architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -36,18 +35,18 @@ class GPTNeoXAlibiConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50432):
             Vocabulary size of the GPTNeoX model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPTNeoXModel`].
-        hidden_size (`int`, *optional*, defaults to 6144):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 44):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 24576):
+        intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 1e-5):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
@@ -75,7 +74,7 @@ class GPTNeoXAlibiConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50304,
+        vocab_size=50432,
         hidden_size=2048,
         num_hidden_layers=24,
         num_attention_heads=16,
