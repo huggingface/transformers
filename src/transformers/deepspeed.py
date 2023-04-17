@@ -13,6 +13,7 @@
 # limitations under the License.
 """
 Integration with Deepspeed
+sometest
 """
 
 import importlib.util
