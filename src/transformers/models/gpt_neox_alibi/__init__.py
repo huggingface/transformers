@@ -64,7 +64,7 @@ if TYPE_CHECKING:
             GPTNeoXAlibiForCausalLM,
             GPTNeoXAlibiLayer,
             GPTNeoXAlibiModel,
-            GPTNeoXPreTrainedModel,
+            GPTNeoXAlibiPreTrainedModel,
         )
 
 

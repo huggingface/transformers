@@ -303,6 +303,7 @@ _import_structure = {
     "models.gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
+    "models.gpt_neox_alibi": ["GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXAlibiConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -744,6 +745,7 @@ else:
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
+    _import_structure["models.gpt_neox_alibi"].append("GPTNeoXAlibiTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
@@ -1700,6 +1702,15 @@ else:
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
+        ]
+    )
+    _import_structure["models.gpt_neox_alibi"].extend(
+        [
+            "GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoXAlibiForCausalLM",
+            "GPTNeoXAlibiLayer",
+            "GPTNeoXAlibiModel",
+            "GPTNeoXAlibiPreTrainedModel",
         ]
     )
     _import_structure["models.gpt_neox_japanese"].extend(
@@ -4036,6 +4047,7 @@ if TYPE_CHECKING:
     from .models.gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
+    from .models.gpt_neox_alibi import GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXAlibiConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
@@ -4442,6 +4454,7 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
+        from .models.gpt_neox_alibi import GPTNeoXAlibiTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -5232,6 +5245,13 @@ if TYPE_CHECKING:
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
+        )
+        from .models.gpt_neox_alibi import (
+            GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoXAlibiForCausalLM,
+            GPTNeoXAlibiLayer,
+            GPTNeoXAlibiModel,
+            GPTNeoXAlibiPreTrainedModel,
         )
         from .models.gpt_neox_japanese import (
             GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,

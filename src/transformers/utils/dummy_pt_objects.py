@@ -3329,6 +3329,37 @@ class GPTNeoXPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTNeoXAlibiForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXAlibiLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXAlibiModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXAlibiPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

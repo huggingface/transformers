@@ -87,6 +87,7 @@ from . import (
     gpt_bigcode,
     gpt_neo,
     gpt_neox,
+    gpt_neox_alibi,
     gpt_neox_japanese,
     gpt_sw3,
     gptj,
