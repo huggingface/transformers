@@ -260,7 +260,7 @@ extras["sklearn"] = deps_list("scikit-learn")
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
-extras["torch"] = deps_list("torch")
+extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 
 if os.name == "nt":  # windows
