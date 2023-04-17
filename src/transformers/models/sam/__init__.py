@@ -27,13 +27,6 @@ _import_structure = {
     "processing_sam": ["SamProcessor"],
 }
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_sam"] = ["SamImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -46,6 +39,14 @@ else:
         "SamForMaskGeneration",
         "SamPreTrainedModel",
     ]
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_sam"] = ["SamImageProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_sam import (
