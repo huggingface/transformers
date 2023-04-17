@@ -134,9 +134,12 @@ class OriginalMask2FormerConfigToOursConverter:
         id2label = {int(k): v for k, v in id2label.items()}
         label2id = {label: idx for idx, label in id2label.items()}
 
+        backbone_out_features = ["stage1", "stage2", "stage3", "stage4"]
+        backbone_out_indices = [1, 2, 3, 4]
+
         if model.SWIN.EMBED_DIM == 96:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-tiny-patch4-window7-224", out_features=backbone_out_features, out_indices=backbone_out_indices,
             )
         elif model.SWIN.EMBED_DIM == 128:
             backbone_config = SwinConfig(
@@ -144,12 +147,13 @@ class OriginalMask2FormerConfigToOursConverter:
                 window_size=12,
                 depths=(2, 2, 18, 2),
                 num_heads=(4, 8, 16, 32),
-                out_features=["stage1", "stage2", "stage3", "stage4"],
+                out_features=backbone_out_features,
+                out_indices=backbone_out_indices,
             )
 
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-large-patch4-window12-384", out_features=backbone_out_features, out_indices=backbone_out_indices,
             )
         else:
             raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
