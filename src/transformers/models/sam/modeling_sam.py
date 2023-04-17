@@ -519,7 +519,6 @@ class SamMaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
         """
         # Concatenate output tokens
-        batch_size = image_embeddings.shape[0]
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
 
@@ -528,6 +527,7 @@ class SamMaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = image_embeddings
+        src = src.repeat(sparse_prompt_embeddings.shape[0], 1 , 1 , 1)
         src = src + dense_prompt_embeddings
 
         pos_src = image_positional_embedding

@@ -15,12 +15,10 @@
 """
 Processor class for SAM.
 """
-from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
 
-from ...image_utils import to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_torch_available
@@ -65,18 +63,19 @@ class SamProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        encoding_image_processor, additional_parameters = self.image_processor(
+        encoding_image_processor = self.image_processor(
             images,
             return_tensors=return_tensors,
             **kwargs,
         )
+        
+        original_sizes = encoding_image_processor.pop("original_sizes")
 
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,
         )
-        original_sizes = additional_parameters["original_sizes"]
 
         if input_points is not None:
             if len(original_sizes) != len(input_points):
@@ -164,29 +163,6 @@ class SamProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names))
 
-    def normalize_coordinates(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
-        """
-        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
-        """
-        old_h, old_w = original_size
-        new_h, new_w = self.image_processor.get_preprocess_shape(
-            original_size[0], original_size[1], self.image_processor.target_size
-        )
-        coords = deepcopy(coords).astype(float)
-
-        if is_bounding_box:
-            # reshape to .reshape(-1, 2, 2)
-            coords = coords.reshape(-1, 2, 2)
-
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
-        coords[..., 1] = coords[..., 1] * (new_h / old_h)
-
-        if is_bounding_box:
-            # reshape back to .reshape(-1, 4)
-            coords = coords.reshape(-1, 4)
-
-        return coords
-
     def pad_to_target_size(
         self,
         image: np.ndarray,
@@ -201,61 +177,3 @@ class SamProcessor(ProcessorMixin):
         image = F.pad(image, (0, padw, 0, padh))
 
         return image.numpy()
-
-    def postprocess_masks(self, images, masks, mask_threshold=0.0, binarize=True):
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Arguments:
-          masks (torch.Tensor): Batched masks from the mask_decoder,
-            in BxCxHxW format.
-          input_size (tuple(int, int)): The size of the image input to the
-            model, in (H, W) format. Used to remove padding.
-          original_size (tuple(int, int)): The original size of the image
-            before resizing for input to the model, in (H, W) format.
-        Returns:
-          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
-            is given by original_size.
-        """
-        if not isinstance(images, list):
-            images = [images]
-
-        images = [to_numpy_array(image) for image in images]
-
-        original_sizes = torch.LongTensor([image.shape[:2] for image in images])
-
-        # TODO: potentially remove this for batched decoding
-        if self.image_processor.do_resize:
-            images = [self.image_processor.resize(image=image) for image in images]
-
-        input_sizes = images[0].shape[:2]  # they all have the same shape
-
-        image_size = (self.image_processor.target_size, self.image_processor.target_size)
-
-        if len(masks.shape) == 3:
-            masks = masks.unsqueeze(0)
-
-        masks = F.interpolate(masks, image_size, mode="bilinear", align_corners=False)
-        masks = masks[..., : input_sizes[0], : input_sizes[1]]
-
-        # check if original size is not the same across batches
-        output_masks = []
-        if original_sizes.shape[0] > 1:
-            for i in range(original_sizes.shape[0]):
-                output_masks.append(
-                    F.interpolate(
-                        masks[i].unsqueeze(0),
-                        (original_sizes[i][0].item(), original_sizes[i][1].item()),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                )
-            output_masks = torch.cat(output_masks, dim=0)
-        else:
-            output_masks = F.interpolate(
-                masks, (original_sizes[0][0].item(), original_sizes[0][1].item()), mode="bilinear", align_corners=False
-            )
-
-        if binarize:
-            output_masks = output_masks > mask_threshold
-        return output_masks
