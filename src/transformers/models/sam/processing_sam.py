@@ -146,7 +146,7 @@ class SamProcessor(ProcessorMixin):
         if input_labels is not None:
             if not isinstance(input_labels, list) and not isinstance(input_labels[0], list):
                 raise ValueError("Input labels must be a list of list integers.")
-            input_labels = [np.array(label) for label in input_labels] 
+            input_labels = [np.array(label) for label in input_labels]
         else:
             input_labels = None
 
