@@ -332,3 +332,30 @@ The groups are selected to ensure they are distinct enough compared to the other
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
+
+### Assisted Generation
+
+Assisted generation is a modification of the decoding strategies above that uses an assistant model with the same
+tokenizer (ideally a much smaller model) to speed up the decoding process. Currently, only assisted greedy search is
+supported.
+
+<!-- TODO: add link to the blog post about assisted generation when it exists -->
+
+To enable assisted generation, set the `assistant_model` argument with a model.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "I look forward to"
+>>> checkpoint = "gpt2"
+>>> assistant_checkpoint = "distilgpt2"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
+>>> outputs = model.generate(**inputs, assistant_model=assistant_model)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['I look forward to seeing you in the future."\n\n"I\'m sure you\'ll be fine']
+```

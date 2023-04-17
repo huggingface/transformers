@@ -1495,6 +1495,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
         if is_greedy_gen_mode:
@@ -4057,6 +4058,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ):
         r"""
@@ -4101,18 +4103,22 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+
         Return:
             [`~generation.GreedySearchDecoderOnlyOutput`], [`~generation.GreedySearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GreedySearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
+
         Examples:
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        update the example before committing
+
         ```python
         >>> from transformers import (
         ...     AutoTokenizer,
@@ -4125,6 +4131,7 @@ class GenerationMixin:
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> assistant_model = AutoModelForCausalLM.from_pretrained("distilgpt2")
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
         >>> input_prompt = "It might be possible to"
@@ -4136,8 +4143,11 @@ class GenerationMixin:
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-        >>> outputs = model.greedy_search(
-        ...     input_ids, logits_processor=logits_processor, stopping_criteria=stopping_criteria
+        >>> outputs = model.assisted_greedy_search(
+        ...     input_ids,
+        ...     assistant_model=assistant_model,
+        ...     logits_processor=logits_processor,
+        ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
@@ -4324,6 +4334,8 @@ class GenerationMixin:
                 n_matches -= 1
             input_ids = candidate_input_ids[:, 0 : cur_len + n_matches]
             new_cur_len = input_ids.shape[-1]
+            if streamer is not None:
+                streamer.put(candidate_input_ids[:, cur_len : cur_len + n_matches])
 
             # 6.2. Discard past key values relative to unused assistant tokens
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cur_len)
@@ -4396,6 +4408,9 @@ class GenerationMixin:
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -4412,6 +4427,9 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
