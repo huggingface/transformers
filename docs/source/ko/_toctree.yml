@@ -59,8 +59,8 @@
         title: (번역중) Causal language modeling
       - local: in_translation
         title: (번역중) Masked language modeling
-      - local: in_translation
-        title: (번역중) Translation
+      - local: tasks/translation
+        title: 번역
       - local: in_translation
         title: (번역중) Summarization
       - local: in_translation
