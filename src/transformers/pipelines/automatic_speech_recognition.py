@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import numpy as np
 import requests
@@ -225,7 +225,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __call__(
         self,
         inputs: Union[np.ndarray, bytes, str],
-        **kwargs,
+        chunk_length_s: float = 0,
+        stride_length_s: Optional[float] = None,
+        ignore_warning: bool = False,
+        decoder_kwargs: Optional[Dict[str, Any]] = None,
+        return_timestamps: Optional[str] = None,
+        return_language: Optional[bool] = None,
+        generate_kwargs: Optional[Dict[str, Any]] = None,
+        max_new_tokens: Optional[int] = None,
     ):
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
@@ -245,6 +252,29 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
+            chunk_length_s (`float`, *optional*, defaults to 0):
+                The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default). Only
+                available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+
+                <Tip>
+
+                For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR
+                chunking blog post](https://huggingface.co/blog/asr-chunking).
+
+                </Tip>
+
+            stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
+                The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This
+                enables the model to *see* more context and infer letters better than without this context but the
+                pipeline discards the stride bits at the end to make the final reconstitution as perfect as possible.
+
+                <Tip>
+
+                For more information on how to effectively use `stride_length_s`, please have a look at the [ASR
+                chunking blog post](https://huggingface.co/blog/asr-chunking).
+
+                </Tip>
+
             return_timestamps (*optional*, `str`):
                 Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
                 text for every character in the text. For instance if you get `[{"text": "h", "timestamps": (0.5,0.6),
@@ -253,6 +283,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
                 "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
                 predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
+            return_language (*optional*, `bool`):
+                Only availble for Whisper. Whether the pipeline should return the language of the inputs or not.
             generate_kwargs (`dict`, *optional*):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
@@ -269,7 +301,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         "there", "timestamps": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
                         `"".join(chunk["text"] for chunk in output["chunks"])`.
         """
-        return super().__call__(inputs, **kwargs)
+        return super().__call__(
+            inputs,
+            chunk_length_s=chunk_length_s,
+            stride_length_s=stride_length_s,
+            ignore_warning=ignore_warning,
+            decoder_kwargs=decoder_kwargs,
+            return_timestamps=return_timestamps,
+            return_language=return_language,
+            generate_kwargs=generate_kwargs,
+            max_new_tokens=max_new_tokens,
+        )
 
     def _sanitize_parameters(
         self,

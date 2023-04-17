@@ -1,5 +1,6 @@
 import enum
 import warnings
+from typing import List, Optional, Union
 
 from .. import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 from ..utils import add_end_docstrings, is_tf_available
@@ -165,21 +166,36 @@ class TextGenerationPipeline(Pipeline):
 
         return super()._parse_and_tokenize(*args, **kwargs)
 
-    def __call__(self, text_inputs, **kwargs):
+    def __call__(
+        self,
+        text_inputs: Union[str, List[str]],
+        return_tensors: Optional[bool] = None,
+        return_text: Optional[bool] = None,
+        return_full_text: Optional[bool] = None,
+        return_type: Optional[ReturnType] = None,
+        clean_up_tokenization_spaces: bool = False,
+        prefix: Optional[str] = None,
+        handle_long_generation: Optional[str] = None,
+        stop_sequence=None,
+        **generate_kwargs,
+    ):
         """
         Complete the prompt(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            text_inputs (`str` or `List[str]`):
                 One or several prompts (or one list of prompts) to complete.
-            return_tensors (`bool`, *optional*, defaults to `False`):
+            return_tensors (`bool`, *optional*):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
-                `True`, the decoded text is not returned.
-            return_text (`bool`, *optional*, defaults to `True`):
-                Whether or not to return the decoded texts in the outputs.
-            return_full_text (`bool`, *optional*, defaults to `True`):
-                If set to `False` only added text is returned, otherwise the full text is returned. Only meaningful if
-                *return_text* is set to True.
+                `True`, the decoded text is not returned. Is exclusive with `return_text` and `return_full_text`.
+            return_text (`bool`, *optional*):
+                Whether or not to return the decoded texts in the outputs. Will eventually default to `True`. Note that
+                this argument is incompatible with `return_full_text` and `return_tensors`
+            return_full_text (`bool`, *optional*):
+                If set to `False` only added text is returned, otherwise the full text is returned. Is incompatible
+                with `return_text` and `return_tensors`.
+            return_type (`ReturnType`, *optional*):
+                A single argument to set the return type (to text, full text or tensors).
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (`str`, *optional*):
@@ -193,7 +209,8 @@ class TextGenerationPipeline(Pipeline):
                 - `None` : default strategy where nothing in particular happens
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
-
+            stop_sequence (`str`, *optional*):
+                A string that will stop the generation when generated. Should be a single token.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./model#generative-models)).
@@ -206,7 +223,18 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        return super().__call__(text_inputs, **kwargs)
+        return super().__call__(
+            text_inputs,
+            return_tensors=return_tensors,
+            return_text=return_text,
+            return_full_text=return_full_text,
+            return_type=return_type,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            prefix=prefix,
+            stop_sequence=stop_sequence,
+            handle_long_generation=handle_long_generation,
+            **generate_kwargs,
+        )
 
     def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
         inputs = self.tokenizer(

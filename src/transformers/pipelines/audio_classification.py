@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import subprocess
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import requests
@@ -103,7 +103,7 @@ class AudioClassificationPipeline(Pipeline):
     def __call__(
         self,
         inputs: Union[np.ndarray, bytes, str],
-        **kwargs,
+        top_k: Optional[int] = None,
     ):
         """
         Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
@@ -116,10 +116,9 @@ class AudioClassificationPipeline(Pipeline):
                 audio file, the file will be read at the correct sampling rate to get the waveform using *ffmpeg*. This
                 requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is supposed to be the
                 content of an audio file and is interpreted by *ffmpeg* in the same way.
-            top_k (`int`, *optional*, defaults to None):
-                The number of top labels that will be returned by the pipeline. If the provided number is `None` or
-                higher than the number of labels available in the model configuration, it will default to the number of
-                labels.
+            top_k (`int`, *optional*):
+                The number of top labels that will be returned by the pipeline. If unset or set to a value higher than
+                the number of labels available in the model configuration, it will default to the number of labels.
 
         Return:
             A list of `dict` with the following keys:
@@ -127,9 +126,9 @@ class AudioClassificationPipeline(Pipeline):
             - **label** (`str`) -- The label predicted.
             - **score** (`float`) -- The corresponding probability.
         """
-        return super().__call__(inputs, **kwargs)
+        return super().__call__(inputs, top_k=top_k)
 
-    def _sanitize_parameters(self, top_k=None, **kwargs):
+    def _sanitize_parameters(self, top_k=None):
         # No parameters on this pipeline right now
         postprocess_params = {}
         if top_k is not None:
