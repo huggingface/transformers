@@ -512,9 +512,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return crop_boxes, points_per_crop, cropped_images
 
-    def calculate_stability_score(
-        self, masks: torch.Tensor, mask_threshold: float, threshold_offset: float
-    ) -> torch.Tensor:
+    def calculate_stability_score(self, masks, mask_threshold, threshold_offset):
         """
         Computes the stability score for a batch of masks. The stability score is the IoU between the binary masks
         obtained by thresholding the predicted mask logits at high and low values.
@@ -528,7 +526,7 @@ class SamImageProcessor(BaseImageProcessor):
         unions = (masks > (mask_threshold - threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
         return intersections / unions
 
-    def uncrop_boxes_xyxy(self, boxes: torch.Tensor, crop_box: List[int]) -> torch.Tensor:
+    def uncrop_boxes_xyxy(self, boxes, crop_box):
         requires_backends(self, "torch")
         x0, y0, _, _ = crop_box
         offset = torch.tensor([[x0, y0, x0, y0]], device=boxes.device)
@@ -537,7 +535,7 @@ class SamImageProcessor(BaseImageProcessor):
             offset = offset.unsqueeze(1)
         return boxes + offset
 
-    def uncrop_masks(self, masks: torch.Tensor, crop_box: List[int], orig_h: int, orig_w: int) -> torch.Tensor:
+    def uncrop_masks(self, masks, crop_box: List[int], orig_h: int, orig_w: int):
         requires_backends(self, "torch")
         x0, y0, x1, y1 = crop_box
         if x0 == 0 and y0 == 0 and x1 == orig_w and y1 == orig_h:
@@ -547,9 +545,7 @@ class SamImageProcessor(BaseImageProcessor):
         pad = (x0, pad_x - x0, y0, pad_y - y0)
         return torch.nn.functional.pad(masks, pad, value=0)
 
-    def is_box_near_crop_edge(
-        self, boxes: torch.Tensor, crop_box: List[int], orig_box: List[int], atol: float = 20.0
-    ) -> torch.Tensor:
+    def is_box_near_crop_edge(self, boxes, crop_box, orig_box, atol=20.0):
         """Filter masks at the edge of a crop, but not at the edge of the original image."""
         crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
         orig_box_torch = torch.as_tensor(orig_box, dtype=torch.float, device=boxes.device)
@@ -559,7 +555,7 @@ class SamImageProcessor(BaseImageProcessor):
         near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
         return torch.any(near_crop_edge, dim=1)
 
-    def batched_mask_to_box(self, masks: torch.Tensor) -> torch.Tensor:
+    def batched_mask_to_box(self, masks):
         """
         Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape
         C1xC2x...xHxW, the output shape is C1xC2x...x4.
@@ -606,7 +602,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return out
 
-    def mask_to_rle_pytorch(self, tensor: torch.Tensor) -> List[Dict[str, Any]]:
+    def mask_to_rle_pytorch(self, tensor):
         """
         Encodes masks to an uncompressed RLE, in the format expected by pycoco tools.
         """
@@ -725,7 +721,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, scores, converted_boxes
 
-    def postprocess_masks(self, images, masks: torch.Tensor, mask_threshold=0.0, binarize=True):
+    def postprocess_masks(self, images, masks, mask_threshold=0.0, binarize=True):
         """
         Remove padding and upscale masks to the original image size.
 

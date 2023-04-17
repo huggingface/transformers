@@ -237,12 +237,16 @@ class SamModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 3))
+        self.parent.assertEqual(result.low_resolution_masks.shape[:2], (self.batch_size, 3))
+
+    def create_and_check_get_image_features(self, config, pixel_values):
+        model = SamForImageSegmentation(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model.get_image_embeddings(pixel_values)
+        self.parent.assertEqual(result[0].shape, (self.output_channels, 12, 12))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -311,6 +315,10 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_get_image_features(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_get_image_features(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
