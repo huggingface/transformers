@@ -947,11 +947,11 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         is_video: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] or [`VideoMask2FormerForSegmentationOutput`] into instance segmentation predictions.
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch.
 
         Args:
-            outputs ([`Mask2FormerForUniversalSegmentation`], [`VideoMask2FormerForSegmentationOutput`]):
+            outputs ([`Mask2FormerForUniversalSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
@@ -986,21 +986,15 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         # [batch_size, num_queries, num_classes+1]
         class_queries_logits = outputs.class_queries_logits
 
-        # [batch_size, num_queries, height, width] -> Vanilla Mask2Former
-        # [num_queries, batch_size, height, width] -> Video Mask2Former
+        # [batch_size, num_queries, height, width] 
         masks_queries_logits = outputs.masks_queries_logits
 
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
         
-        if is_video:
-            mask_size = (480, 640)
-            num_topk_queries = 10
-            masks_queries_logits = outputs.masks_queries_logits.transpose(1, 0)
-        else:
-            mask_size = (384, 384)
-            num_topk_queries = num_queries
+        mask_size = (384, 384)
+        num_topk_queries = num_queries
         
         # Scale back to preprocessed image size for all models
         masks_queries_logits = torch.nn.functional.interpolate(
@@ -1029,28 +1023,19 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             pred_classes = labels_per_image
             
             # calculate final prediction scores and masks
-            if is_video:
-                pred_masks = mask_pred[:, : mask_size[0], : mask_size[1]]
-                pred_scores = scores_per_image
-                mask_resize_interpolation_mode = "bilinear"
-            else:
-                pred_masks = (mask_pred > 0).float()
-                # Calculate average mask prob
-                mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
-                    pred_masks.flatten(1).sum(1) + 1e-6
-                )
-                pred_scores = scores_per_image * mask_scores_per_image
-                mask_resize_interpolation_mode = "nearest"
+            pred_masks = (mask_pred > 0).float()
+            # Calculate average mask prob
+            mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+                pred_masks.flatten(1).sum(1) + 1e-6
+            )
+            pred_scores = scores_per_image * mask_scores_per_image
             
             # resize prediction masks
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
-                    pred_masks.unsqueeze(0), size=target_sizes[i], mode=mask_resize_interpolation_mode
+                    pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
                 )[0]
-            
-            if is_video:
-                pred_masks = (pred_masks > 0).float()
             
             # Compute segmentation maps and segments_info
             segmentation, segments = self._post_process_instance_segmentation(num_topk_queries, pred_masks, pred_classes, pred_scores, segmentation, threshold, return_coco_annotation, return_binary_maps)
