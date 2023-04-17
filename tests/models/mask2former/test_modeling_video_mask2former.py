@@ -246,7 +246,7 @@ class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["shivi/video-mask2former-swin-tiny-youtubevis-2021-instance"]:
+        for model_name in ["facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"]:
             model = VideoMask2FormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -336,7 +336,7 @@ def prepare_video():
 class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return "shivi/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        return "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
 
     @cached_property
     def default_image_processor(self):
