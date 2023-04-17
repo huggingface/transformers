@@ -217,11 +217,22 @@ def apply_mel_filters(
     return mel
 
 
-def window_function(length: int, name: str = "hann") -> np.ndarray:
+def optimal_fft_length(window_length: int) -> int:
     """
-    Returns an array containing the specified window.
+    Finds the best FFT input size for a given `window_length`, which will be a power of two.
+    """
+    return 2 ** int(np.ceil(np.log2(window_length)))
 
-    The window is periodic, not symmetric, and is intended to be used with `stft`.
+
+def window_function(
+    window_length: int,
+    name: str = "hann",
+    periodic: bool = True,
+    frame_length: Optional[int] = None,
+    center: bool = True,
+) -> np.ndarray:
+    """
+    Returns an array containing the specified window. This window is intended to be used with `stft`.
 
     The following window types are supported:
 
@@ -230,31 +241,56 @@ def window_function(length: int, name: str = "hann") -> np.ndarray:
         - `"hann"`: the Hann window
 
     Args:
-        length (`int`):
+        window_length (`int`):
             The length of the window in samples.
         name (`str`, *optional*, defaults to `"hann"`):
             The name of the window function.
+        periodic (`bool`, *optional*, defaults to `True`):
+            Whether the window is periodic or symmetric.
+        frame_length (`int`, *optional*):
+            The length of the analysis frames in samples. Provide a value for `frame_length` if the window is smaller
+            than the frame length, so that it will be zero-padded.
+        center (`bool`, *optional*, defaults to `True`):
+            Whether to center the window inside the FFT buffer. Only used when `frame_length` is provided.
 
     Returns:
-        `np.ndarray` of shape `(length,)` containing the window.
+        `np.ndarray` of shape `(window_length,)` or `(frame_length,)` containing the window.
     """
+    length = window_length + 1 if periodic else window_length
+
     if name == "boxcar":
-        return np.ones(length)
+        window = np.ones(length)
     elif name == "hamming":
-        return np.hamming(length + 1)[:-1]
+        window = np.hamming(length)
     elif name == "hann":
-        return np.hanning(length + 1)[:-1]
+        window = np.hanning(length)
     else:
         raise ValueError(f"Unknown window function '{name}'")
+
+    if periodic:
+        window = window[:-1]
+
+    if frame_length is None:
+        return window
+
+    if window_length > frame_length:
+        raise ValueError(
+            f"Length of the window ({window_length}) may not be larger than frame_length ({frame_length})"
+        )
+
+    padded_window = np.zeros(frame_length)
+    offset = (frame_length - window_length) // 2 if center else 0
+    padded_window[offset : offset + window_length] = window
+    return padded_window
 
 
 # TODO This method does not support batching yet as we are mainly focus on inference.
 def stft(
     waveform: np.ndarray,
+    window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: int,
-    window: np.ndarray,
+    fft_length: Optional[int] = None,
     power: Optional[float] = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
@@ -267,39 +303,38 @@ def stft(
 
       1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
          - hop_length` samples.
-      2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`. If the window is smaller
-         than `fft_length`, it is first centered and zero-padded.
+      2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`.
       3. The DFT is taken of each windowed frame.
       4. The results are stacked into a spectrogram.
 
-    We make a distinction between the following "blocks" of sample data:
+    We make a distinction between the following "blocks" of sample data, each of which may have a different lengths:
 
-      - The analysis frame. This is the size of the segments that the input waveform is split into.
-      - The window. Each analysis frame is multiplied with this to avoid spectral leakage.
+      - The analysis frame. This is the size of the time slices that the input waveform is split into.
+      - The window. Each analysis frame is multiplied by the window to avoid spectral leakage.
       - The FFT input buffer. The length of this determines how many frequency bins are in the spectrogram.
 
-    Depending on how you choose to compute the STFT, the FFT input buffer may have the length of the window or be (much)
-    larger; the analysis frame may have the length of the window or the length of the FFT input buffer.
+    In this implementation, the window is assumed to be zero-padded to have the same size as the analysis frame. A
+    padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame,
+    typically the next power of two.
 
-    This function is not optimized for speed yet. It should be mostly compatible with `librosa.stft` and
+    Note: This function is not optimized for speed yet. It should be mostly compatible with `librosa.stft` and
     `torchaudio.functional.transforms.Spectrogram`, although it is more flexible due to the different ways spectrograms
     can be constructed.
 
     Args:
         waveform (`np.ndarray` of shape `(length,)`):
             The input waveform. This must be a single real-valued, mono waveform.
+        window (`np.ndarray` of shape `(frame_length,)`):
+            The windowing function to apply, including zero-padding if necessary. The actual window length may be
+            shorter than `frame_length`, but we're assuming the array has already been zero-padded.
         frame_length (`int`):
-            The length of the analysis frames in samples. This should be equal to either `fft_length` (what librosa
-            does) or to `len(window)`. If `-1`, uses the FFT buffer length from `fft_length`.
+            The length of the analysis frames in samples. With librosa this is always equal to `fft_length` but we
+            also allow smaller sizes.
         hop_length (`int`):
             The stride between successive analysis frames in samples.
-        fft_length (`int`):
+        fft_length (`int`, *optional*):
             The size of the FFT buffer in samples. This determines how many frequency bins the spectrogram will have.
-            For optimal speed, this should be a power of two. If `-1`, this will automatically set `fft_length` to a
-            power of two based on the window length.
-        window (`np.ndarray` of shape `(window_length,)`):
-            The windowing function to apply. The `window_length` may not be larger than `fft_length`. If it's smaller,
-            the remainder of the FFT input buffer will be zero-padded.
+            For optimal speed, this should be a power of two. If `None`, uses `frame_length`.
         power (`float`, *optional*, defaults to 1.0):
             If 1.0, returns the amplitude spectrogram. If 2.0, returns the power spectrogram. If `None`, returns
             complex numbers.
@@ -319,19 +354,14 @@ def stft(
     """
     window_length = len(window)
 
-    if fft_length == -1:
-        fft_length = 2 ** int(np.ceil(np.log2(window_length)))
+    if fft_length is None:
+        fft_length = frame_length
 
-    if window_length > fft_length:
-        raise ValueError(f"Length of the window ({window_length}) may not be larger than fft_length ({fft_length})")
+    if frame_length > fft_length:
+        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
 
-    if frame_length == -1:
-        frame_length = fft_length
-
-    if frame_length not in [window_length, fft_length]:
-        raise ValueError(
-            f"frame_length is {frame_length} but should equal window_length ({window_length}) or fft_length ({fft_length})"
-        )
+    if window_length != frame_length:
+        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
 
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
@@ -350,13 +380,6 @@ def stft(
     # promote to float64, since np.fft uses float64 internally
     waveform = waveform.astype(np.float64)
     window = window.astype(np.float64)
-
-    # center the window in the FFT frame
-    if frame_length == fft_length and fft_length > window_length:
-        offset = (fft_length - window_length) // 2
-        padded_window = np.zeros(fft_length)
-        padded_window[offset : offset + window_length] = window
-        window = padded_window
 
     # split waveform into frames of frame_length size
     num_frames = int(1 + np.floor((waveform.size - frame_length) / hop_length))
