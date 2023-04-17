@@ -1084,7 +1084,7 @@ class SamPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1217,6 +1217,8 @@ class SamForMaskGeneration(SamPreTrainedModel):
         self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
 
@@ -1269,7 +1271,10 @@ class SamForMaskGeneration(SamPreTrainedModel):
                 Whether or not to return 3 scores and binary mask for each image as described in the original paper.
 
         Returns:
-
+            iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
+                The predicted iou scores of the 3 predicted masks
+            low_resolution_masks (`torch.FloatTensor`):
+                Raw low resolution masks
         Example:
         """
         if pixel_values is None and image_embeddings is None:
