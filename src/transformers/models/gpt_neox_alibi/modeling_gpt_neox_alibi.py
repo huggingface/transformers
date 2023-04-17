@@ -76,12 +76,6 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
         extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
-    # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
-    # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
-    # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
-    # => the query_length dimension will then be broadcasted correctly
-    # This is more or less identical to T5's relative position bias:
-    # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
     alibi = slopes[..., None] * arange_tensor
     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
@@ -257,6 +251,7 @@ class GPTNeoXAlibiMLP(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
+
 
 class GPTNeoXAlibiLayer(nn.Module):
     def __init__(self, config):
@@ -446,6 +441,8 @@ class GPTNeoXAlibiModel(GPTNeoXAlibiPreTrainedModel):
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
             attention_mask = attention_mask.to(hidden_states.device)
+
+            # Create alibi positional embedding
             alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
     
             # We create a 3D attention mask from a 2D tensor mask.
@@ -453,15 +450,15 @@ class GPTNeoXAlibiModel(GPTNeoXAlibiPreTrainedModel):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            #attention_mask = attention_mask[:, None, None, :]
+            attention_mask = attention_mask[:, None, None, :]
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
             # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            #attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            #attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
