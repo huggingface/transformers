@@ -444,8 +444,9 @@ def spectrogram(
 
     Args:
         log_mel (`str`, *optional*):
-            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log10"` (only
-            take the log), `"dB"` (convert to decibels). Can only be used when `power` is not `None`.
+            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take the
+            natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be used when
+            `power` is not `None`.
         dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the spectrogram tensor.
 
@@ -468,7 +469,9 @@ def spectrogram(
         spectrogram = apply_mel_filters(spectrogram, mel_filters, mel_floor)
 
     if power is not None and log_mel is not None:
-        if log_mel == "log10":
+        if log_mel == "log":
+            spectrogram = np.log(spectrogram)
+        elif log_mel == "log10":
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
