@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torchvision, require_vision
 from transformers.utils import is_vision_available
 
 
@@ -28,6 +28,7 @@ if is_vision_available():
 
 
 @require_vision
+@require_torchvision
 class SamProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
