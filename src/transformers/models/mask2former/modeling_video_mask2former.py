@@ -190,9 +190,9 @@ class VideoMask2FormerModelOutput(ModelOutput):
 
 
 @dataclass
-class VideoMask2FormerForSegmentationOutput(ModelOutput):
+class VideoMask2FormerForVideoSegmentationOutput(ModelOutput):
     """
-    Class for outputs of [`VideoMask2FormerForSegmentationOutput`].
+    Class for outputs of [`VideoMask2FormerForVideoSegmentationOutput`].
 
     This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] to compute final segmentation maps. Please, see
     [`~Mask2FormerImageProcessor] for details regarding usage.
@@ -2392,10 +2392,10 @@ class VideoMask2FormerModel(VideoMask2FormerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Video Mask2Former Model with heads on top for video instance segmentation.",
+    "The Video Mask2Former model with heads on top for video segmentation.",
     VIDEO_MASK2FORMER_START_DOCSTRING,
 )
-class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
+class VideoMask2FormerForVideoSegmentation(VideoMask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config: Mask2FormerConfig):
@@ -2449,7 +2449,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         return auxiliary_logits
 
     @add_start_docstrings_to_model_forward(VIDEO_MASK2FORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VideoMask2FormerForSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=VideoMask2FormerForVideoSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -2460,7 +2460,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> VideoMask2FormerForSegmentationOutput:
+    ) -> VideoMask2FormerForVideoSegmentationOutput:
         r"""
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
@@ -2475,7 +2475,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         Video instance segmentation example:
 
         ```python
-        >>> from transformers import AutoImageProcessor, VideoMask2FormerForSegmentation
+        >>> from transformers import AutoImageProcessor, VideoMask2FormerForVideoSegmentation
         >>> import torch
         >>> import torchvision
         >>> from huggingface_hub import hf_hub_download
@@ -2484,7 +2484,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained(
         ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
         ... )
-        >>> model = VideoMask2FormerForSegmentation.from_pretrained(
+        >>> model = VideoMask2FormerForVideoSegmentation.from_pretrained(
         ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
         ... )
 
@@ -2565,7 +2565,7 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         # [batch_size, num_queries, num_frames, height, width] -> [num_queries, num_frames, height, width]
         mask_logits = mask_logits[0]
 
-        output = VideoMask2FormerForSegmentationOutput(
+        output = VideoMask2FormerForVideoSegmentationOutput(
             loss=loss,
             class_queries_logits=class_logits,
             masks_queries_logits=mask_logits,

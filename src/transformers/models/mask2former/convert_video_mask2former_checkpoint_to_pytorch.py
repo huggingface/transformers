@@ -34,13 +34,13 @@ from torch import Tensor, nn
 
 from transformers import (
     Mask2FormerConfig,
-    VideoMask2FormerForSegmentation,
+    VideoMask2FormerForVideoSegmentation,
     VideoMask2FormerImageProcessor,
     VideoMask2FormerModel,
     SwinConfig,
 )
 from transformers.models.mask2former.modeling_video_mask2former import (
-    VideoMask2FormerForSegmentationOutput,
+    VideoMask2FormerForVideoSegmentationOutput,
     VideoMask2FormerModelOutput,
 )
 from transformers.utils import logging
@@ -906,8 +906,8 @@ class OriginalVideoMask2FormerCheckpointToOursConverter:
         return video_mask2former
 
     def convert_segmentation_head(
-        self, video_mask2former: VideoMask2FormerForSegmentation
-    ) -> VideoMask2FormerForSegmentation:
+        self, video_mask2former: VideoMask2FormerForVideoSegmentation
+    ) -> VideoMask2FormerForVideoSegmentation:
         dst_state_dict = TrackedStateDict(video_mask2former.state_dict())
         src_state_dict = self.original_model.state_dict()
 
@@ -942,7 +942,7 @@ class OriginalVideoMask2FormerCheckpointToOursConverter:
 
 def test(
     original_model,
-    our_model: VideoMask2FormerForSegmentation,
+    our_model: VideoMask2FormerForVideoSegmentation,
     image_processor: VideoMask2FormerImageProcessor,
     tolerance: float,
 ):
@@ -990,7 +990,7 @@ def test(
         # modify original Mask2Former code to return mask and class logits
         original_class_logits, original_mask_logits = original_model([{"image": original_model_input}])
 
-        our_model_out: VideoMask2FormerForSegmentationOutput = our_model(img_processor_output.clone())
+        our_model_out: VideoMask2FormerForVideoSegmentationOutput = our_model(img_processor_output.clone())
         our_mask_logits = our_model_out.masks_queries_logits
         our_class_logits = our_model_out.class_queries_logits
 
@@ -1105,7 +1105,7 @@ if __name__ == "__main__":
         converter = OriginalVideoMask2FormerCheckpointToOursConverter(original_model, config)
         mask2former = converter.convert(video_mask2former)
 
-        video_mask2former_for_segmentation = VideoMask2FormerForSegmentation(config=config).eval()
+        video_mask2former_for_segmentation = VideoMask2FormerForVideoSegmentation(config=config).eval()
         video_mask2former_for_segmentation.model = video_mask2former
 
         video_mask2former_for_segmentation = converter.convert_segmentation_head(video_mask2former_for_segmentation)

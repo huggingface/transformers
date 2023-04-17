@@ -1912,7 +1912,7 @@ else:
             "Mask2FormerPreTrainedModel",
             "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VideoMask2FormerModel",
-            "VideoMask2FormerForSegmentation",
+            "VideoMask2FormerForVideoSegmentation",
             "VideoMask2FormerPreTrainedModel",
         ]
     )
@@ -5374,7 +5374,7 @@ if TYPE_CHECKING:
             Mask2FormerPreTrainedModel,
             VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMask2FormerModel,
-            VideoMask2FormerForSegmentation,
+            VideoMask2FormerForVideoSegmentation,
             VideoMask2FormerPreTrainedModel,
         )
         from .models.maskformer import (

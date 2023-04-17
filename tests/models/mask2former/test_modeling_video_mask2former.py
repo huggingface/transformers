@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import VideoMask2FormerForSegmentation, VideoMask2FormerModel
+    from transformers import VideoMask2FormerForVideoSegmentation, VideoMask2FormerModel
 
     if is_vision_available():
         from transformers import VideoMask2FormerImageProcessor
@@ -147,7 +147,7 @@ class VideoVideoMask2FormerModelTester:
     def create_and_check_video_mask2former_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
-        model = VideoMask2FormerForSegmentation(config=config)
+        model = VideoMask2FormerForVideoSegmentation(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -185,7 +185,7 @@ class VideoVideoMask2FormerModelTester:
 
 @require_torch
 class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (VideoMask2FormerModel, VideoMask2FormerForSegmentation) if is_torch_available() else ()
+    all_model_classes = (VideoMask2FormerModel, VideoMask2FormerForVideoSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": VideoMask2FormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
@@ -259,7 +259,7 @@ class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         }
         config = self.model_tester.get_config()
 
-        model = VideoMask2FormerForSegmentation(config).to(torch_device)
+        model = VideoMask2FormerForVideoSegmentation(config).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -391,7 +391,7 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_video_mask2former_segmentation_head_model(self):
         # load model and processor
-        model = VideoMask2FormerForSegmentation.from_pretrained(self.model_checkpoints).to(torch_device)
+        model = VideoMask2FormerForVideoSegmentation.from_pretrained(self.model_checkpoints).to(torch_device)
         image_processor = self.default_image_processor
 
         video = prepare_video()
@@ -438,13 +438,13 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_with_segmentation_maps_and_loss(self):
-        model = VideoMask2FormerForSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = VideoMask2FormerForVideoSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         image_processor = self.default_image_processor
 
         video_inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)) ],
             segmentation_maps=[np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32)],
-            is_train=True,
+            do_sampling=True,
             return_tensors="pt",
         )
 

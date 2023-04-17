@@ -531,16 +531,16 @@ class Mask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         self.assertEqual(rle[1], 45)
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
 
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs)
 
         self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
         self.assertEqual(segmentation[0].shape, (384, 384))
 
         target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 

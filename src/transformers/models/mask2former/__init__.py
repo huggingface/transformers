@@ -48,7 +48,7 @@ else:
 
     _import_structure["modeling_video_mask2former"] = [
         "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VideoMask2FormerForSegmentation",
+        "VideoMask2FormerForVideoSegmentation",
         "VideoMask2FormerModel",
         "VideoMask2FormerPreTrainedModel",
     ]
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
 
         from .modeling_video_mask2former import (
             VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VideoMask2FormerForSegmentation,
+            VideoMask2FormerForVideoSegmentation,
             VideoMask2FormerModel,
             VideoMask2FormerPreTrainedModel,
         )
