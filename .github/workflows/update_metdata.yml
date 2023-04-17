@@ -19,6 +19,7 @@ jobs:
       - name: Setup environment
         run: |
           pip install --upgrade pip
+          pip install datasets, huggingface_hub, pandas
           pip install .
 
       - name: Update metadata
