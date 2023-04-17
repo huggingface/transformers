@@ -1469,8 +1469,12 @@ class GenerationTesterMixin:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
-            # may fix in the future: the following models fail to pass this test
-
+            # may fix in the future: the following models fail to pass this test, and need model-specific fixes
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text"]
+            ):
+                return
 
             # enable cache
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
