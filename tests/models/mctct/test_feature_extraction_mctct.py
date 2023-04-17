@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_torch
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -47,7 +47,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-@require_torchaudio
 class MCTCTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -102,7 +101,6 @@ class MCTCTFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = MCTCTFeatureExtractor if is_speech_available() else None
 
