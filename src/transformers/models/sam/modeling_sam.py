@@ -527,10 +527,9 @@ class SamMaskDecoder(nn.Module):
         tokens = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
-        # src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
         src = image_embeddings
         src = src + dense_prompt_embeddings
-        # pos_src = torch.repeat_interleave(image_positional_embedding, tokens.shape[0], dim=0)
+
         pos_src = image_positional_embedding
         batch_size, num_channels, height, width = src.shape
 
@@ -1259,7 +1258,8 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         image_position_embedding = self.get_image_wide_positional_embeddings()
         # repeat with batch size
-        image_position_embedding = image_position_embedding.repeat(pixel_values.shape[0], 1, 1, 1)
+        batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
+        image_position_embedding = image_position_embedding.repeat(batch_size, 1, 1, 1)
 
         all_attentions = ()
 
