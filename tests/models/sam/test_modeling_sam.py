@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+import requests
+
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -33,12 +35,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SamForMaskGeneration
+    from transformers import SamForMaskGeneration, SamProcessor
     from transformers.models.sam.modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    pass
+    from PIL import Image
 
 
 class SamPromptEncoderTester:
@@ -431,3 +433,114 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SamForMaskGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+def prepare_image():
+    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    return raw_image
+
+
+@slow
+class SamModelIntegrationTest(unittest.TestCase):
+    def test_inference_mask_generation_no_point(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
+
+    def test_inference_mask_generation_one_point(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        input_points = [[[400, 650]]]
+        input_labels = [[1]]
+
+        inputs = processor(
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
+
+    def test_inference_mask_generation_two_points(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        input_points = [[[400, 650], [800, 650]]]
+        input_labels = [[1, 1]]
+
+        inputs = processor(
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
+
+    def test_inference_mask_generation_two_points_batched(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        input_points = [[[400, 650], [800, 650]], [[400, 650]]]
+        input_labels = [[1, 1], [1]]
+
+        inputs = processor(
+            images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.9936), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9716), atol=1e-4))
+
+    def test_inference_mask_generation_one_box(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        input_boxes = ((75, 275, 1725, 850),)
+
+        inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
