@@ -2127,6 +2127,7 @@ class Trainer:
 
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file):
             # If the model is on the GPU, it still works!
+            # Try modifying the trainer itself
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
                     # If the 'user_content.pt' file exists, load with the new smp api.
