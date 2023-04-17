@@ -675,10 +675,10 @@ class SamPromptEncoder(nn.Module):
 
     def forward(
         self,
-        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
-        labels: Optional[torch.Tensor],
-        boxes: Optional[torch.Tensor],
-        masks: Optional[torch.Tensor],
+        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        input_labels: Optional[torch.Tensor],
+        input_boxes: Optional[torch.Tensor],
+        input_masks: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -697,21 +697,21 @@ class SamPromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         target_device = self.shared_embedding.positional_embedding.device
-        if points is not None:
-            batch_size = points[0].shape[0] if len(points.shape) == 2 else points.shape[0]
-            if labels is None:
+        if input_points is not None:
+            batch_size = input_points[0].shape[0] if len(input_points.shape) == 2 else input_points.shape[0]
+            if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
-            point_embeddings = self._embed_points(points, labels, pad=(boxes is None))
+            point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
             sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
-        if boxes is not None:
-            batch_size = boxes.shape[0]
-            box_embeddings = self._embed_boxes(boxes)
+        if input_boxes is not None:
+            batch_size = input_boxes.shape[0]
+            box_embeddings = self._embed_boxes(input_boxes)
             if sparse_embeddings is None:
                 sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
-        if masks is not None:
-            dense_embeddings = self.mask_embed(masks)
+        if input_masks is not None:
+            dense_embeddings = self.mask_embed(input_masks)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
                 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
@@ -1222,6 +1222,22 @@ class SamForMaskGeneration(SamPreTrainedModel):
         image_embeddings = vision_output[0]
         return image_embeddings
 
+    @torch.no_grad()
+    def get_prompt_embeddings(
+        self,
+        input_points: Optional[torch.FloatTensor] = None,
+        input_labels: Optional[torch.LongTensor] = None,
+        input_boxes: Optional[torch.FloatTensor] = None,
+        input_masks: Optional[torch.LongTensor] = None,
+    ):
+        prompt_output = self.prompt_encoder(
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            input_masks=input_masks,
+        )
+        return prompt_output
+
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1280,13 +1296,14 @@ class SamForMaskGeneration(SamPreTrainedModel):
             all_attentions = all_attentions + (None,)
 
         if input_points is not None and input_labels is None:
+            # TODO: @younesbelkada fix this
             input_labels = torch.ones(input_points.shape[0], dtype=torch.int, device=input_points.device)
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            points=input_points,
-            labels=input_labels,
-            boxes=input_boxes,
-            masks=input_masks,
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            input_masks=input_masks,
         )
 
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
