@@ -295,6 +295,7 @@ def stft(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    preemphasis: Optional[float] = None,
 ) -> np.ndarray:
     """
     Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
@@ -347,6 +348,8 @@ def stft(
         onesided (`bool`, *optional*, defaults to `True`):
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
+        preemphasis (`float`, *optional*)
+            Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
 
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_frames)` containing the spectrogram; its dtype is
@@ -393,7 +396,14 @@ def stft(
 
     timestep = 0
     for frame_idx in range(num_frames):
-        buffer[:frame_length] = waveform[timestep : timestep + frame_length] * window
+        buffer[:frame_length] = waveform[timestep : timestep + frame_length]
+
+        if preemphasis is not None:
+            buffer[1 : frame_length] -= preemphasis * buffer[:frame_length - 1]
+            buffer[0] *= 1 - preemphasis
+
+        buffer[:frame_length] *= window
+
         spectrogram[frame_idx] = fft_func(buffer)
         timestep += hop_length
 
@@ -414,6 +424,7 @@ def spectrogram(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    preemphasis: Optional[float] = None,
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
     log_mel: Optional[str] = None,
@@ -450,6 +461,7 @@ def spectrogram(
         center,
         pad_mode,
         onesided,
+        preemphasis,
     )
 
     if mel_filters is not None:
