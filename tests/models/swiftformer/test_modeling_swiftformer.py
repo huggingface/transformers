@@ -257,11 +257,11 @@ def prepare_img():
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTImageProcessor.from_pretrained("shehan97/swiftformer-xs") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = SwiftFormerForImageClassification.from_pretrained("shehan97/swiftformer-xs").to(torch_device)
+        model = SwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
