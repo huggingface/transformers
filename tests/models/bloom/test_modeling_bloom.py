@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import BloomConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device, require_torch_non_multi_gpu
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -349,6 +349,17 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems to be not supported
+
+    def test_foo(self):
+        pass
+
+    @require_torch_non_multi_gpu
+    def test_foo_1(self):
+        raise ValueError("bon")
+
+    @require_torch_non_multi_gpu
+    def test_foo_2(self):
+        raise ValueError("bon")
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)

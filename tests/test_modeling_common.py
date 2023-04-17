@@ -289,6 +289,9 @@ class ModelTesterMixin:
 
         return inputs_dict
 
+    def test_foo(self):
+        raise ValueError("Sorry")
+
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

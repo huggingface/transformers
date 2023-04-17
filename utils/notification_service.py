@@ -413,7 +413,7 @@ class Message:
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
-        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
+        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/run_better_report"
         if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
             # Get the last previously completed CI's failure tables
             artifact_names = ["test_failure_tables"]
