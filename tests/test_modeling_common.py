@@ -509,7 +509,7 @@ class ModelTesterMixin:
 
     def test_initialization(self):
         pass
-    
+
     # def test_initialization(self):
     #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
