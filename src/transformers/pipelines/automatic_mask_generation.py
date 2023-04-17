@@ -1,25 +1,30 @@
-from typing import Any, Dict, List, Union, Tuple, Optional
-
-import numpy as np
 import math
 from itertools import product
+from typing import Any, Dict, List, Tuple
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends, is_torchvision_available
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+import numpy as np
+
 from ..image_utils import load_image, to_numpy_array
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
+from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
-    from ..models.auto.modeling_auto import (
-        MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING
-    )
+
+    from ..models.auto.modeling_auto import MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -56,7 +61,7 @@ def generate_crop_boxes(
     if isinstance(image, list):
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
-    original_size = image.shape[:2]
+    image.shape[:2]
 
     points_grid = build_all_layer_point_grids(
         points_per_crop=points_per_crop, n_layers=n_layers, scale_per_layer=scale_per_layer
@@ -317,16 +322,16 @@ def postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh):
     masks = [rle_to_mask(rle) for rle in rle_masks]
 
     return masks, rle_masks, iou_scores, mask_boxes
-    
+
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class AutomaticMaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
     image, given an image and potentially additional inputs such as points, bounding boxes or .
-    
+
     The pipeline used the following functions:
         1. pre_process: calls the processor with image, points labels etc
-            - generate_crop_boxes 
+            - generate_crop_boxes
         2. forward: feed the output of the processor to the model
             - get_image_embeddings
             - forward sequentually (loop)
@@ -366,15 +371,15 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         super().__init__(**kwargs)
         requires_backends(self, "vision")
         requires_backends(self, "torch")
-        
+
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-        
+
         self.check_model_type(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING)
 
     def _sanitize_parameters(self, **kwargs):
         """
-        
+
         """
         preprocessor_kwargs = {}
         postprocess_kwargs = {}
@@ -400,57 +405,62 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         """
         Since the pipeline inherits from `chunkPipeline` is meas that setting a `max_batch_points` allows the user to run the model
         sequentially on the specified number of points.
-        
+
         Args:
-            - image: an input image. 
+            - image: an input image.
             - max_batch_points : number maxium of points to process at the same time
         """
         image = load_image(image)
         crop_boxes, points_per_crop, cropped_images = self.processor.generate_crop_boxes(image)
-        pixel_values = self.processor(images=cropped_images, return_tensors="pt").to("cuda").pixel_values
-       
+        model_inputs = self.processor(images=cropped_images, return_tensors="pt").to("cuda")
+        target_size = model_inputs["target_size"]
+        image_embeddings = self.model.get_image_embeddings(model_inputs["pixel_values"])
+        input_labels = torch.ones_like(points_per_crop, dtype=torch.long)
         if point_batch_size:
-            image_embeddings = self.model.get_image_embeddings(pixel_values)
-            for i, (batched_points, input_labels) in enumerate(zip(points_per_crop, cropped_images)):
+            for i, (batched_points, labels) in enumerate(zip(points_per_crop,input_labels)):
                 input_labels = torch.ones_like(batched_points[:, :, 0], dtype=torch.long)
 
                 yield {
                     "image_embeddings": image_embeddings,
                     "batched_points": batched_points,
-                    "input_labels": input_labels,
-                    "target_size": inputs["target_size"],
+                    "input_labels": labels,
+                    "target_size": target_size,
+                    "crop_boxes":crop_boxes
                 }
         else:
-            yield {"image_embeddings": pixel_values }
+            yield {"image_embeddings": image_embeddings, "target_size": target_size, "points_per_crop": points_per_crop, "input_labels":input_labels, "crop_boxes":crop_boxes}
 
 
 
-    def _forward(self, model_inputs, batch_size):
+    def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
+        original_height, original_width  = model_inputs.pop("original_size")
+        
         points_per_crop = model_inputs.pop("points_per_crop")
         image_embeddings = model_inputs.pop("image_embeddings")
-        all_outputs = []
-        
-        batched_points = points_per_crop[:, i : i + batch_size, :].to("cuda").permute(1, 0, 2)
-        input_labels = torch.ones_like(batched_points[:, :, 0], dtype=torch.long)
+        crop_boxes = model_inputs.pop("crop_boxes")
         with torch.no_grad():
-            model_output = self.model(
-                image_embeddings=image_embeddings,
-                input_points=batched_points,
-                input_labels=input_labels,
-            )
-        outputs = self.model(**model_inputs)
-        all_outputs += [outputs]
+            model_outputs = self.model(**model_inputs)
             
-        model_outputs = {"target_size": target_size, "all_outputs":all_outputs}
+
         return model_outputs
 
     def postprocess(self):
-        pass
-        # final_masks, final_rle_masks, final_iou_scores, final_boxes = processor.postprocess_masks_for_amg(
-        #     total_masks, total_iou_scores, total_boxes
-        # )
-    
-    
+        iou_scores = model_outputs.iou_scores.flatten(0, 1)
+        masks = self.processor.postprocess_masks(target_size, model_outputs.low_resolution_masks, binarize=False).flatten(
+                0, 1
+            )
+        
+        masks, iou_scores, boxes = self.processor.filter_masks_for_amg(
+                masks, iou_scores, original_height, original_width, crop_boxes[0]
+            )
+        
+        outputs = self.processor.postprocess_masks_for_amg(
+            iou_scores, total_iou_scores, total_boxes
+        )
+                
+        model_outputs = {"target_size": target_size, "outputs":outputs}
+
+
 
 
