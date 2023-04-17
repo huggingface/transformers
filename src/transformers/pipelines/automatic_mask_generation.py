@@ -28,6 +28,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 def build_point_grid(n_per_side: int) -> np.ndarray:
     """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
     offset = 1 / (2 * n_per_side)
@@ -36,6 +37,7 @@ def build_point_grid(n_per_side: int) -> np.ndarray:
     points_y = np.tile(points_one_side[:, None], (1, n_per_side))
     points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
     return points
+
 
 def build_all_layer_point_grids(
     points_per_crop: int = None, n_layers: int = None, scale_per_layer: int = None
@@ -46,6 +48,7 @@ def build_all_layer_point_grids(
         n_points = int(points_per_crop / (scale_per_layer**i))
         points_by_layer.append(build_point_grid(n_points))
     return points_by_layer
+
 
 def generate_crop_boxes(
     image,
@@ -125,18 +128,18 @@ def generate_crop_boxes(
 
     return crop_boxes, points_per_crop, cropped_images
 
+
 def calculate_stability_score(masks, mask_threshold, threshold_offset):
     """
-    Computes the stability score for a batch of masks. The stability score is the IoU between the binary masks
-    obtained by thresholding the predicted mask logits at high and low values.
+    Computes the stability score for a batch of masks. The stability score is the IoU between the binary masks obtained
+    by thresholding the predicted mask logits at high and low values.
     """
     # One mask is always contained inside the other.
     # Save memory by preventing unnecesary cast to torch.int64
-    intersections = (
-        (masks > (mask_threshold + threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
-    )
+    intersections = (masks > (mask_threshold + threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     unions = (masks > (mask_threshold - threshold_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     return intersections / unions
+
 
 def uncrop_boxes_xyxy(boxes, crop_box):
     x0, y0, _, _ = crop_box
@@ -146,6 +149,7 @@ def uncrop_boxes_xyxy(boxes, crop_box):
         offset = offset.unsqueeze(1)
     return boxes + offset
 
+
 def uncrop_masks(masks, crop_box: List[int], orig_h: int, orig_w: int):
     x0, y0, x1, y1 = crop_box
     if x0 == 0 and y0 == 0 and x1 == orig_w and y1 == orig_h:
@@ -154,6 +158,7 @@ def uncrop_masks(masks, crop_box: List[int], orig_h: int, orig_w: int):
     pad_x, pad_y = orig_w - (x1 - x0), orig_h - (y1 - y0)
     pad = (x0, pad_x - x0, y0, pad_y - y0)
     return torch.nn.functional.pad(masks, pad, value=0)
+
 
 def is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     """Filter masks at the edge of a crop, but not at the edge of the original image."""
@@ -165,10 +170,11 @@ def is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
     return torch.any(near_crop_edge, dim=1)
 
+
 def batched_mask_to_box(masks):
     """
-    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape
-    C1xC2x...xHxW, the output shape is C1xC2x...x4.
+    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape C1xC2x...xHxW,
+    the output shape is C1xC2x...x4.
     """
     # torch.max below raises an error on empty inputs, just skip in this case
     requires_backends("torch")
@@ -212,6 +218,7 @@ def batched_mask_to_box(masks):
 
     return out
 
+
 def mask_to_rle_pytorch(tensor):
     """
     Encodes masks to an uncompressed RLE, in the format expected by pycoco tools.
@@ -241,6 +248,7 @@ def mask_to_rle_pytorch(tensor):
         out.append({"size": [h, w], "counts": counts})
     return out
 
+
 def rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     """Compute a binary mask from an uncompressed RLE."""
     h, w = rle["size"]
@@ -261,6 +269,10 @@ def filter_masks(
     original_height,
     original_width,
     cropped_box_image,
+    pred_iou_thresh,
+    stability_score_thresh,
+    mask_threshold,
+    stability_score_offset,
 ):
     r"""
     Filters the masks and iou_scores for the AMG algorithm.
@@ -277,15 +289,13 @@ def filter_masks(
 
     keep_mask = torch.ones(batch_size, dtype=torch.bool, device=masks.device)
 
-    if amg_pred_iou_thresh > 0.0:
-        keep_mask = keep_mask & (iou_scores > amg_pred_iou_thresh)
+    if pred_iou_thresh > 0.0:
+        keep_mask = keep_mask & (iou_scores > pred_iou_thresh)
 
     # Calculate stability score
-    if amg_stability_score_thresh > 0.0:
-        stability_scores = calculate_stability_score(
-            masks, mask_threshold, amg_stability_score_offset
-        )
-        keep_mask = keep_mask & (stability_scores > amg_stability_score_thresh)
+    if stability_score_thresh > 0.0:
+        stability_scores = calculate_stability_score(masks, mask_threshold, stability_score_offset)
+        keep_mask = keep_mask & (stability_scores > stability_score_thresh)
 
     scores = iou_scores[keep_mask]
     masks = masks[keep_mask]
@@ -294,9 +304,7 @@ def filter_masks(
     masks = masks > mask_threshold
     converted_boxes = batched_mask_to_box(masks)
 
-    keep_mask = ~is_box_near_crop_edge(
-        converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
-    )
+    keep_mask = ~is_box_near_crop_edge(converted_boxes, cropped_box_image, [0, 0, original_width, original_height])
 
     scores = scores[keep_mask]
     masks = masks[keep_mask]
@@ -322,6 +330,7 @@ def postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh):
     masks = [rle_to_mask(rle) for rle in rle_masks]
 
     return masks, rle_masks, iou_scores, mask_boxes
+
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class AutomaticMaskGenerationPipeline(ChunkPipeline):
@@ -351,10 +360,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
     ... )
     []
 
-    >>> generator(
-    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
-    ...     point_batch_size = 16
-    ... )
+    >>> generator("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", point_batch_size=16)
     []
     ```
 
@@ -378,9 +384,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         self.check_model_type(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING)
 
     def _sanitize_parameters(self, **kwargs):
-        """
-
-        """
+        """ """
         preprocessor_kwargs = {}
         postprocess_kwargs = {}
         if "n_layers" in kwargs:
@@ -400,24 +404,24 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
 
         return preprocessor_kwargs, {}, postprocess_kwargs
 
-
     def preprocess(self, image, point_batch_size, **kwargs):
         """
-        Since the pipeline inherits from `chunkPipeline` is meas that setting a `max_batch_points` allows the user to run the model
-        sequentially on the specified number of points.
+        Since the pipeline inherits from `chunkPipeline` is meas that setting a `max_batch_points` allows the user to
+        run the model sequentially on the specified number of points.
 
         Args:
             - image: an input image.
             - max_batch_points : number maxium of points to process at the same time
         """
         image = load_image(image)
-        crop_boxes, points_per_crop, cropped_images = self.processor.generate_crop_boxes(image)
+        original_size = image.shape
+        crop_boxes, points_per_crop, cropped_images = generate_crop_boxes(image, **kwargs)
         model_inputs = self.processor(images=cropped_images, return_tensors="pt").to("cuda")
         target_size = model_inputs["target_size"]
         image_embeddings = self.model.get_image_embeddings(model_inputs["pixel_values"])
         input_labels = torch.ones_like(points_per_crop, dtype=torch.long)
         if point_batch_size:
-            for i, (batched_points, labels) in enumerate(zip(points_per_crop,input_labels)):
+            for i, (batched_points, labels) in enumerate(zip(points_per_crop, input_labels)):
                 input_labels = torch.ones_like(batched_points[:, :, 0], dtype=torch.long)
 
                 yield {
@@ -425,42 +429,39 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                     "batched_points": batched_points,
                     "input_labels": labels,
                     "target_size": target_size,
-                    "crop_boxes":crop_boxes
+                    "crop_boxes": crop_boxes,
+                    "original_size": original_size,
                 }
         else:
-            yield {"image_embeddings": image_embeddings, "target_size": target_size, "points_per_crop": points_per_crop, "input_labels":input_labels, "crop_boxes":crop_boxes}
-
-
+            yield {
+                "image_embeddings": image_embeddings,
+                "target_size": target_size,
+                "points_per_crop": points_per_crop,
+                "input_labels": input_labels,
+                "crop_boxes": crop_boxes,
+                "original_size": original_size,
+            }
 
     def _forward(self, model_inputs):
-        target_size = model_inputs.pop("target_size")
-        original_height, original_width  = model_inputs.pop("original_size")
-        
-        points_per_crop = model_inputs.pop("points_per_crop")
-        image_embeddings = model_inputs.pop("image_embeddings")
-        crop_boxes = model_inputs.pop("crop_boxes")
         with torch.no_grad():
             model_outputs = self.model(**model_inputs)
-            
 
         return model_outputs
 
-    def postprocess(self):
+    def postprocess(self, model_outputs, **kwargs):
+        target_size = model_outputs.pop("target_size")
+        original_height, original_width = model_outputs.pop("original_size")
+        crop_boxes = model_outputs.pop("crop_boxes")
+
+        masks = self.processor.postprocess_masks(
+            target_size, model_outputs.low_resolution_masks, binarize=False
+        ).flatten(0, 1)
+
         iou_scores = model_outputs.iou_scores.flatten(0, 1)
-        masks = self.processor.postprocess_masks(target_size, model_outputs.low_resolution_masks, binarize=False).flatten(
-                0, 1
-            )
-        
         masks, iou_scores, boxes = self.processor.filter_masks_for_amg(
-                masks, iou_scores, original_height, original_width, crop_boxes[0]
-            )
-        
-        outputs = self.processor.postprocess_masks_for_amg(
-            iou_scores, total_iou_scores, total_boxes
+            masks, iou_scores, original_height, original_width, crop_boxes[0]
         )
-                
-        model_outputs = {"target_size": target_size, "outputs":outputs}
 
+        outputs = self.processor.postprocess_masks_for_amg(iou_scores, iou_scores, boxes)
 
-
-
+        model_outputs = {"target_size": target_size, "outputs": outputs}
