@@ -29,11 +29,20 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
     import PIL
+
+if is_torchvision_available():
     from torchvision.transforms.functional import resize, to_pil_image
 
 if is_torch_available():
@@ -153,7 +162,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return image.numpy()
 
-    def resize(self,image: np.ndarray,target_size: int = None,**kwargs) -> np.ndarray:
+    def resize(self, image: np.ndarray, target_size: int = None, **kwargs) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
 
@@ -166,13 +175,20 @@ class SamImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        requires_backends(self, "torchvision")
         target_size = target_size if target_size is not None else self.target_size
         output_size = self.get_preprocess_shape(image.shape[0], image.shape[1], target_size)
         image = to_pil_image(image)
         image = to_numpy_array(resize(image, output_size))
         return image.astype(np.float32)
 
-    def rescale(self,image: np.ndarray,scale: Union[int, float],data_format: Optional[Union[str, ChannelDimension]] = None,**kwargs):
+    def rescale(
+        self,
+        image: np.ndarray,
+        scale: Union[int, float],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ):
         """
         Rescale an image by a scale factor. image = image * scale.
 
