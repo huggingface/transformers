@@ -671,12 +671,22 @@ class AutoTokenizer:
                         " repo on your local machine. Make sure you have read the code there to avoid malicious use,"
                         " then set the option `trust_remote_code=True` to remove this error."
                     )
+                if kwargs.get("revision", None) is None:
+                    logger.warning(
+                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure"
+                        " no malicious code has been contributed in a newer revision."
+                    )
 
                 if use_fast and tokenizer_auto_map[1] is not None:
                     class_ref = tokenizer_auto_map[1]
                 else:
                     class_ref = tokenizer_auto_map[0]
-                tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+
+                module_file, class_name = class_ref.split(".")
+                tokenizer_class = get_class_from_dynamic_module(
+                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                )
+                tokenizer_class.register_for_auto_class()
 
             elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
