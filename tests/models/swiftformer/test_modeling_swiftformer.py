@@ -176,6 +176,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
 
+    has_attentions = False
+
     def setUp(self):
         self.model_tester = SwiftFormerModelTester(self)
         self.config_tester = ConfigTester(
@@ -230,6 +232,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.assertIsNotNone(model)
 
     ####
+    @unittest.skip(reason="SwiftFormer does not output attentions")
     def test_attention_outputs(self):
         pass
 

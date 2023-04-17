@@ -27,9 +27,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2CLS
 from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    ImageClassifierOutput,
+    BaseModelOutputWithNoAttention,
+    ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -497,12 +496,10 @@ class SwiftFormerEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_hidden_states else None
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -510,16 +507,13 @@ class SwiftFormerEncoder(nn.Module):
             hidden_states = block(hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-        # return x
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            # attentions=None,
         )
 
 
@@ -569,9 +563,6 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -604,7 +595,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -612,10 +603,9 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         r""" """
 
         if pixel_values is None:
@@ -626,7 +616,6 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         embedding_output = self.patch_embed(x)
         encoder_outputs = self.encoder(
             embedding_output,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -634,10 +623,9 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         if not return_dict:
             return tuple(v for v in encoder_outputs if v is not None)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -668,7 +656,7 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -676,11 +664,9 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -692,7 +678,6 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         # run base model
         outputs = self.swiftformer(
             pixel_values,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -734,9 +719,8 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
