@@ -164,9 +164,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         """
         log_mel_spectrogram = spectrogram(
             waveform,
+            window_function(self.fft_window_size, "hann"),
             frame_length=self.fft_window_size,
             hop_length=self.hop_length,
-            window=window_function(self.fft_window_size, "hann"),
             power=2.0,
             mel_filters=mel_filters,
             log_mel="dB",

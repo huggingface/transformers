@@ -419,7 +419,7 @@ def spectrogram(
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: int,
+    fft_length: Optional[int] = None,
     power: Optional[float] = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
