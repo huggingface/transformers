@@ -4,7 +4,6 @@ scikit-learn
 seqeval
 psutil
 sacrebleu >= 1.4.12
-git+https://github.com/huggingface/accelerate@main#egg=accelerate
 rouge-score
 tensorflow_datasets
 matplotlib
