@@ -153,7 +153,7 @@ class SamProcessor(ProcessorMixin):
         if input_boxes is not None:
             if not isinstance(input_boxes, tuple):
                 raise ValueError("Input boxes must be a tuple of tuple of floating integers.")
-            input_boxes = [np.array(box) for box in input_boxes]
+            input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
         else:
             input_boxes = None
 
@@ -183,7 +183,7 @@ class SamProcessor(ProcessorMixin):
 
         if is_bounding_box:
             # reshape back to .reshape(-1, 4)
-            coords = coords.reshape(-1, 4)
+            coords = coords.reshape(-1, 4).astype(np.float32)
 
         return coords
 
