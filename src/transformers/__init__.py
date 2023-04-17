@@ -4494,7 +4494,7 @@ if TYPE_CHECKING:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
+        from .utils.dummy_sentencepiece_and_tokenizers_objects import *
     else:
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
 
