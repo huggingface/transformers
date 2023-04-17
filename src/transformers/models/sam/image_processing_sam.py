@@ -434,7 +434,6 @@ class SamImageProcessor(BaseImageProcessor):
         overlap_ratio: float = None,
         points_per_crop: int = None,
         scale_per_layer: int = None,
-        do_normalize: bool = None,
         return_tensors="pt",
     ) -> Tuple[List[List[int]], List[int]]:
         """

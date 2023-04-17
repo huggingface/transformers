@@ -76,30 +76,3 @@ class SamProcessorTest(unittest.TestCase):
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-
-        processor = SamProcessor(image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "prompt", "attention_mask"])
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-
-        processor = SamProcessor(image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "prompt", "attention_mask"])

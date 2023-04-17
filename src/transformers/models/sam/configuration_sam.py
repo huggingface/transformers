@@ -55,7 +55,7 @@ class SamPromptEncoderConfig(PretrainedConfig):
         hidden_act="gelu",
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.input_image_size = input_image_size
         self.patch_size = patch_size
@@ -95,7 +95,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.mlp_dim = mlp_dim

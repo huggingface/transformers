@@ -430,6 +430,8 @@ _import_structure = {
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
+        "SamPromptEncoderConfig",
+        "SamMaskDecoderConfig",
         "SamProcessor",
         "SamVisionConfig",
     ],
@@ -4120,6 +4122,8 @@ if TYPE_CHECKING:
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
+        SamPromptEncoderConfig,
+        SamMaskDecoderConfig,
         SamProcessor,
         SamVisionConfig,
     )
