@@ -19,7 +19,7 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 import random
 import numpy as np
-
+import itertools
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
@@ -256,7 +256,6 @@ def compute_segments(
 # TODO: (Amy) Move to image_transforms
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
-    video_label_ids: Dict[int, int],
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     reduce_labels: bool = False,
@@ -267,25 +266,17 @@ def convert_segmentation_map_to_binary_masks(
     if reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
     
-    # Initialize a list of binary masks 
-    final_binary_masks = [np.zeros(segmentation_map.shape, dtype=bool) for label in video_label_ids]
-    
     # Get unique ids (class or instance ids based on input) present in the video frame
     all_frame_labels = np.unique(segmentation_map)
     
-    all_frame_labels_ids = [video_label_ids[label] for idx,label in enumerate(all_frame_labels) if label in  video_label_ids.keys()]
-
     # Drop background label if applicable
     if ignore_index is not None:
         all_frame_labels = all_frame_labels[all_frame_labels != ignore_index]
         
     # Generate a binary mask for each object instance
     binary_masks = [(segmentation_map == i) for i in all_frame_labels]
-    
-    for idx, mask in zip(all_frame_labels_ids, binary_masks):
-        final_binary_masks[idx] = mask
 
-    binary_masks = np.stack(final_binary_masks, axis=0)  # (num_labels, height, width)
+    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
     
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
@@ -535,7 +526,6 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
-        video_label_ids: Dict[int, int],
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
@@ -544,14 +534,13 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
-            video_label_ids=video_label_ids,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
             reduce_labels=reduce_labels,
         )
 
-    def __call__(self, images, segmentation_maps=None, is_train=False, **kwargs) -> BatchFeature:
-        return self.preprocess(images, segmentation_maps=segmentation_maps, is_train=is_train, **kwargs)
+    def __call__(self, images, segmentation_maps=None, do_sampling=False, **kwargs) -> BatchFeature:
+        return self.preprocess(images, segmentation_maps=segmentation_maps, do_sampling=do_sampling, **kwargs)
 
     def _preprocess(
         self,
@@ -645,12 +634,15 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         self,
         video_frames: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        is_train: bool = False,
+        do_sampling: bool = False,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
+        sampling_frame_range: Optional[int] = 20,
+        sampling_frame_num: Optional[int] = 2, 
+        sampling_frame_shuffle: Optional[bool] = False,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -703,19 +695,14 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             )
 
         if not is_batched(video_frames):
-            images = [video_frames]
+            video_frames = [video_frames]
             segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
 
         if segmentation_maps is not None and len(video_frames) != len(segmentation_maps):
             raise ValueError("Video_frames and segmentation maps must have the same length.")
 
-        # select only 2 frames for training
-        if is_train:
-            
-            # read from config
-            sampling_frame_range = 20
-            sampling_frame_num = 2
-            sampling_frame_shuffle = False
+        # do frame sampling (Video Mask2Former model uses only 2 frames for training)
+        if do_sampling:
             
             video_length = len(video_frames)
 
@@ -848,7 +835,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
-        Mask2Former addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
+        Video Mask2Former addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
         will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
         `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
@@ -907,15 +894,9 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             
             mask_labels = []
             class_labels = []
+            frame_labels = []
+            frame_masks = []
             video_masks = []
-            
-            # Find the unique labels present in the segmentation maps
-            video_labels = np.unique(np.stack([(np.ascontiguousarray(x)) for x in segmentation_maps]))
-            
-            # Create a mapping of labels with unique id
-            video_label_id_map = dict()
-            for idx, label in enumerate(list(video_labels)):
-                video_label_id_map[label] = idx
 
             pad_size = get_max_height_width(pixel_values_list)
 
@@ -927,7 +908,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, video_label_id_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
@@ -935,16 +916,32 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                 masks = [
                     self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
                 ]
-                masks = np.concatenate(masks, axis=0)
 
-                current_frame_mask = torch.from_numpy(masks)
-                video_masks.append(current_frame_mask)
-
-            # with all the unique class labels found in video frames
-            class_labels.append(torch.from_numpy(video_labels.astype(np.int64)))
+                # add list of binary masks corresponding to current segmentation map  
+                frame_masks.append(masks)
+                # add list of classes corresponding to current segmentation map 
+                frame_labels.append(classes)
             
-            # mask_label of shape (num_labels, num_frames, height, width)
-            mask_labels.append(torch.stack(video_masks).transpose(1, 0)) 
+            # create list of labels for the whole video using `frame_labels`
+            video_labels = list(itertools.chain.from_iterable(frame_labels))
+            num_video_instances = len(video_labels)
+            
+            # iterate over lists of binary masks for each frame
+            for current_frame_mask_list in frame_masks:
+                # each frame should have equal no. of binary masks  which is equal to `num_video_instances`
+                # if they have less masks then create & add additional dummy masks so that total no. of binary masks is equal to `num_video_instances`
+                if len(current_frame_mask_list) != num_video_instances:
+                    dummy_mask_count = num_video_instances - len(current_frame_mask_list)
+                    dummy_masks = [np.zeros(current_frame_mask_list[0].shape) for count in range(dummy_mask_count)]
+                    current_frame_mask_list += dummy_masks
+                
+                video_masks.append(torch.from_numpy(np.concatenate(current_frame_mask_list, axis=0)))
+            
+            # mask_label of shape (`num_labels, num_frames, height, width`)
+            mask_labels.append(torch.stack(video_masks).transpose(1, 0))
+
+            # class_label of shape (`num_video_instances,  height, width`)
+            class_labels.append(torch.from_numpy(np.array(video_labels))) 
             
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
@@ -963,11 +960,11 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         return_binary_maps: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`VideoMask2FormerForSegmentationOutput`] into instance segmentation predictions.
+        Converts the output of [`VideoMask2FormerForVideoSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch.
 
         Args:
-            outputs ([`VideoMask2FormerForSegmentationOutput`]):
+            outputs ([`VideoMask2FormerForVideoSegmentationOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
