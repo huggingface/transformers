@@ -1599,16 +1599,14 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         super().__init__(config)
         self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
         self.num_layers = config.num_hidden_layers + 1
+        with tf.name_scope(self._name_scope()):
+            if config.use_weighted_layer_sum:
+                self.layer_weights = self.add_weight(
+                    shape=(self.num_layers,), initializer="ones", trainable=True, name="layer_weights"
+                )
         self.config = config
         self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, name="projector")
         self.classifier = tf.keras.layers.Dense(units=config.num_labels, activation=None, name="classifier")
-
-    def build(self, input_shape):
-        if self.config.use_weighted_layer_sum:
-            self.layer_weights = self.add_weight(
-                shape=(self.num_layers,), initializer="ones", trainable=True, name="layer_weights"
-            )
-        super().build(input_shape)
 
     def freeze_feature_extractor(self):
         """
@@ -1688,6 +1686,16 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(
+            logits=output.logits,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
     @tf.function(
