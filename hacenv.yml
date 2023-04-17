@@ -3,11 +3,11 @@ dependencies:
     - python=3.8
     - pip
     - pip:
-        - torch==1.7.1+cu110.moreh23.3.1
-        - moreh-driver==23.3.1
+        - torch==1.7.1+cu110.moreh23.4.1
+        - moreh-driver==23.4.1
         - tensorflow==2.9.0
         - -e ".[dev]"
 
 # conda env create -f hacenv.yml
 # conda activate transformers-dev
-# update-moreh --force --target 23.3.1 --tensorflow
+# update-moreh --force --target 23.4.1 --tensorflow
