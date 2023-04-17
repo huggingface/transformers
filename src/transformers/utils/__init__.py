@@ -83,7 +83,6 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
-    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
