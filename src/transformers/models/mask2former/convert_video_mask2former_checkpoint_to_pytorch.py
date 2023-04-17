@@ -953,11 +953,8 @@ def test(
         image_size = (480, 640)
         file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
         video = torchvision.io.read_video(file_path)[0]
-        video_frames = [
-            image_processor(images=frame, return_tensors="pt", do_resize=True, size=image_size).pixel_values
-            for frame in video[:5]
-        ]
-        img_processor_output = torch.cat(video_frames)
+        
+        img_processor_output = image_processor(images=list(video[:5]), return_tensors="pt", do_resize=True, size=image_size).pixel_values
 
         original_model_backbone_features = original_model.backbone(img_processor_output.clone())
         our_model_output: VideoMask2FormerModelOutput = our_model.model(
@@ -986,18 +983,9 @@ def test(
 
         # Let's test the full model
         
-        original_model_input = []
-        for frame in video[:5]:
-            original_model_input.append(
-                image_processor(
-                    images=frame,
-                    return_tensors="pt",
-                    do_resize=True,
-                    do_rescale=False,
-                    do_normalize=False,
-                    size=image_size,
-                ).pixel_values[0]
-            )
+        original_model_input = image_processor(images=list(video[:5]),return_tensors="pt",
+                                    do_resize=True,do_rescale=False,
+                                    do_normalize=False,size=image_size).pixel_values
 
         # modify original Mask2Former code to return mask and class logits
         original_class_logits, original_mask_logits = original_model([{"image": original_model_input}])
