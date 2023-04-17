@@ -28,7 +28,6 @@ import tempfile
 import time
 import unittest
 from collections.abc import Mapping
-from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
@@ -59,6 +58,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_keras_nlp_available,
     is_librosa_available,
@@ -93,6 +93,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    strtobool,
 )
 
 
@@ -275,6 +276,13 @@ def require_rjieba(test_case):
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
     """
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
+
+
+def require_jieba(test_case):
+    """
+    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
+    """
+    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
 
 
 def require_tf2onnx(test_case):

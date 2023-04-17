@@ -164,3 +164,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True)

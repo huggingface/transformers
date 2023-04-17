@@ -26,6 +26,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -58,6 +59,7 @@ class ConvNextV2ModelTester:
         num_labels=10,
         initializer_range=0.02,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         scope=None,
     ):
         self.parent = parent
@@ -74,6 +76,7 @@ class ConvNextV2ModelTester:
         self.num_labels = num_labels
         self.initializer_range = initializer_range
         self.out_features = out_features
+        self.out_indices = out_indices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -97,6 +100,7 @@ class ConvNextV2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_labels=self.num_labels,
         )
 
@@ -161,7 +165,7 @@ class ConvNextV2ModelTester:
 
 
 @require_torch
-class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNextV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -175,6 +179,11 @@ class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ConvNextV2Model, "image-classification": ConvNextV2ForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = False

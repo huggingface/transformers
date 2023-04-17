@@ -56,7 +56,7 @@ class GenerationConfig(PushToHubMixin):
             `constraints!=None` or `force_words_ids!=None`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
-    more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
     Arg:
         > Parameters that control the length of the output
@@ -681,7 +681,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config.
-        for decoder_name in ("decoder", "generator"):
+        for decoder_name in ("decoder", "generator", "text_config"):
             if decoder_name in config_dict:
                 default_generation_config = GenerationConfig()
                 decoder_config = config_dict[decoder_name]

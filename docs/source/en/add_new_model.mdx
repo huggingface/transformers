@@ -202,7 +202,15 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
-and return to the parent directory
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
+```
+
+which should be enough for most use cases. You can then return to the parent directory
 
 ```bash
 cd ..

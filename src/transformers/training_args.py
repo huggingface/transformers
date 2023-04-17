@@ -42,6 +42,7 @@ from .utils import (
     get_full_repo_name,
     is_accelerate_available,
     is_psutil_available,
+    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -53,7 +54,12 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.import_utils import is_optimum_neuron_available
 
+
+logger = logging.get_logger(__name__)
+log_levels = logging.get_log_levels_dict().copy()
+trainer_log_levels = dict(**log_levels, passive=-1)
 
 if is_torch_available():
     import torch
@@ -66,23 +72,29 @@ if is_torch_neuroncore_available(check_device=False):
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
     if os.environ.get("TORCHELASTIC_RUN_ID"):
-        import torch_xla.distributed.xla_backend as xbn
+        if is_optimum_neuron_available():
+            logger.info(
+                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "will fail otherwise."
+            )
+        else:
+            logger.warning(
+                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "training on AWS Trainium instances. More information here: "
+                "https://github.com/huggingface/optimum-neuron"
+            )
+            import torch_xla.distributed.xla_backend as xbn
 
-        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-            torch.distributed.init_process_group(backend="xla")
             if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
+                torch.distributed.init_process_group(backend="xla")
+                if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                    raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     smp.init()
-
-
-logger = logging.get_logger(__name__)
-log_levels = logging.get_log_levels_dict().copy()
-trainer_log_levels = dict(**log_levels, passive=-1)
 
 
 def default_logdir() -> str:
@@ -261,6 +273,9 @@ class TrainingArguments:
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             `output_dir`.
+        save_safetensors (`bool`, *optional*, defaults to `False`):
+            Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
+            default `torch.load` and `torch.save`.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
             the main one.
@@ -538,7 +553,7 @@ class TrainingArguments:
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
-            distributed training
+            distributed training. Important: this will negatively impact the performance, so only use it for debugging.
         torchdynamo (`str`, *optional*):
             If set, the backend compiler for TorchDynamo. Possible choices are `"eager"`, `"aot_eager"`, `"inductor"`,
             `"nvfuser"`, `"aot_nvfuser"`, `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
@@ -560,9 +575,9 @@ class TrainingArguments:
             [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/).
 
             This will use the best defaults for the [`torch.compile`
-            API](https://pytorch.org/docs/2.0/generated/torch.compile.html?highlight=torch+compile#torch.compile). You
-            can customize the defaults with the argument `torch_compile_backend` and `torch_compile_mode` but we don't
-            guarantee any of them will work as the support is progressively rolled in in PyTorch.
+            API](https://pytorch.org/docs/stable/generated/torch.compile.html?highlight=torch+compile#torch.compile).
+            You can customize the defaults with the argument `torch_compile_backend` and `torch_compile_mode` but we
+            don't guarantee any of them will work as the support is progressively rolled in in PyTorch.
 
             This flag and the whole compile API is experimental and subject to change in future releases.
         torch_compile_backend (`str`, *optional*):
@@ -718,6 +733,12 @@ class TrainingArguments:
                 "Limit the total amount of checkpoints. "
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
+        },
+    )
+    save_safetensors: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
         },
     )
     save_on_each_node: bool = field(
@@ -1055,7 +1076,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
-                " training"
+                " training. Important: this will negatively impact the performance, so only use it for debugging."
             )
         },
     )
@@ -1165,6 +1186,17 @@ class TrainingArguments:
                     "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
                     f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                 )
+
+        safetensors_available = is_safetensors_available()
+        if self.save_safetensors and not safetensors_available:
+            raise ValueError(f"--save_safetensors={self.save_safetensors} requires safetensors to be installed!")
+        if not self.save_safetensors and safetensors_available:
+            logger.info(
+                f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
+                f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
+                f"If your model cannot be saved by safetensors please feel free to open an issue at "
+                f"https://github.com/huggingface/safetensors!"
+            )
 
         if self.load_best_model_at_end and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"

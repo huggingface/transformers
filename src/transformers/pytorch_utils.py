@@ -27,20 +27,8 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
-is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
-is_torch_less_than_1_9 = parsed_torch_version_base < version.parse("1.9.0")
 is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
-
-
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -261,7 +249,8 @@ def find_pruneable_heads_and_indices(
         already_pruned_heads (`Set[int]`): A set of already pruned heads.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
+        `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
+        into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
     heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads

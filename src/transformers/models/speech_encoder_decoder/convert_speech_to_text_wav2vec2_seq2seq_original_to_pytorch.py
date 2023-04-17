@@ -207,7 +207,7 @@ def create_vocab_dict(dict_path):
         "<unk>": 3,
     }
 
-    vocab_dict.update({k: v for k, v in zip(words, range(4, num_words + 4))})
+    vocab_dict.update(dict(zip(words, range(4, num_words + 4))))
     return vocab_dict
 
 
