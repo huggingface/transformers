@@ -437,20 +437,20 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
         self,
         masks_queries_logits: torch.Tensor,
         class_queries_logits: torch.Tensor,
-        mask_labels: torch.Tensor,
-        class_labels: torch.Tensor,
+        mask_labels: List[torch.Tensor],
+        class_labels: List[torch.Tensor],
     ) -> List[Tuple[Tensor]]:
         """
         Params:
-            masks_queries_logits (`torch.Tensor`):
-                A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
             class_queries_logits (`torch.Tensor`):
-                A tensor of dim `batch_size, num_queries, height, width` with the predicted masks.
-            class_labels (`torch.Tensor`):
-                A tensor of dim `num_target_boxes` (where num_target_boxes is the number of ground-truth objects in the
+                A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
+            masks_queries_logits (`torch.Tensor`):
+                A tensor of dim `batch_size, num_queries, num_frames, height, width` with the predicted masks.
+            class_labels (`List[torch.Tensor]`):
+                A list containing tensor of dim `num_target_boxes` (where num_target_boxes is the number of ground-truth objects in the
                 target) containing the class labels.
-            mask_labels (`torch.Tensor`):
-                A tensor of dim `num_target_boxes, height, width` containing the target masks.
+            mask_labels (`List[torch.Tensor]`):
+                A list containing tensor of dim `num_target_boxes, num_frames, height, width` containing the target masks.
 
         Returns:
             matched_indices (`List[Tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
@@ -465,11 +465,17 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
         # iterate through batch size
         batch_size = masks_queries_logits.shape[0]
         for i in range(batch_size):
+
+            #(num_queries, num_classes+1)
             pred_probs = class_queries_logits[i].softmax(-1)
+
+            #(num_queries, num_frames, H_pred, W_pred)
             pred_mask = masks_queries_logits[i]
 
             # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, class_labels[i]]
+            
+            #(num_labels, num_frames, height, width)
             target_mask = mask_labels[i].to(pred_mask)
 
             # Sample ground truth and predicted masks
@@ -608,9 +614,9 @@ class VideoMask2FormerLoss(nn.Module):
 
         Args:
             masks_queries_logits (`torch.Tensor`):
-                A tensor of shape `(batch_size, num_queries, height, width)`.
+                A tensor of shape `(batch_size, num_queries, num_frames, height, width)`.
             mask_labels (`torch.Tensor`):
-                List of mask labels of shape `(labels, height, width)`.
+                List of mask labels of shape `(labels, num_frames, height, width)`.
             indices (`Tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
             num_masks (`int)`:
@@ -625,11 +631,10 @@ class VideoMask2FormerLoss(nn.Module):
         """
         src_idx = self._get_predictions_permutation_indices(indices)
         tgt_idx = self._get_targets_permutation_indices(indices)
-        # shape (batch_size * num_queries, height, width)
+        
         pred_masks = masks_queries_logits[src_idx]
 
-    
-        target_masks = torch.cat([target["masks"][i] for target, (_, i) in zip(mask_labels, indices)]).to(
+        target_masks = torch.cat([target[i] for target, (_, i) in zip(mask_labels, indices)]).to(
             pred_masks
         )
 
@@ -757,11 +762,11 @@ class VideoMask2FormerLoss(nn.Module):
 
         Args:
             masks_queries_logits (`torch.Tensor`):
-                A tensor of shape `(batch_size, num_queries, height, width)`.
+                A tensor of shape `(batch_size, num_queries, num_frames, height, width)`.
             class_queries_logits (`torch.Tensor`):
                 A tensor of shape `(batch_size, num_queries, num_labels)`.
-            mask_labels (`torch.Tensor`):
-                List of mask labels of shape `(labels, height, width)`.
+            mask_labels (`List[torch.Tensor]`):
+                List of mask labels of shape `(labels, num_frames, height, width)`.
             class_labels (`List[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
@@ -2559,9 +2564,6 @@ class VideoMask2FormerForSegmentation(VideoMask2FormerPreTrainedModel):
         
         # [batch_size, num_queries, num_frames, height, width] -> [num_queries, num_frames, height, width]
         mask_logits = mask_logits[0]
-
-        # [num_queries, num_frames, height, width] -> [num_frames, num_queries, height, width]
-        #mask_logits = mask_logits.transpose(1, 0)
 
         output = VideoMask2FormerForSegmentationOutput(
             loss=loss,
