@@ -23,7 +23,6 @@ from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoProcessor
