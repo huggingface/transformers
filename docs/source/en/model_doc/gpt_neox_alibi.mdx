@@ -1,0 +1,41 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# GPT-NeoX-ALiBi
+
+## Overview
+
+This is exactly like the original [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox), the only difference being the use of the [ALiBi Positional Embedding](https://arxiv.org/abs/2108.12409).
+This allows for the possibility on evaluating on sequences longer than those seen during training.
+Models trained with ALiBi using the GPT NeoX library [https://github.com/EleutherAI/gpt-neox](https://github.com/EleutherAI/gpt-neox) should use this model class instead.
+
+## Documentation resources
+
+- [Causal language modeling task guide](../tasks/language_modeling)
+
+## GPTNeoXALiBiConfig
+
+[[autodoc]] GPTNeoXALiBiConfig
+
+## GPTNeoXTokenizerFast
+
+[[autodoc]] GPTNeoXALiBiTokenizerFast
+
+## GPTNeoXModel
+
+[[autodoc]] GPTNeoXALiBiModel
+    - forward
+
+## GPTNeoXALiBiForCausalLM
+
+[[autodoc]] GPTNeoXALiBiForCausalLM
+    - forward
