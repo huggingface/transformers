@@ -522,10 +522,10 @@ class AutoformerAttention(nn.Module):
 
         # find top k autocorrelations delays
         top_k = int(self.factor * math.log(time_length))
-        autocorrelations_mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
+        autocorrelations_mean_on_head_channel = torch.mean(autocorrelations, dim=(1, -1))  # bsz x tgt_len
         if self.training:
             autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
-            top_k_delays_index = torch.topk(autocorrelations_mean_on_bsz, top_k)[1]
+            _, top_k_delays_index = torch.topk(autocorrelations_mean_on_bsz, top_k)
             top_k_autocorrelations = torch.stack(
                 [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)], dim=-1
             )
@@ -542,8 +542,7 @@ class AutoformerAttention(nn.Module):
             tmp_values = value_states.repeat(1, 2, 1)
             init_index = (
                 torch.arange(time_length)
-                .unsqueeze(0)
-                .unsqueeze(-1)
+                .view(1, -1, 1)
                 .repeat(bsz * self.num_heads, 1, channel)
                 .to(value_states.device)
             )
@@ -552,7 +551,7 @@ class AutoformerAttention(nn.Module):
         for i in range(top_k):
             # compute value_states roll delay
             if not self.training:
-                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).repeat(
+                tmp_delay = init_index + top_k_delays_index[:, i].view(-1, 1, 1).repeat(
                     self.num_heads, tgt_len, channel
                 )
                 value_states_roll_delay = torch.gather(tmp_values, dim=1, index=tmp_delay)
@@ -561,7 +560,7 @@ class AutoformerAttention(nn.Module):
 
             # aggregation
             top_k_autocorrelations_at_delay = (
-                top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).repeat(self.num_heads, tgt_len, channel)
+                top_k_autocorrelations[:, i].view(-1, 1, 1).repeat(self.num_heads, tgt_len, channel)
             )
             delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
 
