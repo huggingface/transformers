@@ -416,10 +416,10 @@ def stft(
 
 def spectrogram(
     waveform: np.ndarray,
+    window: np.ndarray,
     frame_length: int,
     hop_length: int,
     fft_length: int,
-    window: np.ndarray,
     power: Optional[float] = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
@@ -453,10 +453,10 @@ def spectrogram(
     """
     spectrogram = stft(
         waveform,
+        window,
         frame_length,
         hop_length,
         fft_length,
-        window,
         power,
         center,
         pad_mode,
