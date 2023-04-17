@@ -26,8 +26,8 @@
   - sections:
     - local: in_translation
       title: (번역중) Create a custom architecture
-    - local: in_translation
-      title: (번역중) Sharing custom models
+    - local: custom_models
+      title: 사용자 정의 모델 공유하기
     - local: in_translation
       title: (번역중) Train with a script
     - local: sagemaker
