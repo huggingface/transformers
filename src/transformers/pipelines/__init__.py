@@ -42,6 +42,7 @@ from ..utils import (
     logging,
 )
 from .audio_classification import AudioClassificationPipeline
+from .automatic_mask_generation import AutomaticMaskGenerationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -81,7 +82,7 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-from .automatic_mask_generation import AutomaticMaskGenerationPipeline
+
 
 if is_tf_available():
     import tensorflow as tf
@@ -394,7 +395,7 @@ SUPPORTED_TASKS = {
             }
         },
         "type": "image",
-    }
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()

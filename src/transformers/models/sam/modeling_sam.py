@@ -527,7 +527,7 @@ class SamMaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = image_embeddings
-        src = src.repeat(sparse_prompt_embeddings.shape[0], 1 , 1 , 1)
+        src = src.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
         src = src + dense_prompt_embeddings
 
         pos_src = image_positional_embedding

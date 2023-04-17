@@ -297,7 +297,6 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        additional_parameters = {}
         original_sizes = [image.shape[:2] for image in images]
 
         if do_resize:
@@ -450,7 +449,6 @@ def _generate_crop_boxes(
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
     original_size = image.shape[:2]
-    
 
     points_grid = _build_all_layer_point_grids(
         points_per_crop=points_per_crop, n_layers=n_layers, scale_per_layer=scale_per_layer
@@ -650,10 +648,10 @@ def _filter_masks(
     original_height,
     original_width,
     cropped_box_image,
-    pred_iou_thresh = 0.88,
-    stability_score_thresh = 0.95,
-    mask_threshold = 0,
-    stability_score_offset = 1,
+    pred_iou_thresh=0.88,
+    stability_score_thresh=0.95,
+    mask_threshold=0,
+    stability_score_offset=1,
 ):
     r"""
     Filters the masks and iou_scores for the AMG algorithm.
@@ -696,7 +694,7 @@ def _filter_masks(
     return masks, scores, converted_boxes
 
 
-def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh = 0.7):
+def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh=0.7):
     keep_by_nms = batched_nms(
         mask_boxes.float(),
         iou_scores,

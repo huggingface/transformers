@@ -88,16 +88,16 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
             postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         if "point_batch_size" in kwargs:
             preprocessor_kwargs["point_batch_size"] = kwargs["point_batch_size"]
-            
+
         return preprocessor_kwargs, {}, postprocess_kwargs
 
     def __call__(self, image, *args, num_workers=None, batch_size=None, **kwargs):
         image = load_image(image)
         image = to_numpy_array(image)
         self._postprocess_params["image"] = image
-        return super().__call__(image, *args, num_workers = num_workers, batch_size=batch_size, **kwargs)
-        
-    def preprocess(self, image,  point_batch_size, **kwargs):
+        return super().__call__(image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs)
+
+    def preprocess(self, image, point_batch_size, **kwargs):
         """
         Since the pipeline inherits from `chunkPipeline` is meas that setting a `max_batch_points` allows the user to
         run the model sequentially on the specified number of points.
@@ -111,19 +111,19 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt").to("cuda")
 
         pixel_values = model_inputs["pixel_values"]
-        input_labels = torch.ones_like(points_per_crop[:,:,0], dtype=torch.long)
-        
+        input_labels = torch.ones_like(points_per_crop[:, :, 0], dtype=torch.long)
+
         if point_batch_size:
             for i in range(0, points_per_crop.shape[0], point_batch_size):
                 batched_points = points_per_crop[i : i + point_batch_size, :, :]
                 labels = input_labels[i : i + point_batch_size]
-                is_last = (i == points_per_crop.shape[0] - point_batch_size)
+                is_last = i == points_per_crop.shape[0] - point_batch_size
                 yield {
                     "pixel_values": pixel_values,
                     "input_points": batched_points,
                     "input_labels": labels,
                     "input_boxes": crop_boxes,
-                    "is_last" : is_last
+                    "is_last": is_last,
                 }
         else:
             yield {
@@ -131,7 +131,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                 "input_points": points_per_crop,
                 "input_labels": input_labels,
                 "input_boxes": crop_boxes,
-                "is_last": True
+                "is_last": True,
             }
 
     def forward(self, model_inputs, **forward_params):
@@ -151,11 +151,11 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
         model_outputs = self.model(**model_inputs, **forward_kwargs)
-        return {"is_last": is_last, "crop_boxes":input_boxes, **model_outputs}
+        return {"is_last": is_last, "crop_boxes": input_boxes, **model_outputs}
 
     def postprocess(self, model_outputs, **kwargs):
         raw_image = kwargs.pop("image")
-        original_height, original_width  = raw_image.shape[:2]
+        original_height, original_width = raw_image.shape[:2]
         total_iou_scores = []
         total_masks = []
         total_boxes = []
@@ -171,7 +171,6 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
             total_iou_scores.append(iou_scores)
             total_masks.extend(masks)
             total_boxes.append(boxes)
-
 
         total_iou_scores = torch.cat(total_iou_scores)
         total_boxes = torch.cat(total_boxes)

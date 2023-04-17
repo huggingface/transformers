@@ -68,7 +68,7 @@ class SamProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             **kwargs,
         )
-        
+
         original_sizes = encoding_image_processor.pop("original_sizes")
 
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
