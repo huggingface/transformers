@@ -117,7 +117,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Model"),
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
-        ("mask2former", "Mask2FormerModel"),
+        ("mask2former", "Mask2FormerModel", "VideoMask2FormerModel"),
         ("maskformer", "MaskFormerModel"),
         ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
@@ -492,6 +492,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
+        ("mask2former", "VideoMask2FormerForVideoSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
     ]
 )
@@ -500,7 +501,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
-        ("mask2former", "Mask2FormerForUniversalSegmentation"),
+        ("mask2former", "Mask2FormerForUniversalSegmentation", "VideoMask2FormerForVideoSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
     ]
