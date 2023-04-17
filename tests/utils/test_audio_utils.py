@@ -213,6 +213,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=16,
             hop_length=4,
+            fft_length=16,
             window=window_function(12, "hann"),
             power=1.0,
             center=True,
@@ -229,8 +230,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         spectrogram = stft(
             waveform,
-            frame_length=-1,  # will be 512
+            frame_length=512,
             hop_length=128,
+            fft_length=512,
             window=window_function(400, "hann"),
             power=1.0,
             center=True,
@@ -258,13 +260,28 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         # fmt: on
         self.assertTrue(np.allclose(spectrogram[:64, 400], expected))
 
+        spectrogram = stft(
+            waveform,
+            frame_length=400,
+            hop_length=128,
+            fft_length=512,
+            window=window_function(400, "hann"),
+            power=1.0,
+            center=True,
+            pad_mode="reflect",
+            onesided=True,
+        )
+        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertTrue(np.allclose(spectrogram[:64, 400], expected))
+
     def test_stft_center_padding(self):
         waveform = self._load_datasamples(1)[0]
 
         spectrogram = stft(
             waveform,
-            frame_length=-1,  # will be 512
+            frame_length=-1,
             hop_length=128,
+            fft_length=-1,  # will be 512
             window=window_function(512, "hann"),
             center=True,
             pad_mode="reflect",
@@ -292,8 +309,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         spectrogram = stft(
             waveform,
-            frame_length=-1,  # will be 512
+            frame_length=-1,
             hop_length=128,
+            fft_length=-1,  # will be 512
             window=window_function(512, "hann"),
             center=True,
             pad_mode="constant",
@@ -321,8 +339,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         spectrogram = stft(
             waveform,
-            frame_length=-1,  # will be 512
+            frame_length=-1,
             hop_length=128,
+            fft_length=-1,  # will be 512
             window=window_function(512, "hann"),
             center=False,
         )
@@ -354,6 +373,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=400,
             hop_length=128,
+            fft_length=400,
             window=window_function(400, "hann"),
             power=1.0,
             center=True,
@@ -366,6 +386,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=400,
             hop_length=128,
+            fft_length=400,
             window=window_function(400, "hann"),
             power=1.0,
             center=False,
@@ -376,8 +397,35 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         spectrogram = stft(
             waveform,
+            frame_length=400,
+            hop_length=128,
+            fft_length=512,
+            window=window_function(400, "hann"),
+            power=1.0,
+            center=True,
+            pad_mode="reflect",
+            onesided=True,
+        )
+        self.assertEquals(spectrogram.shape, (257, 732))
+
+        spectrogram = stft(
+            waveform,
             frame_length=512,
             hop_length=64,
+            fft_length=512,
+            window=window_function(400, "hann"),
+            power=1.0,
+            center=True,
+            pad_mode="reflect",
+            onesided=False,
+        )
+        self.assertEquals(spectrogram.shape, (512, 1464))
+
+        spectrogram = stft(
+            waveform,
+            frame_length=512,
+            hop_length=64,
+            fft_length=512,
             window=window_function(512, "hann"),
             power=1.0,
             center=True,
@@ -390,6 +438,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=512,
             hop_length=512,
+            fft_length=512,
             window=window_function(512, "hann"),
             power=1.0,
             center=True,
@@ -405,6 +454,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=512,
             hop_length=128,
+            fft_length=512,
             window=window_function(400, "hann"),
             power=None,
         )
@@ -437,6 +487,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=512,
             hop_length=128,
+            fft_length=512,
             window=window_function(400, "hann"),
             power=1.0,
         )
@@ -466,6 +517,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=512,
             hop_length=128,
+            fft_length=512,
             window=window_function(400, "hann"),
             power=2.0,
         )
@@ -512,6 +564,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             waveform,
             frame_length=1024,
             hop_length=128,
+            fft_length=1024,
             window=window_function(800, "hann"),
             power=2.0,
         )

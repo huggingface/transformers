@@ -253,6 +253,7 @@ def stft(
     waveform: np.ndarray,
     frame_length: int,
     hop_length: int,
+    fft_length: int,
     window: np.ndarray,
     power: Optional[float] = 1.0,
     center: bool = True,
@@ -266,25 +267,39 @@ def stft(
 
       1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
          - hop_length` samples.
-      2. If the window is smaller than `frame_length`, it is centered and zero-padded.
-      3. Each frame is multiplied by the window.
-      4. The DFT is taken of each windowed frame.
-      5. The results are stacked into a spectrogram.
+      2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`. If the window is smaller
+         than `fft_length`, it is first centered and zero-padded.
+      3. The DFT is taken of each windowed frame.
+      4. The results are stacked into a spectrogram.
+
+    We make a distinction between the following "blocks" of sample data:
+
+      - The analysis frame. This is the size of the segments that the input waveform is split into.
+      - The window. Each analysis frame is multiplied with this to avoid spectral leakage.
+      - The FFT input buffer. The length of this determines how many frequency bins are in the spectrogram.
+
+    Depending on how you choose to compute the STFT, the FFT input buffer may have the length of the window or be (much)
+    larger; the analysis frame may have the length of the window or the length of the FFT input buffer.
 
     This function is not optimized for speed yet. It should be mostly compatible with `librosa.stft` and
-    `torchaudio.functional.transforms.Spectrogram`.
+    `torchaudio.functional.transforms.Spectrogram`, although it is more flexible due to the different ways spectrograms
+    can be constructed.
 
     Args:
         waveform (`np.ndarray` of shape `(length,)`):
             The input waveform. This must be a single real-valued, mono waveform.
         frame_length (`int`):
-            The length of the FFT frames. For optimal speed, this should be a power of two. If `-1`, this will
-            automatically set `frame_length` based on the window length.
+            The length of the analysis frames in samples. This should be equal to either `fft_length` (what librosa
+            does) or to `len(window)`. If `-1`, uses the FFT buffer length from `fft_length`.
         hop_length (`int`):
-            The stride between successive FFT frames in samples.
+            The stride between successive analysis frames in samples.
+        fft_length (`int`):
+            The size of the FFT buffer in samples. This determines how many frequency bins the spectrogram will have.
+            For optimal speed, this should be a power of two. If `-1`, this will automatically set `fft_length` to a
+            power of two based on the window length.
         window (`np.ndarray` of shape `(window_length,)`):
-            The windowing function to apply. The `window_length` may not be larger than `frame_length`. If it's
-            smaller, the remainder of the FFT frame will be zero-padded.
+            The windowing function to apply. The `window_length` may not be larger than `fft_length`. If it's smaller,
+            the remainder of the FFT input buffer will be zero-padded.
         power (`float`, *optional*, defaults to 1.0):
             If 1.0, returns the amplitude spectrogram. If 2.0, returns the power spectrogram. If `None`, returns
             complex numbers.
@@ -295,9 +310,8 @@ def stft(
             Padding mode used when `center` is `True`. Possible values are: `"constant"` (pad with zeros), `"edge"`,
             `"reflect"`.
         onesided (`bool`, *optional*, defaults to `True`):
-            If True, only computes the positive frequencies and returns a spectrogram containing `frame_length // 2 +
-            1` frequency bins. If False, also computes the negative frequencies and returns `frame_length` frequency
-            bins.
+            If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
+            frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
 
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_frames)` containing the spectrogram; its dtype is
@@ -305,22 +319,28 @@ def stft(
     """
     window_length = len(window)
 
-    if frame_length == -1:
-        frame_length = 2 ** int(np.ceil(np.log2(window_length)))
+    if fft_length == -1:
+        fft_length = 2 ** int(np.ceil(np.log2(window_length)))
 
-    if window_length > frame_length:
+    if window_length > fft_length:
+        raise ValueError(f"Length of the window ({window_length}) may not be larger than fft_length ({fft_length})")
+
+    if frame_length == -1:
+        frame_length = fft_length
+
+    if frame_length not in [window_length, fft_length]:
         raise ValueError(
-            f"Length of the window ({window_length}) may not be larger than frame_length ({frame_length})"
+            f"frame_length is {frame_length} but should equal window_length ({window_length}) or fft_length ({fft_length})"
         )
+
+    if hop_length <= 0:
+        raise ValueError("hop_length must be greater than zero")
 
     if waveform.ndim != 1:
         raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
 
     if np.iscomplexobj(waveform):
         raise ValueError("Complex-valued input waveforms are not currently supported")
-
-    if hop_length <= 0:
-        raise ValueError("hop_length must be greater than zero")
 
     # center pad the waveform
     if center:
@@ -332,25 +352,26 @@ def stft(
     window = window.astype(np.float64)
 
     # center the window in the FFT frame
-    if frame_length != window_length:
-        offset = (frame_length - window_length) // 2
-        padded_window = np.zeros(frame_length)
+    if frame_length == fft_length and fft_length > window_length:
+        offset = (fft_length - window_length) // 2
+        padded_window = np.zeros(fft_length)
         padded_window[offset : offset + window_length] = window
         window = padded_window
 
     # split waveform into frames of frame_length size
     num_frames = int(1 + np.floor((waveform.size - frame_length) / hop_length))
-    num_frequency_bins = (frame_length // 2) + 1 if onesided else frame_length
 
+    num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
     spectrogram = np.empty((num_frames, num_frequency_bins), dtype=np.complex64)
 
     # rfft is faster than fft
     fft_func = np.fft.rfft if onesided else np.fft.fft
+    buffer = np.zeros(fft_length)
 
     timestep = 0
     for frame_idx in range(num_frames):
-        frame = waveform[timestep : timestep + frame_length]
-        spectrogram[frame_idx] = fft_func(frame * window)
+        buffer[:frame_length] = waveform[timestep : timestep + frame_length] * window
+        spectrogram[frame_idx] = fft_func(buffer)
         timestep += hop_length
 
     # note: ** is much faster than np.power
@@ -364,6 +385,7 @@ def spectrogram(
     waveform: np.ndarray,
     frame_length: int,
     hop_length: int,
+    fft_length: int,
     window: np.ndarray,
     power: Optional[float] = 1.0,
     center: bool = True,
@@ -388,8 +410,8 @@ def spectrogram(
 
     Args:
         log_mel (`str`, *optional*):
-            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log10"`
-            (only take the log), `"dB"` (convert to decibels). Can only be used when `power` is not `None`.
+            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log10"` (only
+            take the log), `"dB"` (convert to decibels). Can only be used when `power` is not `None`.
         dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the spectrogram tensor.
 
@@ -399,6 +421,7 @@ def spectrogram(
         waveform,
         frame_length,
         hop_length,
+        fft_length,
         window,
         power,
         center,
