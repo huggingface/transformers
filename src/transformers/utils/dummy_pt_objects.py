@@ -4163,6 +4163,9 @@ class MarkupLMPreTrainedModel(metaclass=DummyObject):
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
 class Mask2FormerForUniversalSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4178,6 +4181,27 @@ class Mask2FormerModel(metaclass=DummyObject):
 
 
 class Mask2FormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMask2FormerForVideoSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMask2FormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMask2FormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -59,8 +59,8 @@ VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class VideoMask2FormerPixelDecoderOutput(ModelOutput):
     """
-    Video Mask2Former's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
-    the mask features and the multiscale features.
+    Video Mask2Former's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It
+    returns the mask features and the multiscale features.
 
     Args:
         multi_scale_features (`tuple(torch.FloatTensor)`):
@@ -115,9 +115,9 @@ class VideoMask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAtten
 @dataclass
 class VideoMask2FormerPixelLevelModuleOutput(ModelOutput):
     """
-    Video Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden states
-    (multi-scale features) from the `decoder`. By default, the `encoder` is a Swin Backbone and the `decoder` is a
-    Multi-Scale Deformable Attention based decoder.
+    Video Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden
+    states (multi-scale features) from the `decoder`. By default, the `encoder` is a Swin Backbone and the `decoder` is
+    a Multi-Scale Deformable Attention based decoder.
 
     The `decoder_last_hidden_state` are the **per-pixel embeddings** while `decoder_hidden_states` refer to multi-scale
     feature maps produced using **multi-scaling strategy** defined in the paper.
@@ -146,7 +146,8 @@ class VideoMask2FormerPixelLevelModuleOutput(ModelOutput):
 @dataclass
 class VideoMask2FormerModelOutput(ModelOutput):
     """
-    Class for outputs of [`VideoMask2FormerModel`]. This class returns all the needed hidden states to compute the logits.
+    Class for outputs of [`VideoMask2FormerModel`]. This class returns all the needed hidden states to compute the
+    logits.
 
     Args:
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
@@ -194,8 +195,8 @@ class VideoMask2FormerForVideoSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`VideoMask2FormerForVideoSegmentationOutput`].
 
-    This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] to compute final segmentation maps. Please, see
-    [`~Mask2FormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] to compute
+    final segmentation maps. Please, see [`~Mask2FormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -322,6 +323,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     loss = loss.sum() / num_masks
     return loss
 
+
 # Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
@@ -363,6 +365,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
     return loss
+
 
 # Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -447,10 +450,11 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
             masks_queries_logits (`torch.Tensor`):
                 A tensor of dim `batch_size, num_queries, num_frames, height, width` with the predicted masks.
             class_labels (`List[torch.Tensor]`):
-                A list containing tensor of dim `num_target_boxes` (where num_target_boxes is the number of ground-truth objects in the
-                target) containing the class labels.
+                A list containing tensor of dim `num_target_boxes` (where num_target_boxes is the number of
+                ground-truth objects in the target) containing the class labels.
             mask_labels (`List[torch.Tensor]`):
-                A list containing tensor of dim `num_target_boxes, num_frames, height, width` containing the target masks.
+                A list containing tensor of dim `num_target_boxes, num_frames, height, width` containing the target
+                masks.
 
         Returns:
             matched_indices (`List[Tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
@@ -465,17 +469,16 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
         # iterate through batch size
         batch_size = masks_queries_logits.shape[0]
         for i in range(batch_size):
-
-            #(num_queries, num_classes+1)
+            # (num_queries, num_classes+1)
             pred_probs = class_queries_logits[i].softmax(-1)
 
-            #(num_queries, num_frames, H_pred, W_pred)
+            # (num_queries, num_frames, H_pred, W_pred)
             pred_mask = masks_queries_logits[i]
 
             # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, class_labels[i]]
-            
-            #(num_labels, num_frames, height, width)
+
+            # (num_labels, num_frames, height, width)
             target_mask = mask_labels[i].to(pred_mask)
 
             # Sample ground truth and predicted masks
@@ -486,7 +489,7 @@ class VideoMask2FormerHungarianMatcher(nn.Module):
 
             pred_coordinates = point_coordinates.repeat(pred_mask.shape[0], 1, 1)
             pred_mask = sample_point(pred_mask, pred_coordinates, align_corners=False)
-        
+
             target_mask = target_mask.flatten(1)
             pred_mask = pred_mask.flatten(1)
 
@@ -630,13 +633,11 @@ class VideoMask2FormerLoss(nn.Module):
               masks.
         """
         src_idx = self._get_predictions_permutation_indices(indices)
-        tgt_idx = self._get_targets_permutation_indices(indices)
-        
+        self._get_targets_permutation_indices(indices)
+
         pred_masks = masks_queries_logits[src_idx]
 
-        target_masks = torch.cat([target[i] for target, (_, i) in zip(mask_labels, indices)]).to(
-            pred_masks
-        )
+        target_masks = torch.cat([target[i] for target, (_, i) in zip(mask_labels, indices)]).to(pred_masks)
 
         # No need to upsample predictions as we are using normalized coordinates
         pred_masks = pred_masks.flatten(0, 1)[:, None]
@@ -1043,7 +1044,7 @@ class VideoMask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module
 
         return output, attention_weights
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderEncoderLayer with Mask2Former->VideoMask2Former
+
 class VideoMask2FormerPixelDecoderEncoderLayer(nn.Module):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__()
@@ -1441,7 +1442,7 @@ class VideoMask2FormerPixelDecoder(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelLevelModule with Mask2Former->VideoMask2Former
+
 class VideoMask2FormerPixelLevelModule(nn.Module):
     def __init__(self, config: Mask2FormerConfig):
         """
@@ -1461,7 +1462,9 @@ class VideoMask2FormerPixelLevelModule(nn.Module):
         self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = VideoMask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
-    def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> VideoMask2FormerPixelLevelModuleOutput:
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: bool = False
+    ) -> VideoMask2FormerPixelLevelModuleOutput:
         backbone_features = self.encoder(pixel_values).feature_maps
         decoder_output = self.decoder(backbone_features, output_hidden_states=output_hidden_states)
 
@@ -1609,15 +1612,15 @@ class VideoMask2FormerAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerMaskedAttentionDecoderLayer with Mask2Former->VideoMask2Former
+
 class VideoMask2FormerMaskedAttentionDecoderLayer(nn.Module):
     """
-    The VideoMask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as FFN
-    blocks. The cross attention block used as part of `VideoMask2FormerMaskedAttentionDecoderLayer` is actually a `masked
-    attention` block that restricts the attention to localized features centered around predicted segments which leads
-    to faster convergence and improved performance. The order of self and cross (i.e. masked) attention blocks have
-    also been swapped in VideoMask2FormerMaskedAttentionDecoder compared to a standard DetrDecoder as an optimization
-    improvement.
+    The VideoMask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as
+    FFN blocks. The cross attention block used as part of `VideoMask2FormerMaskedAttentionDecoderLayer` is actually a
+    `masked attention` block that restricts the attention to localized features centered around predicted segments
+    which leads to faster convergence and improved performance. The order of self and cross (i.e. masked) attention
+    blocks have also been swapped in VideoMask2FormerMaskedAttentionDecoder compared to a standard DetrDecoder as an
+    optimization improvement.
 
     Args:
         config (`Mask2FormerConfig`):
@@ -1823,7 +1826,7 @@ class VideoMask2FormerMaskedAttentionDecoderLayer(nn.Module):
 
         return outputs
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerMaskedAttentionDecoder with Mask2Former->VideoMask2Former
+
 class VideoMask2FormerMaskedAttentionDecoder(nn.Module):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
@@ -2016,7 +2019,8 @@ class VideoMask2FormerPredictionBlock(nn.Module):
             hidden_state = layer(hidden_state)
         return hidden_state
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerMLPPredictionHead with MaskFormer->VideoMask2Former
+
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerMLPPredictionHead with Mask2Former->VideoMask2Former
 class VideoMask2FormerMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """
@@ -2079,7 +2083,7 @@ class VideoMask2FormerMaskPredictor(nn.Module):
 
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
-        
+
         outputs_mask = torch.einsum("bqc,btchw->bqthw", mask_embeddings, pixel_embeddings)
         b, q, t, _, _ = outputs_mask.shape
         # [B, Q, T, H, W] -> [B, Q, T*H*W] -> [B, h, Q, T*H*W] -> [B*h, Q, T*HW]
@@ -2087,7 +2091,7 @@ class VideoMask2FormerMaskPredictor(nn.Module):
             outputs_mask.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False
         )
         attention_mask = attention_mask.view(b, q, t, attention_mask_target_size[0], attention_mask_target_size[1])
-        
+
         attention_mask = attention_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1)
         attention_mask = (attention_mask.flatten(0, 1) < 0.5).bool()
         attention_mask = attention_mask.detach()
@@ -2157,7 +2161,10 @@ class VideoMask2FormerTransformerModule(nn.Module):
                 .flatten(0, 1)
             )
             multi_stage_features[-1] = (
-                multi_stage_features[-1].view(batch_size, frames, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
+                multi_stage_features[-1]
+                .view(batch_size, frames, channels, height_width)
+                .permute(1, 3, 0, 2)
+                .flatten(0, 1)
             )
 
         # [num_queries, batch_size, num_channels]
@@ -2297,7 +2304,7 @@ class VideoMask2FormerModel(VideoMask2FormerPreTrainedModel):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
         self.pixel_level_module = VideoMask2FormerPixelLevelModule(config)
-        
+
         self.transformer_module = VideoMask2FormerTransformerModule(in_features=config.feature_size, config=config)
         self.post_init()
 
@@ -2326,9 +2333,13 @@ class VideoMask2FormerModel(VideoMask2FormerPreTrainedModel):
         >>> video = torchvision.io.read_video(file_path)[0]
 
         >>> # load image preprocessor and VideoMask2FormerModel trained on Youtube-VIS 2021 instance segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
-        >>> model = VideoMask2FormerModel.from_pretrained("facebook/video-mask2former-swin-tiny-youtubevis-2021-instance")
-        
+        >>> image_processor = AutoImageProcessor.from_pretrained(
+        ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        ... )
+        >>> model = VideoMask2FormerModel.from_pretrained(
+        ...     "facebook/video-mask2former-swin-tiny-youtubevis-2021-instance"
+        ... )
+
         >>> video_input = image_processor(video, return_tensors="pt")
 
         >>> # forward pass
@@ -2533,10 +2544,10 @@ class VideoMask2FormerForVideoSegmentation(VideoMask2FormerPreTrainedModel):
 
         auxiliary_logits = self.get_auxiliary_logits(class_queries_logits, masks_queries_logits)
         class_logits = class_queries_logits[-1]
-        
+
         # [batch_size, num_queries, num_frames, height, width]
         mask_logits = masks_queries_logits[-1]
-        
+
         if mask_labels is not None and class_labels is not None:
             loss_dict = self.get_loss_dict(
                 masks_queries_logits=mask_logits,
@@ -2561,7 +2572,7 @@ class VideoMask2FormerForVideoSegmentation(VideoMask2FormerPreTrainedModel):
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None
-        
+
         # [batch_size, num_queries, num_frames, height, width] -> [num_queries, num_frames, height, width]
         mask_logits = mask_logits[0]
 

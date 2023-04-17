@@ -14,12 +14,14 @@
 # limitations under the License.
 """Image processor class for Video Mask2Former."""
 
+import itertools
 import math
+import random
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
-import random
+
 import numpy as np
-import itertools
+
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
@@ -262,22 +264,22 @@ def convert_segmentation_map_to_binary_masks(
 ):
     if reduce_labels and ignore_index is None:
         raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
-    
+
     if reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
-    
+
     # Get unique ids (class or instance ids based on input) present in the video frame
     all_frame_labels = np.unique(segmentation_map)
-    
+
     # Drop background label if applicable
     if ignore_index is not None:
         all_frame_labels = all_frame_labels[all_frame_labels != ignore_index]
-        
+
     # Generate a binary mask for each object instance
     binary_masks = [(segmentation_map == i) for i in all_frame_labels]
 
     binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
-    
+
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
         labels = np.zeros(all_frame_labels.shape[0])
@@ -330,8 +332,8 @@ def get_mask2former_resize_output_image_size(
 
 class VideoMask2FormerImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Video Mask2Former image processor. The image processor can be used to prepare image(s) and optional targets
-    for the model.
+    Constructs a Video Mask2Former image processor. The image processor can be used to prepare image(s) and optional
+    targets for the model.
 
     This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -499,7 +501,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             size_divisor=size_divisor,
             default_to_square=False,
         )
-        
+
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
@@ -610,7 +612,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         if segmentation_map.ndim == 2:
             added_channel_dim = True
             segmentation_map = segmentation_map[None, ...]
-        
+
         # TODO: (Amy)
         # Remork segmentation map processing to include reducing labels and resizing which doesn't
         # drop segment IDs > 255.
@@ -623,11 +625,11 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             do_rescale=False,
             do_normalize=False,
         )
-        
+
         # Remove extra channel dimension if added for processing
         if added_channel_dim:
             segmentation_map = segmentation_map.squeeze(0)
-        
+
         return segmentation_map
 
     def preprocess(
@@ -641,7 +643,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         sampling_frame_range: Optional[int] = 20,
-        sampling_frame_num: Optional[int] = 2, 
+        sampling_frame_num: Optional[int] = 2,
         sampling_frame_shuffle: Optional[bool] = False,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -703,10 +705,9 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
 
         # do frame sampling (Video Mask2Former model uses only 2 frames for training)
         if do_sampling:
-            
             video_length = len(video_frames)
 
-            # choose a reference frame 
+            # choose a reference frame
             reference_frame = random.randrange(video_length)
 
             start_idx_range = reference_frame - sampling_frame_range
@@ -716,17 +717,14 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             end_idx = min(video_length, end_idx_range)
 
             # create a list of frames which doesn't include the reference frame
-            selected_frame_list = list(range(start_idx, reference_frame)) + list(range(reference_frame+1, end_idx))
-            
+            selected_frame_list = list(range(start_idx, reference_frame)) + list(range(reference_frame + 1, end_idx))
+
             # choose another frame at random from the `selected_frame_list`
-            selected_frame = np.random.choice(
-                np.array(selected_frame_list),
-                sampling_frame_num - 1
-            )
-            
+            selected_frame = np.random.choice(np.array(selected_frame_list), sampling_frame_num - 1)
+
             # create a list containing the indexes of the 2 chosen frames
             selected_frame_indexes = sorted(selected_frame.tolist() + [reference_frame])
-            
+
             # shuffle the frames if shuffling is enabled
             if sampling_frame_shuffle:
                 random.shuffle(selected_frame_indexes)
@@ -757,7 +755,12 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            processed_frames, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
+            processed_frames,
+            segmentation_maps,
+            instance_id_to_semantic_id,
+            ignore_index,
+            reduce_labels,
+            return_tensors,
         )
         return encoded_inputs
 
@@ -835,8 +838,8 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
-        Video Mask2Former addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
-        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
+        Video Mask2Former addresses semantic segmentation with a mask classification paradigm, thus input segmentation
+        maps will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
         `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
         each mask.
@@ -873,8 +876,8 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `=True` or if `pixel_mask` is in
               `self.model_input_names`).
-            - **mask_labels** -- Optional list of mask labels of shape `(labels, num_frames, height, width)` to be fed to a model
-              (when `annotations` are provided).
+            - **mask_labels** -- Optional list of mask labels of shape `(labels, num_frames, height, width)` to be fed
+              to a model (when `annotations` are provided).
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
@@ -891,7 +894,6 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
         if segmentation_maps is not None:
-            
             mask_labels = []
             class_labels = []
             frame_labels = []
@@ -917,15 +919,15 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                     self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
                 ]
 
-                # add list of binary masks corresponding to current segmentation map  
+                # add list of binary masks corresponding to current segmentation map
                 frame_masks.append(masks)
-                # add list of classes corresponding to current segmentation map 
+                # add list of classes corresponding to current segmentation map
                 frame_labels.append(classes)
-            
+
             # create list of labels for the whole video using `frame_labels`
             video_labels = list(itertools.chain.from_iterable(frame_labels))
             num_video_instances = len(video_labels)
-            
+
             # iterate over lists of binary masks for each frame
             for current_frame_mask_list in frame_masks:
                 # each frame should have equal no. of binary masks  which is equal to `num_video_instances`
@@ -934,20 +936,19 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                     dummy_mask_count = num_video_instances - len(current_frame_mask_list)
                     dummy_masks = [np.zeros(current_frame_mask_list[0].shape) for count in range(dummy_mask_count)]
                     current_frame_mask_list += dummy_masks
-                
+
                 video_masks.append(torch.from_numpy(np.concatenate(current_frame_mask_list, axis=0)))
-            
+
             # mask_label of shape (`num_labels, num_frames, height, width`)
             mask_labels.append(torch.stack(video_masks).transpose(1, 0))
 
             # class_label of shape (`num_video_instances,  height, width`)
-            class_labels.append(torch.from_numpy(np.array(video_labels))) 
-            
+            class_labels.append(torch.from_numpy(np.array(video_labels)))
+
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
-
 
     def post_process_instance_segmentation(
         self,
@@ -1003,12 +1004,11 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
-        
+
         mask_size = (480, 640)
         num_topk_queries = 10
         masks_queries_logits = masks_queries_logits.transpose(1, 0)
-    
-        
+
         # Scale back to preprocessed image size for all models
         masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits, size=mask_size, mode="bilinear", align_corners=False
@@ -1023,7 +1023,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
 
             scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
             labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
-            
+
             # keep top-k predictions
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_topk_queries, sorted=False)
             labels_per_image = labels[topk_indices]
@@ -1032,36 +1032,45 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             mask_pred = mask_pred[topk_indices]
 
             segmentation = torch.zeros(mask_size) - 1
-            
+
             # calculate final prediction scores, masks, classes
             pred_masks = mask_pred[:, : mask_size[0], : mask_size[1]]
             pred_scores = scores_per_image
             pred_classes = labels_per_image
-            
+
             # resize prediction masks
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
                     pred_masks.unsqueeze(0), size=target_sizes[i], mode="bilinear"
                 )[0]
-            
+
             pred_masks = (pred_masks > 0).float()
-            
+
             # Compute segmentation maps and segments_info
-            segmentation, segments = self._post_process_instance_segmentation(num_topk_queries, pred_masks, pred_classes, pred_scores, segmentation, threshold, return_coco_annotation, return_binary_maps)
-            
+            segmentation, segments = self._post_process_instance_segmentation(
+                num_topk_queries,
+                pred_masks,
+                pred_classes,
+                pred_scores,
+                segmentation,
+                threshold,
+                return_coco_annotation,
+                return_binary_maps,
+            )
+
             results.append({"segmentation": segmentation, "segments_info": segments})
 
         return results
 
     def _post_process_instance_segmentation(
-        self, 
-        num_predictions: int, 
-        pred_masks: torch.Tensor, 
+        self,
+        num_predictions: int,
+        pred_masks: torch.Tensor,
         pred_classes: torch.Tensor,
         pred_scores: torch.Tensor,
-        segmentation: torch.Tensor, 
-        threshold: float = 0.5, 
+        segmentation: torch.Tensor,
+        threshold: float = 0.5,
         return_coco_annotation: Optional[bool] = False,
         return_binary_maps: Optional[bool] = False,
     ):
@@ -1111,5 +1120,5 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         # Return a concatenated tensor of binary instance maps
         if return_binary_maps and len(instance_maps) != 0:
             segmentation = torch.stack(instance_maps, dim=0)
-        
+
         return segmentation, segments

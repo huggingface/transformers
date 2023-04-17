@@ -20,24 +20,21 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
-import requests
 import torch
 import torchvision
-import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
-from detectron2.config import get_cfg
 from detectron2.config import CfgNode as CN
+from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from huggingface_hub import hf_hub_download
-from PIL import Image
 from torch import Tensor, nn
 
 from transformers import (
     Mask2FormerConfig,
+    SwinConfig,
     VideoMask2FormerForVideoSegmentation,
     VideoMask2FormerImageProcessor,
     VideoMask2FormerModel,
-    SwinConfig,
 )
 from transformers.models.mask2former.modeling_video_mask2former import (
     VideoMask2FormerForVideoSegmentationOutput,
@@ -206,6 +203,7 @@ def add_maskformer2_video_config(cfg):
     cfg.INPUT.SAMPLING_FRAME_SHUFFLE = False
     cfg.INPUT.AUGMENTATIONS = []  # "brightness", "contrast", "saturation", "rotation"
 
+
 def setup_video_cfg(args: Args):
     # load config from file and command-line arguments
     cfg = get_cfg()
@@ -236,7 +234,9 @@ class OriginalVideoMask2FormerConfigToOursConverter:
 
         if model.SWIN.EMBED_DIM == 96:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-tiny-patch4-window7-224", out_features=backbone_out_features, out_indices=backbone_out_indices,
+                "microsoft/swin-tiny-patch4-window7-224",
+                out_features=backbone_out_features,
+                out_indices=backbone_out_indices,
             )
         elif model.SWIN.EMBED_DIM == 128:
             backbone_config = SwinConfig(
@@ -250,7 +250,9 @@ class OriginalVideoMask2FormerConfigToOursConverter:
 
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-large-patch4-window12-384", out_features=backbone_out_features, out_indices=backbone_out_indices,
+                "microsoft/swin-large-patch4-window12-384",
+                out_features=backbone_out_features,
+                out_indices=backbone_out_indices,
             )
         else:
             raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
@@ -290,7 +292,7 @@ class OriginalVideoMask2FormerConfigToOursConverter:
             enforce_input_proj=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
             common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
         )
-        
+
         return config
 
 
@@ -923,9 +925,7 @@ class OriginalVideoMask2FormerCheckpointToOursConverter:
         return video_mask2former
 
     @staticmethod
-    def using_dirs(
-        checkpoints_dir: Path, config_dir: Path
-    ) -> Iterator[Tuple[object, Path, Path]]:
+    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
@@ -935,10 +935,10 @@ class OriginalVideoMask2FormerCheckpointToOursConverter:
             dataset_name = checkpoint.parents[2].stem
 
             # task type e.g 'instance-segmentation'
-            segmentation_task = checkpoint.parents[1].stem
+            checkpoint.parents[1].stem
             # config file corresponding to checkpoint
             config_file_name = f"{checkpoint.parents[0].stem}.yaml"
-            
+
             config: Path = config_dir / dataset_name / "swin" / config_file_name
 
             yield config, checkpoint
@@ -957,8 +957,10 @@ def test(
         image_size = (480, 640)
         file_path = hf_hub_download(repo_id="shivi/video-demo", filename="cars.mp4", repo_type="dataset")
         video = torchvision.io.read_video(file_path)[0]
-        
-        img_processor_output = image_processor(images=list(video[:5]), return_tensors="pt", do_resize=True, size=image_size).pixel_values
+
+        img_processor_output = image_processor(
+            images=list(video[:5]), return_tensors="pt", do_resize=True, size=image_size
+        ).pixel_values
 
         original_model_backbone_features = original_model.backbone(img_processor_output.clone())
         our_model_output: VideoMask2FormerModelOutput = our_model.model(
@@ -986,10 +988,15 @@ def test(
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
-        
-        original_model_input = image_processor(images=list(video[:5]),return_tensors="pt",
-                                    do_resize=True,do_rescale=False,
-                                    do_normalize=False,size=image_size).pixel_values
+
+        original_model_input = image_processor(
+            images=list(video[:5]),
+            return_tensors="pt",
+            do_resize=True,
+            do_rescale=False,
+            do_normalize=False,
+            size=image_size,
+        ).pixel_values
 
         # modify original Mask2Former code to return mask and class logits
         original_class_logits, original_mask_logits = original_model([{"image": original_model_input}])
@@ -1031,9 +1038,7 @@ def get_model_and_dataset_name(checkpoint_file: Path):
     backbone_types = ["tiny", "small", "base_IN21k", "large"]
     backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0].replace("_", "-")
 
-    model_name = (
-        f"video-mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
-    )
+    model_name = f"video-mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
 
     return model_name, dataset_name
 
@@ -1074,7 +1079,7 @@ if __name__ == "__main__":
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     mask2former_dir: Path = args.mask2former_dir
-    
+
     # append the path to the parents to mask2former dir
     sys.path.append(str(mask2former_dir.parent))
     sys.path.append(str(mask2former_dir))
@@ -1088,7 +1093,6 @@ if __name__ == "__main__":
     ):
         model_name, dataset_name = get_model_and_dataset_name(checkpoint_file)
 
-        
         height_width = (480, 640)
         # load video mask2former config
         original_config = setup_video_cfg(Args(config_file=config_file))
@@ -1101,9 +1105,7 @@ if __name__ == "__main__":
 
         DetectionCheckpointer(original_model).load(str(checkpoint_file))
 
-        config: Mask2FormerConfig = OriginalVideoMask2FormerConfigToOursConverter()(
-            original_config, dataset_name
-        )
+        config: Mask2FormerConfig = OriginalVideoMask2FormerConfigToOursConverter()(original_config, dataset_name)
         video_mask2former = VideoMask2FormerModel(config=config).eval()
 
         converter = OriginalVideoMask2FormerCheckpointToOursConverter(original_model, config)

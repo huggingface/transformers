@@ -944,7 +944,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
         return_binary_maps: Optional[bool] = False,
-        is_video: Optional[bool] = False,
     ) -> List[Dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
@@ -968,8 +967,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             return_binary_maps (`bool`, *optional*, defaults to `False`):
                 If set to `True`, segmentation maps are returned as a concatenated tensor of binary segmentation maps
                 (one per detected instance).
-            is_video (`bool`, *optional*, defaults to `False`):
-                Whether the input logits correspond to vanilla Mask2Former or VideoMask2Former. 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
@@ -986,16 +983,16 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         # [batch_size, num_queries, num_classes+1]
         class_queries_logits = outputs.class_queries_logits
 
-        # [batch_size, num_queries, height, width] 
+        # [batch_size, num_queries, height, width]
         masks_queries_logits = outputs.masks_queries_logits
 
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
-        
+
         mask_size = (384, 384)
         num_topk_queries = num_queries
-        
+
         # Scale back to preprocessed image size for all models
         masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits, size=mask_size, mode="bilinear", align_corners=False
@@ -1010,7 +1007,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
             scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
             labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
-            
+
             # keep top-k predictions
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_topk_queries, sorted=False)
             labels_per_image = labels[topk_indices]
@@ -1021,7 +1018,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             segmentation = torch.zeros(mask_size) - 1
 
             pred_classes = labels_per_image
-            
+
             # calculate final prediction scores and masks
             pred_masks = (mask_pred > 0).float()
             # Calculate average mask prob
@@ -1029,29 +1026,38 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 pred_masks.flatten(1).sum(1) + 1e-6
             )
             pred_scores = scores_per_image * mask_scores_per_image
-            
+
             # resize prediction masks
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
                     pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
                 )[0]
-            
+
             # Compute segmentation maps and segments_info
-            segmentation, segments = self._post_process_instance_segmentation(num_topk_queries, pred_masks, pred_classes, pred_scores, segmentation, threshold, return_coco_annotation, return_binary_maps)
-            
+            segmentation, segments = self._post_process_instance_segmentation(
+                num_topk_queries,
+                pred_masks,
+                pred_classes,
+                pred_scores,
+                segmentation,
+                threshold,
+                return_coco_annotation,
+                return_binary_maps,
+            )
+
             results.append({"segmentation": segmentation, "segments_info": segments})
 
         return results
 
     def _post_process_instance_segmentation(
-        self, 
-        num_predictions: int, 
-        pred_masks: torch.Tensor, 
+        self,
+        num_predictions: int,
+        pred_masks: torch.Tensor,
         pred_classes: torch.Tensor,
         pred_scores: torch.Tensor,
-        segmentation: torch.Tensor, 
-        threshold: float = 0.5, 
+        segmentation: torch.Tensor,
+        threshold: float = 0.5,
         return_coco_annotation: Optional[bool] = False,
         return_binary_maps: Optional[bool] = False,
     ):
@@ -1101,7 +1107,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         # Return a concatenated tensor of binary instance maps
         if return_binary_maps and len(instance_maps) != 0:
             segmentation = torch.stack(instance_maps, dim=0)
-        
+
         return segmentation, segments
 
     def post_process_panoptic_segmentation(

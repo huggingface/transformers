@@ -17,7 +17,6 @@
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_torch, require_vision
@@ -32,7 +31,9 @@ if is_torch_available():
     if is_vision_available():
         from transformers import VideoMask2FormerImageProcessor
         from transformers.models.mask2former.image_processing_video_mask2former import binary_mask_to_rle
-        from transformers.models.mask2former.modeling_video_mask2former import VideoMask2FormerForVideoSegmentationOutput
+        from transformers.models.mask2former.modeling_video_mask2former import (
+            VideoMask2FormerForVideoSegmentationOutput,
+        )
 
 if is_vision_available():
     from PIL import Image
@@ -133,7 +134,9 @@ class VideoMask2FormerImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-    image_processing_class = VideoMask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    image_processing_class = (
+        VideoMask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    )
 
     def setUp(self):
         self.image_processor_tester = VideoMask2FormerImageProcessingTester(self)
@@ -204,7 +207,7 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
-        
+
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -307,11 +310,11 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
             ]
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
-        
+
         inputs = image_processing(
             image_inputs,
             annotations,
-            size=(480,640),
+            size=(480, 640),
             is_train=True,
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
@@ -344,8 +347,8 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
 
             mask_labels = inputs["mask_labels"]
             class_labels = inputs["class_labels"]
-            pixel_values = inputs["pixel_values"]
-            
+            inputs["pixel_values"]
+
             # check that mask_label is of shape (`num_labels, num_frames, height, width`)
             self.assertEqual(mask_labels[0].shape, (class_labels[0].shape[0], 2, 480, 640))
 
@@ -381,7 +384,7 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
             for label in class_labels:
                 instance_ids = np.unique(instance_seg[class_id_map == label])
                 inst2class.update({i: label for i in instance_ids})
-            
+
             return instance_seg, inst2class
 
         instance_seg1, inst2class1 = get_instance_segmentation_and_mapping(annotation1)
@@ -405,13 +408,12 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"][0]), 6)
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor([30, 55,  4,  4, 23, 55])))
-        
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor([30, 55, 4, 4, 23, 55])))
+
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"][0]), 6)
         self.assertEqual(inputs["mask_labels"][0].shape, (6, 2, 512, 512))
         self.assertEquals(inputs["mask_labels"][0].sum().item(), 67786.0)
-
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))
@@ -427,7 +429,7 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
     def test_post_process_instance_segmentation(self):
         image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
         outputs = self.image_processor_tester.get_fake_video_mask2former_outputs()
-        
+
         segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_dim)

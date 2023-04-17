@@ -1907,12 +1907,12 @@ else:
     _import_structure["models.mask2former"].extend(
         [
             "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Mask2FormerForUniversalSegmentation",
             "Mask2FormerModel",
             "Mask2FormerPreTrainedModel",
-            "VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VideoMask2FormerModel",
             "VideoMask2FormerForVideoSegmentation",
+            "VideoMask2FormerModel",
             "VideoMask2FormerPreTrainedModel",
         ]
     )
@@ -4073,7 +4073,11 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, VIDEO_MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
+    from .models.mask2former import (
+        MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VIDEO_MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Mask2FormerConfig,
+    )
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
@@ -5369,12 +5373,12 @@ if TYPE_CHECKING:
         )
         from .models.mask2former import (
             MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
-            VIDEO_MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VideoMask2FormerModel,
             VideoMask2FormerForVideoSegmentation,
+            VideoMask2FormerModel,
             VideoMask2FormerPreTrainedModel,
         )
         from .models.maskformer import (

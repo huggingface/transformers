@@ -48,7 +48,7 @@ if is_torchvision_available():
     import torchvision
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class VideoVideoMask2FormerModelTester:
@@ -84,9 +84,12 @@ class VideoVideoMask2FormerModelTester:
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
-        mask_labels = [(
-            torch.zeros([self.num_labels, self.batch_size, self.min_size, self.max_size], device=torch_device) > 0.5
-        ).float()]
+        mask_labels = [
+            (
+                torch.zeros([self.num_labels, self.batch_size, self.min_size, self.max_size], device=torch_device)
+                > 0.5
+            ).float()
+        ]
         class_labels = [(torch.zeros((self.num_labels), device=torch_device)).long()]
 
         config = self.get_config()
@@ -135,7 +138,7 @@ class VideoVideoMask2FormerModelTester:
         self.parent.assertEqual(
             output.transformer_decoder_last_hidden_state.shape,
             (1, self.num_queries, self.hidden_dim),
-        ) 
+        )
 
         # let's ensure the other two hidden state exists
         self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
@@ -163,9 +166,7 @@ class VideoVideoMask2FormerModelTester:
                 (self.num_queries, self.batch_size, self.min_size // 4, self.max_size // 4),
             )
             # + 1 for null class
-            self.parent.assertEqual(
-                result.class_queries_logits.shape, (1, self.num_queries, self.num_labels + 1)
-            )
+            self.parent.assertEqual(result.class_queries_logits.shape, (1, self.num_queries, self.num_labels + 1))
 
         with torch.no_grad():
             result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
@@ -251,7 +252,7 @@ class VideoMask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     def test_model_with_labels(self):
         size = (self.model_tester.min_size, self.model_tester.max_size)
-        
+
         inputs = {
             "pixel_values": torch.randn((2, 3, *size), device=torch_device),
             "mask_labels": [torch.zeros((10, 2, *size), device=torch_device)],
@@ -339,8 +340,9 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return VideoMask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
-    
+        return (
+            VideoMask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        )
 
     def test_video_mask2former_inference_no_head(self):
         # load model and processor
@@ -349,12 +351,12 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
 
         video = prepare_video()
         video_input = image_processor(images=list(video[:5]), return_tensors="pt").pixel_values
-        
+
         video_shape = video_input.shape
-        
+
         # check size is divisible by 32
         self.assertTrue((video_shape[-1] % 32) == 0 and (video_shape[-2] % 32) == 0)
-    
+
         # check video size
         self.assertEqual(video_shape, (5, 3, 480, 640))
 
@@ -363,7 +365,7 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
 
         # check if we are getting expected hidden states from backbone, pixel_decoder and transformer_decoder
         expected_slice_hidden_state = torch.tensor(
-            [[-0.4360,  0.7583,  0.9673], [-0.1426, -0.0267,  0.5829], [-0.2385,  0.0773, -0.1495]]
+            [[-0.4360, 0.7583, 0.9673], [-0.1426, -0.0267, 0.5829], [-0.2385, 0.0773, -0.1495]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -396,12 +398,12 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
 
         video = prepare_video()
         video_input = image_processor(images=list(video[:5]), return_tensors="pt").pixel_values
-        
+
         video_shape = video_input.shape
-        
+
         # check size is divisible by 32
         self.assertTrue((video_shape[-1] % 32) == 0 and (video_shape[-2] % 32) == 0)
-    
+
         # check video size
         self.assertEqual(video_shape, (5, 3, 480, 640))
 
@@ -420,7 +422,7 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
             [-61.4500, -68.9583, -73.0472],
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
-        
+
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
 
         # class_queries_logits
@@ -442,8 +444,13 @@ class VideoMask2FormerModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
 
         video_inputs = image_processor(
-            [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)) ],
-            segmentation_maps=[np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32), np.zeros((480, 640)).astype(np.float32)],
+            [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
+            segmentation_maps=[
+                np.zeros((480, 640)).astype(np.float32),
+                np.zeros((480, 640)).astype(np.float32),
+                np.zeros((480, 640)).astype(np.float32),
+                np.zeros((480, 640)).astype(np.float32),
+            ],
             do_sampling=True,
             return_tensors="pt",
         )
