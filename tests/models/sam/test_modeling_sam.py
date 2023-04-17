@@ -257,7 +257,7 @@ class SamModelTester:
                 output_hidden_states=True,
                 return_dict=True,
             )
-        
+
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
         self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
@@ -269,7 +269,7 @@ class SamModelTester:
                 output_hidden_states=True,
                 return_dict=False,
             )
-        
+
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
         self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
@@ -346,7 +346,7 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
     def test_get_image_features(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_features(*config_and_inputs)
-    
+
     def test_image_hidden_states(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_hidden_states(*config_and_inputs)
@@ -355,7 +355,11 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        expected_vision_attention_shape = (self.model_tester.batch_size * self.model_tester.num_attention_heads, 196, 196)
+        expected_vision_attention_shape = (
+            self.model_tester.batch_size * self.model_tester.num_attention_heads,
+            196,
+            196,
+        )
         expected_mask_decoder_attention_shape = (self.model_tester.batch_size, 144, 32)
 
         for model_class in self.all_model_classes:

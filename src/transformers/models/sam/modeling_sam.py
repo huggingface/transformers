@@ -1332,7 +1332,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         if not return_dict:
             output = (iou_predictions, low_res_masks)
             if output_attentions:
-                output = output + (all_attentions,)
+                output = output + (all_attentions[0], all_attentions[1])
             return output
 
         return SamImageSegmentationOutput(
