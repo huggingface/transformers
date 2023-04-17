@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GPTNeoX Alibi model. """
+""" Testing suite for the PyTorch GPTNeoX ALiBi model. """
 
 
 import unittest
 
-from transformers import AutoTokenizer, GPTNeoXAlibiConfig, is_torch_available
+from transformers import AutoTokenizer, GPTNeoXALiBiConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -29,10 +29,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GPTNeoXAlibiForCausalLM, GPTNeoXAlibiModel
+    from transformers import GPTNeoXALiBiForCausalLM, GPTNeoXALiBiModel
 
 
-class GPTNeoXAlibiModelTester:
+class GPTNeoXALiBiModelTester:
     def __init__(
         self,
         parent,
@@ -96,7 +96,7 @@ class GPTNeoXAlibiModelTester:
         return config, input_ids, input_mask, token_labels
 
     def get_config(self):
-        return GPTNeoXAlibiConfig(
+        return GPTNeoXALiBiConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -119,7 +119,7 @@ class GPTNeoXAlibiModelTester:
         return config, input_ids, input_mask, token_labels
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = GPTNeoXAlibiModel(config=config)
+        model = GPTNeoXALiBiModel(config=config)
         model.to(torch_device)
         model.eval()
         _ = model(input_ids, attention_mask=input_mask)
@@ -128,14 +128,14 @@ class GPTNeoXAlibiModelTester:
 
     def create_and_check_model_as_decoder(self, config, input_ids, input_mask):
         config.add_cross_attention = True
-        model = GPTNeoXAlibiModel(config)
+        model = GPTNeoXALiBiModel(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(self, config, input_ids, input_mask, token_labels):
-        model = GPTNeoXAlibiForCausalLM(config=config)
+        model = GPTNeoXALiBiForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -143,7 +143,7 @@ class GPTNeoXAlibiModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
         config.is_decoder = True
-        model = GPTNeoXAlibiForCausalLM(config=config)
+        model = GPTNeoXALiBiForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -188,13 +188,13 @@ class GPTNeoXAlibiModelTester:
 @require_torch
 class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPTNeoXAlibiModel, GPTNeoXAlibiForCausalLM) if is_torch_available() else ()
+        (GPTNeoXALiBiModel, GPTNeoXALiBiForCausalLM) if is_torch_available() else ()
     )
-    all_generative_model_classes = (GPTNeoXAlibiForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (GPTNeoXALiBiForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": GPTNeoXAlibiModel,
-            "text-generation": GPTNeoXAlibiForCausalLM,
+            "feature-extraction": GPTNeoXALiBiModel,
+            "text-generation": GPTNeoXALiBiForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -205,8 +205,8 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = GPTNeoXAlibiModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXAlibiConfig, hidden_size=37)
+        self.model_tester = GPTNeoXALiBiModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GPTNeoXALiBiConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()

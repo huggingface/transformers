@@ -170,7 +170,7 @@ class GPTNeoXTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class GPTNeoXAlibiTokenizerFast(metaclass=DummyObject):
+class GPTNeoXALiBiTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

@@ -17,7 +17,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {"configuration_gpt_neox_alibi": ["GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXAlibiConfig"]}
+_import_structure = {"configuration_gpt_neox_alibi": ["GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXALiBiConfig"]}
 
 try:
     if not is_tokenizers_available():
@@ -25,7 +25,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_gpt_neox_alibi_fast"] = ["GPTNeoXAlibiTokenizerFast"]
+    _import_structure["tokenization_gpt_neox_alibi_fast"] = ["GPTNeoXALiBiTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -35,15 +35,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_gpt_neox_alibi"] = [
         "GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTNeoXAlibiForCausalLM",
-        "GPTNeoXAlibiLayer",
-        "GPTNeoXAlibiModel",
-        "GPTNeoXAlibiPreTrainedModel",
+        "GPTNeoXALiBiForCausalLM",
+        "GPTNeoXALiBiLayer",
+        "GPTNeoXALiBiModel",
+        "GPTNeoXALiBiPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neox_alibi import GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXAlibiConfig
+    from .configuration_gpt_neox_alibi import GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXALiBiConfig
 
     try:
         if not is_tokenizers_available():
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_gpt_neox_alibi_fast import GPTNeoXAlibiTokenizerFast
+        from .tokenization_gpt_neox_alibi_fast import GPTNeoXALiBiTokenizerFast
 
     try:
         if not is_torch_available():
@@ -61,10 +61,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_gpt_neox_alibi import (
             GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoXAlibiForCausalLM,
-            GPTNeoXAlibiLayer,
-            GPTNeoXAlibiModel,
-            GPTNeoXAlibiPreTrainedModel,
+            GPTNeoXALiBiForCausalLM,
+            GPTNeoXALiBiLayer,
+            GPTNeoXALiBiModel,
+            GPTNeoXALiBiPreTrainedModel,
         )
 
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for GPTNeoXAlibi."""
+"""Tokenization classes for GPTNeoXALiBi."""
 import json
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -37,7 +37,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-class GPTNeoXAlibiTokenizerFast(PreTrainedTokenizerFast):
+class GPTNeoXALiBiTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-NeoX-20B tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
@@ -46,8 +46,8 @@ class GPTNeoXAlibiTokenizerFast(PreTrainedTokenizerFast):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```
-    >>> from transformers import GPTNeoXAlibiTokenizerFast
-    >>> tokenizer = GPTNeoXAlibiTokenizerFast.from_pretrained("gpt2")
+    >>> from transformers import GPTNeoXALiBiTokenizerFast
+    >>> tokenizer = GPTNeoXALiBiTokenizerFast.from_pretrained("gpt2")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']

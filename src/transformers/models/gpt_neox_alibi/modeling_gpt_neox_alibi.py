@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPTNeoXAlibi model."""
+""" PyTorch GPTNeoXALiBi model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -32,20 +32,20 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_gpt_neox_alibi import GPTNeoXAlibiConfig
+from .configuration_gpt_neox_alibi import GPTNeoXALiBiConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
 _REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
-_CONFIG_FOR_DOC = "GPTNeoXAlibiConfig"
+_CONFIG_FOR_DOC = "GPTNeoXALiBiConfig"
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Copied from the transformers.models.bloom.modeling_bloom
-    Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
+    Link to paper: https://arxiv.org/abs/2108.12409 ALiBi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
@@ -81,16 +81,16 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
 
 
-class GPTNeoXAlibiPreTrainedModel(PreTrainedModel):
+class GPTNeoXALiBiPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GPTNeoXAlibiConfig
+    config_class = GPTNeoXALiBiConfig
     base_model_prefix = "gpt_neox_alibi"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GPTNeoXAlibiLayer"]
+    _no_split_modules = ["GPTNeoXALiBiLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -107,11 +107,11 @@ class GPTNeoXAlibiPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXAlibiModel):
+        if isinstance(module, GPTNeoXALiBiModel):
             module.gradient_checkpointing = value
 
 
-class GPTNeoXAlibiAttention(nn.Module):
+class GPTNeoXALiBiAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
@@ -239,7 +239,7 @@ class GPTNeoXAlibiAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GPTNeoXAlibiMLP(nn.Module):
+class GPTNeoXALiBiMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -253,14 +253,14 @@ class GPTNeoXAlibiMLP(nn.Module):
         return hidden_states
 
 
-class GPTNeoXAlibiLayer(nn.Module):
+class GPTNeoXALiBiLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = GPTNeoXAlibiAttention(config)
-        self.mlp = GPTNeoXAlibiMLP(config)
+        self.attention = GPTNeoXALiBiAttention(config)
+        self.mlp = GPTNeoXALiBiMLP(config)
 
     def forward(
         self,
@@ -311,7 +311,7 @@ GPT_NEOX_ALIBI_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~GPTNeoXAlibiConfig`]): Model configuration class with all the parameters of the model.
+        config ([`~GPTNeoXALiBiConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -354,17 +354,17 @@ GPT_NEOX_ALIBI_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GPTNeoXAlibi Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare GPTNeoXALiBi Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEOX_ALIBI_START_DOCSTRING,
 )
 
-class GPTNeoXAlibiModel(GPTNeoXAlibiPreTrainedModel):
+class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([GPTNeoXAlibiLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([GPTNeoXALiBiLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -529,15 +529,15 @@ class GPTNeoXAlibiModel(GPTNeoXAlibiPreTrainedModel):
         )
 
 @add_start_docstrings(
-    """GPTNeoXAlibi Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_ALIBI_START_DOCSTRING
+    """GPTNeoXALiBi Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_ALIBI_START_DOCSTRING
 )
-class GPTNeoXAlibiForCausalLM(GPTNeoXAlibiPreTrainedModel):
+class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.gpt_neox = GPTNeoXAlibiModel(config)
+        self.gpt_neox = GPTNeoXALiBiModel(config)
         self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -590,13 +590,13 @@ class GPTNeoXAlibiForCausalLM(GPTNeoXAlibiPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GPTNeoXAlibiForCausalLM, GPTNeoXAlibiConfig
+        >>> from transformers import AutoTokenizer, GPTNeoXALiBiForCausalLM, GPTNeoXALiBiConfig
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-        >>> config = GPTNeoXAlibiConfig.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> config = GPTNeoXALiBiConfig.from_pretrained("EleutherAI/gpt-neox-20b")
         >>> config.is_decoder = True
-        >>> model = GPTNeoXAlibiForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
+        >>> model = GPTNeoXALiBiForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

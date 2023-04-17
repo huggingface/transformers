@@ -305,6 +305,8 @@
         title: GPT Neo
       - local: model_doc/gpt_neox
         title: GPT NeoX
+      - local: model_doc/gpt_neox_alibi
+        title: GPT NeoX ALiBi
       - local: model_doc/gpt_neox_japanese
         title: GPT NeoX Japanese
       - local: model_doc/gptj

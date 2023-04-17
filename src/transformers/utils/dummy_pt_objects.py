@@ -3332,28 +3332,28 @@ class GPTNeoXPreTrainedModel(metaclass=DummyObject):
 GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GPTNeoXAlibiForCausalLM(metaclass=DummyObject):
+class GPTNeoXALiBiForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTNeoXAlibiLayer(metaclass=DummyObject):
+class GPTNeoXALiBiLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTNeoXAlibiModel(metaclass=DummyObject):
+class GPTNeoXALiBiModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTNeoXAlibiPreTrainedModel(metaclass=DummyObject):
+class GPTNeoXALiBiPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

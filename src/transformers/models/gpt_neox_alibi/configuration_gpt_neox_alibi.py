@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPTNeoXAlibi model configuration"""
+""" GPTNeoXALiBi model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,11 +21,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXAlibiConfig(PretrainedConfig):
+class GPTNeoXALiBiConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTNeoXAlibiModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GPTNeoXALiBiModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of a 1.4b GPTNeoXAlibi architecture.
+    with the defaults will yield a similar configuration to that of a 1.4b GPTNeoXALiBi architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -59,13 +59,13 @@ class GPTNeoXAlibiConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import GPTNeoXAlibiConfig, GPTNeoXAlibiModel
+    >>> from transformers import GPTNeoXALiBiConfig, GPTNeoXALiBiModel
 
-    >>> # Initializing a GPTNeoXAlibi gpt-neox-1.4b style configuration
-    >>> configuration = GPTNeoXAlibiConfig()
+    >>> # Initializing a GPTNeoXALiBi gpt-neox-1.4b style configuration
+    >>> configuration = GPTNeoXALiBiConfig()
 
     >>> # Initializing a model (with random weights) from the gpt-neox-1.4b style configuration
-    >>> model = GPTNeoXAlibiModel(configuration)  # doctest: +SKIP
+    >>> model = GPTNeoXALiBiModel(configuration)  # doctest: +SKIP
 
     >>> # Accessing the model configuration
     >>> configuration = model.config  # doctest: +SKIP
