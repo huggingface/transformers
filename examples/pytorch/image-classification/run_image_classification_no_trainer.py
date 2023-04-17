@@ -18,6 +18,7 @@ import json
 import logging
 import math
 import os
+import time
 from pathlib import Path
 
 import datasets
@@ -52,7 +53,7 @@ check_min_version("4.29.0")
 logger = get_logger(__name__)
 
 # use relaxed_fp32 option
-try: 
+try:
     from moreh.driver.common.config import set_backend_config
     set_backend_config("allow_relaxed_fp32", True)
     print("Setting `allow_relaxed_fp32` in the backend")
@@ -466,9 +467,11 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
+        start_time = time.time()
         model.train()
         if args.with_tracking:
             total_loss = 0
+
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == starting_epoch:
@@ -560,6 +563,10 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
+        elapsed = time.time() - start_time
+        logger.info(f"Throughput: {round(len(train_dataset) / elapsed, 4)}")
+
 
     if args.with_tracking:
         accelerator.end_training()
