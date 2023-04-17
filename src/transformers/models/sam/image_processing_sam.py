@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
-from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -30,11 +29,20 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
     import PIL
+
+if is_torchvision_available():
     from torchvision.transforms.functional import resize, to_pil_image
 
 if is_torch_available():
@@ -139,27 +147,6 @@ class SamImageProcessor(BaseImageProcessor):
         newh = int(newh + 0.5)
         return (newh, neww)
 
-    def apply_coords(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
-        """
-        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
-        """
-        old_h, old_w = original_size
-        new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_size)
-        coords = deepcopy(coords).astype(float)
-
-        if is_bounding_box:
-            # reshape to .reshape(-1, 2, 2)
-            coords = coords.reshape(-1, 2, 2)
-
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
-        coords[..., 1] = coords[..., 1] * (new_h / old_h)
-
-        if is_bounding_box:
-            # reshape back to .reshape(-1, 4)
-            coords = coords.reshape(-1, 4)
-
-        return coords
-
     def pad_to_target_size(
         self,
         image: np.ndarray,
@@ -175,7 +162,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return image.numpy()
 
-    def resize(self,image: np.ndarray,target_size: int = None,**kwargs) -> np.ndarray:
+    def resize(self, image: np.ndarray, target_size: int = None, **kwargs) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
 
@@ -188,13 +175,20 @@ class SamImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        requires_backends(self, "torchvision")
         target_size = target_size if target_size is not None else self.target_size
         output_size = self.get_preprocess_shape(image.shape[0], image.shape[1], target_size)
         image = to_pil_image(image)
         image = to_numpy_array(resize(image, output_size))
         return image.astype(np.float32)
 
-    def rescale(self,image: np.ndarray,scale: Union[int, float],data_format: Optional[Union[str, ChannelDimension]] = None,**kwargs):
+    def rescale(
+        self,
+        image: np.ndarray,
+        scale: Union[int, float],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ):
         """
         Rescale an image by a scale factor. image = image * scale.
 

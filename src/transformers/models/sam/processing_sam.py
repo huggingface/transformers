@@ -41,8 +41,6 @@ class SamProcessor(ProcessorMixin):
     Args:
         image_processor (`SamImageProcessor`):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
@@ -82,10 +80,10 @@ class SamProcessor(ProcessorMixin):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
                 # TODO deal better with this case
-                input_points = [self.apply_coords(point, original_sizes[0]) for point in input_points]
+                input_points = [self.normalize_coordinates(point, original_sizes[0]) for point in input_points]
             else:
                 input_points = [
-                    self.apply_coords(point, original_size)
+                    self.normalize_coordinates(point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
             input_points = np.array(input_points)
@@ -96,10 +94,12 @@ class SamProcessor(ProcessorMixin):
         if input_boxes is not None:
             if len(original_sizes) != len(input_boxes):
                 # TODO deal better with this case
-                input_boxes = [self.apply_coords(box, original_sizes[0], is_bounding_box=True) for box in input_boxes]
+                input_boxes = [
+                    self.normalize_coordinates(box, original_sizes[0], is_bounding_box=True) for box in input_boxes
+                ]
             else:
                 input_boxes = [
-                    self.apply_coords(box, original_size, is_bounding_box=True)
+                    self.normalize_coordinates(box, original_size, is_bounding_box=True)
                     for box, original_size in zip(input_boxes, original_sizes)
                 ]
             input_boxes = np.array(input_boxes)
@@ -150,7 +150,7 @@ class SamProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names))
 
-    def apply_coords(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
+    def normalize_coordinates(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
         """
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
