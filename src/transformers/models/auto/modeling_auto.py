@@ -154,7 +154,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
-        ("sam", "SamModel"),
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),

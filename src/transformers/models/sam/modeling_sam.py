@@ -1263,6 +1263,15 @@ class SamForImageSegmentation(SamPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict=True,
     ) -> List[Dict[str, torch.Tensor]]:
+        r"""
+        Args:
+            multimask_output (`bool`, *optional*):
+                Whether or not to return 3 scores and binary mask for each image as described in the original paper.
+
+        Returns:
+
+        Example:
+        """
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
