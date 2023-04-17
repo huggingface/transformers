@@ -48,6 +48,7 @@ class SamProcessor(ProcessorMixin):
     def __init__(self, image_processor):
         super().__init__(image_processor)
         self.current_processor = self.image_processor
+        self.point_pad_value = -10
 
     def __call__(
         self,
@@ -86,6 +87,19 @@ class SamProcessor(ProcessorMixin):
                     self.normalize_coordinates(point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
+
+            # check that all arrays have the same shape
+            if not all([point.shape == input_points[0].shape for point in input_points]):
+                expected_nb_points = max([point.shape[0] for point in input_points])
+                processed_input_points = []
+                for i, point in enumerate(input_points):
+                    if point.shape[0] != expected_nb_points:
+                        point = np.concatenate(
+                            [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
+                        )
+                        input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
+                    processed_input_points.append(point)
+                input_points = processed_input_points
             input_points = np.array(input_points)
 
         if input_labels is not None:

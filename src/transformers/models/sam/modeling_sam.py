@@ -519,6 +519,7 @@ class SamMaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
         """
         # Concatenate output tokens
+        batch_size = image_embeddings.shape[0]
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
 
@@ -526,9 +527,11 @@ class SamMaskDecoder(nn.Module):
         tokens = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
-        src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+        # src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+        src = image_embeddings
         src = src + dense_prompt_embeddings
-        pos_src = torch.repeat_interleave(image_positional_embedding, tokens.shape[0], dim=0)
+        # pos_src = torch.repeat_interleave(image_positional_embedding, tokens.shape[0], dim=0)
+        pos_src = image_positional_embedding
         batch_size, num_channels, height, width = src.shape
 
         # Run the transformer
@@ -651,8 +654,12 @@ class SamPromptEncoder(nn.Module):
             labels = torch.cat([labels, padding_label], dim=1)
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
+
         point_embedding[labels == -1] = 0.0
         point_embedding[labels == -1] += self.not_a_point_embed.weight
+
+        point_embedding[labels == -10] = 0.0  # ignore points
+
         point_embedding[labels == 0] += self.point_embed[0].weight
         point_embedding[labels == 1] += self.point_embed[1].weight
         return point_embedding
@@ -1251,6 +1258,9 @@ class SamForMaskGeneration(SamPreTrainedModel):
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
         image_position_embedding = self.get_image_wide_positional_embeddings()
+        # repeat with batch size
+        image_position_embedding = image_position_embedding.repeat(pixel_values.shape[0], 1, 1, 1)
+
         all_attentions = ()
 
         if pixel_values is not None:
