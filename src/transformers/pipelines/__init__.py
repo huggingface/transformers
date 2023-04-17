@@ -727,9 +727,8 @@ def pipeline(
                     " set the option `trust_remote_code=True` to remove this error."
                 )
             class_ref = targeted_task["impl"]
-            module_file, class_name = class_ref.split(".")
             pipeline_class = get_class_from_dynamic_module(
-                model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
+                class_ref, model, revision=revision, use_auth_token=use_auth_token
             )
     else:
         normalized_task, targeted_task, task_options = check_task(task)

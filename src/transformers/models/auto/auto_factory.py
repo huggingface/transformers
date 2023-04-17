@@ -403,8 +403,12 @@ class _BaseAutoModelClass:
                     "no malicious code has been contributed in a newer revision."
                 )
             class_ref = config.auto_map[cls.__name__]
+            if "--" in class_ref:
+                repo_id, class_ref = class_ref.split("--")
+            else:
+                repo_id = config.name_or_path
             module_file, class_name = class_ref.split(".")
-            model_class = get_class_from_dynamic_module(config.name_or_path, module_file + ".py", class_name, **kwargs)
+            model_class = get_class_from_dynamic_module(repo_id, module_file + ".py", class_name, **kwargs)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
@@ -452,17 +456,10 @@ class _BaseAutoModelClass:
                     "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
                     "the option `trust_remote_code=True` to remove this error."
                 )
-            if hub_kwargs.get("revision", None) is None:
-                logger.warning(
-                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                    "no malicious code has been contributed in a newer revision."
-                )
             class_ref = config.auto_map[cls.__name__]
-            module_file, class_name = class_ref.split(".")
             model_class = get_class_from_dynamic_module(
-                pretrained_model_name_or_path, module_file + ".py", class_name, **hub_kwargs, **kwargs
+                class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
-            model_class.register_for_auto_class(cls.__name__)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
