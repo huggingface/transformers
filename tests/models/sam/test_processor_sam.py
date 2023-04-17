@@ -16,7 +16,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import pytest
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available

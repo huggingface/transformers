@@ -16,37 +16,31 @@
 
 
 import inspect
-import tempfile
 import unittest
 
-import requests
-
-from transformers import CONFIG_MAPPING, SamConfig, SamVisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
-    ids_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SamForImageSegmentation, SamConfig, SamVisionConfig, SamPromptEncoderConfig, SamMaskDecoderConfig
+    from transformers import SamForImageSegmentation
     from transformers.models.sam.modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    from PIL import Image
 
-    from transformers import SamProcessor
+    pass
+
 
 class SamPromptEncoderTester:
     def __init__(
@@ -64,7 +58,7 @@ class SamPromptEncoderTester:
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
-    
+
     def get_config(self):
         return SamPromptEncoderConfig(
             input_image_size=self.input_image_size,
@@ -106,7 +100,7 @@ class SamMaskDecoderTester:
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
         self.layer_norm_eps = layer_norm_eps
-    
+
     def get_config(self):
         return SamMaskDecoderConfig(
             hidden_size=self.hidden_size,
@@ -129,7 +123,7 @@ class SamMaskDecoderTester:
         }
 
         return config, dummy_inputs
-        
+
 
 class SamModelTester:
     def __init__(
@@ -273,8 +267,16 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SamModelTester(self)
         self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
-        self.prompt_encoder_config_tester = ConfigTester(self, config_class=SamPromptEncoderConfig, has_text_modality=False, num_attention_heads=12, num_hidden_layers=2)
-        self.mask_decoder_config_tester = ConfigTester(self, config_class=SamMaskDecoderConfig, has_text_modality=False)
+        self.prompt_encoder_config_tester = ConfigTester(
+            self,
+            config_class=SamPromptEncoderConfig,
+            has_text_modality=False,
+            num_attention_heads=12,
+            num_hidden_layers=2,
+        )
+        self.mask_decoder_config_tester = ConfigTester(
+            self, config_class=SamMaskDecoderConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.vision_config_tester.run_common_tests()
@@ -330,7 +332,7 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            
+
             vision_attentions = outputs.vision_attentions
             self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
 
@@ -353,12 +355,12 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
 
             if chunk_length is not None:
                 self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
+                    list(vision_attentions[0].shape[-4:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
+                    list(vision_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
             out_len = len(outputs)
@@ -419,5 +421,3 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SamForImageSegmentation.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-

@@ -324,10 +324,10 @@ class SamTwoWayAttentionBlock(nn.Module):
         self.skip_first_layer_pe = skip_first_layer_pe
 
     def forward(
-        self, 
-        queries: Tensor, 
-        keys: Tensor, 
-        query_point_embedding: Tensor, 
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Tensor,
         key_point_embedding: Tensor,
         output_attentions: bool = False,
     ):
@@ -533,8 +533,8 @@ class SamMaskDecoder(nn.Module):
 
         # Run the transformer
         hs, src, attentions = self.transformer(
-            src, 
-            pos_src, 
+            src,
+            pos_src,
             tokens,
             output_attentions=output_attentions,
         )
@@ -1294,7 +1294,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
             boxes=input_boxes,
             masks=mask_inputs,
         )
-        
+
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_positional_embedding=image_position_embedding,
@@ -1310,7 +1310,7 @@ class SamForImageSegmentation(SamPreTrainedModel):
             all_attentions = all_attentions + (None,)
 
         if not return_dict:
-            output = (iou_predictions, low_res_masks) 
+            output = (iou_predictions, low_res_masks)
             if output_attentions:
                 output = output + (all_attentions,)
             return output

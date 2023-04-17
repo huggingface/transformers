@@ -20,9 +20,9 @@ _import_structure = {
     "configuration_sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
-        "SamVisionConfig",
-        "SamPromptEncoderConfig",
         "SamMaskDecoderConfig",
+        "SamPromptEncoderConfig",
+        "SamVisionConfig",
     ],
     "processing_sam": ["SamProcessor"],
 }
@@ -51,9 +51,9 @@ if TYPE_CHECKING:
     from .configuration_sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
-        SamVisionConfig,
-        SamPromptEncoderConfig,
         SamMaskDecoderConfig,
+        SamPromptEncoderConfig,
+        SamVisionConfig,
     )
     from .processing_sam import SamProcessor
 
