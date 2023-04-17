@@ -153,12 +153,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return image.numpy()
 
-    def resize(
-        self,
-        image: np.ndarray,
-        target_size: int = None,
-        **kwargs,
-    ) -> np.ndarray:
+    def resize(self,image: np.ndarray,target_size: int = None,**kwargs) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
 
@@ -177,13 +172,7 @@ class SamImageProcessor(BaseImageProcessor):
         image = to_numpy_array(resize(image, output_size))
         return image.astype(np.float32)
 
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
+    def rescale(self,image: np.ndarray,scale: Union[int, float],data_format: Optional[Union[str, ChannelDimension]] = None,**kwargs):
         """
         Rescale an image by a scale factor. image = image * scale.
 
