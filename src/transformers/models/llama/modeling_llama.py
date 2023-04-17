@@ -132,8 +132,8 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = cos.squeeze((0, 1))  # [seq_len, dim]
-    sin = sin.squeeze((0, 1))  # [seq_len, dim]
+    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
+    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     q_embed = (q * cos) + (rotate_half(q) * sin)
