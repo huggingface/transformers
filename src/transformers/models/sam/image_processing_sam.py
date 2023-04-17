@@ -559,7 +559,6 @@ def _batched_mask_to_box(masks):
     the output shape is C1xC2x...x4.
     """
     # torch.max below raises an error on empty inputs, just skip in this case
-    requires_backends("torch")
 
     if torch.numel(masks) == 0:
         return torch.zeros(*masks.shape[:-2], 4, device=masks.device)
@@ -652,14 +651,13 @@ def _filter_masks(
     original_width,
     cropped_box_image,
     pred_iou_thresh = 0.88,
-    stability_score_thres = 0.95,
+    stability_score_thresh = 0.95,
     mask_threshold = 0,
     stability_score_offset = 1,
 ):
     r"""
     Filters the masks and iou_scores for the AMG algorithm.
     """
-    requires_backends("torch")
 
     if masks.shape[0] != iou_scores.shape[0]:
         raise ValueError("masks and iou_scores must have the same batch size.")
