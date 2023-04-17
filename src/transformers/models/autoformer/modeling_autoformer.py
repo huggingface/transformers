@@ -1982,7 +1982,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             )
             dec_last_hidden = dec_output.last_hidden_state
 
-            params = self.parameter_projection(dec_last_hidden[0][:, -1:] + dec_last_hidden[1][:, -1:])
+            params = self.output_params(dec_last_hidden[0][:, -1:] + dec_last_hidden[1][:, -1:])
             distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
 
