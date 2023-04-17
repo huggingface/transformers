@@ -158,7 +158,7 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
         config_path = "https://huggingface.co/Xrenya/pvt-large-224/raw/main/config.json"
     else:
         raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
-    config = PVTConfig(config_path)
+    config = PvtConfig(config_path)
     # load original model from https://github.com/whai362/PVT
     state_dict = torch.load(pvt_checkpoint, map_location="cpu")
 
