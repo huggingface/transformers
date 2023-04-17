@@ -3,6 +3,7 @@ tensorboard
 scikit-learn
 seqeval
 psutil
+git+https://github.com/huggingface/accelerate@main#egg=accelerate
 sacrebleu >= 1.4.12
 rouge-score
 tensorflow_datasets
