@@ -845,20 +845,6 @@ class SamVisionAttention(nn.Module):
 
 class SamVisionLayer(nn.Module):
     def __init__(self, config, window_size) -> None:
-        """
-        Args:
-            dim (int): Number of input channels.
-            num_attention_heads (int): Number of attention heads in each ViT block.
-            mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-            qkv_bias (bool): If True, add a learnable bias to query, key, value.
-            norm_layer (nn.Module): Normalization layer.
-            act_layer (nn.Module): Activation layer.
-            use_rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            window_size (int): Window size for window attention blocks. If it equals 0, then
-                use global attention.
-            input_size (int or None): Input resolution for calculating the relative positional
-                parameter size.
-        """
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = SamVisionAttention(config, window_size)
@@ -952,7 +938,6 @@ class SamVisionEncoder(nn.Module):
         self.patch_embed = SamPatchEmbeddings(config)
 
         self.pos_embed = None
-        # self.activation = ACT2FN[self.config.hidden_act]
         if config.use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
@@ -986,31 +971,10 @@ class SamVisionEncoder(nn.Module):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SamVisionEncoderOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, ViTMAEModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
-        >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

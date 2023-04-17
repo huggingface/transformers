@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torchvision, require_vision
 from transformers.utils import is_vision_available
 
 
@@ -28,6 +28,7 @@ if is_vision_available():
 
 
 @require_vision
+@require_torchvision
 class SamProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -70,7 +71,7 @@ class SamProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
+        input_feat_extract, _ = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
