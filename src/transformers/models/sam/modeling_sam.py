@@ -1256,7 +1256,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         input_points: Optional[torch.FloatTensor] = None,
         input_labels: Optional[torch.LongTensor] = None,
         input_boxes: Optional[torch.FloatTensor] = None,
-        mask_inputs: Optional[torch.LongTensor] = None,
+        input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
         output_hidden_states: Optional[bool] = None,
@@ -1301,7 +1301,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
             points=input_points,
             labels=input_labels,
             boxes=input_boxes,
-            masks=mask_inputs,
+            masks=input_masks,
         )
 
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
