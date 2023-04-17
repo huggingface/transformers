@@ -1841,6 +1841,30 @@ class ConvNextV2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CpmAntForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3230,6 +3254,13 @@ GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class GPTNeoXForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

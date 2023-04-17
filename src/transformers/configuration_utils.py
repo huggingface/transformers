@@ -667,6 +667,11 @@ class PretrainedConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
+        if "auto_map" in config_dict and not is_local:
+            config_dict["auto_map"] = {
+                k: (f"{pretrained_model_name_or_path}--{v}" if "--" not in v else v)
+                for k, v in config_dict["auto_map"].items()
+            }
         return config_dict, kwargs
 
     @classmethod
@@ -800,6 +805,13 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        if hasattr(self, "quantization_config"):
+            output["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
 
         self.dict_torch_dtype_to_str(output)
 

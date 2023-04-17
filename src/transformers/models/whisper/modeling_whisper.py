@@ -1432,6 +1432,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
@@ -1760,6 +1762,8 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
 
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:

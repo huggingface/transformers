@@ -83,6 +83,7 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
+    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -110,6 +111,7 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,

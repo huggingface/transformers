@@ -2313,6 +2313,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
+            # If `torch_dtype` is in the config with a torch dtype class as the value, we need to change it to string.
+            # (Although TF doesn't care about this attribute, we can't just remove it or set it to `None`.)
+            if getattr(self.config, "torch_dtype", None) is not None and not isinstance(self.config.torch_dtype, str):
+                self.config.torch_dtype = str(self.config.torch_dtype).split(".")[1]
             if signatures is None:
                 if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
                     int64_spec = {
