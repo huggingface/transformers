@@ -27,7 +27,7 @@ from PIL import Image
 
 from transformers import (
     SamConfig,
-    SamForImageSegmentation,
+    SamForMaskGeneration,
     SamImageProcessor,
     SamProcessor,
     SamVisionConfig,
@@ -150,7 +150,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     image_processor = SamImageProcessor()
 
     processor = SamProcessor(image_processor=image_processor)
-    hf_model = SamForImageSegmentation(config)
+    hf_model = SamForMaskGeneration(config)
 
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to("cuda")

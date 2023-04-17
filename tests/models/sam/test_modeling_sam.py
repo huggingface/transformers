@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SamForImageSegmentation
+    from transformers import SamForMaskGeneration
     from transformers.models.sam.modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -232,7 +232,7 @@ class SamModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = SamForImageSegmentation(config=config)
+        model = SamForMaskGeneration(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -241,7 +241,7 @@ class SamModelTester:
         self.parent.assertEqual(result.low_resolution_masks.shape[:2], (self.batch_size, 3))
 
     def create_and_check_get_image_features(self, config, pixel_values):
-        model = SamForImageSegmentation(config=config)
+        model = SamForMaskGeneration(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -262,7 +262,7 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SamForImageSegmentation,) if is_torch_available() else ()
+    all_model_classes = (SamForMaskGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -427,5 +427,5 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SamForImageSegmentation.from_pretrained(model_name)
+            model = SamForMaskGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)

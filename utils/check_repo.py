@@ -231,7 +231,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
-    "SamForImageSegmentation",
+    "SamForMaskGeneration",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",

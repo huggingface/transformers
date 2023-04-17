@@ -1206,7 +1206,7 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
-class SamForImageSegmentation(SamPreTrainedModel):
+class SamForMaskGeneration(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config) -> None:
