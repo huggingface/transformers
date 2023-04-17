@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
-from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -138,27 +137,6 @@ class SamImageProcessor(BaseImageProcessor):
         neww = int(neww + 0.5)
         newh = int(newh + 0.5)
         return (newh, neww)
-
-    def apply_coords(self, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
-        """
-        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
-        """
-        old_h, old_w = original_size
-        new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_size)
-        coords = deepcopy(coords).astype(float)
-
-        if is_bounding_box:
-            # reshape to .reshape(-1, 2, 2)
-            coords = coords.reshape(-1, 2, 2)
-
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
-        coords[..., 1] = coords[..., 1] * (new_h / old_h)
-
-        if is_bounding_box:
-            # reshape back to .reshape(-1, 4)
-            coords = coords.reshape(-1, 4)
-
-        return coords
 
     def pad_to_target_size(
         self,
