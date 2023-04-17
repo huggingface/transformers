@@ -17,7 +17,7 @@
 import math
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
-
+import random
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -256,36 +256,45 @@ def compute_segments(
 # TODO: (Amy) Move to image_transforms
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
+    video_label_ids: Dict[int, int],
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     reduce_labels: bool = False,
 ):
     if reduce_labels and ignore_index is None:
         raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
-
+    
     if reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
-
-    # Get unique ids (class or instance ids based on input)
-    all_labels = np.unique(segmentation_map)
+    
+    # Initialize a list of binary masks 
+    final_binary_masks = [np.zeros(segmentation_map.shape, dtype=bool) for label in video_label_ids]
+    
+    # Get unique ids (class or instance ids based on input) present in the video frame
+    all_frame_labels = np.unique(segmentation_map)
+    
+    all_frame_labels_ids = [video_label_ids[label] for idx,label in enumerate(all_frame_labels) if label in  video_label_ids.keys()]
 
     # Drop background label if applicable
     if ignore_index is not None:
-        all_labels = all_labels[all_labels != ignore_index]
-
+        all_frame_labels = all_frame_labels[all_frame_labels != ignore_index]
+        
     # Generate a binary mask for each object instance
-    binary_masks = [(segmentation_map == i) for i in all_labels]
-    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
+    binary_masks = [(segmentation_map == i) for i in all_frame_labels]
+    
+    for idx, mask in zip(all_frame_labels_ids, binary_masks):
+        final_binary_masks[idx] = mask
 
+    binary_masks = np.stack(final_binary_masks, axis=0)  # (num_labels, height, width)
+    
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
-        labels = np.zeros(all_labels.shape[0])
-
-        for label in all_labels:
+        labels = np.zeros(all_frame_labels.shape[0])
+        for label in all_frame_labels:
             class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
-            labels[all_labels == label] = class_id - 1 if reduce_labels else class_id
+            labels[all_frame_labels == label] = class_id - 1 if reduce_labels else class_id
     else:
-        labels = all_labels
+        labels = all_frame_labels
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
@@ -499,6 +508,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             size_divisor=size_divisor,
             default_to_square=False,
         )
+        
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
@@ -525,6 +535,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
+        video_label_ids: Dict[int, int],
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
@@ -533,13 +544,14 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
+            video_label_ids=video_label_ids,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
             reduce_labels=reduce_labels,
         )
 
-    def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
-        return self.preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
+    def __call__(self, images, segmentation_maps=None, is_train=False, **kwargs) -> BatchFeature:
+        return self.preprocess(images, segmentation_maps=segmentation_maps, is_train=is_train, **kwargs)
 
     def _preprocess(
         self,
@@ -631,8 +643,9 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: ImageInput,
+        video_frames: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
+        is_train: bool = False,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -677,9 +690,9 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("If `do_normalize` is True, `image_mean` and `image_std` must be provided.")
 
-        if not valid_images(images):
+        if not valid_images(video_frames):
             raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "Invalid frame type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
@@ -689,16 +702,54 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if not is_batched(images):
-            images = [images]
+        if not is_batched(video_frames):
+            images = [video_frames]
             segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
 
-        if segmentation_maps is not None and len(images) != len(segmentation_maps):
-            raise ValueError("Images and segmentation maps must have the same length.")
+        if segmentation_maps is not None and len(video_frames) != len(segmentation_maps):
+            raise ValueError("Video_frames and segmentation maps must have the same length.")
 
-        images = [
+        # select only 2 frames for training
+        if is_train:
+            
+            # read from config
+            sampling_frame_range = 20
+            sampling_frame_num = 2
+            sampling_frame_shuffle = False
+            
+            video_length = len(video_frames)
+
+            # choose a reference frame 
+            reference_frame = random.randrange(video_length)
+
+            start_idx_range = reference_frame - sampling_frame_range
+            start_idx = max(0, start_idx_range)
+
+            end_idx_range = reference_frame + sampling_frame_range + 1
+            end_idx = min(video_length, end_idx_range)
+
+            # create a list of frames which doesn't include the reference frame
+            selected_frame_list = list(range(start_idx, reference_frame)) + list(range(reference_frame+1, end_idx))
+            
+            # choose another frame at random from the `selected_frame_list`
+            selected_frame = np.random.choice(
+                np.array(selected_frame_list),
+                sampling_frame_num - 1
+            )
+            
+            # create a list containing the indexes of the 2 chosen frames
+            selected_frame_indexes = sorted(selected_frame.tolist() + [reference_frame])
+            
+            # shuffle the frames if shuffling is enabled
+            if sampling_frame_shuffle:
+                random.shuffle(selected_frame_indexes)
+
+            video_frames = [video_frames[frame_idx] for frame_idx in selected_frame_indexes]
+            segmentation_maps = [segmentation_maps[frame_idx] for frame_idx in selected_frame_indexes]
+
+        processed_frames = [
             self._preprocess_image(
-                image,
+                frame,
                 do_resize=do_resize,
                 size=size,
                 size_divisor=size_divisor,
@@ -710,7 +761,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                 image_std=image_std,
                 data_format=data_format,
             )
-            for image in images
+            for frame in video_frames
         ]
 
         if segmentation_maps is not None:
@@ -719,7 +770,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
+            processed_frames, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
         )
         return encoded_inputs
 
@@ -835,7 +886,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `=True` or if `pixel_mask` is in
               `self.model_input_names`).
-            - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
+            - **mask_labels** -- Optional list of mask labels of shape `(labels, num_frames, height, width)` to be fed to a model
               (when `annotations` are provided).
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
@@ -853,10 +904,21 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
         if segmentation_maps is not None:
+            
             mask_labels = []
             class_labels = []
+            video_masks = []
+            
+            # Find the unique labels present in the segmentation maps
+            video_labels = np.unique(np.stack([(np.ascontiguousarray(x)) for x in segmentation_maps]))
+            
+            # Create a mapping of labels with unique id
+            video_label_id_map = dict()
+            for idx, label in enumerate(list(video_labels)):
+                video_label_id_map[label] = idx
+
             pad_size = get_max_height_width(pixel_values_list)
-            # Convert to list of binary masks and labels
+
             for idx, segmentation_map in enumerate(segmentation_maps):
                 segmentation_map = to_numpy_array(segmentation_map)
                 if isinstance(instance_id_to_semantic_id, list):
@@ -865,7 +927,7 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                    segmentation_map, video_label_id_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
@@ -874,10 +936,16 @@ class VideoMask2FormerImageProcessor(BaseImageProcessor):
                     self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
                 ]
                 masks = np.concatenate(masks, axis=0)
-                mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
 
-            # we cannot batch them since they don't share a common class size
+                current_frame_mask = torch.from_numpy(masks)
+                video_masks.append(current_frame_mask)
+
+            # with all the unique class labels found in video frames
+            class_labels.append(torch.from_numpy(video_labels.astype(np.int64)))
+            
+            # mask_label of shape (num_labels, num_frames, height, width)
+            mask_labels.append(torch.stack(video_masks).transpose(1, 0)) 
+            
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
 
