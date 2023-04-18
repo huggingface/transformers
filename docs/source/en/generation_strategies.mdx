@@ -346,9 +346,9 @@ To enable assisted generation, set the `assistant_model` argument with a model.
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> prompt = "I look forward to"
->>> checkpoint = "gpt2"
->>> assistant_checkpoint = "distilgpt2"
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
+>>> assistant_checkpoint = "EleutherAI/pythia-160m-deduped"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -357,5 +357,5 @@ To enable assisted generation, set the `assistant_model` argument with a model.
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['I look forward to seeing you in the future."\n\n"I\'m sure you\'ll be fine']
+['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
