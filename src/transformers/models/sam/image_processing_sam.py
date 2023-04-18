@@ -69,6 +69,8 @@ class SamImageProcessor(BaseImageProcessor):
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        target_size (`int`, *optional*, defaults to `1024`):
+            Target image size used for resizing the input image.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
