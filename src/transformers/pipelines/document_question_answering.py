@@ -185,9 +185,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        image: Union["Image.Image", str],
+        images: Union[List[Union["Image.Image", str]], Union["Image.Image", str]],
         question: Optional[str] = None,
-        word_boxes: Tuple[str, List[float]] = None,
+        word_boxes_list: Optional[List[Tuple[str, List[float]]]] = None,
         **kwargs,
     ):
         """
@@ -269,7 +269,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         lang=None,
         tesseract_config="",
     ):
-
         # NOTE: This code accept mulitple images instead of a single image.
         # If a single image is an input, then convert to a list to potentially accept multiple images.
         if isinstance(input.get("image", None), list):
@@ -291,14 +290,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         #image_features = {}
         words_list = []
         boxes_list = []
-       
+        
         for image in images:
             image_features = dict()
             if image is not None:
                 # If an image processor is available, extract image features
                 if self.image_processor is not None:
                     image_features.update(self.image_processor(images=image, return_tensors=self.framework))
-                # If a feature extractor is available, extract image features
+                # If a feature extractor is available, extract image features 
                 elif self.feature_extractor is not None:
                     image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             words, boxes = None, None
@@ -323,11 +322,12 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
                         " run OCR to derive words and boxes"
                     )
-            # Add words detected in the current image
+            # Add words detected in the current image 
             words_list.extend(words)
             # Add  boxes of the words detected in the current image
             boxes_list.extend(boxes)
 
+            
         if self.tokenizer.padding_side != "right":
             raise ValueError(
                 "Document question answering only supports tokenizers whose padding side is 'right', not"
@@ -426,32 +426,41 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 }
 
     def _forward(self, model_inputs):
-        p_mask = model_inputs.pop("p_mask", None)
-        word_ids = model_inputs.pop("word_ids", None)
-        words = model_inputs.pop("words", None)
-        is_last = model_inputs.pop("is_last", False)
+        all_model_outputs = []
+        for image_model_inputs in model_inputs:
+            p_mask = image_model_inputs.pop("p_mask", None)
+            word_ids = image_model_inputs.pop("word_ids", None)
+            words = image_model_inputs.pop("words", None)
+            is_last = image_model_inputs.pop("is_last", False)
 
-        if self.model_type == ModelType.VisionEncoderDecoder:
-            model_outputs = self.model.generate(**model_inputs)
-        else:
-            model_outputs = self.model(**model_inputs)
+            if self.model_type == ModelType.VisionEncoderDecoder:
+                model_outputs = self.model.generate(**image_model_inputs)
+            else:
+                model_outputs = self.model(**image_model_inputs)
 
-        model_outputs = dict(model_outputs.items())
-        model_outputs["p_mask"] = p_mask
-        model_outputs["word_ids"] = word_ids
-        model_outputs["words"] = words
-        model_outputs["attention_mask"] = model_inputs.get("attention_mask", None)
-        model_outputs["is_last"] = is_last
-        return model_outputs
+            model_outputs = dict(model_outputs.items())
+            model_outputs["p_mask"] = p_mask
+            model_outputs["word_ids"] = word_ids
+            model_outputs["words"] = words
+            model_outputs["attention_mask"] = image_model_inputs.get("attention_mask", None)
+            model_outputs["is_last"] = is_last
+            all_model_outputs.append(model_outputs)
+
+            return all_model_outputs
+
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
+        answers = []
+    
         if self.model_type == ModelType.VisionEncoderDecoder:
-            answers = [self.postprocess_encoder_decoder_single(o) for o in model_outputs]
+            for o in model_outputs:
+                answers.extend(self.postprocess_encoder_decoder_single(o))
         else:
-            answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
+            answers.extend(self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs))
 
         answers = sorted(answers, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
         return answers
+
 
     def postprocess_encoder_decoder_single(self, model_outputs, **kwargs):
         sequence = self.tokenizer.batch_decode(model_outputs["sequences"])[0]
