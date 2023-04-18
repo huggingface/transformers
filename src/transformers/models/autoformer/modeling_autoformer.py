@@ -233,18 +233,20 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
+        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
@@ -308,14 +310,14 @@ class AutoformerValueEmbedding(nn.Module):
         return self.value_projection(x)
 
 
-# Eli to Kashif: class based on
+# Class based on
 # https://github.com/thuml/Autoformer/blob/c6a0694ff484753f2d986cc0bb1f99ee850fc1a8/layers/Autoformer_EncDec.py#L39
 # where AutoformerSeriesDecompositionLayer is series_decomp + moving_avg
 class AutoformerSeriesDecompositionLayer(nn.Module):
     """
-    Highlight the trend and the seasonal parts of the time series. Calculated as:
+    Returns the trend and the seasonal parts of the time series. Calculated as:
 
-        x_trend = AvgPool(Padding(X)) x_seasonal = X - x_trend
+        x_trend = AvgPool(Padding(X)) and x_seasonal = X - x_trend
     """
 
     def __init__(self, kernel_size):
@@ -337,7 +339,7 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
         return x_seasonal, x_trend
 
 
-# Eli to Kashif: class based on
+# Class based on
 # https://github.com/thuml/Autoformer/blob/c6a0694ff484753f2d986cc0bb1f99ee850fc1a8/layers/Autoformer_EncDec.py#L6
 # where AutoformerLayernorm is my_Layernorm
 class AutoformerLayernorm(nn.Module):
@@ -512,9 +514,6 @@ class AutoformerAttention(nn.Module):
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, channel)
         else:
             attn_weights_reshaped = None
-
-        # attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        # attn_output = torch.bmm(attn_probs, value_states)
 
         # time delay aggregation
         time_length = value_states.size(1)
@@ -786,8 +785,6 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states, trend3 = self.decomp3(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        # TODO in the original they used another projection layer to hidden_states and residual_trend:
-        #  nn.Conv1d to residual_trend and nn.Linear to hidden_states
         residual_trend = trend1 + trend2 + trend3
         residual_trend = self.trend_projection(residual_trend.permute(0, 2, 1)).transpose(1, 2)
         outputs = ((hidden_states, residual_trend),)
@@ -1148,7 +1145,10 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+                input_shape,
+                inputs_embeds.dtype,
+                device=inputs_embeds.device,
+                past_key_values_length=past_key_values_length,
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
@@ -1654,7 +1654,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
     "The Autoformer Model with a distribution head on top for time-series forecasting.",
     AUTOFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Autoformer,TIME_SERIES_TRANSFORMER->AUTOFORMER
 class AutoformerForPrediction(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
