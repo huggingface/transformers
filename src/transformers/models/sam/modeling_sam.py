@@ -1126,6 +1126,20 @@ class SamForMaskGeneration(SamPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns the image embeddings by passing the pixel values through the vision encoder.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Input pixel values
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        """
         vision_output = self.vision_encoder(
             pixel_values,
             output_attentions=output_attentions,
@@ -1143,6 +1157,21 @@ class SamForMaskGeneration(SamPreTrainedModel):
         input_boxes: Optional[torch.FloatTensor] = None,
         input_masks: Optional[torch.LongTensor] = None,
     ):
+        r"""
+        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
+
+        Args:
+            input_points (`torch.FloatTensor` of shape `(batch_size, num_points_per_image, 2)`):
+                Optional input points for the prompt encoder. The padding of the point is automatically done by the processor.
+            input_labels (`torch.LongTensor` of shape `(batch_size, num_points_per_image)`):
+                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the processor,
+                or can be fed by the user.
+            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
+                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the processor.
+                users can also pass manually the input boxes
+            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
+                Optional input masks for the prompt encoder.
+        """
         prompt_output = self.prompt_encoder(
             input_points=input_points,
             input_labels=input_labels,
