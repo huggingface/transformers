@@ -1531,7 +1531,7 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
-        if not is_sagemaker_mp_enabled() and not is_accelerate_available(partial_state=True):
+        if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
             raise ImportError(
                 "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
             )
