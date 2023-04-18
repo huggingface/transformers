@@ -317,12 +317,14 @@ class SamImageProcessor(BaseImageProcessor):
         """
         target_image_size = (self.target_size, self.target_size)
 
-            # reshaped_input_sizes = [image.shape[:2] for image in images]
+        # reshaped_input_sizes = [image.shape[:2] for image in images]
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F.interpolate(interpolated_mask,[*original_size.numpy()],mode="bilinear",align_corners=False)
+            interpolated_mask = F.interpolate(
+                interpolated_mask, [*original_size.numpy()], mode="bilinear", align_corners=False
+            )
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
