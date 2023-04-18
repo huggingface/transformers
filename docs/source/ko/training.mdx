@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# 사전 학습된 모델 미세 튜닝하기[[Fine-tune a pretrained model]]
+# 사전 학습된 모델 미세 튜닝하기[[finetune-a-pretrained-model]]
 
 [[open-in-colab]]
 
@@ -22,7 +22,7 @@ specific language governing permissions and limitations under the License.
 
 <a id='data-processing'></a>
 
-## 데이터셋 준비[[Prepare a dataset]]
+## 데이터셋 준비[[prepare-a-dataset]]
 
 <Youtube id="_BZearw7f0w"/>
 
@@ -71,7 +71,7 @@ specific language governing permissions and limitations under the License.
 <pt>
 <Youtube id="nvBXf7s7vTI"/>
 
-## 파이토치 Trainer로 훈련하기[[Train with PyTorch Trainer]]
+## 파이토치 Trainer로 훈련하기[[train-with-pytorch-trainer]]
 
 🤗 Transformers는 🤗 Transformers 모델 훈련에 최적화된 [`Trainer`] 클래스를 제공하여 훈련 루프를 직접 작성하지 않고도 쉽게 훈련을 시작할 수 있습니다. [`Trainer`] API는 로깅(logging), 경사 누적(gradient accumulation), 혼합 정밀도(mixed precision) 등 다양한 훈련 옵션과 기능을 지원합니다.
 
@@ -90,7 +90,7 @@ specific language governing permissions and limitations under the License.
 
 </Tip>
 
-### 하이퍼파라미터 훈련[[Training hyperparameters]]
+### 하이퍼파라미터 훈련[[training-hyperparameters]]
 
 다음으로 정할 수 있는 모든 하이퍼파라미터와 다양한 훈련 옵션을 활성화하기 위한 플래그를 포함하는 [`TrainingArguments`] 클래스를 생성합니다.
 
@@ -104,7 +104,7 @@ specific language governing permissions and limitations under the License.
 >>> training_args = TrainingArguments(output_dir="test_trainer")
 ```
 
-### Evaluate
+### 평가 하기[[evaluate]]
 
 [`Trainer`]는 훈련 중에 모델 성능을 자동으로 평가하지 않습니다. 평가 지표를 계산하고 보고할 함수를 [`Trainer`]에 전달해야 합니다. 
 [🤗 Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리는 [`evaluate.load`](https://huggingface.co/spaces/evaluate-metric/accuracy) 함수로 로드할 수 있는 간단한 [`accuracy`]함수를 제공합니다 (자세한 내용은 [둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요):
@@ -133,7 +133,7 @@ specific language governing permissions and limitations under the License.
 >>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
 ```
 
-### Trainer
+### 훈련 하기[[trainer]]
 
 모델, 훈련 인수, 훈련 및 테스트 데이터셋, 평가 함수가 포함된 [`Trainer`] 객체를 만듭니다:
 
@@ -158,11 +158,11 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="rnTGBy2ax1c"/>
 
-## Keras로 텐서플로우 모델 훈련하기[[Train a TensorFlow model with Keras]]
+## Keras로 텐서플로우 모델 훈련하기[[train-a-tensorflow-model-with-keras]]
 
 Keras API를 사용하여 텐서플로우에서 🤗 Transformers 모델을 훈련할 수도 있습니다!
 
-### Keras용 데이터 로드[[Loading data for Keras]]
+### Keras용 데이터 로드[[loading-data-for-keras]]
 
 Keras API로 🤗 Transformers 모델을 학습시키려면 데이터셋을 Keras가 이해할 수 있는 형식으로 변환해야 합니다.
 데이터 세트가 작은 경우, 전체를 NumPy 배열로 변환하여 Keras로 전달하면 됩니다.
@@ -217,7 +217,7 @@ model.fit(tokenized_data, labels)
 토큰화된 배열과 레이블을 메모리에 완전히 로드하고 NumPy는 "들쭉날쭉한" 배열을 처리하지 않기 때문에,
 모든 토큰화된 샘플을 전체 데이터셋에서 가장 긴 샘플의 길이만큼 패딩해야 합니다. 이렇게 하면 배열이 훨씬 더 커지고 이 패딩 토큰으로 인해 학습 속도도 느려집니다!
 
-### 데이터를 tf.data.Dataset으로 로드하기[[Loading data as a tf.data.Dataset]]
+### 데이터를 tf.data.Dataset으로 로드하기[[loading-data-as-a-tfdatadataset]]
 
 학습 속도가 느려지는 것을 피하려면 데이터를 `tf.data.Dataset`으로 로드할 수 있습니다. 원한다면 직접
 `tf.data` 파이프라인을 직접 작성할 수도 있지만, 이 작업을 간편하게 수행하는 수 있는 두 가지 방법이 있습니다:
@@ -266,7 +266,7 @@ model.fit(tf_dataset)
 
 <a id='pytorch_native'></a>
 
-## 기본 파이토치로 훈련하기[[Train in native PyTorch]]
+## 기본 파이토치로 훈련하기[[train-in-native-pytorch]]
 
 <frameworkcontent>
 <pt>
@@ -309,7 +309,7 @@ torch.cuda.empty_cache()
 >>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 ```
 
-### DataLoader[[DataLoader]]
+### DataLoader[[dataloader]]
 
 훈련 및 테스트 데이터셋에 대한 'DataLoader'를 생성하여 데이터 배치를 반복할 수 있습니다:
 
@@ -328,7 +328,7 @@ torch.cuda.empty_cache()
 >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-### 옵티마이저 및 학습 속도 스케줄러[[Optimizer and learning rate scheduler]]
+### 옵티마이저 및 학습 속도 스케줄러[[optimizer-and-learning-rate-scheduler]]
 
 옵티마이저와 학습 속도 스케줄러를 생성하여 모델을 미세 조정합니다. 파이토치에서 제공하는 [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) 옵티마이저를 사용해 보겠습니다:
 
@@ -367,7 +367,7 @@ torch.cuda.empty_cache()
 
 이제 훈련할 준비가 되었습니다! 🥳
 
-### 훈련 루프[[Training loop]]
+### 훈련 루프[[training-loop]]
 
 훈련 진행 상황을 추적하려면 [tqdm](https://tqdm.github.io/) 라이브러리를 사용하여 트레이닝 단계 수에 진행률 표시줄을 추가하세요:
 
@@ -390,7 +390,7 @@ torch.cuda.empty_cache()
 ...         progress_bar.update(1)
 ```
 
-### 평가하기[[Evaluate]]
+### 평가 하기[[evaluate]]
 
 [`Trainer`]에 평가 함수를 추가한 방법과 마찬가지로, 훈련 루프를 직접 작성할 때도 동일한 작업을 수행해야 합니다. 하지만 이번에는 각 에포크가 끝날 때마다 평가지표를 계산하여 보고하는 대신, [`~evaluate.add_batch`]를 사용하여 모든 배치를 누적하고 맨 마지막에 평가지표를 계산합니다.
 
@@ -415,7 +415,7 @@ torch.cuda.empty_cache()
 
 <a id='additional-resources'></a>
 
-## 추가 자료[[Additional resources]]
+## 추가 자료[[additional-resources]]
 
 더 많은 미세 튜닝 예제는 다음을 참조하세요:
 
