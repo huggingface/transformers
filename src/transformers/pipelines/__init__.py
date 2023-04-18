@@ -42,7 +42,6 @@ from ..utils import (
     logging,
 )
 from .audio_classification import AudioClassificationPipeline
-from .automatic_mask_generation import AutomaticMaskGenerationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -385,17 +384,6 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
         "type": "video",
     },
-    "automatic-mask-generation": {
-        "impl": AutomaticMaskGenerationPipeline,
-        "tf": (),
-        "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {
-            "model": {
-                "pt": ("ybelkada/sam-vit-h", "6348709"),
-            }
-        },
-        "type": "image",
-    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -479,7 +467,6 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
             - `"zero-shot-object-detection"`
-            - `"automatic-mask-generation"`
 
     Returns:
         (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
