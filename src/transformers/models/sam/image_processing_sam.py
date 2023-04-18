@@ -606,9 +606,6 @@ def _filter_masks(
     mask_threshold=0,
     stability_score_offset=1,
 ):
-    r"""
-    TODO doc Filters the masks and iou_scores for the AMG algorithm.
-    """
     original_height, original_width = original_sizes
     iou_scores = iou_scores.flatten(0, 1)
     masks = masks.flatten(0, 1)
