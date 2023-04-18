@@ -238,3 +238,28 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+
+@require_torch
+class GPTNeoXLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_gptneox(self):
+        tokenizer = AutoTokenizer.from_pretrained("kelechi/neox_alibi_1.4b_test")
+        for checkpointing in [True, False]:
+            model = GPTNeoXALiBiForCausalLM.from_pretrained("kelechi/neox_alibi_1.4b_test")
+
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
+            model.to(torch_device)
+
+            inputs = tokenizer("I have a brown egg and", return_tensors="pt").to(torch_device)
+            expected_output = (
+                "I have a brown egg and a white egg. I have a brown egg and a white egg. I have a brown egg and"
+            )
+
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            output_str = tokenizer.batch_decode(output_ids)[0]
+
+            self.assertEqual(output_str, expected_output)
