@@ -1432,6 +1432,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
                 for i in range(self.config.num_hidden_layers)
             ]
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
@@ -1496,6 +1497,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->BigBird
 class FlaxBigBirdEncoder(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1551,6 +1553,7 @@ class FlaxBigBirdPredictionHeadTransform(nn.Module):
         return self.LayerNorm(hidden_states)
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLMPredictionHead with Bert->BigBird
 class FlaxBigBirdLMPredictionHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1685,6 +1688,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -1889,6 +1893,7 @@ class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
 append_call_sample_docstring(FlaxBigBirdModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
 class FlaxBigBirdForPreTrainingModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1990,6 +1995,7 @@ append_replace_return_docstrings(
 )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLMModule with Bert->BigBird
 class FlaxBigBirdForMaskedLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -2152,6 +2158,7 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoiceModule with Bert->BigBird
 class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -2250,6 +2257,7 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassificationModule with Bert->BigBird
 class FlaxBigBirdForTokenClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
