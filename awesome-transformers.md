@@ -208,8 +208,14 @@ The goal of this project is to create a learning based system that takes an imag
 
 ## [open_clip](https://github.com/mlfoundations/open_clip)
 
-OpenCLIP is an open source implementation of OpenAI's CLIP (Contrastive Language-Image Pre-training).
-The goal of this repository is to enable training models with contrastive image-text supervision, and to investigate their properties such as robustness to distribution shift. The starting point is an implementation of CLIP that matches the accuracy of the original CLIP models when trained on the same dataset. Specifically, a ResNet-50 model trained with our codebase on OpenAI's 15 million image subset of YFCC achieves 32.7% top-1 accuracy on ImageNet.
+OpenCLIP is an open source implementation of OpenAI's CLIP.
+
+The goal of this repository is to enable training models with contrastive image-text supervision, and to investigate their properties such as robustness to distribution shift. 
+The starting point is an implementation of CLIP that matches the accuracy of the original CLIP models when trained on the same dataset. 
+
+Specifically, a ResNet-50 model trained with this codebase on OpenAI's 15 million image subset of YFCC achieves 32.7% top-1 accuracy on ImageNet.
+
+Keywords: CLIP, Open-source, Contrastice, Image-text
 
 ## [dalle-playground](https://github.com/saharmor/dalle-playground)
 
