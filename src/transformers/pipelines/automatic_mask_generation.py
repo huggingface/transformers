@@ -196,16 +196,17 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         crop_boxes, grid_points, cropped_images = _generate_crop_boxes(
             image, target_size, n_layers, overlap_ratio, points_per_crop, scale_per_layer
         )
+        grid_points = grid_points[None, :, :, :]
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt").to("cuda")
 
         pixel_values = model_inputs["pixel_values"]
-        input_labels = torch.ones_like(grid_points[:, :, 0], dtype=torch.long)
+        input_labels = torch.ones_like(grid_points[:, :, :, 0], dtype=torch.long)
 
         if points_per_batch:
-            for i in range(0, grid_points.shape[0], points_per_batch):
-                batched_points = grid_points[i : i + points_per_batch, :, :]
-                labels = input_labels[i : i + points_per_batch]
-                is_last = i == grid_points.shape[0] - points_per_batch
+            for i in range(0, grid_points.shape[1], points_per_batch):
+                batched_points = grid_points[:, i : i + points_per_batch, :, :]
+                labels = input_labels[:, i : i + points_per_batch]
+                is_last = i == grid_points.shape[1] - points_per_batch
                 yield {
                     "pixel_values": pixel_values,
                     "input_points": batched_points,
@@ -259,21 +260,20 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         all_masks = []
         all_boxes = []
         for model_output in model_outputs:
-            low_resolution_masks = model_output.pop("low_resolution_masks")
-            crop_boxes = model_output.pop("crop_boxes")
-            iou_scores = model_output.pop("iou_scores").flatten(0, 1)
+            low_resolution_masks = model_output.pop("low_resolution_masks")[0]
+            crop_boxes = model_output.pop("crop_boxes")[0]
+            iou_scores = model_output.pop("iou_scores")[0]
 
             masks = self.image_processor.postprocess_masks(
                 raw_image, low_resolution_masks, mask_threshold, binarize=False
             )
-            masks = masks.flatten(0, 1)
 
             masks, iou_scores, boxes = _filter_masks(
                 masks,
                 iou_scores,
                 original_height,
                 original_width,
-                crop_boxes[0],
+                crop_boxes,
                 pred_iou_thresh,
                 stability_score_thresh,
                 mask_threshold,

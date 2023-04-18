@@ -209,15 +209,15 @@ class SamAttention(nn.Module):
         self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, n_tokens, channel = hidden_states.shape
+        batch, point_batch_size, n_tokens, channel = hidden_states.shape
         c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch, n_tokens, num_attention_heads, c_per_head)
+        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
         return hidden_states.transpose(1, 2)
 
-    def _recombine_heads(self, hidden_states: Tensor) -> Tensor:
+    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
         batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(batch, n_tokens, n_heads * c_per_head)
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
@@ -225,6 +225,7 @@ class SamAttention(nn.Module):
         key = self.k_proj(key)
         value = self.v_proj(value)
 
+        point_batch_size = query.shape[1]
         # Separate into heads
         query = self._separate_heads(query, self.num_attention_heads)
         key = self._separate_heads(key, self.num_attention_heads)
@@ -232,13 +233,13 @@ class SamAttention(nn.Module):
 
         # SamAttention
         _, _, _, c_per_head = query.shape
-        attn = query @ key.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
+        attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
 
         # Get output
         out = attn @ value
-        out = self._recombine_heads(out)
+        out = self._recombine_heads(out, point_batch_size)
         out = self.out_proj(out)
 
         return out
@@ -362,8 +363,8 @@ class SamTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1)
+        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(0)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(0)
 
         # Prepare queries
         queries = point_embeddings
@@ -469,33 +470,33 @@ class SamMaskDecoder(nn.Module):
         Returns:
           torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
         """
+        batch_size, num_channels, height, width = image_embeddings.shape
+        point_batch_size = sparse_prompt_embeddings.shape[1]
+
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
-        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
+        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
         # image_embeddings = image_embeddings.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
         image_embeddings = image_embeddings + dense_prompt_embeddings
 
-        batch_size, num_channels, height, width = image_embeddings.shape
-
         # Run the transformer, image_positional_embedding are consumed
         point_embedding, image_embeddings, attentions = self.transformer(
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
-        iou_token_out = point_embedding[:, 0, :]
-        mask_tokens_out = point_embedding[:, 1 : (1 + self.num_mask_tokens), :]
+        iou_token_out = point_embedding[:, :, 0, :]
+        mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
 
-        point_batch_size = point_embedding.shape[0]
         # Upscale mask embeddings and predict masks using the mask tokens
-        image_embeddings = image_embeddings.transpose(1, 2).view(
-            point_batch_size, num_channels, height, width
+        image_embeddings = image_embeddings.transpose(2, 3).reshape(
+            batch_size * point_batch_size, num_channels, height, width
         )
 
         upscaled_embedding = self.upscale_conv1(image_embeddings)
@@ -505,12 +506,12 @@ class SamMaskDecoder(nn.Module):
         hyper_in_list = []
         for i in range(self.num_mask_tokens):
             current_mlp = self.output_hypernetworks_mlps[i]
-            hyper_in_list += [current_mlp(mask_tokens_out[:, i, :])]
-        hyper_in = torch.stack(hyper_in_list, dim=1)
+            hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
+        hyper_in = torch.stack(hyper_in_list, dim=2)
 
-        batch_size, num_channels, height, width = upscaled_embedding.shape
-        upscaled_embedding = upscaled_embedding.view(batch_size, num_channels, height * width)
-        masks = (hyper_in @ upscaled_embedding).view(batch_size, -1, height, width)
+        _, num_channels, height, width = upscaled_embedding.shape
+        upscaled_embedding = upscaled_embedding.reshape(batch_size, point_batch_size, num_channels, height * width)
+        masks = (hyper_in @ upscaled_embedding).reshape(batch_size, point_batch_size, -1, height, width)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
@@ -520,8 +521,8 @@ class SamMaskDecoder(nn.Module):
             mask_slice = slice(1, None)
         else:
             mask_slice = slice(0, 1)
-        masks = masks[:, mask_slice, :, :]
-        iou_pred = iou_pred[:, mask_slice]
+        masks = masks[:, :, mask_slice, :, :]
+        iou_pred = iou_pred[:, :, mask_slice]
 
         outputs = (masks, iou_pred)
 
@@ -552,7 +553,7 @@ class SamPositionalEmbedding(nn.Module):
         coordinates = coordinates.to(self.positional_embedding.dtype)
         coordinates = coordinates @ self.positional_embedding
         coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x C shape
+        # outputs d_1 x ... x d_n x channel shape
         return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
@@ -599,10 +600,10 @@ class SamPromptEncoder(nn.Module):
         """Embeds point prompts."""
         points = points + 0.5  # Shift to center of pixel
         if pad:
-            padding_point = torch.zeros((points.shape[0], 1, 2), device=points.device)
-            padding_label = -torch.ones((labels.shape[0], 1), device=labels.device)
-            points = torch.cat([points, padding_point], dim=1)
-            labels = torch.cat([labels, padding_label], dim=1)
+            padding_point = torch.zeros_like(points, device=points.device)
+            padding_label = -torch.ones_like(labels, device=labels.device)
+            points = torch.cat([points, padding_point], dim=2)
+            labels = torch.cat([labels, padding_label], dim=2)
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
@@ -650,12 +651,12 @@ class SamPromptEncoder(nn.Module):
         sparse_embeddings = None
         target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
-            batch_size = input_points[0].shape[0] if len(input_points.shape) == 2 else input_points.shape[0]
+            batch_size, point_batch_size = input_points.shape[:2]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
-            sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
-            sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
+            sparse_embeddings = torch.empty((batch_size, point_batch_size, 0, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=2)
         if input_boxes is not None:
             batch_size = input_boxes.shape[0]
             box_embeddings = self._embed_boxes(input_boxes)
@@ -696,7 +697,9 @@ class SamVisionAttention(nn.Module):
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
-            assert input_size is not None, "Input size must be provided if using relative positional encoding."
+            if input_size is None:
+                raise ValueError("Input size must be provided if using relative positional encoding.")
+
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
@@ -709,7 +712,7 @@ class SamVisionAttention(nn.Module):
         Args:
             q_size (int): size of query q.
             k_size (int): size of key k.
-            rel_pos (Tensor): relative position embeddings (L, C).
+            rel_pos (Tensor): relative position embeddings (L, channel).
 
         Returns:
             Extracted positional embeddings according to relative positions.
@@ -749,48 +752,65 @@ class SamVisionAttention(nn.Module):
         https:
             //github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
         # noqa B950
-            attn (Tensor): attention map. q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-            rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis. rel_pos_w (Tensor): relative
-            position embeddings (Lw, C) for width axis. q_size (Tuple): spatial sequence size of query q with (q_h,
-            q_w). k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
+            attn (Tensor):
+                attention map. q (Tensor): query q in the attention layer with shape (batch_size, query_height *
+                query_width, channel).
+            rel_pos_h (Tensor):
+                relative position embeddings (Lh, channel) for height axis.
+            rel_pos_w (Tensor):
+                relative position embeddings (Lw, channel) for width axis.
+            q_size (Tuple):
+                spatial sequence size of query q with (query_height, query_width).
+            k_size (Tuple):
+                spatial sequence size of key k with (key_height, key_width).
 
         Returns:
             attn (Tensor): attention map with added relative positional embeddings.
         """
-        q_h, q_w = q_size
-        k_h, k_w = k_size
-        Rh = self.get_rel_pos(q_h, k_h, rel_pos_h)
-        Rw = self.get_rel_pos(q_w, k_w, rel_pos_w)
+        query_height, query_width = q_size
+        key_height, key_width = k_size
+        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
+        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
 
-        B, _, dim = query.shape
-        r_q = query.reshape(B, q_h, q_w, dim)
-        rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
-        rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
+        batch_size, _, dim = query.shape
+        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
+        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
+        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
 
-        attn = (attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).view(
-            B, q_h * q_w, k_h * k_w
+        attn = (
+            attn.reshape(batch_size, query_height, query_width, key_height, key_width)
+            + rel_h[:, :, :, :, None]
+            + rel_w[:, :, :, None, :]
         )
+        attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
 
         return attn
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
-        B, H, W, _ = hidden_states.shape
-        # qkv with shape (3, B, nHead, H * W, C)
-        qkv = self.qkv(hidden_states).reshape(B, H * W, 3, self.num_attention_heads, -1).permute(2, 0, 3, 1, 4)
-        # q, k, v with shape (B * nHead, H * W, C)
-        q, k, v = qkv.reshape(3, B * self.num_attention_heads, H * W, -1).unbind(0)
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, batch_size, nHead, height * width, channel)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (batch_size * nHead, height * width, channel)
+        q, k, v = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
         attn_weights = (q * self.scale) @ k.transpose(-2, -1)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(attn_weights, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+            attn_weights = self.add_decomposed_rel_pos(
+                attn_weights, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = (
-            (attn_probs @ v).view(B, self.num_attention_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
-        )
+
+        attn_output = (attn_probs @ v).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+
         attn_output = self.proj(attn_output)
 
         if output_attentions:
@@ -814,45 +834,56 @@ class SamVisionLayer(nn.Module):
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
-            hidden_states (tensor): input tokens with [B, H, W, C]. window_size (int): window size.
+            hidden_states (tensor): input tokens with [batch_size, height, width, channel]. window_size (int): window
+            size.
 
         Returns:
-            windows: windows after partition with [B * num_windows, window_size, window_size, C]. (Hp, Wp): padded
-            height and width before partition
+            windows: windows after partition with [batch_size * num_windows, window_size, window_size, channel].
+            (pad_height, pad_width): padded height and width before partition
         """
-        B, H, W, C = hidden_states.shape
+        batch_size, height, width, channel = hidden_states.shape
 
-        pad_h = (window_size - H % window_size) % window_size
-        pad_w = (window_size - W % window_size) % window_size
+        pad_h = (window_size - height % window_size) % window_size
+        pad_w = (window_size - width % window_size) % window_size
         if pad_h > 0 or pad_w > 0:
             hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
-        Hp, Wp = H + pad_h, W + pad_w
+        pad_height, pad_width = height + pad_h, width + pad_w
 
-        hidden_states = hidden_states.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-        return windows, (Hp, Wp)
+        hidden_states = hidden_states.reshape(
+            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
+        )
+        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, pad_hw: Tuple[int, int], hw: Tuple[int, int]
+        self, windows: torch.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
     ) -> torch.Tensor:
         """
         Args:
         Window unpartition into original sequences and removing padding.
-            hidden_states (tensor): input tokens with [B * num_windows, window_size, window_size, C]. window_size
-            (int): window size. pad_hw (Tuple): padded height and width (Hp, Wp). hw (Tuple): original height and width
-            (H, W) before padding.
+            hidden_states (tensor):
+                input tokens with [batch_size * num_windows, window_size, window_size, channel].
+            window_size (int):
+                window size.
+            padding_shape (Tuple):
+                padded height and width (pad_height, pad_width).
+            original_shape (Tuple): original height and width (height, width) before padding.
 
         Returns:
-            hidden_states: unpartitioned sequences with [B, H, W, C].
+            hidden_states: unpartitioned sequences with [batch_size, height, width, channel].
         """
-        Hp, Wp = pad_hw
-        H, W = hw
-        B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-        hidden_states = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-        hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+        pad_height, pad_width = padding_shape
+        height, width = original_shape
+        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        hidden_states = windows.reshape(
+            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
+        )
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+        )
 
-        if Hp > H or Wp > W:
-            hidden_states = hidden_states[:, :H, :W, :].contiguous()
+        if pad_height > height or pad_width > width:
+            hidden_states = hidden_states[:, :height, :width, :].contiguous()
         return hidden_states
 
     def forward(
@@ -865,8 +896,8 @@ class SamVisionLayer(nn.Module):
         hidden_states = self.layer_norm1(hidden_states)
         # Window partition
         if self.window_size > 0:
-            H, W = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, pad_hw = self.window_partition(hidden_states, self.window_size)
+            height, width = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
 
         hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
@@ -874,7 +905,7 @@ class SamVisionLayer(nn.Module):
         )
         # Reverse window partition
         if self.window_size > 0:
-            hidden_states = self.window_unpartition(hidden_states, self.window_size, pad_hw, (H, W))
+            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
 
         hidden_states = residual + hidden_states
         layernorm_output = self.layer_norm2(hidden_states)
@@ -1155,7 +1186,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         x_embed = x_embed / size
 
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
-        return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # C x H x W
+        return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
 
     @torch.no_grad()
     def get_image_embeddings(

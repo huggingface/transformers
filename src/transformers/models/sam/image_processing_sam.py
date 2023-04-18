@@ -324,7 +324,7 @@ class SamImageProcessor(BaseImageProcessor):
         original_sizes = torch.LongTensor([image.shape[:2] for image in images])
 
         # TODO: potentially remove this for batched decoding
-        # TODO create _infer_mask_shape
+        # TODO create _infer_mask_shape TODO
         if self.do_resize:
             images = [self.resize(image=image) for image in images]
 
@@ -335,6 +335,8 @@ class SamImageProcessor(BaseImageProcessor):
 
             if len(masks.shape) == 3:
                 masks = masks.unsqueeze(0)
+            if len(masks.shape) == 5:
+                masks = masks.flatten(0, 1)
 
             masks = F.interpolate(masks, target_image_size, mode="bilinear", align_corners=False)
             masks = masks[..., : input_sizes[0], : input_sizes[1]]
@@ -352,7 +354,6 @@ class SamImageProcessor(BaseImageProcessor):
         output_masks = []
         if original_sizes.shape[0] > 1:
             for i in range(original_sizes.shape[0]):
-
                 interpolated_mask = F.interpolate(
                     masks[i].unsqueeze(0),
                     (original_sizes[i][0].item(), original_sizes[i][1].item()),
@@ -653,6 +654,8 @@ def _filter_masks(
     r"""
     TODO doc Filters the masks and iou_scores for the AMG algorithm.
     """
+    iou_scores = iou_scores.flatten(0, 1)
+    masks = masks.flatten(0, 1)
 
     if masks.shape[0] != iou_scores.shape[0]:
         raise ValueError("masks and iou_scores must have the same batch size.")
