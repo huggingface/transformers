@@ -18,7 +18,6 @@ Convert SAM checkpoints from the original repository.
 import argparse
 import re
 
-import matplotlib.pyplot as plt
 import numpy as np
 import requests
 import torch
@@ -32,33 +31,6 @@ from transformers import (
     SamProcessor,
     SamVisionConfig,
 )
-
-
-def show_mask(mask, ax, random_color=False):
-    if random_color:
-        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    else:
-        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
-
-
-def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels == 1]
-    neg_points = coords[labels == 0]
-    ax.scatter(
-        pos_points[:, 0], pos_points[:, 1], color="green", marker="*", s=marker_size, edgecolor="white", linewidth=1.25
-    )
-    ax.scatter(
-        neg_points[:, 0], neg_points[:, 1], color="red", marker="*", s=marker_size, edgecolor="white", linewidth=1.25
-    )
-
-
-def show_box(box, ax):
-    x0, y0 = box[0], box[1]
-    w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2))
 
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -177,18 +149,6 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         with torch.no_grad():
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
-        # TODO raw image no longer used
-        masks = processor.postprocess_masks(raw_image, output.low_resolution_masks)
-
-        for i, (mask, score) in enumerate(zip(masks.squeeze(), scores)):
-            mask = mask.cpu().detach()
-            plt.imshow(np.array(raw_image))
-            show_mask(mask, plt.gca())
-            plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-            plt.axis("off")
-            plt.show()
-
-            plt.savefig(f"temp_{i}.png")
 
         assert scores[-1].item() == 0.9712603092193604
 
@@ -213,68 +173,8 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         with torch.no_grad():
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
-        masks = processor.postprocess_masks(raw_image, output.low_resolution_masks)
 
         assert scores[-1].item() == 0.9936047792434692
-
-        for i, (mask, score) in enumerate(zip(masks.squeeze(), scores)):
-            mask = mask.cpu().detach()
-            plt.imshow(np.array(raw_image))
-            show_mask(mask, plt.gca())
-            plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-            plt.axis("off")
-            plt.show()
-
-            plt.savefig(f"temp_{i}.png")
-
-        # # AMG
-        # crop_boxes, points_per_crop, cropped_images = processor.generate_crop_boxes(raw_image)
-
-        # inputs = processor(images=cropped_images, return_tensors="pt").to("cuda")
-        # image_embeddings = hf_model.get_image_embeddings(inputs["pixel_values"])
-
-        # batch_size = 64
-        # original_height, original_width = np.array(raw_image).shape[:2]
-        # total_iou_scores = []
-        # total_masks = []
-        # total_boxes = []
-        # for i in range(0, points_per_crop.shape[1], batch_size):
-        #     # bs x 1 x 2
-        #     batched_points = points_per_crop[:, i : i + batch_size, :].to("cuda").permute(1, 0, 2)
-        #     # bs x 1
-        #     input_labels = torch.ones_like(batched_points[:, :, 0], dtype=torch.long)
-        #     with torch.no_grad():
-        #         model_output = hf_model(
-        #             image_embeddings=image_embeddings,
-        #             input_points=batched_points,
-        #             input_labels=input_labels,
-        #         )
-        #     iou_scores = model_output.iou_scores.flatten(0, 1)
-        #     masks = processor.postprocess_masks(raw_image, model_output.low_resolution_masks, binarize=False).flatten(
-        #         0, 1
-        #     )
-
-        #     masks, iou_scores, boxes = processor.filter_masks_for_amg(
-        #         masks, iou_scores, original_height, original_width, crop_boxes[0]
-        #     )
-        #     total_iou_scores.append(iou_scores)
-        #     total_masks.extend(masks)
-        #     total_boxes.append(boxes)
-
-        # total_iou_scores = torch.cat(total_iou_scores)
-        # total_boxes = torch.cat(total_boxes)
-
-        # final_masks, final_rle_masks, final_iou_scores, final_boxes = processor.postprocess_masks_for_amg(
-        #     total_masks, total_iou_scores, total_boxes
-        # )
-        # plt.imshow(np.array(raw_image))
-        # ax = plt.gca()
-        # for mask in final_masks:
-        #     show_mask(mask, ax=ax, random_color=True)
-        # plt.axis("off")
-        # plt.show()
-
-        # plt.savefig("amg.png")
 
 
 if __name__ == "__main__":
