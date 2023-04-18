@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 from numpy.fft import fft
 
+from ...audio_utils import spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -132,87 +133,23 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         return weights
 
-    def fram_wave(self, waveform, center=True):
-        """
-        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
-        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
-        new frame.
-
-        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
-        """
-        frames = []
-        for i in range(0, waveform.shape[0] + 1, self.hop_length):
-            half_window = (self.n_fft - 1) // 2 + 1
-            if center:
-                start = i - half_window if i > half_window else 0
-                end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-
-                frame = waveform[start:end]
-
-                if start == 0:
-                    padd_width = (-i + half_window, 0)
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-                elif end == waveform.shape[0]:
-                    padd_width = (0, (i - waveform.shape[0] + half_window))
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            else:
-                frame = waveform[i : i + self.n_fft]
-                frame_width = frame.shape[0]
-                if frame_width < waveform.shape[0]:
-                    frame = np.lib.pad(
-                        frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
-                    )
-
-            frames.append(frame)
-        return np.stack(frames, 0)
-
-    def stft(self, frames, window):
-        """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`.
-        """
-        frame_size = frames.shape[1]
-        fft_size = self.n_fft
-
-        if fft_size is None:
-            fft_size = frame_size
-
-        if fft_size < frame_size:
-            raise ValueError("FFT size must greater or equal the frame size")
-        # number of FFT bins to store
-        num_fft_bins = (fft_size >> 1) + 1
-
-        data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
-        fft_signal = np.zeros(fft_size)
-
-        for f, frame in enumerate(frames):
-            if window is not None:
-                np.multiply(frame, window, out=fft_signal[:frame_size])
-            else:
-                fft_signal[:frame_size] = frame
-            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-        return data.T
-
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
         implementation with 1e-5 tolerance.
         """
-        window = np.hanning(self.n_fft + 1)[:-1]
-
-        frames = self.fram_wave(waveform)
-        stft = self.stft(frames, window=window)
-        magnitudes = np.abs(stft[:, :-1]) ** 2
-
-        filters = self.mel_filters
-        mel_spec = filters @ magnitudes
-
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
+        log_spec = spectrogram(
+            waveform,
+            window_function(self.n_fft, "hann"),
+            frame_length=self.n_fft,
+            hop_length=self.hop_length,
+            power=2.0,
+            mel_filters=self.mel_filters.T,
+            log_mel="log10",
+        )
+        log_spec = log_spec[:, :-1]
         log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-
         return log_spec
 
     @staticmethod
