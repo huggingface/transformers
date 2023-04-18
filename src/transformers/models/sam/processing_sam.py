@@ -27,7 +27,6 @@ from .image_processing_sam import _normalize_coordinates
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 
 class SamProcessor(ProcessorMixin):
@@ -81,6 +80,26 @@ class SamProcessor(ProcessorMixin):
             input_boxes=input_boxes,
         )
 
+        encoding_image_processor = self._normalize_and_convert(
+            encoding_image_processor,
+            original_sizes,
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            return_tensors=return_tensors,
+        )
+
+        return encoding_image_processor
+
+    def _normalize_and_convert(
+        self,
+        encoding_image_processor,
+        original_sizes,
+        input_points=None,
+        input_labels=None,
+        input_boxes=None,
+        return_tensors="pt",
+    ):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
                 input_points = [
@@ -189,21 +208,6 @@ class SamProcessor(ProcessorMixin):
             input_boxes = None
 
         return input_points, input_labels, input_boxes
-
-    def pad_to_target_size(
-        self,
-        image: np.ndarray,
-        target_size: int = None,
-    ):
-        target_size = target_size if target_size is not None else self.target_size
-        image = torch.from_numpy(image).permute(2, 0, 1)
-
-        height, width = image.shape[-2:]
-        padh = target_size - height
-        padw = target_size - width
-        image = F.pad(image, (0, padw, 0, padh))
-
-        return image.numpy()
 
     @property
     def model_input_names(self):
