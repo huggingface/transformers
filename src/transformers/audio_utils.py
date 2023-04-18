@@ -260,9 +260,9 @@ def window_function(
 
     if name == "boxcar":
         window = np.ones(length)
-    elif name == "hamming":
+    elif name in ["hamming", "hamming_window"]:
         window = np.hamming(length)
-    elif name == "hann":
+    elif name in ["hann", "hann_window"]:
         window = np.hanning(length)
     else:
         raise ValueError(f"Unknown window function '{name}'")
