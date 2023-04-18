@@ -232,8 +232,9 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "conversational": BlenderbotForConditionalGeneration,
             "feature-extraction": BlenderbotModel,
             "summarization": BlenderbotForConditionalGeneration,
-            "text2text-generation": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,
+            "text2text-generation": BlenderbotForConditionalGeneration,
+            "translation": BlenderbotForConditionalGeneration,
         }
         if is_torch_available()
         else {}

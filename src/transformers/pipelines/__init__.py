@@ -32,7 +32,6 @@ from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoIma
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
@@ -139,9 +138,13 @@ if is_torch_available():
         AutoModelForZeroShotImageClassification,
         AutoModelForZeroShotObjectDetection,
     )
+
+
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+
 
 logger = logging.get_logger(__name__)
 
@@ -495,7 +498,7 @@ def pipeline(
     task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
@@ -785,7 +788,6 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
@@ -868,7 +870,8 @@ def pipeline(
                 tokenizer_kwargs = tokenizer[1]
             else:
                 tokenizer_identifier = tokenizer
-                tokenizer_kwargs = model_kwargs
+                tokenizer_kwargs = model_kwargs.copy()
+                tokenizer_kwargs.pop("torch_dtype", None)
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs

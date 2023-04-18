@@ -196,7 +196,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self._extra_commit_description = extra_commit_description
         self._override_model_class = override_model_class
 
-    def get_inputs(self, pt_model, config):
+    def get_inputs(self, pt_model, tf_dummy_inputs, config):
         """
         Returns the right inputs for the model, based on its signature.
         """
@@ -255,7 +255,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         tf_input = processor(**processor_inputs, return_tensors="tf")
 
         # Extra input requirements, in addition to the input modality
-        if config.is_encoder_decoder or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder")):
+        if (
+            config.is_encoder_decoder
+            or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"))
+            or "decoder_input_ids" in tf_dummy_inputs
+        ):
             decoder_input_ids = np.asarray([[1], [1]], dtype=int) * (pt_model.config.decoder_start_token_id or 0)
             pt_input.update({"decoder_input_ids": torch.tensor(decoder_input_ids)})
             tf_input.update({"decoder_input_ids": tf.convert_to_tensor(decoder_input_ids)})
@@ -306,18 +310,24 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             except AttributeError:
                 raise AttributeError(f"The TensorFlow equivalent of {architectures[0]} doesn't exist in transformers.")
 
-        # Load models and acquire a basic input compatible with the model.
+        # Check the TF dummy inputs to see what keys we need in the forward pass
+        tf_from_pt_model = tf_class.from_config(config)
+        tf_dummy_inputs = tf_from_pt_model.dummy_inputs
+
+        del tf_from_pt_model  # Try to keep only one model in memory at a time
+
+        # Load the model and get some basic inputs
         pt_model = pt_class.from_pretrained(self._local_dir)
         pt_model.eval()
 
-        pt_input, tf_input = self.get_inputs(pt_model, config)
+        pt_input, tf_input = self.get_inputs(pt_model, tf_dummy_inputs, config)
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         del pt_model  # will no longer be used, and may have a large memory footprint
 
         tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
-        tf_from_pt_outputs = tf_from_pt_model(**tf_input, output_hidden_states=True)
+        tf_from_pt_outputs = tf_from_pt_model(**tf_input, output_hidden_states=True, training=False)
 
         # Confirms that cross loading PT weights into TF worked.
         crossload_differences = self.find_pt_tf_differences(pt_outputs, tf_from_pt_outputs)
