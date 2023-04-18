@@ -441,7 +441,7 @@ def prepare_image():
     return raw_image
 
 
-# @slow
+@slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")

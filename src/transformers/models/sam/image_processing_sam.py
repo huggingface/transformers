@@ -107,15 +107,6 @@ class SamImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        n_layers: int = 0,
-        overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        scale_per_layer: Optional[List[int]] = 1,
-        amg_pred_iou_thresh: Optional[float] = 0.88,
-        amg_stability_score_offset: Optional[float] = 1.0,
-        amg_stability_score_thresh: Optional[float] = 0.95,
-        amg_box_nms_thresh: Optional[float] = 0.7,
-        mask_threshold: Optional[float] = 0.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -132,15 +123,6 @@ class SamImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
         self.target_size = target_size
-        self.n_layers = n_layers
-        self.overlap_ratio = overlap_ratio
-        self.points_per_crop = points_per_crop
-        self.scale_per_layer = scale_per_layer
-        self.amg_pred_iou_thresh = amg_pred_iou_thresh
-        self.amg_box_nms_thresh = amg_box_nms_thresh
-        self.mask_threshold = mask_threshold
-        self.amg_stability_score_offset = amg_stability_score_offset
-        self.amg_stability_score_thresh = amg_stability_score_thresh
 
     def pad_to_target_size(
         self,
