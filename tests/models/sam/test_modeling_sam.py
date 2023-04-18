@@ -238,8 +238,8 @@ class SamModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 3))
-        self.parent.assertEqual(result.low_resolution_masks.shape[:2], (self.batch_size, 3))
+        self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
+        self.parent.assertEqual(result.low_resolution_masks.shape[:3], (self.batch_size, 1, 3))
 
     def create_and_check_get_image_features(self, config, pixel_values):
         model = SamForMaskGeneration(config=config)
@@ -362,7 +362,7 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
             196,
             196,
         )
-        expected_mask_decoder_attention_shape = (self.model_tester.batch_size, 144, 32)
+        expected_mask_decoder_attention_shape = (1, self.model_tester.batch_size, 144, 32)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
