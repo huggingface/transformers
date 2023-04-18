@@ -29,7 +29,8 @@ class GPTNeoXALiBiConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXALiBiModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of a 1.4b GPTNeoXALiBi [kelechi/neox_alibi_1.4b_test](https://huggingface.co/kelechi/neox_alibi_1.4b_test) architecture.
+    with the defaults will yield a similar configuration to that of a 1.4b GPTNeoXALiBi
+    [kelechi/neox_alibi_1.4b_test](https://huggingface.co/kelechi/neox_alibi_1.4b_test) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

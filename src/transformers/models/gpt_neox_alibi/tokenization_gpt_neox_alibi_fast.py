@@ -93,7 +93,6 @@ class GPTNeoXALiBiTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
-
     def __init__(
         self,
         vocab_file=None,

@@ -17,7 +17,9 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {"configuration_gpt_neox_alibi": ["GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXALiBiConfig"]}
+_import_structure = {
+    "configuration_gpt_neox_alibi": ["GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXALiBiConfig"]
+}
 
 try:
     if not is_tokenizers_available():

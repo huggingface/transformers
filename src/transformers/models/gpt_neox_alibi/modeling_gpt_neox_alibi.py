@@ -45,12 +45,12 @@ GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "kelechi/neox_alibi_1.4b_test",
 ]
 
+
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
-    Copied from the transformers.models.bloom.modeling_bloom
-    Link to paper: https://arxiv.org/abs/2108.12409 ALiBi tensor is not causal as the original paper mentions, it
-    relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
-    `softmax(l+a) = softmax(l)`. Based on
+    Copied from the transformers.models.bloom.modeling_bloom Link to paper: https://arxiv.org/abs/2108.12409 ALiBi
+    tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for quick
+    implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
     TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
 
@@ -120,7 +120,7 @@ class GPTNeoXALiBiAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
-        self.register_buffer("bias", None, persistent = False)
+        self.register_buffer("bias", None, persistent=False)
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -137,9 +137,7 @@ class GPTNeoXALiBiAttention(nn.Module):
     ):
         has_layer_past = layer_past is not None
         seq_length = attention_mask.shape[-1]
-        bias = torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool)).view(
-                1, 1, seq_length, seq_length
-            )
+        bias = torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool)).view(1, 1, seq_length, seq_length)
         self.register_buffer("bias", bias, persistent=False)
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
@@ -212,7 +210,7 @@ class GPTNeoXALiBiAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        
+
         attn_scores = alibi.baddbmm(
             batch1=query,
             batch2=key.transpose(1, 2),
@@ -220,7 +218,7 @@ class GPTNeoXALiBiAttention(nn.Module):
             alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
-        
+
         mask_value = torch.finfo(attn_scores.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -360,7 +358,6 @@ GPT_NEOX_ALIBI_INPUTS_DOCSTRING = r"""
     "The bare GPTNeoXALiBi Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEOX_ALIBI_START_DOCSTRING,
 )
-
 class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -430,12 +427,11 @@ class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
 
         if past_key_values is None:
             past_key_values = tuple([None] * self.config.num_hidden_layers)
-        
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
         hidden_states = inputs_embeds
-
 
         # Attention mask.
         if attention_mask is None:
@@ -447,7 +443,7 @@ class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
 
             # Create alibi positional embedding
             alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
-    
+
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -531,8 +527,10 @@ class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
             attentions=all_attentions,
         )
 
+
 @add_start_docstrings(
-    """GPTNeoXALiBi Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_ALIBI_START_DOCSTRING
+    """GPTNeoXALiBi Model with a `language modeling` head on top for CLM fine-tuning.""",
+    GPT_NEOX_ALIBI_START_DOCSTRING,
 )
 class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -667,4 +665,3 @@ class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
-    
