@@ -32,7 +32,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
-        "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/tokenizer.json",
+        "kelechi/neox_alibi_1.4b_test": "https://huggingface.co/kelechi/neox_alibi_1.4b_test/resolve/main/tokenizer.json",
     },
 }
 

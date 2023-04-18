@@ -37,10 +37,13 @@ from .configuration_gpt_neox_alibi import GPTNeoXALiBiConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
+_CHECKPOINT_FOR_DOC = "kelechi/neox_alibi_1.4b_test"
+_REAL_CHECKPOINT_FOR_DOC = "kelechi/neox_alibi_1.4b_test"
 _CONFIG_FOR_DOC = "GPTNeoXALiBiConfig"
 
+GPT_NEOX_ALIBI_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "kelechi/neox_alibi_1.4b_test",
+]
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
@@ -593,10 +596,10 @@ class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
         >>> from transformers import AutoTokenizer, GPTNeoXALiBiForCausalLM, GPTNeoXALiBiConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-        >>> config = GPTNeoXALiBiConfig.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("kelechi/neox_alibi_1.4b_test")
+        >>> config = GPTNeoXALiBiConfig.from_pretrained("kelechi/neox_alibi_1.4b_test")
         >>> config.is_decoder = True
-        >>> model = GPTNeoXALiBiForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
+        >>> model = GPTNeoXALiBiForCausalLM.from_pretrained("kelechi/neox_alibi_1.4b_test", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
