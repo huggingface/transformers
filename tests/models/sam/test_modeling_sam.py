@@ -598,5 +598,4 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
-
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))

@@ -217,7 +217,9 @@ class SamAttention(nn.Module):
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
         batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+        return hidden_states.reshape(
+            batch // max(1, point_batch_size), point_batch_size, n_tokens, n_heads * c_per_head
+        )
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
@@ -471,12 +473,15 @@ class SamMaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
         """
         batch_size, num_channels, height, width = image_embeddings.shape
-        point_batch_size = sparse_prompt_embeddings.shape[1]
+        point_batch_size = max(1, sparse_prompt_embeddings.shape[1])
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
+        if sparse_prompt_embeddings.sum().item() != 0:
+            tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
+        else:
+            tokens = output_tokens
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
@@ -599,8 +604,10 @@ class SamPromptEncoder(nn.Module):
         """Embeds point prompts."""
         points = points + 0.5  # Shift to center of pixel
         if pad:
-            padding_point = torch.zeros_like(points, device=points.device)
-            padding_label = -torch.ones_like(labels, device=labels.device)
+            target_point_shape = (points.shape[0], points.shape[1], 1, points.shape[-1])
+            target_labels_shape = (points.shape[0], points.shape[1], 1)
+            padding_point = torch.zeros(target_point_shape, device=points.device)
+            padding_label = -torch.ones(target_labels_shape, device=labels.device)
             points = torch.cat([points, padding_point], dim=2)
             labels = torch.cat([labels, padding_label], dim=2)
         input_shape = (self.input_image_size, self.input_image_size)
@@ -623,6 +630,7 @@ class SamPromptEncoder(nn.Module):
         corner_embedding = self.shared_embedding(coords, input_shape)
         corner_embedding[:, 0, :] += self.point_embed[2].weight
         corner_embedding[:, 1, :] += self.point_embed[3].weight
+        corner_embedding = corner_embedding.unsqueeze(1)
         return corner_embedding
 
     def forward(
@@ -659,9 +667,7 @@ class SamPromptEncoder(nn.Module):
         if input_boxes is not None:
             batch_size = input_boxes.shape[0]
             box_embeddings = self._embed_boxes(input_boxes)
-            if sparse_embeddings is None:
-                sparse_embeddings = torch.empty((batch_size, 0, self.hidden_size), device=target_device)
-            sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
+            sparse_embeddings = box_embeddings
         if input_masks is not None:
             dense_embeddings = self.mask_embed(input_masks)
         else:
@@ -670,7 +676,7 @@ class SamPromptEncoder(nn.Module):
             )
 
         if sparse_embeddings is None:
-            sparse_embeddings = torch.empty((dense_embeddings.shape[0], 0, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.empty((dense_embeddings.shape[0], 0, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
@@ -1272,7 +1278,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
             all_attentions = all_attentions + (None,)
 
         if input_points is not None and input_labels is None:
-            input_labels = torch.ones_like(input_points[:, :, 0], dtype=torch.int, device=input_points.device)
+            input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
 
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
