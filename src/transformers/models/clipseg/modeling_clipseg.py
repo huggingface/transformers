@@ -1480,6 +1480,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to the correct device to enable PP
+            labels = labels.to(logits.device)
             loss_fn = nn.BCEWithLogitsLoss()
             loss = loss_fn(logits, labels)
 
