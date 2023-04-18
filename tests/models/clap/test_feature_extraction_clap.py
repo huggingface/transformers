@@ -160,7 +160,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
         return [x["array"] for x in speech_samples]
 
-    def integration_test_fusion(self):
+    def test_integration_fusion(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [
@@ -206,14 +206,14 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # fmt: on
         MEL_BIN = [963, 963, 161]
         input_speech = self._load_datasamples(1)
-        feaure_extractor = ClapFeatureExtractor()
+        feature_extractor = ClapFeatureExtractor()
         for padding, EXPECTED_VALUES, idx_in_mel in zip(
             ["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES, MEL_BIN
         ):
-            input_features = feaure_extractor(input_speech, return_tensors="pt", padding=padding).input_features
-            self.assertTrue(torch.allclose(input_features[0, idx_in_mel], EXPECTED_VALUES, atol=1e-4))
+            input_features = feature_extractor(input_speech, return_tensors="pt", padding=padding).input_features
+            self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel], EXPECTED_VALUES, atol=1e-4))
 
-    def integration_test_rand_trunc(self):
+    def test_integration_rand_trunc(self):
         # TODO in this case we should set the seed and use a longer audio to properly see the random truncation
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -259,9 +259,9 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = ClapFeatureExtractor()
+        feature_extractor = ClapFeatureExtractor()
         for padding, EXPECTED_VALUES in zip(["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES):
-            input_features = feaure_extractor(
+            input_features = feature_extractor(
                 input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding
             ).input_features
             self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_VALUES, atol=1e-4))
