@@ -1872,6 +1872,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if "auto_map" in init_kwargs and not _is_local:
             new_auto_map = {}
+            # For backward compatibility with odl format.
+            if isinstance(init_kwargs["auto_map"], (tuple, list)):
+                init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
             for key, value in init_kwargs["auto_map"].items():
                 if isinstance(value, (list, tuple)):
                     new_auto_map[key] = [f"{pretrained_model_name_or_path}--{v}" for v in value]

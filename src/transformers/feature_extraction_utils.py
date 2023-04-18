@@ -469,6 +469,12 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
+        if "auto_map" in feature_extractor_dict and not is_local:
+            feature_extractor_dict["auto_map"] = {
+                k: (f"{pretrained_model_name_or_path}--{v}" if "--" not in v else v)
+                for k, v in feature_extractor_dict["auto_map"].items()
+            }
+
         return feature_extractor_dict, kwargs
 
     @classmethod
