@@ -22,6 +22,7 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_torch_available
+from .image_processing_sam import _normalize_coordinates
 
 
 if is_torch_available():
@@ -47,6 +48,7 @@ class SamProcessor(ProcessorMixin):
         super().__init__(image_processor)
         self.current_processor = self.image_processor
         self.point_pad_value = -10
+        self.target_size = self.image_processor.target_size
 
     def __call__(
         self,
@@ -71,6 +73,9 @@ class SamProcessor(ProcessorMixin):
 
         original_sizes = encoding_image_processor.pop("original_sizes")
 
+        if isinstance(original_sizes, torch.Tensor):
+            original_sizes = original_sizes.numpy()
+
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
             input_points=input_points,
             input_labels=input_labels,
@@ -80,10 +85,12 @@ class SamProcessor(ProcessorMixin):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
                 # TODO deal better with this case
-                input_points = [self.normalize_coordinates(point, original_sizes[0]) for point in input_points]
+                input_points = [
+                    _normalize_coordinates(self.target_size, point, original_sizes[0]) for point in input_points
+                ]
             else:
                 input_points = [
-                    self.normalize_coordinates(point, original_size)
+                    _normalize_coordinates(self.target_size, point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
 
@@ -108,11 +115,12 @@ class SamProcessor(ProcessorMixin):
             if len(original_sizes) != len(input_boxes):
                 # TODO deal better with this case
                 input_boxes = [
-                    self.normalize_coordinates(box, original_sizes[0], is_bounding_box=True) for box in input_boxes
+                    _normalize_coordinates(self.target_size, box, original_sizes[0], is_bounding_box=True)
+                    for box in input_boxes
                 ]
             else:
                 input_boxes = [
-                    self.normalize_coordinates(box, original_size, is_bounding_box=True)
+                    _normalize_coordinates(self.target_size, box, original_size, is_bounding_box=True)
                     for box, original_size in zip(input_boxes, original_sizes)
                 ]
             input_boxes = np.array(input_boxes)
