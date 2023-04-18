@@ -17,11 +17,21 @@ import json
 import math
 import os
 import shutil
+import warnings
 
 import torch
 
-from transformers import LlamaConfig, LlamaForCausalLM
+from transformers import LlamaConfig, LlamaForCausalLM, LlamaTokenizer
 
+
+try:
+    from transformers import LlamaTokenizerFast
+except ImportError as e:
+    warnings.warn(e)
+    warnings.warn(
+        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
+    )
+    LlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -34,7 +44,7 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import LlamaForCausalLM, LlamaForTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer
 
 model = LlamaForCausalLM.from_pretrained("/output/path")
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
@@ -94,7 +104,7 @@ def write_model(model_path, input_base_path, model_size):
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     if model_size == "7B":
-        # Not shared
+        # Not sharded
         # (The sharded implementation would also work, but this is simpler.)
         loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
     else:
@@ -232,20 +242,11 @@ def write_model(model_path, input_base_path, model_size):
 
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
-    print(f"Fetching the tokenizer from {input_tokenizer_path}.")
-    os.makedirs(tokenizer_path, exist_ok=True)
-    write_json({}, os.path.join(tokenizer_path, "special_tokens_map.json"))
-    write_json(
-        {
-            "bos_token": "",
-            "eos_token": "",
-            "model_max_length": int(1e30),
-            "tokenizer_class": "LlamaTokenizer",
-            "unk_token": "",
-        },
-        os.path.join(tokenizer_path, "tokenizer_config.json"),
-    )
-    shutil.copyfile(input_tokenizer_path, os.path.join(tokenizer_path, "tokenizer.model"))
+    # Initialize the tokenizer based on the `spm` model
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
+    tokenizer = tokenizer_class(input_tokenizer_path)
+    tokenizer.save_pretrained(tokenizer_path)
 
 
 def main():
@@ -269,10 +270,8 @@ def main():
             input_base_path=os.path.join(args.input_dir, args.model_size),
             model_size=args.model_size,
         )
-    write_tokenizer(
-        tokenizer_path=args.output_dir,
-        input_tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
-    )
+    spm_path = os.path.join(args.input_dir, "tokenizer.model")
+    write_tokenizer(args.output_dir, spm_path)
 
 
 if __name__ == "__main__":

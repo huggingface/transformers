@@ -564,7 +564,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
         >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
         >>> word_offsets[:4]
-        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.88}, {'word': 'A', 'start_time': 2.12, 'end_time': 2.14}, {'word': 'MILE', 'start_time': 2.26, 'end_time': 2.46}]
+        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.66, 'end_time': 1.9}, {'word': 'MILISANDRA', 'start_time': 2.26, 'end_time': 2.9}, {'word': 'LOOK', 'start_time': 3.0, 'end_time': 3.16}]
         ```"""
 
         from pyctcdecode.constants import (
