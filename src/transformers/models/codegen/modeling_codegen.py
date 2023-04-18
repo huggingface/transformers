@@ -192,14 +192,16 @@ class CodeGenAttention(nn.Module):
 
         embed_positions = self.embed_positions
         if position_ids is None:
-            past_length = layer_past[0].size(-2)
+            if layer_past is not None:
+                past_length = layer_past[0].size(-2)
+            else:
+                past_length = 0
             position_ids = self.position_ids[past_length:(hidden_states[-1]+past_lenth)]
             position_ids = position_ids.unsqueeze(0).view(-1, hidden_states[-1])
             
         if embed_positions.device != position_ids.device:
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
-            
 
         sincos = embed_positions[position_ids]
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
