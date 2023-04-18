@@ -2705,7 +2705,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model,
                     dtype=torch_dtype if not load_in_8bit else torch.int8,
                     low_zero=(device_map == "balanced_low_0"),
-                    max_memory=max_memory,
                     **kwargs,
                 )
             kwargs["max_memory"] = max_memory
