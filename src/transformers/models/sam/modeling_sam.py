@@ -1233,6 +1233,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict=True,
+        **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
         Args:

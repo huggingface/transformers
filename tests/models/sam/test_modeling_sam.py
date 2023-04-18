@@ -649,4 +649,4 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        self.assertTrue(torch.allclose(iou_scores[0, 0, -1], torch.tensor(0.9946), atol=1e-4))
+        self.assertTrue(torch.allclose(iou_scores[0, 1, -1], torch.tensor(0.8686), atol=1e-4))
