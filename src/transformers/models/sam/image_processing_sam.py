@@ -517,7 +517,7 @@ def _batched_mask_to_box(masks):
 
     # Normalize shape to CxHxW
     shape = masks.shape
-    h, w = shape[-2:]
+    height, width = shape[-2:]
     if len(shape) > 2:
         masks = masks.flatten(0, -3)
     else:
@@ -525,16 +525,16 @@ def _batched_mask_to_box(masks):
 
     # Get top and bottom edges
     in_height, _ = torch.max(masks, dim=-1)
-    in_height_coords = in_height * torch.arange(h, device=in_height.device)[None, :]
+    in_height_coords = in_height * torch.arange(height, device=in_height.device)[None, :]
     bottom_edges, _ = torch.max(in_height_coords, dim=-1)
-    in_height_coords = in_height_coords + h * (~in_height)
+    in_height_coords = in_height_coords + height * (~in_height)
     top_edges, _ = torch.min(in_height_coords, dim=-1)
 
     # Get left and right edges
     in_width, _ = torch.max(masks, dim=-2)
-    in_width_coords = in_width * torch.arange(w, device=in_width.device)[None, :]
+    in_width_coords = in_width * torch.arange(width, device=in_width.device)[None, :]
     right_edges, _ = torch.max(in_width_coords, dim=-1)
-    in_width_coords = in_width_coords + w * (~in_width)
+    in_width_coords = in_width_coords + width * (~in_width)
     left_edges, _ = torch.min(in_width_coords, dim=-1)
 
     # If the mask is empty the right edge will be to the left of the left edge.
@@ -557,7 +557,7 @@ def _mask_to_rle_pytorch(tensor):
     Encodes masks to an uncompressed RLE, in the format expected by pycoco tools.
     """
     # Put in fortran order and flatten h,w
-    b, h, w = tensor.shape
+    batch_size, height, width = tensor.shape
     tensor = tensor.permute(0, 2, 1).flatten(1)
 
     # Compute change indices
@@ -566,33 +566,33 @@ def _mask_to_rle_pytorch(tensor):
 
     # Encode run length
     out = []
-    for i in range(b):
+    for i in range(batch_size):
         cur_idxs = change_indices[change_indices[:, 0] == i, 1]
         cur_idxs = torch.cat(
             [
                 torch.tensor([0], dtype=cur_idxs.dtype, device=cur_idxs.device),
                 cur_idxs + 1,
-                torch.tensor([h * w], dtype=cur_idxs.dtype, device=cur_idxs.device),
+                torch.tensor([height * width], dtype=cur_idxs.dtype, device=cur_idxs.device),
             ]
         )
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if tensor[i, 0] == 0 else [0]
         counts.extend(btw_idxs.detach().cpu().tolist())
-        out.append({"size": [h, w], "counts": counts})
+        out.append({"size": [height, width], "counts": counts})
     return out
 
 
 def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     """Compute a binary mask from an uncompressed RLE."""
-    h, w = rle["size"]
-    mask = np.empty(h * w, dtype=bool)
+    height, width = rle["size"]
+    mask = np.empty(height * width, dtype=bool)
     idx = 0
     parity = False
     for count in rle["counts"]:
         mask[idx : idx + count] = parity
         idx += count
         parity ^= True
-    mask = mask.reshape(w, h)
+    mask = mask.reshape(width, height)
     return mask.transpose()  # Put in C order
 
 
