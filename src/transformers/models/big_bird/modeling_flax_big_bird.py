@@ -1553,7 +1553,6 @@ class FlaxBigBirdPredictionHeadTransform(nn.Module):
         return self.LayerNorm(hidden_states)
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLMPredictionHead with Bert->BigBird
 class FlaxBigBirdLMPredictionHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
