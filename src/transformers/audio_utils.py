@@ -428,6 +428,9 @@ def spectrogram(
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
     log_mel: Optional[str] = None,
+    reference: float = 1.0,
+    min_value: float = 1e-10,
+    db_range: Optional[float] = None,
     dtype: np.dtype = np.float32,
 ) -> np.ndarray:
     """
@@ -475,9 +478,9 @@ def spectrogram(
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
-                spectrogram = amplitude_to_db(spectrogram)
+                spectrogram = amplitude_to_db(spectrogram, reference, min_value, db_range)
             elif power == 2.0:
-                spectrogram = power_to_db(spectrogram)
+                spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
             else:
                 raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
         else:

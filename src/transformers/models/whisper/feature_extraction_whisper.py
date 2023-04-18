@@ -19,7 +19,6 @@ import copy
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-from numpy.fft import fft
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
