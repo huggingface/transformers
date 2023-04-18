@@ -877,19 +877,6 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # init input tensors if not passed
-        if token_type_ids is None:
-            token_type_ids = jnp.zeros_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        if head_mask is None:
-            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
-
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
@@ -909,11 +896,11 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
             outputs = self.module.apply(
                 inputs,
-                jnp.array(input_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                position_ids=jnp.array(position_ids, dtype="i4"),
-                head_mask=jnp.array(head_mask, dtype="i4"),
+                input_ids,
+                attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 deterministic=not train,
@@ -936,11 +923,11 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         else:
             outputs = self.module.apply(
                 inputs,
-                jnp.array(input_ids, dtype="i4"),
-                jnp.array(attention_mask, dtype="i4"),
-                token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                position_ids=jnp.array(position_ids, dtype="i4"),
-                head_mask=jnp.array(head_mask, dtype="i4"),
+                input_ids,
+                attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
                 deterministic=not train,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -977,10 +964,22 @@ class FlaxBertModule(nn.Module):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        if head_mask is None:
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+        
         # make sure `token_type_ids` is correctly initialized when not passed
         if token_type_ids is None:
             token_type_ids = jnp.zeros_like(input_ids)
@@ -988,6 +987,12 @@ class FlaxBertModule(nn.Module):
         # make sure `position_ids` is correctly initialized when not passed
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+
+        input_ids = input_ids.astype("i4")
+        attention_mask = attention_mask.astype("i4")
+        token_type_ids = token_type_ids.astype("i4")
+        position_ids = position_ids.astype("i4")
+        head_mask = head_mask.astype("i4")
 
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
