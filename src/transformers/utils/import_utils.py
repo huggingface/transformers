@@ -575,7 +575,7 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(partial_state=False):
+def is_accelerate_available(check_partial_state=False):
     accelerate_available = importlib.util.find_spec("accelerate") is not None
     if accelerate_available:
         if partial_state:

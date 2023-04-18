@@ -1533,7 +1533,7 @@ class TrainingArguments:
         logger.info("PyTorch: setting up devices")
         if not is_sagemaker_mp_enabled() and not is_accelerate_available(partial_state=True):
             raise ImportError(
-                "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install accelerate>=0.17.0`"
+                "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
             )
         if self.no_cuda:
             self.distributed_state = PartialState(cpu=True)
