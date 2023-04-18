@@ -27,7 +27,6 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -44,6 +43,8 @@ from ...utils import (
 
 if is_vision_available():
     import PIL
+
+    from ...image_utils import PILImageResampling
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms

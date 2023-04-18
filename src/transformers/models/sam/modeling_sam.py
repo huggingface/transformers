@@ -28,7 +28,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -800,20 +800,20 @@ class SamVisionAttention(nn.Module):
             .permute(2, 0, 3, 1, 4)
         )
         # q, k, v with shape (batch_size * nHead, height * width, channel)
-        q, k, v = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
-        attn_weights = (q * self.scale) @ k.transpose(-2, -1)
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
 
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output = (attn_probs @ v).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
         attn_output = self.proj(attn_output)
@@ -1067,21 +1067,6 @@ SAM_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SAM_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
-            details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 
 SAM_INPUTS_DOCSTRING = r"""
     Args:
@@ -1127,6 +1112,11 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings(
+    "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
+    " optional 2D location and bounding boxes.",
+    SAM_START_DOCSTRING,
+)
 class SamForMaskGeneration(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
