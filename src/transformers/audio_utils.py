@@ -329,8 +329,8 @@ def stft(
             The windowing function to apply, including zero-padding if necessary. The actual window length may be
             shorter than `frame_length`, but we're assuming the array has already been zero-padded.
         frame_length (`int`):
-            The length of the analysis frames in samples. With librosa this is always equal to `fft_length` but we
-            also allow smaller sizes.
+            The length of the analysis frames in samples. With librosa this is always equal to `fft_length` but we also
+            allow smaller sizes.
         hop_length (`int`):
             The stride between successive analysis frames in samples.
         fft_length (`int`, *optional*):
@@ -399,7 +399,7 @@ def stft(
         buffer[:frame_length] = waveform[timestep : timestep + frame_length]
 
         if preemphasis is not None:
-            buffer[1 : frame_length] -= preemphasis * buffer[:frame_length - 1]
+            buffer[1:frame_length] -= preemphasis * buffer[: frame_length - 1]
             buffer[0] *= 1 - preemphasis
 
         buffer[:frame_length] *= window
@@ -447,9 +447,9 @@ def spectrogram(
 
     Args:
         log_mel (`str`, *optional*):
-            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take the
-            natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be used when
-            `power` is not `None`.
+            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take
+            the natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be
+            used when `power` is not `None`.
         dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the spectrogram tensor.
 
