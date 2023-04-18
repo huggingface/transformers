@@ -1296,8 +1296,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
             all_attentions = all_attentions + (None,)
 
         if input_points is not None and input_labels is None:
-            # TODO: @younesbelkada fix this
-            input_labels = torch.ones(input_points.shape[0], dtype=torch.int, device=input_points.device)
+            input_labels = torch.ones_like(input_points[:, :, 0], dtype=torch.int, device=input_points.device)
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             input_points=input_points,

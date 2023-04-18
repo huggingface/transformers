@@ -441,7 +441,7 @@ def prepare_image():
     return raw_image
 
 
-@slow
+# @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
@@ -481,6 +481,17 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
 
+        # With no label
+        input_points = [[[400, 650]]]
+
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
+
     def test_inference_mask_generation_two_points(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
         processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
@@ -496,6 +507,15 @@ class SamModelIntegrationTest(unittest.TestCase):
         inputs = processor(
             images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
+
+        # no labels
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
