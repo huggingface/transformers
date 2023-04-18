@@ -34,6 +34,7 @@ from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoder
 
 logger = logging.get_logger(__name__)
 
+_CONFIG_FOR_DOC = "SamConfig"
 _CHECKPOINT_FOR_DOC = "facebook/sam-vit-h"
 
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -47,7 +48,8 @@ SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class SamVisionEncoderOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
 
     Args:
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -74,64 +76,6 @@ class SamVisionEncoderOutput(ModelOutput):
 
 
 @dataclass
-class SamPromptEncoderOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class SamMaskEncoderOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
 class SamImageSegmentationOutput(ModelOutput):
     """
     Base class for Segment-Anything model's output
@@ -141,6 +85,18 @@ class SamImageSegmentationOutput(ModelOutput):
             The iou scores of the predicted masks.
         low_resolution_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
             The predicted low resolutions masks. Needs to be post-processed by the processor
+        vision_attentions  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     iou_scores: torch.FloatTensor = None
@@ -230,9 +186,9 @@ class SamLayerNorm(nn.Module):
         return x
 
 
-class SamTwoWayTransformerAttention(nn.Module):
+class SamAttention(nn.Module):
     """
-    An attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
     values.
     """
 
@@ -253,14 +209,15 @@ class SamTwoWayTransformerAttention(nn.Module):
         self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        b, n, c = hidden_states.shape
-        hidden_states = hidden_states.reshape(b, n, num_attention_heads, c // num_attention_heads)
-        return hidden_states.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+        batch, n_tokens, channel = hidden_states.shape
+        c_per_head = channel // num_attention_heads
+        hidden_states = hidden_states.reshape(batch, n_tokens, num_attention_heads, c_per_head)
+        return hidden_states.transpose(1, 2)
 
     def _recombine_heads(self, hidden_states: Tensor) -> Tensor:
-        b, n_heads, n_tokens, c_per_head = hidden_states.shape
+        batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+        return hidden_states.reshape(batch, n_tokens, n_heads * c_per_head)
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
@@ -290,36 +247,34 @@ class SamTwoWayTransformerAttention(nn.Module):
 class SamTwoWayAttentionBlock(nn.Module):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
         """
-        A transformer block with four layers: (1) self-attention of sparse inputs, (2) cross attention of sparse inputs
-        to dense inputs, (3) mlp block on sparse inputs, and (4) cross attention of dense inputs to sparse inputs.
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
 
         Arguments:
-          hidden_size (int): the channel dimension of the embeddings
-          num_attention_heads (int): the number of heads in the attention layers
-          mlp_dim (int): the hidden dimension of the mlp block
-          activation (nn.Module): the activation of the mlp block
-          skip_first_layer_pe (bool): skip the PE on the first layer
+            config (`SamMaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            attention_downsample_rate (*optionalk*, int, default to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
+            skip_first_layer_pe (*optional*, bool, default to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
         """
         super().__init__()
 
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = SamTwoWayTransformerAttention(config, downsample_rate=1)
+        self.self_attn = SamAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = SamTwoWayTransformerAttention(
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_token_to_image = SamAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.mlp = SamMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SamTwoWayTransformerAttention(
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_image_to_token = SamAttention(config, downsample_rate=attention_downsample_rate)
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
@@ -384,14 +339,14 @@ class SamTwoWayTransformer(nn.Module):
         for i in range(self.num_hidden_layers):
             self.layers.append(SamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
-        self.final_attn_token_to_image = SamTwoWayTransformerAttention(config)
+        self.final_attn_token_to_image = SamAttention(config)
         self.layer_norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
-        image_embedding: Tensor,
-        image_position_embedding: Tensor,
-        point_embedding: Tensor,
+        point_embeddings: Tensor,
+        image_embeddings: Tensor,
+        image_positional_embeddings: Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -404,23 +359,23 @@ class SamTwoWayTransformer(nn.Module):
 
         all_attentions = ()
 
-        if image_embedding is None:
-            raise ValueError("You have to specify image_embedding")
+        if image_embeddings is None:
+            raise ValueError("You have to specify an image_embedding")
 
-        image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
-        image_position_embedding = image_position_embedding.flatten(2).permute(0, 2, 1)
+        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1)
 
         # Prepare queries
-        queries = point_embedding
-        keys = image_embedding
+        queries = point_embeddings
+        keys = image_embeddings
 
         # Apply transformer blocks and final layernorm
         for layer in self.layers:
             queries, keys, attention_outputs = layer(
                 queries=queries,
                 keys=keys,
-                query_point_embedding=point_embedding,
-                key_point_embedding=image_position_embedding,
+                query_point_embedding=point_embeddings,
+                key_point_embedding=image_positional_embeddings,
                 output_attentions=output_attentions,
             )
 
@@ -428,8 +383,8 @@ class SamTwoWayTransformer(nn.Module):
                 all_attentions = all_attentions + (attention_outputs,)
 
         # Apply the final attenion layer from the points to the image
-        query = queries + point_embedding
-        key = keys + image_position_embedding
+        query = queries + point_embeddings
+        key = keys + image_positional_embeddings
 
         attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
 
@@ -453,7 +408,7 @@ class SamFeedForward(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.proj_in(hidden_states)
         hidden_states = self.activation(hidden_states)
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             hidden_states = self.activation(layer(hidden_states))
 
         hidden_states = self.proj_out(hidden_states)
@@ -482,12 +437,10 @@ class SamMaskDecoder(nn.Module):
         self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.activation = nn.GELU()
 
-        self.output_hypernetworks_mlps = nn.ModuleList(
-            [
-                SamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
-                for _ in range(self.num_mask_tokens)
-            ]
-        )
+        mlps_list = []
+        for _ in range(self.num_mask_tokens):
+            mlps_list += [SamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)]
+        self.output_hypernetworks_mlps = nn.ModuleList(mlps_list)
 
         self.iou_prediction_head = SamFeedForward(
             self.hidden_size, config.iou_head_hidden_dim, self.num_mask_tokens, config.iou_head_depth
@@ -496,13 +449,11 @@ class SamMaskDecoder(nn.Module):
     def forward(
         self,
         image_embeddings: torch.Tensor,
-        image_positional_embedding: torch.Tensor,
+        image_positional_embeddings: torch.Tensor,
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -523,42 +474,43 @@ class SamMaskDecoder(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
 
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
-        tokens = tokens.to(self.iou_token.weight.dtype)
+        point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
-        src = image_embeddings
-        src = src.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
-        src = src + dense_prompt_embeddings
+        # image_embeddings = image_embeddings.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
+        image_embeddings = image_embeddings + dense_prompt_embeddings
 
-        pos_src = image_positional_embedding
-        batch_size, num_channels, height, width = src.shape
+        batch_size, num_channels, height, width = image_embeddings.shape
 
-        # Run the transformer
-        hs, src, attentions = self.transformer(
-            src,
-            pos_src,
-            tokens,
-            output_attentions=output_attentions,
+        # Run the transformer, image_positional_embedding are consumed
+        point_embedding, image_embeddings, attentions = self.transformer(
+            point_embeddings=point_embeddings,
+            image_embeddings=image_embeddings,
+            image_positional_embeddings=image_positional_embeddings,
+            output_attentions=output_attentions
         )
-        iou_token_out = hs[:, 0, :]
-        mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
+        iou_token_out = point_embedding[:, 0, :]
+        mask_tokens_out = point_embedding[:, 1 : (1 + self.num_mask_tokens), :]
 
+        point_batch_size = point_embedding.shape[0]
         # Upscale mask embeddings and predict masks using the mask tokens
-        src = src.transpose(1, 2).view(batch_size, num_channels, height, width)
+        image_embeddings = image_embeddings.transpose(1, 2).view(
+            point_batch_size, num_channels, height, width
+        )
 
-        upscaled_embedding = self.upscale_conv1(src)
+        upscaled_embedding = self.upscale_conv1(image_embeddings)
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
 
-        # let's define a class for this: probably the dynamic_prediction_head?
-        hyper_in_list: List[torch.Tensor] = []
+        hyper_in_list = []
         for i in range(self.num_mask_tokens):
-            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
+            current_mlp = self.output_hypernetworks_mlps[i]
+            hyper_in_list += [current_mlp(mask_tokens_out[:, i, :])]
         hyper_in = torch.stack(hyper_in_list, dim=1)
+
         batch_size, num_channels, height, width = upscaled_embedding.shape
-        masks = (hyper_in @ upscaled_embedding.view(batch_size, num_channels, height * width)).view(
-            batch_size, -1, height, width
-        )
+        upscaled_embedding = upscaled_embedding.view(batch_size, num_channels, height * width)
+        masks = (hyper_in @ upscaled_embedding).view(batch_size, -1, height, width)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
@@ -1272,10 +1224,10 @@ class SamForMaskGeneration(SamPreTrainedModel):
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
-        image_position_embedding = self.get_image_wide_positional_embeddings()
+        image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
         batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
-        image_position_embedding = image_position_embedding.repeat(batch_size, 1, 1, 1)
+        image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
 
         all_attentions = ()
 
@@ -1307,7 +1259,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
             image_embeddings=image_embeddings,
-            image_positional_embedding=image_position_embedding,
+            image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
