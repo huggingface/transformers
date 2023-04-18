@@ -76,6 +76,8 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
+        ("mobilevitv2", "MobileViTv2ImageProcessor"),
+        ("mobilevitv2", "MobileViTv2ImageProcessor"),
         ("nat", "ViTImageProcessor"),
         ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
