@@ -177,6 +177,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         with torch.no_grad():
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
+        # TODO raw image no longer used
         masks = processor.postprocess_masks(raw_image, output.low_resolution_masks)
 
         for i, (mask, score) in enumerate(zip(masks.squeeze(), scores)):
