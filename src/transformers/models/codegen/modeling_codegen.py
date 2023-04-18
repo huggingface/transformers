@@ -103,6 +103,7 @@ class CodeGenAttention(nn.Module):
         self.rotary_dim = config.rotary_dim
         pos_embd_dim = self.rotary_dim or self.embed_dim
         self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
+        self.position_ids = torch.arange(max_positions, dtype=torch.long)
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
@@ -190,9 +191,15 @@ class CodeGenAttention(nn.Module):
         value = value.permute(0, 2, 1, 3)
 
         embed_positions = self.embed_positions
+        if position_ids is None:
+            past_length = layer_past[0].size(-2)
+            position_ids = self.position_ids[past_length:(hidden_states[-1]+past_lenth)]
+            position_ids = position_ids.unsqueeze(0).view(-1, hidden_states[-1])
+            
         if embed_positions.device != position_ids.device:
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
+            
 
         sincos = embed_positions[position_ids]
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
