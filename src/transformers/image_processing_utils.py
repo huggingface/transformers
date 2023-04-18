@@ -25,6 +25,7 @@ from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -310,10 +311,9 @@ class ImageProcessingMixin(PushToHubMixin):
             )
 
         if "auto_map" in image_processor_dict and not is_local:
-            image_processor_dict["auto_map"] = {
-                k: (f"{pretrained_model_name_or_path}--{v}" if "--" not in v else v)
-                for k, v in image_processor_dict["auto_map"].items()
-            }
+            image_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                image_processor_dict["auto_map"], pretrained_model_name_or_path
+            )
 
         return image_processor_dict, kwargs
 

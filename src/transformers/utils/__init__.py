@@ -33,6 +33,7 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    add_model_info_to_auto_map,
     cached_property,
     can_return_loss,
     expand_dims,
