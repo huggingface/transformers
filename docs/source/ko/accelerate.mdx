@@ -12,17 +12,17 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Accelerate를 활용한 분산 학습[[distributed-training-with-accelerate]]
 
-As models get bigger, parallelism has emerged as a strategy for training larger models on limited hardware and accelerating training speed by several orders of magnitude. At Hugging Face, we created the [🤗 Accelerate](https://huggingface.co/docs/accelerate) library to help users easily train a 🤗 Transformers model on any type of distributed setup, whether it is multiple GPU's on one machine or multiple GPU's across several machines. In this tutorial, learn how to customize your native PyTorch training loop to enable training in a distributed environment.
+모델이 커지면서 병렬 처리는 제한된 하드웨어에서 더 큰 모델을 훈련하고 훈련 속도를 몇 배로 가속화하기 위한 전략으로 등장했습니다. Hugging Face에서는 사용자가 하나의 머신에 여러 개의 GPU를 사용하든 여러 머신에 여러 개의 GPU를 사용하든 모든 유형의 분산 설정에서 🤗 Transformers 모델을 쉽게 훈련할 수 있도록 돕기 위해 [🤗 Accelerate](https://huggingface.co/docs/accelerate) 라이브러리를 만들었습니다. 이 튜토리얼에서는 분산 환경에서 훈련할 수 있도록 기본 PyTorch 훈련 루프를 커스터마이즈하는 방법을 알아봅시다.
 
-## Setup
+## 설정[[setup]]
 
-Get started by installing 🤗 Accelerate:
+🤗 Accelerate 설치 시작하기:
 
 ```bash
 pip install accelerate
 ```
 
-Then import and create an [`~accelerate.Accelerator`] object. The [`~accelerate.Accelerator`] will automatically detect your type of distributed setup and initialize all the necessary components for training. You don't need to explicitly place your model on a device.
+그 다음, [`~accelerate.Accelerator`] 객체를 불러오고 생성합니다. [`~accelerate.Accelerator`]는 자동으로 분산 설정 유형을 감지하고 훈련에 필요한 모든 구성 요소를 초기화합니다. 장치에 모델을 명시적으로 배치할 필요는 없습니다.
 
 ```py
 >>> from accelerate import Accelerator
@@ -30,9 +30,9 @@ Then import and create an [`~accelerate.Accelerator`] object. The [`~accelerate.
 >>> accelerator = Accelerator()
 ```
 
-## Prepare to accelerate
+## 가속화를 위한 준비[[prepare-to-accelerate]]
 
-The next step is to pass all the relevant training objects to the [`~accelerate.Accelerator.prepare`] method. This includes your training and evaluation DataLoaders, a model and an optimizer:
+다음 단계는 모든 관련 훈련 객체를 [`~accelerate.Accelerator.prepare`] 메소드에 전달하는 것입니다. 여기에는 훈련 및 평가 데이터로더, 모델 및 옵티마이저가 포함됩니다:
 
 ```py
 >>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
@@ -40,9 +40,9 @@ The next step is to pass all the relevant training objects to the [`~accelerate.
 ... )
 ```
 
-## Backward
+## 백워드(Backward)[[backward]]
 
-The last addition is to replace the typical `loss.backward()` in your training loop with 🤗 Accelerate's [`~accelerate.Accelerator.backward`]method:
+마지막 추가 사항은 훈련 루프의 일반적인 `loss.backward()`를 🤗 Accelerate의 [`~accelerate.Accelerator.backward`] 메소드로 대체하는 것입니다:
 
 ```py
 >>> for epoch in range(num_epochs):
@@ -57,7 +57,7 @@ The last addition is to replace the typical `loss.backward()` in your training l
 ...         progress_bar.update(1)
 ```
 
-As you can see in the following code, you only need to add four additional lines of code to your training loop to enable distributed training!
+다음 코드에서 볼 수 있듯이, 훈련 루프에 코드 네 줄만 추가하면 분산 학습을 활성화할 수 있습니다!
 
 ```diff
 + from accelerate import Accelerator
@@ -101,13 +101,13 @@ As you can see in the following code, you only need to add four additional lines
           progress_bar.update(1)
 ```
 
-## Train
+## 학습[[train]]
 
-Once you've added the relevant lines of code, launch your training in a script or a notebook like Colaboratory.
+관련 코드를 추가한 후에는 스크립트나 Colaboratory와 같은 노트북에서 훈련을 시작하세요.
 
-### Train with a script
+### 스크립트로 학습하기[[train-with-a-script]]
 
-If you are running your training from a script, run the following command to create and save a configuration file:
+스크립트에서 훈련을 실행하는 경우, 다음 명령을 실행하여 구성 파일을 생성하고 저장합니다:
 
 ```bash
 accelerate config
@@ -119,9 +119,9 @@ Then launch your training with:
 accelerate launch train.py
 ```
 
-### Train with a notebook
+### 노트북으로 학습하기[[train-with-a-notebook]]
 
-🤗 Accelerate can also run in a notebook if you're planning on using Colaboratory's TPUs. Wrap all the code responsible for training in a function, and pass it to [`~accelerate.notebook_launcher`]:
+Collaboratory의 TPU를 사용하려는 경우, 노트북에서도 🤗 Accelerate를 실행할 수 있습니다. 훈련을 담당하는 모든 코드를 함수로 감싸서 [`~accelerate.notebook_launcher`]에 전달하세요:
 
 ```py
 >>> from accelerate import notebook_launcher
@@ -129,4 +129,4 @@ accelerate launch train.py
 >>> notebook_launcher(training_function)
 ```
 
-For more information about 🤗 Accelerate and it's rich features, refer to the [documentation](https://huggingface.co/docs/accelerate).
+🤗 Accelerate 및 다양한 기능에 대한 자세한 내용은 [documentation](https://huggingface.co/docs/accelerate)를 참조하세요.
