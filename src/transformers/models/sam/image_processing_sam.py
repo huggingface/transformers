@@ -438,7 +438,6 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     scale_per_layer: Optional[List[int]] = 1,
-    return_tensors="pt",
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -652,7 +651,7 @@ def _filter_masks(
     stability_score_offset=1,
 ):
     r"""
-    Filters the masks and iou_scores for the AMG algorithm.
+    TODO doc Filters the masks and iou_scores for the AMG algorithm.
     """
 
     if masks.shape[0] != iou_scores.shape[0]:
@@ -687,6 +686,7 @@ def _filter_masks(
     converted_boxes = converted_boxes[keep_mask]
 
     masks = _uncrop_masks(masks, cropped_box_image, original_height, original_width)
+    # conversion to rle is necessary to run non-maximum suppresion
     masks = _mask_to_rle_pytorch(masks)
 
     return masks, scores, converted_boxes
@@ -705,4 +705,4 @@ def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh=0
     mask_boxes = mask_boxes[keep_by_nms]
     masks = [_rle_to_mask(rle) for rle in rle_masks]
 
-    return masks, rle_masks, iou_scores, mask_boxes
+    return masks, iou_scores, rle_masks, mask_boxes
