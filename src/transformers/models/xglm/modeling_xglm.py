@@ -202,8 +202,8 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, position_ids: torch.Tensor = None, past_key_values_length: int = 0):
-        # NOTE: XGLM offsets the position IDs by `self.offset`. It is assumed here that the offset is already applied.
         bsz, seq_len = position_ids.size()
+        position_ids += self.offset
 
         # Expand embeddings if needed. `position_ids.max()` is NOT used to keep torch.fx compatibility.
         max_pos = 2 + seq_len + past_key_values_length
@@ -862,7 +862,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids += 2  # XGLM-specific change: the position ids are shifted by this constant
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
