@@ -441,6 +441,12 @@ def prepare_image():
     return raw_image
 
 
+def prepare_dog_img():
+    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    return raw_image
+
+
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
@@ -564,3 +570,33 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
 
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
+
+    def test_inference_mask_generation_batched_image_one_point(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        raw_dog_image = prepare_dog_img()
+
+        input_points = [[[820, 1080]], [[220, 470]]]
+
+        inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="pt").to(
+            torch_device
+        )
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores_batched = outputs.iou_scores.squeeze()
+
+        input_points = [[[220, 470]]]
+
+        inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores_single = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
