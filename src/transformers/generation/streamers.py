@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from queue import Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 
 if TYPE_CHECKING:
@@ -38,6 +38,12 @@ class BaseStreamer:
 class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
+
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -95,6 +101,10 @@ class TextStreamer(BaseStreamer):
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
+        # If the last token is a CJK character, we print the characters.
+        elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+            printable_text = text[self.print_len :]
+            self.print_len += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
@@ -121,6 +131,30 @@ class TextStreamer(BaseStreamer):
         """Prints the new text to stdout. If the stream is ending, also prints a newline."""
         print(text, flush=True, end="" if not stream_end else None)
 
+    def _is_chinese_char(self, cp):
+        """Checks whether CP is the codepoint of a CJK character."""
+        # This defines a "chinese character" as anything in the CJK Unicode block:
+        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
+        #
+        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+        ):  #
+            return True
+
+        return False
+
 
 class TextIteratorStreamer(TextStreamer):
     """
@@ -128,11 +162,20 @@ class TextIteratorStreamer(TextStreamer):
     useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
+
     Parameters:
         tokenizer (`AutoTokenizer`):
             The tokenized used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        timeout (`float`, *optional*):
+            The timeout for the text queue. If `None`, the queue will block indefinitely. Useful to handle exceptions
+            in `.generate()`, when it is called in a separate thread.
         decode_kwargs (`dict`, *optional*):
             Additional keyword arguments to pass to the tokenizer's `decode` method.
 
@@ -159,22 +202,25 @@ class TextIteratorStreamer(TextStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+    def __init__(
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+    ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
         self.stop_signal = None
+        self.timeout = timeout
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
-        self.text_queue.put(text)
+        self.text_queue.put(text, timeout=self.timeout)
         if stream_end:
-            self.text_queue.put(self.stop_signal)
+            self.text_queue.put(self.stop_signal, timeout=self.timeout)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        value = self.text_queue.get()
+        value = self.text_queue.get(timeout=self.timeout)
         if value == self.stop_signal:
             raise StopIteration()
         else:

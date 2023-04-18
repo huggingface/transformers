@@ -1984,7 +1984,7 @@ class ModelTesterMixin:
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
 
     @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
         for model_class in self.all_model_classes:
@@ -2030,14 +2030,18 @@ class ModelTesterMixin:
 
             # For some models (e.g. base models), there is no label returned.
             # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
+            if not set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
                 pt_inputs_dict_with_labels = None
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             # Here requires `tf_inputs_dict` to build `tf_model`
             tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+            )
+            pt_model = transformers.load_tf2_model_in_pytorch_model(
+                pt_model, tf_model, allow_missing_keys=allow_missing_keys
+            )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
@@ -2049,11 +2053,15 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
                 torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
+                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
+                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
+                )
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)

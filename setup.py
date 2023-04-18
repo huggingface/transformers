@@ -78,7 +78,7 @@ import re
 import shutil
 from pathlib import Path
 
-from setuptools import setup, Command
+from setuptools import Command, find_packages, setup
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
@@ -251,6 +251,7 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
+
 extras = {}
 
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
@@ -259,7 +260,7 @@ extras["sklearn"] = deps_list("scikit-learn")
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
-extras["torch"] = deps_list("torch")
+extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 
 if os.name == "nt":  # windows
@@ -424,8 +425,37 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.28.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.29.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
+    author_email="transformers@huggingface.co",
+    description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
+    long_description=open("README.md", "r", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
+    keywords="NLP vision speech deep learning transformer pytorch tensorflow jax BERT GPT-2 Wav2Vec2 ViT",
+    license="Apache 2.0 License",
+    url="https://github.com/huggingface/transformers",
+    package_dir={"": "src"},
+    packages=find_packages("src"),
+    include_package_data=True,
+    package_data={"transformers": ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
+    zip_safe=False,
     extras_require=extras,
+    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
+    python_requires=">=3.7.0",
     install_requires=install_requires,
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )

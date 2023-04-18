@@ -453,9 +453,7 @@ class Blip2Encoder(nn.Module):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
+                Embedded representation of the inputs. Should be float, not int tokens.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1524,6 +1522,7 @@ class Blip2Model(Blip2PreTrainedModel):
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
+                labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
@@ -1759,6 +1758,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
+                labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()

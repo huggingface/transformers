@@ -145,6 +145,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "SpeechT5Decoder",  # Building part of bigger (tested) model.
@@ -205,6 +206,12 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipVisionModel",
     "BlipTextLMHeadModel",
     "BlipTextModel",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForImageTextRetrieval",
+    "TFBlipForQuestionAnswering",
+    "TFBlipVisionModel",
+    "TFBlipTextLMHeadModel",
+    "TFBlipTextModel",
     "Swin2SRForImageSuperResolution",
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",

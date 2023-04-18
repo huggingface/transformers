@@ -47,10 +47,10 @@ repo-consistency:
 # this target runs checks on all files
 
 quality:
-	black --check $(check_dirs)
+	black --check $(check_dirs) setup.py
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
-	ruff $(check_dirs)
+	ruff $(check_dirs) setup.py
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 	python utils/check_doc_toc.py
 
@@ -65,8 +65,8 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	black $(check_dirs)
-	ruff $(check_dirs) --fix
+	black $(check_dirs) setup.py
+	ruff $(check_dirs) setup.py --fix
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
