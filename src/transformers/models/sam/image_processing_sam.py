@@ -290,18 +290,17 @@ class SamImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
-        images = [self.pad_to_target_size(image=image, target_size=target_size) for image in images]
+        reshaped_input_sizes = [image.shape[:2] for image in images]
 
+        images = [self.pad_to_target_size(image=image, target_size=target_size) for image in images]
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        data = {"pixel_values": images}
-        data["original_sizes"] = original_sizes
-
+        data = {"pixel_values": images, "original_sizes": original_sizes, "reshaped_input_sizes": reshaped_input_sizes}
         encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
 
-    def postprocess_masks(self, images, masks, mask_threshold=0.0, binarize=True):
+    def postprocess_masks(self, original_sizes, reshaped_input_sizes, masks, mask_threshold=0.0, binarize=True):
         """
         Remove padding and upscale masks to the original image size.
 
@@ -316,64 +315,17 @@ class SamImageProcessor(BaseImageProcessor):
           (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
             is given by original_size.
         """
-        if not isinstance(images, list):
-            images = [images]
-
-        images = [to_numpy_array(image) for image in images]
-
-        original_sizes = torch.LongTensor([image.shape[:2] for image in images])
-
-        # TODO: potentially remove this for batched decoding
-        # TODO create _infer_mask_shape TODO
-        if self.do_resize:
-            images = [self.resize(image=image) for image in images]
-
         target_image_size = (self.target_size, self.target_size)
 
-        if len(images) == 1:
-            input_sizes = images[0].shape[:2]  # they all have the same shape
-
-            if len(masks.shape) == 3:
-                masks = masks.unsqueeze(0)
-            if len(masks.shape) == 5:
-                masks = masks.flatten(0, 1)
-
-            masks = F.interpolate(masks, target_image_size, mode="bilinear", align_corners=False)
-            masks = masks[..., : input_sizes[0], : input_sizes[1]]
-        else:
-            input_sizes = [image.shape[:2] for image in images]
-            interpolated_masks = []
-            for i, mask in enumerate(masks):
-                interpolated_mask = F.interpolate(
-                    mask.unsqueeze(0), target_image_size, mode="bilinear", align_corners=False
-                )[..., : input_sizes[i][0], : input_sizes[i][1]]
-                interpolated_masks.append(interpolated_mask.squeeze())
-            masks = interpolated_masks
-
-        # check if original size is not the same across batches
+            # reshaped_input_sizes = [image.shape[:2] for image in images]
         output_masks = []
-        if original_sizes.shape[0] > 1:
-            for i in range(original_sizes.shape[0]):
-                interpolated_mask = F.interpolate(
-                    masks[i].unsqueeze(0),
-                    (original_sizes[i][0].item(), original_sizes[i][1].item()),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-
-                if binarize:
-                    interpolated_mask = interpolated_mask > mask_threshold
-
-                output_masks.append(interpolated_mask)
-            # check all output_masks shape are the same
-            # output_masks = torch.cat(output_masks, dim=0)
-        else:
-            output_masks = F.interpolate(
-                masks, (original_sizes[0][0].item(), original_sizes[0][1].item()), mode="bilinear", align_corners=False
-            )
-
+        for i, original_size in enumerate(original_sizes):
+            interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
+            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
+            interpolated_mask = F.interpolate(interpolated_mask,[*original_size.numpy()],mode="bilinear",align_corners=False)
             if binarize:
-                output_masks = output_masks > mask_threshold
+                interpolated_mask = interpolated_mask > mask_threshold
+            output_masks.append(interpolated_mask)
 
         return output_masks
 
@@ -643,8 +595,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
 def _filter_masks(
     masks,
     iou_scores,
-    original_height,
-    original_width,
+    original_sizes,
     cropped_box_image,
     pred_iou_thresh=0.88,
     stability_score_thresh=0.95,
@@ -654,6 +605,7 @@ def _filter_masks(
     r"""
     TODO doc Filters the masks and iou_scores for the AMG algorithm.
     """
+    original_height, original_width = original_sizes
     iou_scores = iou_scores.flatten(0, 1)
     masks = masks.flatten(0, 1)
 

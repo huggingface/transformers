@@ -1,7 +1,6 @@
 from collections import defaultdict
 from typing import List, Optional
 
-from ..image_utils import load_image, to_numpy_array
 from ..models.sam.image_processing_sam import _filter_masks, _generate_crop_boxes, _postprocess_for_amg
 from ..utils import (
     add_end_docstrings,
@@ -176,11 +175,11 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                 "object" described by the label and the mask..
 
         """
-        if isinstance(image, List):
-            raise ValueError("The input should be a single image, the pipeline does not support multiple inputs")
-        image = load_image(image)
-        image = to_numpy_array(image)
-        self._postprocess_params["image"] = image
+        # if isinstance(image, List):
+        #     raise ValueError("The input should be a single image, the pipeline does not support multiple inputs")
+        # image = load_image(image)
+        # image = to_numpy_array(image)
+        # self._postprocess_params["image"] = image
         return super().__call__(image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs)
 
     def preprocess(
@@ -213,6 +212,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                     "input_labels": labels,
                     "input_boxes": crop_boxes,
                     "is_last": is_last,
+                    **model_inputs,
                 }
         else:
             yield {
@@ -221,6 +221,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                 "input_labels": input_labels,
                 "input_boxes": crop_boxes,
                 "is_last": True,
+                **model_inputs,
             }
 
     def forward(self, model_inputs, **forward_params):
@@ -239,13 +240,21 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
     def _forward(self, model_inputs, **forward_kwargs):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
+        original_sizes = model_inputs.pop("original_sizes")
+        reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes")
+
         model_outputs = self.model(**model_inputs, **forward_kwargs)
-        return {"is_last": is_last, "crop_boxes": input_boxes, **model_outputs}
+        return {
+            "is_last": is_last,
+            "crop_boxes": input_boxes,
+            "original_sizes": original_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
+            **model_outputs,
+        }
 
     def postprocess(
         self,
         model_outputs,
-        image,
         output_rle_mask=False,
         output_bboxes_mask=False,
         box_nms_thresh=0.7,
@@ -254,26 +263,25 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         mask_threshold=0,
         stability_score_offset=1,
     ):
-        raw_image = image
-        original_height, original_width = raw_image.shape[:2]
         all_scores = []
         all_masks = []
         all_boxes = []
         for model_output in model_outputs:
-            low_resolution_masks = model_output.pop("low_resolution_masks")[0]
-            crop_boxes = model_output.pop("crop_boxes")[0]
-            iou_scores = model_output.pop("iou_scores")[0]
+            low_resolution_masks = model_output.pop("low_resolution_masks")
+            original_sizes = model_output.pop("original_sizes")
+            reshaped_input_sizes = model_output.pop("reshaped_input_sizes")
+            crop_boxes = model_output.pop("crop_boxes")
+            iou_scores = model_output.pop("iou_scores")
 
             masks = self.image_processor.postprocess_masks(
-                raw_image, low_resolution_masks, mask_threshold, binarize=False
+                original_sizes, reshaped_input_sizes, low_resolution_masks, mask_threshold, binarize=False
             )
 
             masks, iou_scores, boxes = _filter_masks(
-                masks,
-                iou_scores,
-                original_height,
-                original_width,
-                crop_boxes,
+                masks[0],
+                iou_scores[0],
+                original_sizes[0],
+                crop_boxes[0],
                 pred_iou_thresh,
                 stability_score_thresh,
                 mask_threshold,

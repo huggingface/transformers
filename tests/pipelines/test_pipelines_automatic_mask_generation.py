@@ -16,7 +16,6 @@ import hashlib
 import unittest
 from typing import Dict
 
-import datasets
 import numpy as np
 import requests
 from datasets import load_dataset
@@ -24,11 +23,7 @@ from datasets import load_dataset
 from transformers import (
     MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING,
     AutoImageProcessor,
-    AutoModelForImageSegmentation,
-    AutoModelForInstanceSegmentation,
-    DetrForSegmentation,
     AutomaticMaskGenerationPipeline,
-    MaskFormerForInstanceSegmentation,
     is_vision_available,
     pipeline,
 )
@@ -36,13 +31,10 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_tf,
-    require_timm,
     require_torch,
     require_vision,
     slow,
 )
-
-from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -78,7 +70,11 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
 @require_torch
 class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
     model_mapping = dict(
-        (list(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING else [])
+        (
+            list(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING.items())
+            if MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING
+            else []
+        )
     )
 
     def get_test_pipeline(self, model, tokenizer, processor):
@@ -92,7 +88,6 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
     @unittest.skip("Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
-
 
     @require_torch
     def test_small_model_pt(self):
@@ -228,7 +223,6 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
                 },
             ],
         )
-
 
     @require_torch
     @slow
