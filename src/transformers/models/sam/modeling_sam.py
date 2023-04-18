@@ -718,8 +718,8 @@ class SamVisionAttention(nn.Module):
                 size of the query.
             k_size (int):
                 size of key k.
-            rel_pos (`torch.Tensor`): r
-                elative position embeddings (L, channel).
+            rel_pos (`torch.Tensor`):
+                relative position embeddings (L, channel).
 
         Returns:
             Extracted positional embeddings according to relative positions.
@@ -765,9 +765,9 @@ class SamVisionAttention(nn.Module):
                 relative position embeddings (Lh, channel) for height axis.
             rel_pos_w (`torch.Tensor`):
                 relative position embeddings (Lw, channel) for width axis.
-            q_size (Tuple):
+            q_size (tuple):
                 spatial sequence size of query q with (query_height, query_width).
-            k_size (Tuple):
+            k_size (tuple):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:

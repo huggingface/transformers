@@ -212,7 +212,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
-    ) -> PIL.Image.Image:
+    ):
         """
         Preprocess an image or batch of images.
 
