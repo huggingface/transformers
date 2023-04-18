@@ -48,8 +48,8 @@ class GPTNeoXALiBiModelTester:
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -122,8 +122,7 @@ class GPTNeoXALiBiModelTester:
         model = GPTNeoXALiBiModel(config=config)
         model.to(torch_device)
         model.eval()
-        _ = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
+        result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(self, config, input_ids, input_mask):

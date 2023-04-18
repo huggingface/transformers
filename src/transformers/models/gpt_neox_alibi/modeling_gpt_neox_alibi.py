@@ -137,7 +137,7 @@ class GPTNeoXALiBiAttention(nn.Module):
     ):
         has_layer_past = layer_past is not None
         seq_length = attention_mask.shape[-1]
-        bias = torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool)).view(1, 1, seq_length, seq_length)
+        bias = torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool)).contiguous().view(1, 1, seq_length, seq_length)
         self.register_buffer("bias", bias, persistent=False)
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
@@ -147,7 +147,7 @@ class GPTNeoXALiBiAttention(nn.Module):
         # [batch, seq_len, (3 * head_size * num_heads)]
         #   --> [batch, seq_len, num_heads, 3 * head_size]
         new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        qkv = qkv.view(*new_qkv_shape)
+        qkv = qkv.contiguous().view(*new_qkv_shape)
 
         # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
         query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
@@ -183,7 +183,7 @@ class GPTNeoXALiBiAttention(nn.Module):
         # tensor: [bs, seq_len, hidden_size]
         new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
         # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(new_shape)
+        tensor = tensor.contiguous().view(new_shape)
         # -> [bs, num_attention_heads, seq_len, attn_head_size]
         tensor = tensor.permute(0, 2, 1, 3)
         return tensor
@@ -196,7 +196,7 @@ class GPTNeoXALiBiAttention(nn.Module):
         # tensor [bs, num_attention_heads, seq_len, attn_head_size]
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
         # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
+        tensor = tensor.contiguous().view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
         # -> [bs, seq_len, hidden_size]
         return tensor
 
@@ -208,8 +208,8 @@ class GPTNeoXALiBiAttention(nn.Module):
 
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
-        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
-        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
+        query = query.contiguous().view(batch_size * num_attention_heads, query_length, attn_head_size)
+        key = key.contiguous().view(batch_size * num_attention_heads, key_length, attn_head_size)
 
         attn_scores = alibi.baddbmm(
             batch1=query,
@@ -217,7 +217,7 @@ class GPTNeoXALiBiAttention(nn.Module):
             beta=1.0,
             alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
         )
-        attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+        attn_scores = attn_scores.contiguous().view(batch_size, num_attention_heads, query_length, key_length)
 
         mask_value = torch.finfo(attn_scores.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
@@ -436,9 +436,11 @@ class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
         # Attention mask.
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
+            # Create alibi positional embedding
+            alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
         else:
             assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
+            attention_mask = attention_mask.contiguous().view(batch_size, -1)
             attention_mask = attention_mask.to(hidden_states.device)
 
             # Create alibi positional embedding
@@ -627,7 +629,7 @@ class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
             shift_logits = lm_logits[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), labels.view(-1))
+            lm_loss = loss_fct(shift_logits.contiguous().view(-1, shift_logits.size(-1)), labels.contiguous().view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
