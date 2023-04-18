@@ -178,7 +178,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
-        ("video-mask2former", "VideoMask2FormerModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
@@ -494,7 +493,6 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
         ("maskformer", "MaskFormerForInstanceSegmentation"),
-        ("video-mask2former", "VideoMask2FormerForVideoSegmentation"),
     ]
 )
 
@@ -505,7 +503,6 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
-        ("video-mask2former", "VideoMask2FormerForVideoSegmentation"),
     ]
 )
 

@@ -324,6 +324,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
+    "VideoMask2FormerModel",
+    "VideoMask2FormerModelForVideoSegmentation",
 ]
 
 # Update this list for models that have multiple model types for the same
