@@ -32,10 +32,11 @@ if is_torch_available():
 
 class SamProcessor(ProcessorMixin):
     r"""
-    Constructs a SAM processor which wraps a BLIP image processor and an OPT/T5 tokenizer into a single processor.
+    Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
+    single processor.
 
-    [`BlipProcessor`] offers all the functionalities of [`SamImageProcessor`] and [`AutoTokenizer`]. See the docstring
-    of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
+    [`SamProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
+    [`~SamProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
 
     Args:
         image_processor (`SamImageProcessor`):
@@ -60,10 +61,8 @@ class SamProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         """
-        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
+        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
+        points and bounding boxes for the model if they are provided.
         """
         encoding_image_processor = self.image_processor(
             images,
@@ -84,7 +83,6 @@ class SamProcessor(ProcessorMixin):
 
         if input_points is not None:
             if len(original_sizes) != len(input_points):
-                # TODO deal better with this case
                 input_points = [
                     _normalize_coordinates(self.target_size, point, original_sizes[0]) for point in input_points
                 ]
@@ -113,7 +111,6 @@ class SamProcessor(ProcessorMixin):
 
         if input_boxes is not None:
             if len(original_sizes) != len(input_boxes):
-                # TODO deal better with this case
                 input_boxes = [
                     _normalize_coordinates(self.target_size, box, original_sizes[0], is_bounding_box=True)
                     for box in input_boxes
@@ -143,7 +140,15 @@ class SamProcessor(ProcessorMixin):
         input_labels=None,
         input_boxes=None,
     ):
+        r"""
+        Check and preprocesses the 2D points, labels and bounding boxes. It checks if the input is valid and if they
+        are, it converts the coordinates of the points and bounding boxes. If a user passes directly a `torch.Tensor`,
+        it is converted to a `numpy.ndarray` and then to a `list`.
+        """
         if input_points is not None:
+            if isinstance(input_points, torch.Tensor):
+                input_points = input_points.numpy().tolist()
+
             if not isinstance(input_points, list) and not isinstance(input_points[0], list):
                 raise ValueError("Input points must be a list of list of floating integers.")
             input_points = [np.array(input_point) for input_point in input_points]
@@ -151,6 +156,9 @@ class SamProcessor(ProcessorMixin):
             input_points = None
 
         if input_labels is not None:
+            if isinstance(input_labels, torch.Tensor):
+                input_labels = input_labels.numpy().tolist()
+
             if not isinstance(input_labels, list) and not isinstance(input_labels[0], list):
                 raise ValueError("Input labels must be a list of list integers.")
             input_labels = [np.array(label) for label in input_labels]
@@ -158,6 +166,9 @@ class SamProcessor(ProcessorMixin):
             input_labels = None
 
         if input_boxes is not None:
+            if isinstance(input_boxes, torch.Tensor):
+                input_boxes = input_boxes.numpy().tolist()
+
             if not isinstance(input_boxes, tuple):
                 raise ValueError("Input boxes must be a tuple of tuple of floating integers.")
             input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
@@ -165,11 +176,6 @@ class SamProcessor(ProcessorMixin):
             input_boxes = None
 
         return input_points, input_labels, input_boxes
-
-    @property
-    def model_input_names(self):
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names))
 
     def pad_to_target_size(
         self,
@@ -185,3 +191,11 @@ class SamProcessor(ProcessorMixin):
         image = F.pad(image, (0, padw, 0, padh))
 
         return image.numpy()
+
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(image_processor_input_names))
+
+    def postprocess_masks(self, *args, **kwargs):
+        return self.image_processor.postprocess_masks(*args, **kwargs)

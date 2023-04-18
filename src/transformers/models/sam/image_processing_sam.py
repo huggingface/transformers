@@ -328,36 +328,52 @@ class SamImageProcessor(BaseImageProcessor):
         if self.do_resize:
             images = [self.resize(image=image) for image in images]
 
-        input_sizes = images[0].shape[:2]  # they all have the same shape
+        target_image_size = (self.target_size, self.target_size)
 
-        image_size = (self.target_size, self.target_size)
+        if len(images) == 1:
+            input_sizes = images[0].shape[:2]  # they all have the same shape
 
-        if len(masks.shape) == 3:
-            masks = masks.unsqueeze(0)
+            if len(masks.shape) == 3:
+                masks = masks.unsqueeze(0)
 
-        masks = F.interpolate(masks, image_size, mode="bilinear", align_corners=False)
-        masks = masks[..., : input_sizes[0], : input_sizes[1]]
+            masks = F.interpolate(masks, target_image_size, mode="bilinear", align_corners=False)
+            masks = masks[..., : input_sizes[0], : input_sizes[1]]
+        else:
+            input_sizes = [image.shape[:2] for image in images]
+            interpolated_masks = []
+            for i, mask in enumerate(masks):
+                interpolated_mask = F.interpolate(
+                    mask.unsqueeze(0), target_image_size, mode="bilinear", align_corners=False
+                )[..., : input_sizes[i][0], : input_sizes[i][1]]
+                interpolated_masks.append(interpolated_mask.squeeze())
+            masks = interpolated_masks
 
         # check if original size is not the same across batches
         output_masks = []
         if original_sizes.shape[0] > 1:
             for i in range(original_sizes.shape[0]):
-                output_masks.append(
-                    F.interpolate(
-                        masks[i].unsqueeze(0),
-                        (original_sizes[i][0].item(), original_sizes[i][1].item()),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
+
+                interpolated_mask = F.interpolate(
+                    masks[i].unsqueeze(0),
+                    (original_sizes[i][0].item(), original_sizes[i][1].item()),
+                    mode="bilinear",
+                    align_corners=False,
                 )
-            output_masks = torch.cat(output_masks, dim=0)
+
+                if binarize:
+                    interpolated_mask = interpolated_mask > mask_threshold
+
+                output_masks.append(interpolated_mask)
+            # check all output_masks shape are the same
+            # output_masks = torch.cat(output_masks, dim=0)
         else:
             output_masks = F.interpolate(
                 masks, (original_sizes[0][0].item(), original_sizes[0][1].item()), mode="bilinear", align_corners=False
             )
 
-        if binarize:
-            output_masks = output_masks > mask_threshold
+            if binarize:
+                output_masks = output_masks > mask_threshold
+
         return output_masks
 
 

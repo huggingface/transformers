@@ -71,7 +71,7 @@ class SamProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract, _ = image_processor(image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
