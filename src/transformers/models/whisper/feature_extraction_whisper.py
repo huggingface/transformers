@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 from numpy.fft import fft
 
-from ...audio_utils import spectrogram, window_function
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -82,60 +82,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-
-    def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
-        # Initialize the weights
-        n_mels = int(n_mels)
-        weights = np.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
-
-        # Center freqs of each FFT bin
-        fftfreqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sr)
-
-        # 'Center freqs' of mel bands - uniformly spaced between limits
-        min_mel = 0.0
-        max_mel = 45.245640471924965
-
-        mels = np.linspace(min_mel, max_mel, n_mels + 2)
-
-        mels = np.asanyarray(mels)
-
-        # Fill in the linear scale
-        f_min = 0.0
-        f_sp = 200.0 / 3
-        freqs = f_min + f_sp * mels
-
-        # And now the nonlinear scale
-        min_log_hz = 1000.0  # beginning of log region (Hz)
-        min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
-        logstep = np.log(6.4) / 27.0  # step size for log region
-
-        # If we have vector data, vectorize
-        log_t = mels >= min_log_mel
-        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
-
-        mel_f = freqs
-
-        fdiff = np.diff(mel_f)
-        ramps = np.subtract.outer(mel_f, fftfreqs)
-
-        for i in range(n_mels):
-            # lower and upper slopes for all bins
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-
-            # .. then intersect them with each other and zero
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
-        weights *= enorm[:, np.newaxis]
-
-        return weights
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=1 + n_fft // 2,
+            num_mel_filters=feature_size,
+            min_frequency=0.0,
+            max_frequency=8000.0,
+            sampling_rate=sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
 
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
+        Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
         """
         log_spec = spectrogram(
@@ -144,7 +103,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             frame_length=self.n_fft,
             hop_length=self.hop_length,
             power=2.0,
-            mel_filters=self.mel_filters.T,
+            mel_filters=self.mel_filters,
             log_mel="log10",
         )
         log_spec = log_spec[:, :-1]
