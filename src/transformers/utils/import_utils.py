@@ -579,7 +579,7 @@ def is_accelerate_available(partial_state=False):
     accelerate_available = importlib.util.find_spec("accelerate") is not None
     if accelerate_available:
         if partial_state:
-            return importlib_metadata.version("accelerate") >= version.parse("0.17.0")
+            return version.parse(importlib_metadata.version("accelerate")) >= version.parse("0.17.0")
         else:
             return True
     else:
