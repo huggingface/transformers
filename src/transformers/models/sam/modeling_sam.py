@@ -461,16 +461,19 @@ class SamMaskDecoder(nn.Module):
         """
         Predict masks given image and prompt embeddings.
 
-        Arguments:
-          image_embeddings (torch.Tensor): the embeddings from the image encoder
-          image_positional_embedding (torch.Tensor): positional encoding with the shape of image_embeddings
-          sparse_prompt_embeddings (torch.Tensor): the embeddings of the points and boxes
-          dense_prompt_embeddings (torch.Tensor): the embeddings of the mask inputs
-          multimask_output (bool): Whether to return multiple masks or a single
-            mask.
-
-        Returns:
-          torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
+        Args:
+            image_embeddings (`torch.Tensor`):
+                the embeddings from the image encoder
+            image_positional_embedding (`torch.Tensor`):
+                positional encoding with the shape of image_embeddings
+            sparse_prompt_embeddings (`torch.Tensor`):
+                The embeddings of the points and boxes
+            dense_prompt_embeddings (`torch.Tensor`):
+                the embeddings of the mask inputs
+            multimask_output (bool):
+                Whether to return multiple masks or a single mask.
+            output_attentions (bool, **optional**):
+                Whether or not to return the attentions tensors of all attention layers.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = max(1, sparse_prompt_embeddings.shape[1])
@@ -643,17 +646,13 @@ class SamPromptEncoder(nn.Module):
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
-        Arguments:
-          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
-            and labels to embed.
-          boxes (torch.Tensor or none): boxes to embed
-          masks (torch.Tensor or none): masks to embed
-
-        Returns:
-          torch.Tensor: sparse embeddings for the points and boxes, with shape
-            BxNx(hidden_size), where N is determined by the number of input points and boxes.
-          torch.Tensor: dense embeddings for the masks, in the shape
-            Bx(hidden_size)x(embed_H)x(embed_W)
+        Args:
+            points (`torch.Tensor`, **optionnal**):
+                point coordinates and labels to embed.
+            boxes (`torch.Tensor`, **optionnal**):
+                boxes to embed
+            masks (`torch.Tensor`, **optionnal**):
+                masks to embed
         """
         sparse_embeddings = None
         target_device = self.shared_embedding.positional_embedding.device
@@ -715,9 +714,12 @@ class SamVisionAttention(nn.Module):
             query and key sizes.
 
         Args:
-            q_size (int): size of query q.
-            k_size (int): size of key k.
-            rel_pos (Tensor): relative position embeddings (L, channel).
+            q_size (int):
+                size of the query.
+            k_size (int):
+                size of key k.
+            rel_pos (`torch.Tensor`): r
+                elative position embeddings (L, channel).
 
         Returns:
             Extracted positional embeddings according to relative positions.
@@ -752,17 +754,16 @@ class SamVisionAttention(nn.Module):
         k_size: Tuple[int, int],
     ) -> torch.Tensor:
         """
-        Args:
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https:
-            //github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
-        # noqa B950
-            attn (Tensor):
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+
+        Args:
+            attn (`torch.Tensor`):
                 attention map. q (Tensor): query q in the attention layer with shape (batch_size, query_height *
                 query_width, channel).
-            rel_pos_h (Tensor):
+            rel_pos_h (`torch.Tensor`):
                 relative position embeddings (Lh, channel) for height axis.
-            rel_pos_w (Tensor):
+            rel_pos_w (`torch.Tensor`):
                 relative position embeddings (Lw, channel) for width axis.
             q_size (Tuple):
                 spatial sequence size of query q with (query_height, query_width).
@@ -770,7 +771,8 @@ class SamVisionAttention(nn.Module):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (Tensor): attention map with added relative positional embeddings.
+            attn (`torch.Tensor`):
+                attention map with added relative positional embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size

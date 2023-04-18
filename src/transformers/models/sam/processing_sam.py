@@ -113,16 +113,7 @@ class SamProcessor(ProcessorMixin):
 
             # check that all arrays have the same shape
             if not all([point.shape == input_points[0].shape for point in input_points]):
-                expected_nb_points = max([point.shape[0] for point in input_points])
-                processed_input_points = []
-                for i, point in enumerate(input_points):
-                    if point.shape[0] != expected_nb_points:
-                        point = np.concatenate(
-                            [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
-                        )
-                        input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
-                    processed_input_points.append(point)
-                input_points = processed_input_points
+                input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
             input_points = np.array(input_points)
 
         if input_labels is not None:
@@ -161,6 +152,22 @@ class SamProcessor(ProcessorMixin):
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
+
+    def _pad_points_and_labels(self, input_points, input_labels):
+        r"""
+        The method pads the 2D points and labels to the maximum number of points in the batch.
+        """
+        expected_nb_points = max([point.shape[0] for point in input_points])
+        processed_input_points = []
+        for i, point in enumerate(input_points):
+            if point.shape[0] != expected_nb_points:
+                point = np.concatenate(
+                    [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
+                )
+                input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
+            processed_input_points.append(point)
+        input_points = processed_input_points
+        return input_points, input_labels
 
     def _check_and_preprocess_points(
         self,
