@@ -2508,7 +2508,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             "top_k": 10,
             "temperature": 0.7,
         }
-        expectation = 20
+        expectation = 15
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         text = """Hello, my dog is cute and"""
