@@ -1552,10 +1552,10 @@ class TrainingArguments:
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and self.distributed_state.distributed_type != DistributedType.NO
+            and self.distributed_state.distributed_type == DistributedType.NO
         ):
             logger.warning(
-                "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
+                "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
 
