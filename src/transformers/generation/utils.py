@@ -1465,8 +1465,8 @@ class GenerationMixin:
         if is_assisted_greedy_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " assisted greedy search."
+                    "num_return_sequences has to be 1 when doing assisted greedy search, "
+                    f"but is {generation_config.num_return_sequences}."
                 )
             if batch_size > 1:
                 raise ValueError("Assisted generation is only supported for batch_size = 1")
@@ -1501,8 +1501,8 @@ class GenerationMixin:
         if is_greedy_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " greedy search."
+                    "num_return_sequences has to be 1 when doing greedy search, "
+                    f"but is {generation_config.num_return_sequences}."
                 )
 
             # 11. run greedy search
@@ -1522,8 +1522,8 @@ class GenerationMixin:
         elif is_contrastive_search_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " contrastive search."
+                    "num_return_sequences has to be 1 when doing contrastive search, "
+                    f"but is {generation_config.num_return_sequences}."
                 )
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
@@ -1796,7 +1796,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
@@ -2163,7 +2163,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
@@ -2419,7 +2419,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
@@ -2697,7 +2697,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -3021,7 +3021,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -3353,7 +3353,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         **model_kwargs,
     ):
         r"""
@@ -4057,7 +4057,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ):
@@ -4162,6 +4162,8 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None and pad_token_id is None:
+            raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
@@ -4322,14 +4324,11 @@ class GenerationMixin:
             if n_matches == int(assistant_model.max_assistant_tokens):
                 assistant_model.max_assistant_tokens += 2.0
             else:
-                assistant_model.max_assistant_tokens -= 1.0
-                if assistant_model.max_assistant_tokens < 1.0:
-                    assistant_model.max_assistant_tokens = 1.0
+                assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
 
             # 6. Update variables according to the number of matching assistant tokens.
             # 6.1. Ensure we don't generate beyond max_len or an EOS token (remember: one token will be added below)
-            if n_matches >= max_len - cur_len:
-                n_matches = max_len - cur_len - 1
+            n_matches = min(n_matches, max_len - cur_len - 1)
             if last_assistant_token_is_eos and n_matches == candidate_length:
                 n_matches -= 1
             input_ids = candidate_input_ids[:, 0 : cur_len + n_matches]
@@ -4402,8 +4401,6 @@ class GenerationMixin:
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
