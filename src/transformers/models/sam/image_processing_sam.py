@@ -44,8 +44,6 @@ from ...utils import (
 if is_vision_available():
     import PIL
 
-    from ...image_utils import PILImageResampling
-
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
     from torchvision.transforms.functional import resize, to_pil_image
@@ -72,9 +70,6 @@ class SamImageProcessor(BaseImageProcessor):
             method.
         target_size (`int`, *optional*, defaults to `1024`):
             Target image size used for resizing the input image.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Wwhether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
@@ -103,7 +98,6 @@ class SamImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         target_size: int = 1024,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -118,7 +112,6 @@ class SamImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
-        self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
