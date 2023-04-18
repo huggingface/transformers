@@ -20,7 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+GPT_NEOX_ALIBI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "kelechi/neox_alibi_1.4b_test": "https://huggingface.co/kelechi/neox_alibi_1.4b_test/resolve/main/config.json",
+}
 
 
 class GPTNeoXALiBiConfig(PretrainedConfig):
