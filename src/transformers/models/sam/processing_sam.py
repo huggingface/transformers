@@ -169,8 +169,12 @@ class SamProcessor(ProcessorMixin):
             if isinstance(input_boxes, torch.Tensor):
                 input_boxes = input_boxes.numpy().tolist()
 
-            if not isinstance(input_boxes, tuple):
-                raise ValueError("Input boxes must be a tuple of tuple of floating integers.")
+            if (
+                not isinstance(input_boxes, list)
+                and not isinstance(input_boxes[0], list)
+                and not isinstance(input_boxes[0][0], list)
+            ):
+                raise ValueError("Input boxes must be a list of list of list of floating integers.")
             input_boxes = [np.array(box).astype(np.float32) for box in input_boxes]
         else:
             input_boxes = None

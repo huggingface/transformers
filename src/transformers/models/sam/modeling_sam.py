@@ -487,16 +487,14 @@ class SamMaskDecoder(nn.Module):
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         iou_token_out = point_embedding[:, 0, :]
         mask_tokens_out = point_embedding[:, 1 : (1 + self.num_mask_tokens), :]
 
         point_batch_size = point_embedding.shape[0]
         # Upscale mask embeddings and predict masks using the mask tokens
-        image_embeddings = image_embeddings.transpose(1, 2).view(
-            point_batch_size, num_channels, height, width
-        )
+        image_embeddings = image_embeddings.transpose(1, 2).view(point_batch_size, num_channels, height, width)
 
         upscaled_embedding = self.upscale_conv1(image_embeddings)
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
