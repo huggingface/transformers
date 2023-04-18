@@ -921,8 +921,17 @@ class AutoConfig:
                     " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
                     " set the option `trust_remote_code=True` to remove this error."
                 )
+            if kwargs.get("revision", None) is None:
+                logger.warning(
+                    "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
+                    "ensure no malicious code has been contributed in a newer revision."
+                )
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            module_file, class_name = class_ref.split(".")
+            config_class = get_class_from_dynamic_module(
+                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+            )
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
