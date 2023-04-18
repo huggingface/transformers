@@ -599,3 +599,54 @@ class SamModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
+
+    def test_inference_mask_generation_two_points_point_batch(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        # fmt: off
+        input_points = torch.Tensor(
+            [[[400, 650]], [[220, 470]]]
+        ).cpu()
+        # fmt: on
+
+        input_points = input_points.unsqueeze(0)
+
+        inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        iou_scores = outputs.iou_scores
+        self.assertTrue(iou_scores.shape == (1, 2, 3))
+        self.assertTrue(torch.allclose(iou_scores[0, 0, -1], torch.tensor(0.9713), atol=1e-4))
+
+    def test_inference_mask_generation_three_boxes_point_batch(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+
+        # fmt: off
+        input_boxes = torch.Tensor(
+            [[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]
+        ).cpu()
+        # fmt: on
+        input_boxes = input_boxes.unsqueeze(0)
+
+        inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        iou_scores = outputs.iou_scores
+        self.assertTrue(iou_scores.shape == (1, 3, 3))
+        self.assertTrue(torch.allclose(iou_scores[0, 1, -1], torch.tensor(0.8686), atol=1e-4))

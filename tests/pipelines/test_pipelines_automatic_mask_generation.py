@@ -24,6 +24,7 @@ from transformers import (
     MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING,
     AutoImageProcessor,
     AutomaticMaskGenerationPipeline,
+    SamForMaskGeneration,
     is_vision_available,
     pipeline,
 )
@@ -93,7 +94,7 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         model_id = "younesb/sam-vit-h"
 
-        model = SamModelForMaskGeneration.from_pretrained(model_id)
+        model = SamForMaskGeneration.from_pretrained(model_id)
         image_processor = AutoImageProcessor.from_pretrained(model_id)
         image_segmenter = AutomaticMaskGenerationPipeline(
             model=model,

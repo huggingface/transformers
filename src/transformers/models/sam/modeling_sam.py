@@ -28,7 +28,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -461,16 +461,19 @@ class SamMaskDecoder(nn.Module):
         """
         Predict masks given image and prompt embeddings.
 
-        Arguments:
-          image_embeddings (torch.Tensor): the embeddings from the image encoder
-          image_positional_embedding (torch.Tensor): positional encoding with the shape of image_embeddings
-          sparse_prompt_embeddings (torch.Tensor): the embeddings of the points and boxes
-          dense_prompt_embeddings (torch.Tensor): the embeddings of the mask inputs
-          multimask_output (bool): Whether to return multiple masks or a single
-            mask.
-
-        Returns:
-          torch.Tensor: batched predicted masks torch.Tensor: batched predictions of mask quality
+        Args:
+            image_embeddings (`torch.Tensor`):
+                the embeddings from the image encoder
+            image_positional_embedding (`torch.Tensor`):
+                positional encoding with the shape of image_embeddings
+            sparse_prompt_embeddings (`torch.Tensor`):
+                The embeddings of the points and boxes
+            dense_prompt_embeddings (`torch.Tensor`):
+                the embeddings of the mask inputs
+            multimask_output (bool):
+                Whether to return multiple masks or a single mask.
+            output_attentions (bool, **optional**):
+                Whether or not to return the attentions tensors of all attention layers.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = max(1, sparse_prompt_embeddings.shape[1])
@@ -625,12 +628,12 @@ class SamPromptEncoder(nn.Module):
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
-        coords = boxes.reshape(-1, 2, 2)
+        batch_size, nb_boxes = boxes.shape[:2]
+        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
         input_shape = (self.input_image_size, self.input_image_size)
         corner_embedding = self.shared_embedding(coords, input_shape)
-        corner_embedding[:, 0, :] += self.point_embed[2].weight
-        corner_embedding[:, 1, :] += self.point_embed[3].weight
-        corner_embedding = corner_embedding.unsqueeze(1)
+        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
+        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
         return corner_embedding
 
     def forward(
@@ -643,17 +646,13 @@ class SamPromptEncoder(nn.Module):
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
-        Arguments:
-          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
-            and labels to embed.
-          boxes (torch.Tensor or none): boxes to embed
-          masks (torch.Tensor or none): masks to embed
-
-        Returns:
-          torch.Tensor: sparse embeddings for the points and boxes, with shape
-            BxNx(hidden_size), where N is determined by the number of input points and boxes.
-          torch.Tensor: dense embeddings for the masks, in the shape
-            Bx(hidden_size)x(embed_H)x(embed_W)
+        Args:
+            points (`torch.Tensor`, **optionnal**):
+                point coordinates and labels to embed.
+            boxes (`torch.Tensor`, **optionnal**):
+                boxes to embed
+            masks (`torch.Tensor`, **optionnal**):
+                masks to embed
         """
         sparse_embeddings = None
         target_device = self.shared_embedding.positional_embedding.device
@@ -715,9 +714,12 @@ class SamVisionAttention(nn.Module):
             query and key sizes.
 
         Args:
-            q_size (int): size of query q.
-            k_size (int): size of key k.
-            rel_pos (Tensor): relative position embeddings (L, channel).
+            q_size (int):
+                size of the query.
+            k_size (int):
+                size of key k.
+            rel_pos (`torch.Tensor`): r
+                elative position embeddings (L, channel).
 
         Returns:
             Extracted positional embeddings according to relative positions.
@@ -752,17 +754,16 @@ class SamVisionAttention(nn.Module):
         k_size: Tuple[int, int],
     ) -> torch.Tensor:
         """
-        Args:
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https:
-            //github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
-        # noqa B950
-            attn (Tensor):
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+
+        Args:
+            attn (`torch.Tensor`):
                 attention map. q (Tensor): query q in the attention layer with shape (batch_size, query_height *
                 query_width, channel).
-            rel_pos_h (Tensor):
+            rel_pos_h (`torch.Tensor`):
                 relative position embeddings (Lh, channel) for height axis.
-            rel_pos_w (Tensor):
+            rel_pos_w (`torch.Tensor`):
                 relative position embeddings (Lw, channel) for width axis.
             q_size (Tuple):
                 spatial sequence size of query q with (query_height, query_width).
@@ -770,7 +771,8 @@ class SamVisionAttention(nn.Module):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (Tensor): attention map with added relative positional embeddings.
+            attn (`torch.Tensor`):
+                attention map with added relative positional embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -800,20 +802,20 @@ class SamVisionAttention(nn.Module):
             .permute(2, 0, 3, 1, 4)
         )
         # q, k, v with shape (batch_size * nHead, height * width, channel)
-        q, k, v = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
-        attn_weights = (q * self.scale) @ k.transpose(-2, -1)
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, q, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
 
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output = (attn_probs @ v).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
         attn_output = self.proj(attn_output)
@@ -1067,21 +1069,6 @@ SAM_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SAM_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
-            details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 
 SAM_INPUTS_DOCSTRING = r"""
     Args:
@@ -1127,6 +1114,11 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings(
+    "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
+    " optional 2D location and bounding boxes.",
+    SAM_START_DOCSTRING,
+)
 class SamForMaskGeneration(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1199,15 +1191,16 @@ class SamForMaskGeneration(SamPreTrainedModel):
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, num_points_per_image, 2)`):
+            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
                 Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor.
-            input_labels (`torch.LongTensor` of shape `(batch_size, num_points_per_image)`):
+                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
+                point. The model will output `point_batch_size` times 3 masks in total.
+            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
                 Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
                 processor, or can be fed by the user.
             input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
                 Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes
+                processor. users can also pass manually the input boxes.
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
                 Optional input masks for the prompt encoder.
         """
@@ -1232,6 +1225,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict=True,
+        **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
         Args:
@@ -1253,6 +1247,26 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
+
+        if input_points is not None and len(input_points.shape) != 4:
+            raise ValueError(
+                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
+                " got {}.".format(input_points.shape),
+            )
+        if input_boxes is not None and len(input_boxes.shape) != 3:
+            raise ValueError(
+                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
+                " got {}.".format(input_boxes.shape),
+            )
+        if input_points is not None and input_boxes is not None:
+            point_batch_size = input_points.shape[1]
+            box_batch_size = input_boxes.shape[1]
+            if point_batch_size != box_batch_size:
+                raise ValueError(
+                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
+                        point_batch_size, box_batch_size
+                    )
+                )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
@@ -1285,7 +1299,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
                 "The batch size of the image embeddings and the input points must be the same. ",
                 "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
                 " if you want to pass multiple points for the same image, make sure that you passed ",
-                " input_points of shape (batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, num_points_per_image)",
+                " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(

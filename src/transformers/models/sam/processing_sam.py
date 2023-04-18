@@ -27,7 +27,6 @@ from .image_processing_sam import _normalize_coordinates
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 
 class SamProcessor(ProcessorMixin):
@@ -81,6 +80,26 @@ class SamProcessor(ProcessorMixin):
             input_boxes=input_boxes,
         )
 
+        encoding_image_processor = self._normalize_and_convert(
+            encoding_image_processor,
+            original_sizes,
+            input_points=input_points,
+            input_labels=input_labels,
+            input_boxes=input_boxes,
+            return_tensors=return_tensors,
+        )
+
+        return encoding_image_processor
+
+    def _normalize_and_convert(
+        self,
+        encoding_image_processor,
+        original_sizes,
+        input_points=None,
+        input_labels=None,
+        input_boxes=None,
+        return_tensors="pt",
+    ):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
                 input_points = [
@@ -94,16 +113,7 @@ class SamProcessor(ProcessorMixin):
 
             # check that all arrays have the same shape
             if not all([point.shape == input_points[0].shape for point in input_points]):
-                expected_nb_points = max([point.shape[0] for point in input_points])
-                processed_input_points = []
-                for i, point in enumerate(input_points):
-                    if point.shape[0] != expected_nb_points:
-                        point = np.concatenate(
-                            [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
-                        )
-                        input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
-                    processed_input_points.append(point)
-                input_points = processed_input_points
+                input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
             input_points = np.array(input_points)
 
         if input_labels is not None:
@@ -126,22 +136,38 @@ class SamProcessor(ProcessorMixin):
             if return_tensors == "pt":
                 input_boxes = torch.from_numpy(input_boxes)
                 # boxes batch size of 1 by default
-                input_boxes = input_boxes.unsqueeze(1)
+                input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
             encoding_image_processor.update({"input_boxes": input_boxes})
         if input_points is not None:
             if return_tensors == "pt":
                 input_points = torch.from_numpy(input_points)
                 # point batch size of 1 by default
-                input_points = input_points.unsqueeze(1)
+                input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
             encoding_image_processor.update({"input_points": input_points})
         if input_labels is not None:
             if return_tensors == "pt":
                 input_labels = torch.from_numpy(input_labels)
                 # point batch size of 1 by default
-                input_labels = input_labels.unsqueeze(1)
+                input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
+
+    def _pad_points_and_labels(self, input_points, input_labels):
+        r"""
+        The method pads the 2D points and labels to the maximum number of points in the batch.
+        """
+        expected_nb_points = max([point.shape[0] for point in input_points])
+        processed_input_points = []
+        for i, point in enumerate(input_points):
+            if point.shape[0] != expected_nb_points:
+                point = np.concatenate(
+                    [point, np.zeros((expected_nb_points - point.shape[0], 2)) + self.point_pad_value], axis=0
+                )
+                input_labels[i] = np.append(input_labels[i], [self.point_pad_value])
+            processed_input_points.append(point)
+        input_points = processed_input_points
+        return input_points, input_labels
 
     def _check_and_preprocess_points(
         self,
@@ -189,21 +215,6 @@ class SamProcessor(ProcessorMixin):
             input_boxes = None
 
         return input_points, input_labels, input_boxes
-
-    def pad_to_target_size(
-        self,
-        image: np.ndarray,
-        target_size: int = None,
-    ):
-        target_size = target_size if target_size is not None else self.target_size
-        image = torch.from_numpy(image).permute(2, 0, 1)
-
-        height, width = image.shape[-2:]
-        padh = target_size - height
-        padw = target_size - width
-        image = F.pad(image, (0, padw, 0, padh))
-
-        return image.numpy()
 
     @property
     def model_input_names(self):
