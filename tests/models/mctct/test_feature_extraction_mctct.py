@@ -279,7 +279,7 @@ class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
 
         return [x["array"] for x in speech_samples]
 
-    def test_integration_test(self):
+    def test_integration(self):
         # fmt: off
         expected = np.array([
             [
