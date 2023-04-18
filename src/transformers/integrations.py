@@ -1245,7 +1245,7 @@ class NeptuneCallback(TrainerCallback):
                 return
 
             if self._run and not self._is_monitoring_run and not self._force_reset_monitoring_run:
-                self._initialize_run(run=self._run_id)
+                self._initialize_run(with_id=self._run_id)
                 self._is_monitoring_run = True
             else:
                 self._initialize_run()
@@ -1257,7 +1257,7 @@ class NeptuneCallback(TrainerCallback):
         else:
             if not self._run:
                 self._initialize_run(
-                    run=self._run_id,
+                    with_id=self._run_id,
                     capture_stdout=False,
                     capture_stderr=False,
                     capture_hardware_metrics=False,
