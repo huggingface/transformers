@@ -74,5 +74,7 @@ class SamProcessorTest(unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
+        input_feat_extract.pop("original_sizes")  # pop original_sizes as it is popped in the processor
+
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
