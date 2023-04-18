@@ -137,7 +137,11 @@ class GPTNeoXALiBiAttention(nn.Module):
     ):
         has_layer_past = layer_past is not None
         seq_length = attention_mask.shape[-1]
-        bias = torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool)).contiguous().view(1, 1, seq_length, seq_length)
+        bias = (
+            torch.tril(torch.ones((seq_length, seq_length), dtype=torch.bool))
+            .contiguous()
+            .view(1, 1, seq_length, seq_length)
+        )
         self.register_buffer("bias", bias, persistent=False)
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
@@ -434,32 +438,31 @@ class GPTNeoXALiBiModel(GPTNeoXALiBiPreTrainedModel):
         hidden_states = inputs_embeds
 
         # Attention mask.
+        # If no attention mask is provided, make them all ones.
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
-            # Create alibi positional embedding
-            alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
-        else:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.contiguous().view(batch_size, -1)
-            attention_mask = attention_mask.to(hidden_states.device)
+            attention_mask = torch.ones(input_shape, device=hidden_states.device)
 
-            # Create alibi positional embedding
-            alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
+        assert batch_size > 0, "batch_size has to be defined and > 0"
+        attention_mask = attention_mask.contiguous().view(batch_size, -1)
+        attention_mask = attention_mask.to(hidden_states.device)
 
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+        # Create alibi positional embedding
+        alibi = build_alibi_tensor(attention_mask, self.config.num_attention_heads, dtype=hidden_states.dtype)
 
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+        # We create a 3D attention mask from a 2D tensor mask.
+        # Sizes are [batch_size, 1, 1, to_seq_length]
+        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+        # this attention mask is more simple than the triangular masking of causal attention
+        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        attention_mask = attention_mask[:, None, None, :]
+
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and the dtype's smallest value for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely.
+        attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
