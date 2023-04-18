@@ -470,8 +470,8 @@ class AutoformerAttention(nn.Module):
             value_states = value_states[:, :queries_time_length, :]
             key_states = key_states[:, :queries_time_length, :]
 
-        query_states_fft = torch.fft.rfft(query_states, dim=1)
-        key_states_fft = torch.fft.rfft(key_states, dim=1)
+        query_states_fft = torch.fft.rfft(query_states, n=tgt_len, dim=1)
+        key_states_fft = torch.fft.rfft(key_states, n=tgt_len, dim=1)
         attn_weights = query_states_fft * torch.conj(key_states_fft)
         attn_weights = torch.fft.irfft(attn_weights, n=tgt_len, dim=1)  # Autocorrelation(Q,K)
 
@@ -1377,8 +1377,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         if config.num_static_categorical_features > 0:
             self.embedder = AutoformerFeatureEmbedder(
-                cardinalities=config.cardinality,
-                embedding_dims=config.embedding_dimension,
+                cardinalities=config.cardinality, embedding_dims=config.embedding_dimension
             )
 
         # transformer encoder-decoder and mask initializer
@@ -1967,7 +1966,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         for k in range(self.config.prediction_length):
             lagged_sequence = self.model.get_lagged_subsequences(
                 sequence=repeated_past_values,
-                subsequences_length=1 + k + self.config.context_length,
+                subsequences_length=k + self.config.context_length,
                 shift=1,
             )
             lags_shape = lagged_sequence.shape
@@ -1984,11 +1983,11 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             params = self.output_params(dec_last_hidden[0][:, -1:] + dec_last_hidden[1][:, -1:])
             distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
+            future_samples.append(next_sample)
 
             repeated_past_values = torch.cat(
                 (repeated_past_values, (next_sample - repeated_loc) / repeated_scale), dim=1
             )
-            future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
 
