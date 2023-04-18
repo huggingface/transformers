@@ -32,7 +32,7 @@ pip install accelerate
 
 ## 가속화를 위한 준비[[prepare-to-accelerate]]
 
-다음 단계는 모든 관련 훈련 객체를 [`~accelerate.Accelerator.prepare`] 메소드에 전달하는 것입니다. 여기에는 훈련 및 평가 데이터로더, 모델 및 옵티마이저가 포함됩니다:
+다음 단계는 관련된 모든 훈련 객체를 [`~accelerate.Accelerator.prepare`] 메소드에 전달하는 것입니다. 여기에는 훈련 및 평가 데이터로더, 모델 및 옵티마이저가 포함됩니다:
 
 ```py
 >>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
