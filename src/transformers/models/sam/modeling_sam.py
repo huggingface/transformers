@@ -527,7 +527,7 @@ class SamMaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = image_embeddings
-        src = src.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
+        # src = src.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
         src = src + dense_prompt_embeddings
 
         pos_src = image_positional_embedding
@@ -1297,6 +1297,14 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, 0], dtype=torch.int, device=input_points.device)
+
+        if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
+            raise ValueError(
+                "The batch size of the image embeddings and the input points must be the same. ",
+                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                " if you want to pass multiple points for the same image, make sure that you passed ",
+                " input_points of shape (batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, num_points_per_image)",
+            )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             input_points=input_points,
