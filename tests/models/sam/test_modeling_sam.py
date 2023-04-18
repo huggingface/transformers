@@ -561,7 +561,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        input_boxes = ((75, 275, 1725, 850),)
+        input_boxes = [[[75, 275, 1725, 850]]]
 
         inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
 
