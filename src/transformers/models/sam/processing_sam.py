@@ -126,19 +126,19 @@ class SamProcessor(ProcessorMixin):
             if return_tensors == "pt":
                 input_boxes = torch.from_numpy(input_boxes)
                 # boxes batch size of 1 by default
-                input_boxes = input_boxes.unsqueeze(1)
+                input_boxes = input_boxes.unsqueeze(1) if len(input_boxes.shape) != 3 else input_boxes
             encoding_image_processor.update({"input_boxes": input_boxes})
         if input_points is not None:
             if return_tensors == "pt":
                 input_points = torch.from_numpy(input_points)
                 # point batch size of 1 by default
-                input_points = input_points.unsqueeze(1)
+                input_points = input_points.unsqueeze(1) if len(input_points.shape) != 4 else input_points
             encoding_image_processor.update({"input_points": input_points})
         if input_labels is not None:
             if return_tensors == "pt":
                 input_labels = torch.from_numpy(input_labels)
                 # point batch size of 1 by default
-                input_labels = input_labels.unsqueeze(1)
+                input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor

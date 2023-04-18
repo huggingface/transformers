@@ -625,12 +625,12 @@ class SamPromptEncoder(nn.Module):
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
-        coords = boxes.reshape(-1, 2, 2)
+        batch_size, nb_boxes = boxes.shape[:2]
+        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
         input_shape = (self.input_image_size, self.input_image_size)
         corner_embedding = self.shared_embedding(coords, input_shape)
-        corner_embedding[:, 0, :] += self.point_embed[2].weight
-        corner_embedding[:, 1, :] += self.point_embed[3].weight
-        corner_embedding = corner_embedding.unsqueeze(1)
+        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
+        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
         return corner_embedding
 
     def forward(
@@ -1199,15 +1199,16 @@ class SamForMaskGeneration(SamPreTrainedModel):
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, num_points_per_image, 2)`):
+            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
                 Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor.
-            input_labels (`torch.LongTensor` of shape `(batch_size, num_points_per_image)`):
+                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
+                point. The model will output `point_batch_size` times 3 masks in total.
+            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
                 Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
                 processor, or can be fed by the user.
             input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
                 Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes
+                processor. users can also pass manually the input boxes.
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
                 Optional input masks for the prompt encoder.
         """
@@ -1254,6 +1255,26 @@ class SamForMaskGeneration(SamPreTrainedModel):
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
+        if input_points is not None and len(input_points.shape) != 4:
+            raise ValueError(
+                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
+                " got {}.".format(input_points.shape),
+            )
+        if input_boxes is not None and len(input_boxes.shape) != 3:
+            raise ValueError(
+                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
+                " got {}.".format(input_boxes.shape),
+            )
+        if input_points is not None and input_boxes is not None:
+            point_batch_size = input_points.shape[1]
+            box_batch_size = input_boxes.shape[1]
+            if point_batch_size != box_batch_size:
+                raise ValueError(
+                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
+                        point_batch_size, box_batch_size
+                    )
+                )
+
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
         batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
@@ -1285,7 +1306,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
                 "The batch size of the image embeddings and the input points must be the same. ",
                 "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
                 " if you want to pass multiple points for the same image, make sure that you passed ",
-                " input_points of shape (batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, num_points_per_image)",
+                " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
