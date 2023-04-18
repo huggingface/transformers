@@ -15,8 +15,6 @@
 """ SAM model configuration"""
 
 import copy
-import os
-from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -26,23 +24,34 @@ logger = logging.get_logger(__name__)
 
 SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/sam-vit-h": "https://huggingface.co/facebook/sam-vit-h/resolve/main/config.json",
+    "facebook/sam-vit-l": "https://huggingface.co/facebook/sam-vit-l/resolve/main/config.json",
+    "facebook/sam-vit-b": "https://huggingface.co/facebook/sam-vit-b/resolve/main/config.json",
 }
 
 
 class SamPromptEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM
-    [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
+    This is the configuration class to store the configuration of a [`SamPromptEncoder`]. The [`SamPromptEncoder`]
+    module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield
+    a similar configuration to that of the SAM-vit-h [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1408):
-            Dimensionality of the encoder layers and the pooler layer.
-
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        input_image_size (`int`, *optional*, defaults to 1024):
+            The expected output resolution of the image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        mask_input_channels (`int`, *optional*, defaults to 16):
+            The number of channels to be fed to the `MaskDecoder` module.
+        num_point_embeddings (`int`, *optional*, defaults to 4):
+            The number of point embeddings to be used.
+        hidden_act (`str`, *optional*, defaults to "gelu"):
+            The non-linear activation function in the encoder and pooler.
     """
 
     def __init__(
@@ -67,17 +76,35 @@ class SamPromptEncoderConfig(PretrainedConfig):
 
 class SamMaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM
+    This is the configuration class to store the configuration of a [`SamMaskDecoder`]. It is used to instantiate a SAM
+    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
+    will yield a similar configuration to that of the SAM-vit-h
     [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1408):
-            Dimensionality of the encoder layers and the pooler layer.
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        hidden_act (`str`, *optional*, defaults to "relu"):
+            The non-linear activation function used inside the `SamMaskDecoder` module.
+        mlp_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 2):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        attention_downsample_rate (`int`, *optional*, defaults to 2):
+            The downsampling rate of the attention layer.
+        num_multimask_outputs (`int`, *optional*, defaults to 3):
+            The number of outputs from the `SamMaskDecoder` module. In the Segment Anything paper, this is set to 3.
+        iou_head_depth (`int`, *optional*, defaults to 3):
+            The number of layers in the IoU head module.
+        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+            The dimensionality of the hidden states in the IoU head module.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
 
     """
 
@@ -112,57 +139,61 @@ class SamVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM
+    defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1408):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 6144):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 39):
+        projection_dim (`int`, *optional*, defaults to 512):
+            Dimensionality of the projection layer in the Transformer encoder.
+        output_channels (`int`, *optional*, defaults to 256):
+            Dimensionality of the output channels in the Patch Encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input image.
+        image_size (`int`, *optional*, defaults to 1024):
+            Expected resolution. Target size of the resized input image.
+        patch_size (`int`, *optional*, defaults to 16):
+            Size of the patches to be extracted from the input image.
+        hidden_act (`str`, *optional*, defaults to "gelu"):
+            The non-linear activation function (function or string)
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries and values in the self-attention layers.
-
-    Example:
-
-    ```python
-    >>> from transformers import SamVisionConfig, SamVisionModel
-
-    >>> # Initializing a SamVisionConfig with facebook/sam-vit-h style configuration
-    >>> configuration = SamVisionConfig()
-
-    >>> # Initializing a SamVisionModel (with random weights) from the facebook/sam-vit-h style configuration
-    >>> model = SamVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "sam_vision_model"
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for multiplying the initializer range.
+        qkv_bias (`bool`, *optional*, defaults to True):
+            Whether to add a bias to query, key, value projections.
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of mlp hidden dim to embedding dim.
+        use_abs_pos (`bool`, *optional*, defaults to True):
+            Whether to use absolute position embedding.
+        use_rel_pos (`bool`, *optional*, defaults to True):
+            Whether to use relative position embedding.
+        window_size (`int`, *optional*, defaults to 14):
+            Window size for relative position.
+        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+            The indexes of the global attention layers.
+        num_pos_feats (`int`, *optional*, defaults to 128):
+            The dimensionality of the position embedding.
+        mlp_dim (`int`, *optional*, defaults to None):
+            The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
+            hidden_size`.
+    """
 
     def __init__(
         self,
@@ -185,7 +216,6 @@ class SamVisionConfig(PretrainedConfig):
         mlp_ratio=4.0,
         use_abs_pos=True,
         use_rel_pos=True,
-        rel_pos_zero_init=False,
         window_size=14,
         global_attn_indexes=[2, 5, 8, 11],
         num_pos_feats=128,
@@ -213,46 +243,29 @@ class SamVisionConfig(PretrainedConfig):
         self.use_rel_pos = use_rel_pos
         self.output_channels = output_channels
         self.mlp_ratio = mlp_ratio
-        self.rel_pos_zero_init = rel_pos_zero_init
         self.window_size = window_size
         self.global_attn_indexes = global_attn_indexes
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from SamConfig
-        if config_dict.get("model_type") == "sam":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class SamConfig(PretrainedConfig):
     r"""
-    [`SamConfig`] is the configuration class to store the configuration of a [`SamForConditionalGeneration`]. It is
-    used to instantiate a SAM model according to the specified arguments, defining the vision model, Q-Former model and
-    language model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the SAM [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
+    [`SamConfig`] is the configuration class to store the configuration of a [`SamForMaskGeneration`]. It is used to
+    instantiate a SAM model according to the specified arguments, defining the vision model, prompt-encoder model and
+    mask decoder configs. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    the SAM-ViT-H [facebook/sam-vit-h](https://huggingface.co/facebook/sam-vit-h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`dict`, *optional*):
+        vision_config (Union[`dict`, `SamVisionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`SamVisionConfig`].
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
+        prompt_encoder_config (Union[`dict`, `SamPromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`SamPromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `SamMaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`SamMaskDecoderConfig`].
 
         kwargs (*optional*):
             Dictionary of keyword arguments.
@@ -262,27 +275,28 @@ class SamConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     SamVisionConfig,
-    ...     OPTConfig,
-    ...     SamConfig,
-    ...     SamForConditionalGeneration,
+    ...     SamPromptEncoderConfig,
+    ...     SamMaskDecoderConfig,
+    ...     SamForMaskGeneration,
     ... )
 
     >>> # Initializing a SamConfig with facebook/sam-vit-h style configuration
     >>> configuration = SamConfig()
 
-    >>> # Initializing a SamForConditionalGeneration (with random weights) from the facebook/sam-vit-h style configuration
-    >>> model = SamForConditionalGeneration(configuration)
+    >>> # Initializing a SamForMaskGeneration (with random weights) from the facebook/sam-vit-h style configuration
+    >>> model = SamForMaskGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a SamConfig from a SamVisionConfig and any PretrainedConfig
+    >>> # We can also initialize a SamConfig from a SamVisionConfig, SamPromptEncoderConfig, and SamMaskDecoderConfig
 
     >>> # Initializing SAM vision, SAM Q-Former and language model configurations
     >>> vision_config = SamVisionConfig()
-    >>> text_config = OPTConfig()
+    >>> prompt_encoder_config = SamPromptEncoderConfig()
+    >>> mask_decoder_config = SamMaskDecoderConfig()
 
-    >>> config = SamConfig.from_text_vision_configs(vision_config, text_config)
+    >>> config = SamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
     ```"""
 
     model_type = "sam"
