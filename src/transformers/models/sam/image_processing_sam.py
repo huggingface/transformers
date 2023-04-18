@@ -42,7 +42,7 @@ from ...utils import (
 
 
 if is_vision_available():
-    import PIL
+    pass
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
