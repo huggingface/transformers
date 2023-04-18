@@ -352,7 +352,6 @@ class SamImageProcessor(BaseImageProcessor):
         output_masks = []
         if original_sizes.shape[0] > 1:
             for i in range(original_sizes.shape[0]):
-
                 interpolated_mask = F.interpolate(
                     masks[i].unsqueeze(0),
                     (original_sizes[i][0].item(), original_sizes[i][1].item()),
