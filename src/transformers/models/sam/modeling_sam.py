@@ -217,7 +217,7 @@ class SamAttention(nn.Module):
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
         batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(batch//point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
@@ -474,7 +474,7 @@ class SamMaskDecoder(nn.Module):
         point_batch_size = sparse_prompt_embeddings.shape[1]
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
-        output_tokens = output_tokens.repeat(batch_size,point_batch_size, 1, 1)
+        output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
@@ -488,7 +488,7 @@ class SamMaskDecoder(nn.Module):
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
@@ -806,7 +806,7 @@ class SamVisionAttention(nn.Module):
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(q.dtype)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-    
+
         attn_output = (attn_probs @ v).reshape(batch_size, self.num_attention_heads, height, width, -1)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
@@ -1194,13 +1194,14 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         Args:
             input_points (`torch.FloatTensor` of shape `(batch_size, num_points_per_image, 2)`):
-                Optional input points for the prompt encoder. The padding of the point is automatically done by the processor.
+                Optional input points for the prompt encoder. The padding of the point is automatically done by the
+                processor.
             input_labels (`torch.LongTensor` of shape `(batch_size, num_points_per_image)`):
-                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the processor,
-                or can be fed by the user.
+                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
+                processor, or can be fed by the user.
             input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
-                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the processor.
-                users can also pass manually the input boxes
+                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
+                processor. users can also pass manually the input boxes
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
                 Optional input masks for the prompt encoder.
         """
