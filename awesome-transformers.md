@@ -215,7 +215,7 @@ The starting point is an implementation of CLIP that matches the accuracy of the
 
 Specifically, a ResNet-50 model trained with this codebase on OpenAI's 15 million image subset of YFCC achieves 32.7% top-1 accuracy on ImageNet.
 
-Keywords: CLIP, Open-source, Contrastice, Image-text
+Keywords: CLIP, Open-source, Contrastive, Image-text
 
 ## [dalle-playground](https://github.com/saharmor/dalle-playground)
 
