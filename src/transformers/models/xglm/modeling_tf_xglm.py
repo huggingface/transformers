@@ -521,7 +521,9 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(past_key_values_length, input_shape[-1] + past_key_values_length), axis=0)
+            position_ids = tf.expand_dims(
+                tf.range(past_key_values_length, input_shape[-1] + past_key_values_length), axis=0
+            )
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
         if inputs_embeds is None:
@@ -874,9 +876,6 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             kernel_initializer=get_initializer(config.init_std),
             name="lm_head",
         )
-
-        # TODO (Joao): investigate why XGLM has numerical issues in XLA generate
-        self.supports_xla_generation = False
 
     def get_output_embeddings(self):
         return self.lm_head
