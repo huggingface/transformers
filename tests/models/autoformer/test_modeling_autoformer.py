@@ -48,6 +48,7 @@ class AutoformerModelTester:
     def __init__(
         self,
         parent,
+        d_model=16,
         batch_size=13,
         prediction_length=7,
         context_length=14,
@@ -66,6 +67,7 @@ class AutoformerModelTester:
         moving_avg=25,
         factor=5,
     ):
+        self.d_model = d_model
         self.parent = parent
         self.batch_size = batch_size
         self.prediction_length = prediction_length
@@ -91,6 +93,7 @@ class AutoformerModelTester:
 
     def get_config(self):
         return AutoformerConfig(
+            d_model=self.d_model,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -126,7 +129,6 @@ class AutoformerModelTester:
         inputs_dict = {
             "past_values": past_values,
             "static_categorical_features": static_categorical_features,
-            "static_real_features": static_real_features,
             "past_time_features": past_time_features,
             "past_observed_mask": past_observed_mask,
             "future_time_features": future_time_features,
@@ -277,6 +279,9 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        d_model = getattr(self.model_tester, "d_model", None)
+        num_attention_heads = getattr(self.model_tester, "num_attention_heads", None)
+        dim = d_model // num_attention_heads
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -297,19 +302,17 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                inputs = self._prepare_for_class(inputs_dict, model_class)
-                outputs = model(**inputs)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions
-            channel = inputs["past_time_features"].size(-1)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, channel],
+                [self.model_tester.num_attention_heads, encoder_seq_length, dim],
             )
             out_len = len(outputs)
 
-            correct_outlen = 6
+            correct_outlen = 7
 
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
@@ -331,7 +334,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, channel],
+                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
             )
 
             # cross attentions
@@ -340,11 +343,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    decoder_seq_length,
-                    channel,
-                ],
+                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
             )
 
         # Check attention is always last and order is fine
@@ -363,7 +362,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
             list(self_attentions[0].shape[-3:]),
-            [self.model_tester.num_attention_heads, encoder_seq_length, channel],
+            [self.model_tester.num_attention_heads, encoder_seq_length, dim],
         )
 
     @is_flaky()
