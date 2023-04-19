@@ -1247,7 +1247,7 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             updates=tf.ones([batch_size], dtype=attention_mask.dtype),
         )
         attention_mask = tf.reverse(attention_mask, axis=[-1])
-        attention_mask = tf.cumsum(attention_mask, axis=-1, reverse=True)
+        attention_mask = tf.cumsum(attention_mask, axis=-1)
         attention_mask = tf.reverse(attention_mask, axis=[-1])
         attention_mask = tf.cast(attention_mask, tf.bool)
         return attention_mask
@@ -1668,10 +1668,8 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             pooled_output = tf.reduce_mean(hidden_states, axis=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            mask = tf.cast(tf.logical_not(padding_mask), tf.float32)
-            mask = tf.expand_dims(mask, axis=-1)
-            hidden_states = hidden_states * mask
-            pooled_output = tf.divide(tf.reduce_sum(hidden_states, axis=1), tf.reduce_sum(mask, axis=1))
+            padding_mask_float = tf.cast(padding_mask, tf.float32)
+            pooled_output = tf.divide(tf.reduce_sum(hidden_states, axis=1), tf.reduce_sum(padding_mask_float, axis=1))
         logits = self.classifier(pooled_output)
         loss = None
         if labels is not None:
