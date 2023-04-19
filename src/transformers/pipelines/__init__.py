@@ -42,6 +42,7 @@ from ..utils import (
     logging,
 )
 from .audio_classification import AudioClassificationPipeline
+from .automatic_mask_generation import AutomaticMaskGenerationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -124,6 +125,7 @@ if is_torch_available():
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
+        AutoModelForMaskGeneration,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSemanticSegmentation,
@@ -384,6 +386,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
         "type": "video",
     },
+    "automatic-mask-generation": {
+        "impl": AutomaticMaskGenerationPipeline,
+        "tf": (),
+        "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("facebook/sam-vit-huge", "")}},
+        "type": "multimodal",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -553,6 +562,7 @@ def pipeline(
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
             - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
+            - `"automatic-mask-generation"`: will return a [`AutomaticMaskGenerationPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
