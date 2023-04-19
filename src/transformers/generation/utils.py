@@ -492,7 +492,7 @@ class GenerationMixin:
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         raise NotImplementedError(
-            "A model class needs to define a `prepare_inputs_for_generation` method in order to use `generate`."
+            "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
         )
 
     def _prepare_model_inputs(
@@ -959,10 +959,10 @@ class GenerationMixin:
                     object_type = "stopping criteria" if isinstance(custom, StoppingCriteria) else "logits processor"
                     raise ValueError(
                         f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
-                        f" `generate`, but it has already been created with the values {default}. {default} has been"
+                        f" `.generate()`, but it has already been created with the values {default}. {default} has been"
                         " created by passing the corresponding arguments to generate or by the model's config default"
                         f" values. If you just want to change the default values of {object_type} consider passing"
-                        f" them as arguments to `generate` instead of using a custom {object_type}."
+                        f" them as arguments to `.generate()` instead of using a custom {object_type}."
                     )
         default_list.extend(custom_list)
         return default_list
@@ -1415,14 +1415,14 @@ class GenerationMixin:
             and not is_constraint_gen_mode
             and not is_contrastive_search_gen_mode
         )
-        is_assisted_greedy_gen_mode = False
+        is_assisted_gen_mode = False
         if assistant_model is not None:
-            if not is_greedy_gen_mode:
+            if not (is_greedy_gen_mode or is_sample_gen_mode):
                 raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generation. Currently, assisted generation "
-                    "is only supported with Greedy Search."
+                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
                 )
-            is_assisted_greedy_gen_mode = True
+            is_assisted_gen_mode = True
 
         if generation_config.num_beam_groups > generation_config.num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
@@ -1461,16 +1461,16 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
-        if is_assisted_greedy_gen_mode:
+        if is_assisted_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
-                    "num_return_sequences has to be 1 when doing assisted greedy search, "
+                    "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
             if batch_size > 1:
-                raise ValueError("Assisted generation is only supported for batch_size = 1")
+                raise ValueError("assisted generate is only supported for batch_size = 1")
             if not model_kwargs["use_cache"]:
-                raise ValueError("Assisted generation requires `use_cache=True`")
+                raise ValueError("assisted generate requires `use_cache=True`")
 
             # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
             if assistant_model.config.is_encoder_decoder:
@@ -1483,11 +1483,18 @@ class GenerationMixin:
                 )
                 model_kwargs["assistant_encoder_outputs"] = assistant_model_kwargs["encoder_outputs"]
 
-            # 12. run assisted greedy search
-            return self.assisted_greedy_search(
+            # 12. prepare logits warper if needed
+            if generation_config.do_sample:
+                logits_warper = self._get_logits_warper(generation_config)
+
+            # 13. run assisted generate
+            return self.assisted_decoding(
                 input_ids,
                 assistant_model=assistant_model,
+                assisted_keep_proba=generation_config.assisted_keep_proba,
+                do_sample=generation_config.do_sample,
                 logits_processor=logits_processor,
+                logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
@@ -4056,11 +4063,14 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def assisted_greedy_search(
+    def assisted_decoding(
         self,
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
+        do_sample: bool = False,
+        assisted_keep_proba: Optional[float] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
+        logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
@@ -4073,12 +4083,13 @@ class GenerationMixin:
         **model_kwargs,
     ):
         r"""
-        Generates sequences of token ids for models with a language modeling head using **greedy decoding**, assisted
-        by a smaller model. Can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **greedy decoding** or
+        **sample** (depending on `do_sample`), assisted by a smaller model. Can be used for text-decoder, text-to-text,
+        speech-to-text, and vision-to-text models.
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.assisted_greedy_search`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin.assisted_decoding`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -4092,6 +4103,13 @@ class GenerationMixin:
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
                 is much faster than running generation with the model you're calling generate from. As such, the
                 assistant model should be much smaller.
+            do_sample (`bool`, *optional*, defaults to `False`):
+                Whether or not to use sampling ; use greedy decoding otherwise.
+            assisted_keep_proba (`float`, *optional*):
+                When `do_sample` is true, this controls the threshold at which the model will resample candidate
+                tokens. When the model's predicted probability for a candidate token is below this threshold, the
+                candidate token is invalidated and a sampling step. Decreasing this value will aproximate the decoding
+                process to greedy search, but it will be faster.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -4154,7 +4172,7 @@ class GenerationMixin:
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-        >>> outputs = model.assisted_greedy_search(
+        >>> outputs = model.assisted_decoding(
         ...     input_ids,
         ...     assistant_model=assistant_model,
         ...     logits_processor=logits_processor,
@@ -4163,16 +4181,20 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # NOTE: the code here is copy/paste from greedy search, except when clearly stated in the comments
+        # NOTE: the code here is copy/paste from greedy search/sample, except when clearly stated in the comments
         # Assistant: initialize assistant-related variables
         if not hasattr(assistant_model, "max_assistant_tokens"):
             assistant_model.max_assistant_tokens = 5  # this value, which will be updated, persists across calls
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        assisted_keep_proba = (
+            assisted_keep_proba if assisted_keep_proba is not None else self.generation_config.assisted_keep_proba
+        )
         if eos_token_id is not None and pad_token_id is None:
             raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
         if isinstance(eos_token_id, int):
@@ -4282,6 +4304,8 @@ class GenerationMixin:
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process (see step 7 on why the +1)
+
+            # 2.1. Run a forward pass on the candidate sequence
             if "past_key_values" in model_kwargs:
                 og_model_attn = torch.ones_like(candidate_input_ids)
                 og_model_input_ids = candidate_input_ids[:, -candidate_length - 1 :]
@@ -4317,12 +4341,25 @@ class GenerationMixin:
                         output_hidden_states=output_hidden_states,
                     )
 
-            # 3. Obtain the argmax from the original model logits.
+            # 2.2. Process the new logits
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
-            max_logits = new_logits.argmax(dim=-1)[:, -candidate_length - 1 : -1]
+            if len(logits_warper) > 0:
+                for i in range(candidate_length):
+                    new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
+
+            # 3. Obtain the argmax from the original model logits. If `do_sample` is True, only logits with high enough
+            # probability are valid (if the most likely token has a probability below `assisted_keep_proba`, we
+            # invalidate the candidate token)
+            if do_sample:
+                probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
+                max_probs, max_logits = probs[:, :-1, :].topk(1, dim=-1)
+                max_logits[max_probs < assisted_keep_proba] = -1  # invalidate candidate tokens with low proba
+                max_logits = max_logits.squeeze(-1)
+            else:
+                max_logits = new_logits[:, -candidate_length - 1 : -1, :].argmax(dim=-1)
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
@@ -4357,12 +4394,17 @@ class GenerationMixin:
             next_token_scores = new_logits[:, n_matches, :]
 
             # 7. Use the set of logits after the last matching assistant token to obtain the next token. Note that,
-            # because of this step, assisted greedy search reduces to a normal greedy search if there is no match.
-            next_tokens = torch.argmax(next_token_scores, dim=-1)
+            # because of this step, assisted greedy search reduces to a normal greedy search/sample if there is no
+            # match.
+            if do_sample:
+                probs = probs[:, n_matches, :]
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            else:
+                next_tokens = torch.argmax(next_token_scores, dim=-1)
 
-            # Assistant: main logic end; Compared to greedy search, the following (redundant) blocks were removed
-            # below: (1) model input preparation; (2) model forward pass; (3) score preparation; (4) model cache
-            # update.
+            # Assistant: main logic end; Compared to greedy search/sample, the following (redundant) blocks were
+            # removed below: (1) model input preparation; (2) model forward pass; (3) score preparation; (4) model
+            # cache update.
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need

@@ -333,15 +333,16 @@ This guide illustrates the main parameters that enable various decoding strategi
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
 
-### Assisted Generation
+### Assisted Decoding
 
-Assisted generation is a modification of the decoding strategies above that uses an assistant model with the same
-tokenizer (ideally a much smaller model) to speed up the decoding process. Currently only assisted greedy search is
-supported, and doesn't support batched inputs.
+Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
+tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
+the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
+and sampling are supported with assisted decoding, and doesn't support batched inputs.
 
-<!-- TODO: add link to the blog post about assisted generation when it exists -->
+<!-- TODO: add link to the blog post about assisted decoding when it exists -->
 
-To enable assisted generation, set the `assistant_model` argument with a model.
+To enable assisted decoding, set the `assistant_model` argument with a model.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -358,4 +359,27 @@ To enable assisted generation, set the `assistant_model` argument with a model.
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+```
+
+When using assisted decoding with sampling methods, the `assisted_keep_proba` argument will balance speed with
+pure sampling behavior. The greedily decoded candidate tokens whose main model's predicted probability are below
+this threshold are discarded, which force an anticipated sampling step. If `assisted_keep_proba` is set to 1.0,
+assisted decoding degenerates into a slow multinomial sampling. Conversely, if `assisted_keep_proba` is set to 0.0,
+the outcome will approximate an accelerated greedy decoding, with a few sampling steps in between.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
+>>> assistant_checkpoint = "EleutherAI/pythia-160m-deduped"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
+>>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, assisted_keep_proba=0.1)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Alice and Bob are in a room watching television. They are both on the same channel. Alice']
 ```

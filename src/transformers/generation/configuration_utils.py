@@ -54,8 +54,10 @@ class GenerationConfig(PushToHubMixin):
             `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
+        - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
+            `assistant_model` is passed to `.generate()`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
+    You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
     Arg:
@@ -179,6 +181,11 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+        assisted_keep_proba (`float`, *optional*):
+            Used with assisted decoding. When `do_sample` is true, this controls the threshold at which the model will
+            resample candidate tokens. When the model's predicted probability for a candidate token is below this
+            threshold, the candidate token is invalidated and a sampling step. Decreasing this value will aproximate
+            the decoding process to greedy search, but it will be faster.
 
         > Parameters that define the output variables of `generate`
 
@@ -258,6 +265,7 @@ class GenerationConfig(PushToHubMixin):
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+        self.assisted_keep_proba = kwargs.pop("assisted_keep_proba", 0.3)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -319,6 +327,8 @@ class GenerationConfig(PushToHubMixin):
         """
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+        if self.assisted_keep_proba < 0.0 or self.assisted_keep_proba > 1.0:
+            raise ValueError(f"`assisted_keep_proba` must be between 0.0 and 1.0, but is {self.assisted_keep_proba}.")
 
     def save_pretrained(
         self,
