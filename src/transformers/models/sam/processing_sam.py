@@ -35,7 +35,7 @@ class SamProcessor(ProcessorMixin):
     single processor.
 
     [`SamProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
-    [`~SamProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
+    [`~SamImageProcessor.__call__`] for more information.
 
     Args:
         image_processor (`SamImageProcessor`):
