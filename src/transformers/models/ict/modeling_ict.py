@@ -362,8 +362,7 @@ class ResnetBlock(nn.Module):
 
         return out
 
-
-class InpaintGenerator(ICTPretrainedModel):
+class InpaintGenerator(nn.Module):
     def __init__(self, residual_blocks=8):
         super().__init__()
 
@@ -390,8 +389,6 @@ class InpaintGenerator(ICTPretrainedModel):
             nn.Conv2d(in_channels=64, out_channels=3, kernel_size=7, padding=0),
         )
 
-        self.init_weights()
-
     def forward(self, x):
         x = self.encoder(x)
         x = self.middle(x)
@@ -399,59 +396,6 @@ class InpaintGenerator(ICTPretrainedModel):
         x = (torch.tanh(x) + 1) / 2
 
         return x
-
-
-class Discriminator(ICTPretrainedModel):
-    def __init__(self, in_channels):
-        super().__init__()
-
-        self.conv1 = nn.Sequential(
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=4, stride=2, padding=1, bias=False)
-            ),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-        self.conv2 = nn.Sequential(
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1, bias=False)
-            ),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-        self.conv3 = nn.Sequential(
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1, bias=False)
-            ),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-        self.conv4 = nn.Sequential(
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=1, padding=1, bias=False)
-            ),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-        self.conv5 = nn.Sequential(
-            nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1, bias=False)
-            ),
-        )
-
-        self.init_weights()
-
-    def forward(self, x):
-        conv1 = self.conv1(x)
-        conv2 = self.conv2(conv1)
-        conv3 = self.conv3(conv2)
-        conv4 = self.conv4(conv3)
-        conv5 = self.conv5(conv4)
-
-        outputs = conv5
-        outputs = torch.sigmoid(conv5)
-
-        return outputs, [conv1, conv2, conv3, conv4, conv5]
 
 
 class AdversarialLoss(nn.Module):
@@ -711,13 +655,8 @@ class ICTGuidedUpsampler(ICTPretrainedModel):
         super().__init__(config)
 
         self.generator = InpaintGenerator(config.residual_blocks)
-        self.discriminator = Discriminator(in_channels=3, use_sigmoid=config.gan_loss != "hinge")
-        self.l1_loss = nn.L1Loss()
-        self.perceptual_loss = PerceptualLoss()
-        self.style_loss = StyleLoss()
-        self.adversarial_loss = AdversarialLoss(type=config.gan_loss)
-
-        self.init_weights()
+        
+        self.post_init()
 
     def forward(self, images, edges, masks):
         images_masked = (images * (1 - masks).float()) + masks
