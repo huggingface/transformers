@@ -954,6 +954,8 @@ class OPTForCausalLM(OPTPreTrainedModel):
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
