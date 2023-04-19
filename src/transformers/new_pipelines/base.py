@@ -4,10 +4,11 @@ from accelerate.utils import send_to_device
 from ..models.auto import AutoProcessor
 
 
-class Pipeline:
+class Tool:
     pre_processor_class = AutoProcessor
     model_class = None
     post_processor_class = AutoProcessor
+    description = ""
 
     def __init__(
         self,
