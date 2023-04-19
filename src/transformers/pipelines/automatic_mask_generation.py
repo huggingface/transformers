@@ -265,26 +265,19 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         all_masks = []
         all_boxes = []
         for model_output in model_outputs:
-            low_resolution_masks = model_output.pop("low_resolution_masks")
             original_sizes = model_output.pop("original_sizes")
             reshaped_input_sizes = model_output.pop("reshaped_input_sizes")
-            crop_boxes = model_output.pop("crop_boxes")
-            iou_scores = model_output.pop("iou_scores")
-
+            low_resolution_masks = model_output.pop("pred_masks")
             masks = self.image_processor.postprocess_masks(
                 original_sizes, reshaped_input_sizes, low_resolution_masks, mask_threshold, binarize=False
             )
 
+            crop_boxes = model_output.pop("crop_boxes")
+            iou_scores = model_output.pop("iou_scores")
             masks, iou_scores, boxes = _filter_masks(
-                masks[0],
-                iou_scores[0],
-                original_sizes[0],
-                crop_boxes[0],
-                pred_iou_thresh,
-                stability_score_thresh,
-                mask_threshold,
-                stability_score_offset,
+                masks[0],iou_scores[0],original_sizes[0],crop_boxes[0],pred_iou_thresh,stability_score_thresh,mask_threshold,stability_score_offset
             )
+            
             all_scores.append(iou_scores)
             all_masks.extend(masks)
             all_boxes.append(boxes)
