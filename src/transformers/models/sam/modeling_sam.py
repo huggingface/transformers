@@ -371,8 +371,8 @@ class SamTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(0)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(0)
+        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -493,9 +493,10 @@ class SamMaskDecoder(nn.Module):
             tokens = output_tokens
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
-        # Expand per-image data in batch direction to be per-mask
-        
+        # Expand per-image data in batch direction to be per-point
         image_embeddings = image_embeddings + dense_prompt_embeddings
+        image_embeddings = image_embeddings.repeat(point_batch_size, 1, 1, 1)
+        image_positional_embeddings = image_positional_embeddings.repeat(point_batch_size, 1, 1, 1)
 
         # Run the transformer, image_positional_embedding are consumed
         point_embedding, image_embeddings, attentions = self.transformer(
@@ -661,6 +662,7 @@ class SamPromptEncoder(nn.Module):
                 masks to embed
         """
         sparse_embeddings = None
+        batch_size = 1
         target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
             batch_size, point_batch_size = input_points.shape[:2]
@@ -680,11 +682,11 @@ class SamPromptEncoder(nn.Module):
             dense_embeddings = self.mask_embed(input_masks)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
 
         if sparse_embeddings is None:
-            sparse_embeddings = torch.empty((dense_embeddings.shape[0], 0, 1, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.empty((batch_size, 0, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 

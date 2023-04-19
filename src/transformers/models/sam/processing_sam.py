@@ -111,10 +111,11 @@ class SamProcessor(ProcessorMixin):
                     self._normalize_coordinates(self.target_size, point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
-
             # check that all arrays have the same shape
             if not all([point.shape == input_points[0].shape for point in input_points]):
-                input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
+                if input_labels is not None:
+                    input_points, input_labels = self._pad_points_and_labels(input_points, input_labels)
+
             input_points = np.array(input_points)
 
         if input_labels is not None:
