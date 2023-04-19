@@ -304,13 +304,20 @@ class SamConfig(PretrainedConfig):
     model_type = "sam"
     is_composition = True
 
-    def __init__(self, vision_config=None, prompt_encoder_config=None, mask_decoder_config=None, initializer_factor = 1.0,initializer_range=0.02, **kwargs):
-        
+    def __init__(
+        self,
+        vision_config=None,
+        prompt_encoder_config=None,
+        mask_decoder_config=None,
+        initializer_factor=1.0,
+        initializer_range=0.02,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-        
+
         if isinstance(vision_config, SamVisionConfig):
             vision_config = vision_config.to_dict()
         if isinstance(prompt_encoder_config, SamPromptEncoderConfig):

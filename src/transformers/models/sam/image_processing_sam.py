@@ -35,10 +35,10 @@ from ...utils import (
     TensorType,
     is_torch_available,
     is_torchvision_available,
-    is_vision_available,
     logging,
     requires_backends,
 )
+
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms

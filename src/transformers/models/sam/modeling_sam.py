@@ -765,8 +765,8 @@ class SamVisionAttention(nn.Module):
 
         Args:
             attn (`torch.Tensor`):
-                attention map. 
-            query (`torch.Tensor`): 
+                attention map.
+            query (`torch.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`torch.Tensor`):
                 relative position embeddings (Lh, channel) for height axis.
@@ -791,7 +791,7 @@ class SamVisionAttention(nn.Module):
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
         attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
-        attn = attn + rel_h[:, :, :, :, None]+ rel_w[:, :, :, None, :]
+        attn = attn + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
         attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
         return attn
 
@@ -1229,7 +1229,9 @@ class SamForMaskGeneration(SamPreTrainedModel):
         return_dict=None,
     ) -> List[Dict[str, torch.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
@@ -1237,7 +1239,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         if pixel_values is not None and image_embeddings is not None:
             raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-        
+
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
