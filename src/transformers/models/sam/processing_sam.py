@@ -15,6 +15,7 @@
 """
 Processor class for SAM.
 """
+from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
@@ -22,7 +23,6 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_torch_available
-from .image_processing_sam import _normalize_coordinates
 
 
 if is_torch_available():
@@ -105,11 +105,11 @@ class SamProcessor(ProcessorMixin):
         if input_points is not None:
             if len(original_sizes) != len(input_points):
                 input_points = [
-                    _normalize_coordinates(self.target_size, point, original_sizes[0]) for point in input_points
+                    self._normalize_coordinates(self.target_size, point, original_sizes[0]) for point in input_points
                 ]
             else:
                 input_points = [
-                    _normalize_coordinates(self.target_size, point, original_size)
+                    self._normalize_coordinates(self.target_size, point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
 
@@ -124,12 +124,12 @@ class SamProcessor(ProcessorMixin):
         if input_boxes is not None:
             if len(original_sizes) != len(input_boxes):
                 input_boxes = [
-                    _normalize_coordinates(self.target_size, box, original_sizes[0], is_bounding_box=True)
+                    self._normalize_coordinates(self.target_size, box, original_sizes[0], is_bounding_box=True)
                     for box in input_boxes
                 ]
             else:
                 input_boxes = [
-                    _normalize_coordinates(self.target_size, box, original_size, is_bounding_box=True)
+                    self._normalize_coordinates(self.target_size, box, original_size, is_bounding_box=True)
                     for box, original_size in zip(input_boxes, original_sizes)
                 ]
             input_boxes = np.array(input_boxes)
@@ -170,6 +170,27 @@ class SamProcessor(ProcessorMixin):
             processed_input_points.append(point)
         input_points = processed_input_points
         return input_points, input_labels
+
+    def _normalize_coordinates(
+        self, target_size: int, coords: np.ndarray, original_size, is_bounding_box=False
+    ) -> np.ndarray:
+        """
+        Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
+        """
+        old_h, old_w = original_size
+        new_h, new_w = self.image_processor._get_preprocess_shape(original_size, longest_edge=target_size)
+        coords = deepcopy(coords).astype(float)
+
+        if is_bounding_box:
+            coords = coords.reshape(-1, 2, 2)
+
+        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 1] = coords[..., 1] * (new_h / old_h)
+
+        if is_bounding_box:
+            coords = coords.reshape(-1, 4)
+
+        return coords
 
     def _check_and_preprocess_points(
         self,

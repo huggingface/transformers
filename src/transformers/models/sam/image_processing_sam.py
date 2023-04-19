@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
-
-from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -40,38 +38,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def _get_preprocess_shape(old_shape: Tuple[int, int], longest_edge: int):
-    """
-    Compute the output size given input size and target long side length.
-    """
-    oldh, oldw = old_shape
-    scale = longest_edge * 1.0 / max(oldh, oldw)
-    newh, neww = oldh * scale, oldw * scale
-    newh = int(newh + 0.5)
-    neww = int(neww + 0.5)
-    return (newh, neww)
-
-
-def _normalize_coordinates(target_size: int, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
-    """
-    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
-    """
-    old_h, old_w = original_size
-    new_h, new_w = _get_preprocess_shape(original_size, longest_edge=target_size)
-    coords = deepcopy(coords).astype(float)
-
-    if is_bounding_box:
-        coords = coords.reshape(-1, 2, 2)
-
-    coords[..., 0] = coords[..., 0] * (new_w / old_w)
-    coords[..., 1] = coords[..., 1] * (new_h / old_h)
-
-    if is_bounding_box:
-        coords = coords.reshape(-1, 4)
-
-    return coords
 
 
 class SamImageProcessor(BaseImageProcessor):
@@ -180,6 +146,17 @@ class SamImageProcessor(BaseImageProcessor):
         padded_image = pad(image, ((0, pad_height), (0, pad_width)), data_format=data_format, **kwargs)
         return padded_image
 
+    def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int):
+        """
+        Compute the output size given input size and target long side length.
+        """
+        oldh, oldw = old_shape
+        scale = longest_edge * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        newh = int(newh + 0.5)
+        neww = int(neww + 0.5)
+        return (newh, neww)
+
     def resize(
         self,
         image: np.ndarray,
@@ -212,7 +189,7 @@ class SamImageProcessor(BaseImageProcessor):
         if "longest_edge" not in size:
             raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
         input_size = get_image_size(image)
-        output_height, output_width = _get_preprocess_shape(input_size, size["longest_edge"])
+        output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
         return resize(image, size=(output_height, output_width), resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
