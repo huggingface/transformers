@@ -649,15 +649,15 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 def _batched_mask_to_box(masks):
     """
-    Computes the bounding boxes around the given input masks.
-    The bounding boxes are in the XYXY format which corresponds the following required indices:
+    Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
+    corresponds the following required indices:
         - LEFT: left hand side of the bounding box
         - TOP: top of the bounding box
         - RIGHT: right of the bounding box
         - BOTTOM: bottom of the bounding box
 
-    Return [0,0,0,0] for an empty mask.
-    For input shape channel_1 x channel_2 x ... x height x width, the output shape is channel_1 x channel_2 x ... x 4.
+    Return [0,0,0,0] for an empty mask. For input shape channel_1 x channel_2 x ... x height x width, the output shape
+    is channel_1 x channel_2 x ... x 4.
 
     Args:
         - masks (`torch.tensor` of shape `(???????)`)
