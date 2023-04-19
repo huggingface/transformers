@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
-from typing import Dict, List, Optional, Tuple, Union
+import math
+from copy import deepcopy
+from itertools import product
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,12 +33,15 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, logging, requires_backends
+from ...utils import TensorType, is_torch_available, is_torchvision_available, logging, requires_backends
 
 
 if is_torch_available():
+    import torch
     import torch.nn.functional as F
 
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
 
 logger = logging.get_logger(__name__)
 
@@ -400,3 +406,356 @@ class SamImageProcessor(BaseImageProcessor):
             output_masks.append(interpolated_mask)
 
         return output_masks
+
+    def post_process_for_mask_generation(self, all_masks, all_scores, all_boxes, crops_nms_thresh):
+        """
+        Post processes mask that are automatically generated.
+        """
+        return _postprocess_for_amg(all_masks, all_scores, all_boxes, crops_nms_thresh)
+
+    def generate_crop_boxes(
+        self,
+        image,
+        target_size,
+        n_layers: int = 0,
+        overlap_ratio: float = 512 / 1500,
+        points_per_crop: Optional[int] = 32,
+        crop_n_points_downscale_factor: Optional[List[int]] = 1,
+    ):
+        return _generate_crop_boxes(
+            image, target_size, n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor
+        )
+
+    def filter_masks(
+        self,
+        masks,
+        iou_scores,
+        original_size,
+        cropped_box_image,
+        pred_iou_thresh=0.88,
+        stability_score_thresh=0.95,
+        mask_threshold=0,
+        stability_score_offset=1,
+    ):
+        """
+        Docstring to come
+
+        Args:
+            cropped_box_image (``):
+                describe this input. Image in a crop box
+
+        """
+        original_height, original_width = original_size
+        iou_scores = iou_scores.flatten(0, 1)
+        masks = masks.flatten(0, 1)
+
+        if masks.shape[0] != iou_scores.shape[0]:
+            raise ValueError("masks and iou_scores must have the same batch size.")
+
+        if masks.device != iou_scores.device:
+            iou_scores = iou_scores.to(masks.device)
+
+        batch_size = masks.shape[0]
+
+        keep_mask = torch.ones(batch_size, dtype=torch.bool, device=masks.device)
+
+        if pred_iou_thresh > 0.0:
+            keep_mask = keep_mask & (iou_scores > pred_iou_thresh)
+
+        # Calculate stability score
+        if stability_score_thresh > 0.0:
+            # One mask is always contained inside the other.
+            # Save memory by preventing unnecesary cast to torch.int64
+            intersections = (
+                (masks > (mask_threshold + stability_score_offset))
+                .sum(-1, dtype=torch.int16)
+                .sum(-1, dtype=torch.int32)
+            )
+            unions = (
+                (masks > (mask_threshold - stability_score_offset))
+                .sum(-1, dtype=torch.int16)
+                .sum(-1, dtype=torch.int32)
+            )
+            stability_scores = intersections / unions
+            keep_mask = keep_mask & (stability_scores > stability_score_thresh)
+
+        scores = iou_scores[keep_mask]
+        masks = masks[keep_mask]
+
+        # binarize masks
+        masks = masks > mask_threshold
+        converted_boxes = _batched_mask_to_box(masks)
+
+        keep_mask = ~_is_box_near_crop_edge(
+            converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
+        )
+
+        scores = scores[keep_mask]
+        masks = masks[keep_mask]
+        converted_boxes = converted_boxes[keep_mask]
+
+        masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
+        # conversion to rle is necessary to run non-maximum suppresion
+        masks = _mask_to_rle_pytorch(masks)
+
+        return masks, scores, converted_boxes
+
+
+def _build_point_grid(n_per_side: int) -> np.ndarray:
+    """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
+    offset = 1 / (2 * n_per_side)
+    points_one_side = np.linspace(offset, 1 - offset, n_per_side)
+    points_x = np.tile(points_one_side[None, :], (n_per_side, 1))
+    points_y = np.tile(points_one_side[:, None], (1, n_per_side))
+    points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
+    return points
+
+
+def _normalize_coordinates(target_size, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
+    """
+    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width)
+    format.
+    """
+    old_height, old_width = original_size
+
+    scale = target_size * 1.0 / max(old_height, old_width)
+    new_height, new_width = old_height * scale, old_width * scale
+    new_width = int(new_width + 0.5)
+    new_height = int(new_height + 0.5)
+
+    coords = deepcopy(coords).astype(float)
+
+    if is_bounding_box:
+        # reshape to .reshape(-1, 2, 2)
+        coords = coords.reshape(-1, 2, 2)
+
+    coords[..., 0] = coords[..., 0] * (new_width / old_width)
+    coords[..., 1] = coords[..., 1] * (new_height / old_height)
+
+    if is_bounding_box:
+        # reshape back to .reshape(-1, 4)
+        coords = coords.reshape(-1, 4)
+
+    return coords
+
+
+def _generate_crop_boxes(
+    image,
+    target_size,
+    n_layers: int = 0,
+    overlap_ratio: float = 512 / 1500,
+    points_per_crop: Optional[int] = 32,
+    crop_n_points_downscale_factor: Optional[List[int]] = 1,
+) -> Tuple[List[List[int]], List[int]]:
+    """
+    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
+    """
+    if isinstance(image, list):
+        raise ValueError("Only one image is allowed for crop generation.")
+    image = to_numpy_array(image)
+    original_size = image.shape[:2]
+
+    points_grid = []
+    for i in range(n_layers + 1):
+        n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
+        points_grid.append(_build_point_grid(n_points))
+
+    crop_boxes, layer_idxs = [], []
+    im_height, im_width = original_size
+    short_side = min(im_height, im_width)
+
+    # Original image
+    crop_boxes.append([0, 0, im_width, im_height])
+    layer_idxs.append(0)
+
+    for i_layer in range(n_layers):
+        n_crops_per_side = 2 ** (i_layer + 1)
+        overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
+
+        crop_width = int(math.ceil((overlap * (n_crops_per_side - 1) + im_width) / n_crops_per_side))
+        crop_height = int(math.ceil((overlap * (n_crops_per_side - 1) + im_height) / n_crops_per_side))
+
+        crop_box_x0 = [int((crop_width - overlap) * i) for i in range(n_crops_per_side)]
+        crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
+
+        # Crops in XYWH format :
+        # The XYWH format consists of the following required indices:
+        #     X: X coordinate of the left of the bounding box
+        #     Y: Y coordinate of the top of the bounding box
+        #     WIDTH: width of the bounding box
+        #     HEIGHT: height of the bounding box
+
+        for left, top in product(crop_box_x0, crop_box_y0):
+            box = [left, top, min(left + crop_width, im_width), min(top + crop_height, im_height)]
+            crop_boxes.append(box)
+            layer_idxs.append(i_layer + 1)
+
+    # generate cropped images
+    cropped_images = []
+    total_points_per_crop = []
+    for i, crop_box in enumerate(crop_boxes):
+        left, top, right, bottom = crop_box
+        cropped_im = image[top:bottom, left:right, :]
+        cropped_images.append(cropped_im)
+
+        cropped_im_size = cropped_im.shape[:2]
+        points_scale = np.array(cropped_im_size)[None, ::-1]
+
+        total_points_per_crop.append(points_grid[layer_idxs[i]] * points_scale)
+
+    normalized_total_points_per_crop = []
+    for points_per_crop in total_points_per_crop:
+        normalized_total_points_per_crop.append(
+            [_normalize_coordinates(target_size, point, original_size) for point in points_per_crop]
+        )
+
+    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32)
+    normalized_total_points_per_crop = np.array([normalized_total_points_per_crop])
+    points_per_crop = torch.tensor(normalized_total_points_per_crop)
+    points_per_crop = points_per_crop.permute(0, 2, 1, 3)
+
+    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long)
+
+    return crop_boxes, points_per_crop, cropped_images, input_labels
+
+
+def _pad_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
+    left, top, right, bottom = crop_box
+    if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
+        return masks
+    # Coordinate transform masks
+    pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
+    pad = (left, pad_x - left, top, pad_y - top)
+    return torch.nn.functional.pad(masks, pad, value=0)
+
+
+def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
+    """Filter masks at the edge of a crop, but not at the edge of the original image."""
+    crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
+    orig_box_torch = torch.as_tensor(orig_box, dtype=torch.float, device=boxes.device)
+
+    left, top, _, _ = crop_box
+    offset = torch.tensor([[left, top, left, top]], device=boxes.device)
+    # Check if boxes has a channel dimension
+    if len(boxes.shape) == 3:
+        offset = offset.unsqueeze(1)
+    boxes = (boxes + offset).float()
+
+    near_crop_edge = torch.isclose(boxes, crop_box_torch[None, :], atol=atol, rtol=0)
+    near_image_edge = torch.isclose(boxes, orig_box_torch[None, :], atol=atol, rtol=0)
+    near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
+    return torch.any(near_crop_edge, dim=1)
+
+
+def _batched_mask_to_box(masks):
+    """
+    Computes the bounding boxes around the given input masks.
+    The bounding boxes are in the XYXY format which corresponds the following required indices:
+        - LEFT: left hand side of the bounding box
+        - TOP: top of the bounding box
+        - RIGHT: right of the bounding box
+        - BOTTOM: bottom of the bounding box
+
+    Return [0,0,0,0] for an empty mask.
+    For input shape channel_1 x channel_2 x ... x height x width, the output shape is channel_1 x channel_2 x ... x 4.
+
+    Args:
+        - masks (`torch.tensor` of shape `(???????)`)
+    """
+    # torch.max below raises an error on empty inputs, just skip in this case
+
+    if torch.numel(masks) == 0:
+        return torch.zeros(*masks.shape[:-2], 4, device=masks.device)
+
+    # Normalize shape to Cxheightxwidth
+    shape = masks.shape
+    height, width = shape[-2:]
+    if len(shape) > 2:
+        masks = masks.flatten(0, -3)
+    else:
+        masks = masks.unsqueeze(0)
+
+    # Get top and bottom edges
+    in_height, _ = torch.max(masks, dim=-1)
+    in_height_coords = in_height * torch.arange(height, device=in_height.device)[None, :]
+    bottom_edges, _ = torch.max(in_height_coords, dim=-1)
+    in_height_coords = in_height_coords + height * (~in_height)
+    top_edges, _ = torch.min(in_height_coords, dim=-1)
+
+    # Get left and right edges
+    in_width, _ = torch.max(masks, dim=-2)
+    in_width_coords = in_width * torch.arange(width, device=in_width.device)[None, :]
+    right_edges, _ = torch.max(in_width_coords, dim=-1)
+    in_width_coords = in_width_coords + width * (~in_width)
+    left_edges, _ = torch.min(in_width_coords, dim=-1)
+
+    # If the mask is empty the right edge will be to the left of the left edge.
+    # Replace these boxes with [0, 0, 0, 0]
+    empty_filter = (right_edges < left_edges) | (bottom_edges < top_edges)
+    out = torch.stack([left_edges, top_edges, right_edges, bottom_edges], dim=-1)
+    out = out * (~empty_filter).unsqueeze(-1)
+
+    # Return to original shape
+    if len(shape) > 2:
+        out = out.reshape(*shape[:-2], 4)
+    else:
+        out = out[0]
+
+    return out
+
+
+def _mask_to_rle_pytorch(input_mask):
+    """
+    Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
+    """
+    # Put in fortran order and flatten h,w
+    batch_size, height, width = input_mask.shape
+    input_mask = input_mask.permute(0, 2, 1).flatten(1)
+
+    # Compute change indices
+    diff = input_mask[:, 1:] ^ input_mask[:, :-1]
+    change_indices = diff.nonzero()
+
+    # Encode run length
+    out = []
+    for i in range(batch_size):
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1].detach().cpu().tolist()
+        cur_idxs = [[0] + [cur_idxs + 1] + [height * width]]
+        btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
+        counts = [] if input_mask[i, 0] == 0 else [0]
+        counts.extend(btw_idxs)
+        # counts.extend(btw_idxs.detach().cpu().tolist())
+        out.append({"size": [height, width], "counts": counts})
+
+    out = torch.cat(out).to()
+    return out
+
+
+def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
+    """Compute a binary mask from an uncompressed RLE."""
+    height, width = rle["size"]
+    mask = np.empty(height * width, dtype=bool)
+    idx = 0
+    parity = False
+    for count in rle["counts"]:
+        mask[idx : idx + count] = parity
+        idx += count
+        parity = not parity
+    mask = mask.reshape(width, height)
+    return mask.transpose()  # Reshape to original shape
+
+
+def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+    keep_by_nms = batched_nms(
+        boxes=mask_boxes.float(),
+        scores=iou_scores,
+        idxs=torch.zeros(mask_boxes.shape[0]),
+        iou_threshold=amg_crops_nms_thresh,
+    )
+
+    iou_scores = iou_scores[keep_by_nms]
+    rle_masks = [rle_masks[i] for i in keep_by_nms]
+    mask_boxes = mask_boxes[keep_by_nms]
+    masks = [_rle_to_mask(rle) for rle in rle_masks]
+
+    return masks, iou_scores, rle_masks, mask_boxes
