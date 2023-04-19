@@ -33,6 +33,8 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
+  - local: perf_train_gpu_one
+    title: Addestramento efficiente su GPU
   - local: perf_train_cpu
     title: Addestramento efficiente su CPU
   - local: perf_train_cpu_many
