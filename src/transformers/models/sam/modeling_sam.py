@@ -601,7 +601,7 @@ class SamPromptEncoder(nn.Module):
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
-        self.input_image_size = config.input_image_size
+        self.input_image_size = config.image_size
 
         self.point_embed = nn.ModuleList(
             [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
@@ -1312,8 +1312,12 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         if not return_dict:
             output = (iou_predictions, low_res_masks)
+            if output_hidden_states:
+                output = output + (vision_hidden_states,)
+
             if output_attentions:
                 output = output + (vision_attentions, mask_decoder_attentions)
+            return output
 
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,

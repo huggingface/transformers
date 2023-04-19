@@ -46,7 +46,7 @@ class SamPromptEncoderTester:
         hidden_size=32,
         input_image_size=24,
         patch_size=2,
-        mask_input_channels=3,
+        mask_input_channels=4,
         num_point_embeddings=4,
         hidden_act="gelu",
     ):
@@ -59,9 +59,9 @@ class SamPromptEncoderTester:
 
     def get_config(self):
         return SamPromptEncoderConfig(
-            input_image_size=self.input_image_size,
+            image_size=self.input_image_size,
             patch_size=self.patch_size,
-            num_channels=self.mask_input_channels,
+            mask_input_channels=self.mask_input_channels,
             hidden_size=self.hidden_size,
             num_point_embeddings=self.num_point_embeddings,
             hidden_act=self.hidden_act,
@@ -140,7 +140,7 @@ class SamModelTester:
         layer_norm_eps=1e-06,
         dropout=0.0,
         attention_dropout=0.0,
-        initializer_range=1e-10,
+        initializer_range=0.02,
         initializer_factor=1.0,
         qkv_bias=True,
         mlp_ratio=4.0,
@@ -596,7 +596,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-3))
+        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
@@ -646,4 +646,4 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_allclose(iou_scores,EXPECTED_IOU,atol=1e-4,rtol=1e-4)
+        torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
