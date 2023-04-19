@@ -1,10 +1,10 @@
 import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
-from .base import Pipeline
+from .base import Tool
 
 
-class TextClassificationPipeline(Pipeline):
+class TextClassificationPipeline(Tool):
     """
     Example:
 
@@ -18,6 +18,24 @@ class TextClassificationPipeline(Pipeline):
 
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
+
+    description = """
+    Text classification tool: it takes text as inputs and labels it. It has {n_labels} available, which are {labels}.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        num_labels = self.model.config.num_labels
+        labels = list(self.model.config.label2id.keys())
+
+        if len(labels) > 1:
+            labels_string = ", ".join(labels[:-1])
+            labels_string += f", and {labels[-1]}"
+        else:
+            raise ValueError("Not enough labels.")
+
+        self.description = self.description.replace("{n_labels}", num_labels).replace("{labels}", labels_string)
 
     def encode(self, text):
         return self.pre_processor(text, return_tensors="pt")
