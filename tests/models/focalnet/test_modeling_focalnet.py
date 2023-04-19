@@ -373,12 +373,11 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         # TODO update organization
-        return AutoImageProcessor.from_pretrained("nielsr/focalnet-tiny") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("microsoft/focalnet-tiny") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        # TODO update organization
-        model = FocalNetForImageClassification.from_pretrained("nielsr/focalnet-tiny").to(torch_device)
+        model = FocalNetForImageClassification.from_pretrained("microsoft/focalnet-tiny").to(torch_device)
         image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
