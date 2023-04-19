@@ -90,11 +90,7 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        model_id = "ybelkada/sam-vit-h"
-
-        model = SamForMaskGeneration.from_pretrained(model_id)
-        image_processor = AutoImageProcessor.from_pretrained(model_id)
-        image_segmenter = AutomaticMaskGenerationPipeline(model=model, image_processor=image_processor)
+        image_segmenter = pipeline(model="ybelkada/sam-vit-h")
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
 
