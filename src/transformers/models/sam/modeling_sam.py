@@ -1090,7 +1090,7 @@ SAM_INPUTS_DOCSTRING = r"""
             - `-1`: the point corresponds to the background
             We added the label:
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
-            The padding of the point is automatically done by the processor.
+            The padding labels should be automatically done by the processor.
         input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better results. The boxes can be obtained by passing a list of list of list, corresponding to the
