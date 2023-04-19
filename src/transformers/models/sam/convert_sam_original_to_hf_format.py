@@ -26,8 +26,8 @@ from PIL import Image
 
 from transformers import (
     SamConfig,
-    SamModel,
     SamImageProcessor,
+    SamModel,
     SamProcessor,
     SamVisionConfig,
 )
