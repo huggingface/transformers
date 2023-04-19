@@ -66,7 +66,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         points_per_batch (*optional*, int, default to 64):
-            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more GPU memory.
+            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more
+            GPU memory.
         output_bboxes_mask (`bool`, *optional*, default to `False`):
            Whether or not to output the bounding box predictions.
         output_rle_masks (`bool`, *optional*, default to `False`):
