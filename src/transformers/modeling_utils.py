@@ -336,7 +336,7 @@ def shard_checkpoint(
     return shards, index
 
 
-def load_sharded_checkpoint(model, folder, strict=True):
+def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     """
     This is the same as
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
@@ -350,6 +350,9 @@ def load_sharded_checkpoint(model, folder, strict=True):
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
         strict (`bool`, *optional`, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+        prefer_safe (`bool`, *optional*, defaults to `False`)
+            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
+            safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
     Returns:
         `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
@@ -358,10 +361,32 @@ def load_sharded_checkpoint(model, folder, strict=True):
     """
     # Load the index
     index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-    if not os.path.isfile(index_file):
-        raise ValueError(f"Can't find a checkpoint index ({WEIGHTS_INDEX_NAME}) in {folder}.")
+    safe_index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
 
-    with open(index_file, "r", encoding="utf-8") as f:
+    index_present = os.path.isfile(index_file)
+    safe_index_present = os.path.isfile(safe_index_file)
+
+    if not index_present and not (safe_index_present and is_safetensors_available()):
+        filenames = (
+            (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if is_safetensors_available() else (WEIGHTS_INDEX_NAME,)
+        )
+        raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
+
+    load_safe = False
+    if safe_index_present:
+        if prefer_safe:
+            if is_safetensors_available():
+                load_safe = True  # load safe due to preference
+            else:
+                logger.warning(
+                    f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
+                )
+        elif not index_present:
+            load_safe = True  # load safe since we have no other choice
+
+    load_index = safe_index_file if load_safe else index_file
+
+    with open(load_index, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     shard_files = list(set(index["weight_map"].values()))
@@ -381,11 +406,13 @@ def load_sharded_checkpoint(model, folder, strict=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
+
     for shard_file in shard_files:
-        state_dict = torch.load(os.path.join(folder, shard_file), map_location="cpu")
+        state_dict = loader(os.path.join(folder, shard_file))
         model.load_state_dict(state_dict, strict=False)
 
-        # Make sure memory is fred before we load the next state dict.
+        # Make sure memory is freed before we load the next state dict.
         del state_dict
         gc.collect()
 
@@ -539,9 +566,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
     """
 
-    # meta device was added in pt=1.9
-    require_version_core("torch>=1.9")
-
     # dematerialize param storage for keys that are going to be replaced by state_dict, by
     # putting those on the meta device
     for k in loaded_state_dict_keys:
@@ -673,7 +697,15 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
+            if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
+                fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
+            else:
+                fp16_statistics = None
+
+            if "SCB" not in param_name:
+                set_module_8bit_tensor_to_device(
+                    model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
+                )
 
     return error_msgs, offload_index, state_dict_index
 
@@ -971,11 +1003,29 @@ class ModuleUtilsMixin:
 
 
 class BackboneMixin:
+    @property
+    def out_feature_channels(self):
+        # the current backbones will output the number of channels for each stage
+        # even if that stage is not in the out_features list.
+        return {stage: self.num_features[i] for i, stage in enumerate(self.stage_names)}
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
     def forward_with_filtered_kwargs(self, *args, **kwargs):
         signature = dict(inspect.signature(self.forward).parameters)
         filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-
         return self(*args, **filtered_kwargs)
+
+    def forward(
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        raise NotImplementedError("This method should be implemented by the derived class.")
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
@@ -1143,7 +1193,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
             return False
         return True
 
@@ -1658,10 +1708,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. ",
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
                 UserWarning,
             )
 
@@ -1721,6 +1771,41 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
+        if safe_serialization:
+            # Safetensors does not allow tensor aliasing.
+            # We're going to remove aliases before saving
+            ptrs = collections.defaultdict(list)
+            for name, tensor in state_dict.items():
+                ptrs[tensor.data_ptr()].append(name)
+
+            # These are all the pointers of shared tensors.
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+            warn_names = set()
+            for names in shared_ptrs.values():
+                # Removing the keys which are declared as known duplicates on
+                # load. This allows to make sure the name which is kept is consistent.
+                if self._keys_to_ignore_on_load_missing is not None:
+                    for name in names:
+                        matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
+                        if matches_pattern and name in state_dict:
+                            del state_dict[name]
+
+                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+                # If the link between tensors was done at runtime then `from_pretrained` will not get
+                # the key back leading to random tensor. A proper warning will be shown
+                # during reload (if applicable), but since the file is not necessarily compatible with
+                # the config, better show a proper warning.
+                found = 0
+                for name in names:
+                    if name in state_dict:
+                        found += 1
+                        if found > 1:
+                            del state_dict[name]
+                            warn_names.add(name)
+            if len(warn_names) > 0:
+                logger.warning_once(
+                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
+                )
 
         # Shard the model if it is too big.
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
@@ -2088,6 +2173,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
+        if is_bitsandbytes_available():
+            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        else:
+            is_8bit_serializable = False
+
         if trust_remote_code is True:
             logger.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
@@ -2100,8 +2190,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
-            # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
-            require_version_core("torch>=1.9")
             if device_map is not None:
                 # The max memory utils require PyTorch >= 1.10 to have torch.cuda.mem_get_info.
                 require_version_core("torch>=1.10")
@@ -2131,6 +2219,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
+
+            # in the case a user loads an 8bit model from the Hub and assigns a new quantization_config
+            if device_map is None:
+                device_map = "auto"
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
 
         if load_in_8bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
@@ -2189,6 +2283,43 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         else:
             model_kwargs = kwargs
+
+        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
+            if hasattr(config, "quantization_config"):
+                logger.warning(
+                    "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
+                    " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
+                    " one you passed to `from_pretrained`."
+                )
+            config.quantization_config = quantization_config
+        elif is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            quantization_config = config.quantization_config
+            if isinstance(quantization_config, dict):
+                quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
+            elif isinstance(quantization_config, BitsAndBytesConfig):
+                pass
+            else:
+                raise ValueError(
+                    f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
+                    " `BitsAndBytesConfig` instance."
+                )
+
+            load_in_8bit = quantization_config.load_in_8bit
+
+            if load_in_8bit:
+                torch_dtype = torch.float16
+
+                if device_map is None:
+                    device_map = "auto"
+
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
+        elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            logger.warning(
+                "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
+                " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
+                " `pip install --upgrade bitsandbytes`."
+            )
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
@@ -2531,7 +2662,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
                     raise ValueError(
                         "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                        "`load_in_8bit_fp32_cpu_offload=True`. Note that these modules will not be "
+                        "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
                         " converted to 8-bit but kept in 32-bit."
                     )
 
@@ -2546,12 +2677,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
+            model.config.quantization_config = quantization_config
+            model.is_8bit_serializable = is_8bit_serializable
+
         if isinstance(device_map, str):
-            special_dtypes = {
-                name: torch.float32
-                for name, _ in model.named_parameters()
-                if any(m in name for m in keep_in_fp32_modules)
-            }
+            special_dtypes = {}
+            if load_in_8bit:
+                special_dtypes.update(
+                    {
+                        name: torch_dtype
+                        for name, _ in model.named_parameters()
+                        if any(m in name for m in modules_to_not_convert)
+                    }
+                )
+
+            special_dtypes.update(
+                {
+                    name: torch.float32
+                    for name, _ in model.named_parameters()
+                    if any(m in name for m in keep_in_fp32_modules)
+                }
+            )
+
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='{device_map}'` yet.")
             no_split_modules = model._no_split_modules
@@ -2563,7 +2710,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif device_map in ["balanced", "balanced_low_0"] and get_balanced_memory is None:
                 raise ValueError(f"`device_map={device_map}` requires a source install of Accelerate.")
 
-            kwargs = {"no_split_module_classes": no_split_modules, "max_memory": max_memory}
+            kwargs = {"no_split_module_classes": no_split_modules}
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
                 kwargs["special_dtypes"] = special_dtypes
             elif len(special_dtypes) > 0:
@@ -2574,10 +2721,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
-                    dtype=torch_dtype,
+                    dtype=torch_dtype if not load_in_8bit else torch.int8,
                     low_zero=(device_map == "balanced_low_0"),
+                    max_memory=max_memory,
                     **kwargs,
                 )
+            kwargs["max_memory"] = max_memory
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=torch_dtype if not load_in_8bit else torch.int8, **kwargs)
@@ -2785,6 +2934,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
+        # Some tensors maybe have been already filled by another key (tied weights).
+        # TODO: Sylvain -> make this work even on meta device.
+        # existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
+        # missing_keys = [
+        #     k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
+        # ]
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:
@@ -3017,6 +3172,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        if load_in_8bit:
+            unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
+            missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
             logger.warning(

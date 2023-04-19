@@ -29,7 +29,6 @@ import sys
 import time
 import warnings
 from collections.abc import Mapping
-from distutils.util import strtobool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -97,6 +96,7 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
     nested_concat,
@@ -135,6 +135,8 @@ from .trainer_utils import (
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     CONFIG_NAME,
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     can_return_loss,
@@ -145,12 +147,14 @@ from .utils import (
     is_datasets_available,
     is_in_notebook,
     is_ipex_available,
+    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
     is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
+    strtobool,
 )
 from .utils.generic import ContextManagers
 
@@ -195,6 +199,10 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+
+
+if is_safetensors_available():
+    import safetensors.torch
 
 
 skip_first_batches = None
@@ -369,6 +377,19 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+        if (
+            getattr(model, "hf_device_map", None) is not None
+            and len([device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]) > 1
+            and not self.is_model_parallel
+        ):
+            self.is_model_parallel = True
+
+            # warn users
+            logger.info(
+                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
+                " to `True` to avoid any unexpected behavior such as device placement mismatching."
+            )
+
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
             if getattr(model, "_is_int8_training_enabled", False):
@@ -395,8 +416,7 @@ class Trainer:
                 raise ValueError(
                     "Using --sharded_ddp xxx together with --fsdp is not possible, deactivate one of those flags."
                 )
-
-            if args.local_rank == -1:
+            if args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
@@ -418,7 +438,7 @@ class Trainer:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and args.local_rank == -1:
+            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
             # dep_version_check("torch>=1.12.0")
@@ -441,9 +461,9 @@ class Trainer:
             if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
-            self.forword_prefetch = False
-            if self.args.fsdp_config.get("forword_prefect", False):
-                self.forword_prefetch = True
+            self.forward_prefetch = False
+            if self.args.fsdp_config.get("forward_prefect", False):
+                self.forward_prefetch = True
 
             self.limit_all_gathers = False
             if self.args.fsdp_config.get("limit_all_gathers", False):
@@ -530,7 +550,7 @@ class Trainer:
             # In case of pull, we need to make sure every process has the latest.
             if is_torch_tpu_available():
                 xm.rendezvous("init git repo")
-            elif args.local_rank != -1:
+            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
                 dist.barrier()
 
         if self.args.should_save:
@@ -543,7 +563,10 @@ class Trainer:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
-            raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
+            raise ValueError(
+                "The train_dataset does not implement __len__, max_steps has to be specified. "
+                "The number of steps needs to be known in advance for the learning rate scheduler."
+            )
 
         if (
             train_dataset is not None
@@ -597,7 +620,7 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled() or is_torch_tpu_available()):
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
@@ -905,7 +928,7 @@ class Trainer:
                     rank=smp.dp_rank(),
                     batch_size=self.args.per_device_eval_batch_size,
                 )
-            elif self.args.local_rank != -1:
+            elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 return SequentialDistributedSampler(eval_dataset)
             else:
                 return SequentialSampler(eval_dataset)
@@ -1360,9 +1383,6 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
-        if self.args.torch_compile:
-            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
-
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
@@ -1385,8 +1405,8 @@ class Trainer:
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
+        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
@@ -1460,6 +1480,11 @@ class Trainer:
                     mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
                 if type(model) != FSDP:
                     # XXX: Breaking the self.model convention but I see no way around it for now.
+                    signature = inspect.signature(FSDP.__init__).parameters.keys()
+                    kwargs = {}
+                    for arg in ["limit_all_gathers", "forward_prefetch", "backward_prefetch"]:
+                        if arg in signature:
+                            kwargs[arg] = getattr(self, arg)
                     self.model = model = FSDP(
                         model,
                         sharding_strategy=self.fsdp,
@@ -1467,9 +1492,7 @@ class Trainer:
                         auto_wrap_policy=auto_wrap_policy,
                         mixed_precision=mixed_precision_policy,
                         device_id=self.args.device,
-                        backward_prefetch=self.backward_prefetch,
-                        forward_prefetch=self.forword_prefetch,
-                        limit_all_gathers=self.limit_all_gathers,
+                        **kwargs,
                     )
             else:
                 try:
@@ -1527,7 +1550,7 @@ class Trainer:
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
             )
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
                 kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
@@ -1548,6 +1571,11 @@ class Trainer:
                 output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 **kwargs,
             )
+
+        # torch.compile() needs to be called after wrapping the model with FSDP or DDP
+        # to ensure that it accounts for the graph breaks required by those wrappers
+        if self.args.torch_compile:
+            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
 
         return model
 
@@ -1738,15 +1766,13 @@ class Trainer:
 
         # Train!
         logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {num_examples}")
-        logger.info(f"  Num Epochs = {num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
+        logger.info(f"  Num examples = {num_examples:,}")
+        logger.info(f"  Num Epochs = {num_train_epochs:,}")
+        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size:,}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-        logger.info(f"  Total optimization steps = {max_steps}")
-        logger.info(
-            f"  Number of trainable parameters = {sum(p.numel() for p in model.parameters() if p.requires_grad)}"
-        )
+        logger.info(f"  Total optimization steps = {max_steps:,}")
+        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
 
         self.state.epoch = 0
         start_time = time.time()
@@ -1892,7 +1918,7 @@ class Trainer:
 
                 if (
                     (total_batched_samples % args.gradient_accumulation_steps != 0)
-                    and args.local_rank != -1
+                    and args.parallel_mode == ParallelMode.DISTRIBUTED
                     and args._no_sync_in_gradient_accumulation
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
@@ -2014,7 +2040,7 @@ class Trainer:
             # Wait for everyone to get here so we are sur the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
-            elif args.local_rank != -1:
+            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
                 dist.barrier()
             elif is_sagemaker_mp_enabled():
                 smp.barrier()
@@ -2074,15 +2100,22 @@ class Trainer:
         if model is None:
             model = self.model
 
-        if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
-            os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
+        config_file = os.path.join(resume_from_checkpoint, CONFIG_NAME)
+
+        weights_file = os.path.join(resume_from_checkpoint, WEIGHTS_NAME)
+        weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
+        safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
+        safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
+
+        if not any(
+            [os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
         logger.info(f"Loading model from {resume_from_checkpoint}.")
 
-        if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
-            config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
+        if os.path.isfile(config_file):
+            config = PretrainedConfig.from_json_file(config_file)
             checkpoint_version = config.transformers_version
             if checkpoint_version is not None and checkpoint_version != __version__:
                 logger.warning(
@@ -2091,7 +2124,7 @@ class Trainer:
                     "yield to errors or unwanted behaviors."
                 )
 
-        if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file):
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2107,7 +2140,7 @@ class Trainer:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
-                    state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                    state_dict = torch.load(weights_file, map_location="cpu")
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
@@ -2115,7 +2148,11 @@ class Trainer:
                     del state_dict
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                if self.args.save_safetensors and os.path.isfile(safe_weights_file):
+                    state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
+                else:
+                    state_dict = torch.load(weights_file, map_location="cpu")
+
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
                 load_result = model.load_state_dict(state_dict, False)
@@ -2124,15 +2161,18 @@ class Trainer:
                 self._issue_warnings_after_load(load_result)
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled())
+            load_result = load_sharded_checkpoint(
+                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=self.args.save_safetensors
+            )
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+        best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
-        if os.path.exists(best_model_path):
+        if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
             if self.deepspeed:
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
@@ -2164,12 +2204,20 @@ class Trainer:
                     else:
                         # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                         # Checkpoint must have been saved with the old smp api.
-                        state_dict = torch.load(best_model_path, map_location="cpu")
+                        if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                            state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
+                        else:
+                            state_dict = torch.load(best_model_path, map_location="cpu")
+
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
-                    state_dict = torch.load(best_model_path, map_location="cpu")
+                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                        state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
+                    else:
+                        state_dict = torch.load(best_model_path, map_location="cpu")
+
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                     # which takes *args instead of **kwargs
@@ -2226,12 +2274,14 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             if isinstance(self.eval_dataset, dict):
+                metrics = {}
                 for eval_dataset_name, eval_dataset in self.eval_dataset.items():
-                    metrics = self.evaluate(
+                    dataset_metrics = self.evaluate(
                         eval_dataset=eval_dataset,
                         ignore_keys=ignore_keys_for_eval,
                         metric_key_prefix=f"eval_{eval_dataset_name}",
                     )
+                    metrics.update(dataset_metrics)
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
@@ -2268,7 +2318,7 @@ class Trainer:
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
-            if self.args.local_rank != -1:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
             else:
                 try:
@@ -2362,7 +2412,7 @@ class Trainer:
             "cpu": torch.random.get_rng_state(),
         }
         if torch.cuda.is_available():
-            if self.args.local_rank == -1:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
@@ -2434,8 +2484,12 @@ class Trainer:
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
+                    # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
+                    # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
+                    # likely to get OOM on CPU (since we load num_gpu times the optimizer state
+                    map_location = self.args.device if self.args.world_size > 1 else "cpu"
                     self.optimizer.load_state_dict(
-                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
+                        torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
                     )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
@@ -2814,17 +2868,24 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
+            if state_dict is None:
+                state_dict = self.model.state_dict()
+
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                if state_dict is None:
-                    state_dict = self.model.state_dict()
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
+                unwrap_model(self.model).save_pretrained(
+                    output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+                )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                if state_dict is None:
-                    state_dict = self.model.state_dict()
-                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                if self.args.save_safetensors:
+                    safetensors.torch.save_file(state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME))
+                else:
+                    torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(
+                output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+            )
+
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
@@ -2833,7 +2894,7 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self.args.local_rank != -1:
+        if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             self.state.total_flos += (
                 distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
             )
@@ -2910,7 +2971,7 @@ class Trainer:
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
-            ignore_keys (`Lst[str]`, *optional*):
+            ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -2975,7 +3036,7 @@ class Trainer:
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
-            ignore_keys (`Lst[str]`, *optional*):
+            ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"test"`):
@@ -3121,8 +3182,6 @@ class Trainer:
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
@@ -3133,10 +3192,13 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
+                logits = self._nested_gather(logits)
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+            if labels is not None:
+                labels = self._nested_gather(labels)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
@@ -3248,7 +3310,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -3309,7 +3371,7 @@ class Trainer:
                 argument `labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
-            ignore_keys (`Lst[str]`, *optional*):
+            ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
 
@@ -3523,7 +3585,7 @@ class Trainer:
 
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
-        modeling_files = [CONFIG_NAME, WEIGHTS_NAME]
+        modeling_files = [CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
         for modeling_file in modeling_files:
             if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
                 shutil.copy(os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file))
@@ -3772,7 +3834,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
 
         return nested_numpify(tensors)

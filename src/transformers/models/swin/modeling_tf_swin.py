@@ -1208,6 +1208,10 @@ class TFSwinModel(TFSwinPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFSwinModelOutput, Tuple[tf.Tensor, ...]]:
+        r"""
+        bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

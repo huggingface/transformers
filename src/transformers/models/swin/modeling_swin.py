@@ -976,6 +976,10 @@ class SwinModel(SwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SwinModelOutput]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1251,12 +1255,11 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.out_feature_channels = {}
-        self.out_feature_channels["stem"] = config.embed_dim
-        for i, stage in enumerate(self.stage_names[1:]):
-            self.out_feature_channels[stage] = num_features[i]
+        if config.out_indices is not None:
+            self.out_indices = config.out_indices
+        else:
+            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
+        self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
@@ -1269,10 +1272,6 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward(
         self,

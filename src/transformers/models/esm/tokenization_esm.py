@@ -57,7 +57,7 @@ class EsmTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, **kwargs):
         super().__init__(**kwargs)
         self.all_tokens = load_vocab_file(vocab_file)
-        self._id_to_token = {ind: tok for ind, tok in enumerate(self.all_tokens)}
+        self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
         self.unk_token = "<unk>"
         self.cls_token = "<cls>"
@@ -91,11 +91,16 @@ class EsmTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.eos_token_id]
         cls = [self.cls_token_id]
         sep = [self.eos_token_id]  # No sep token in ESM vocabulary
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+        if token_ids_1 is None:
+            if self.eos_token_id is None:
+                return cls + token_ids_0
+            else:
+                return cls + token_ids_0 + sep
+        elif self.eos_token_id is None:
+            raise ValueError("Cannot tokenize multiple sequences when EOS token is not set!")
+        return cls + token_ids_0 + sep + token_ids_1 + sep  # Multiple inputs always have an EOS token
 
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False

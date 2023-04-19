@@ -80,6 +80,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
+        ("pix2struct", "Pix2StructImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),
         ("resnet", "ConvNextImageProcessor"),
@@ -306,7 +307,7 @@ class AutoImageProcessor:
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
+        >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
@@ -354,17 +355,9 @@ class AutoImageProcessor:
                         "in that repo on your local machine. Make sure you have read the code there to avoid "
                         "malicious use, then set the option `trust_remote_code=True` to remove this error."
                     )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a image processor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
-
-                module_file, class_name = image_processor_auto_map.split(".")
                 image_processor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                    image_processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
-                image_processor_class.register_for_auto_class()
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)
 

@@ -163,6 +163,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "feature-extraction": FSMTModel,
             "summarization": FSMTForConditionalGeneration,
             "text2text-generation": FSMTForConditionalGeneration,
+            "translation": FSMTForConditionalGeneration,
         }
         if is_torch_available()
         else {}

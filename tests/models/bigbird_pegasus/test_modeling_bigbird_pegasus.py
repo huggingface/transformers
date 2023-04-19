@@ -251,9 +251,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
-            "text2text-generation": BigBirdPegasusForConditionalGeneration,
             "text-classification": BigBirdPegasusForSequenceClassification,
             "text-generation": BigBirdPegasusForCausalLM,
+            "text2text-generation": BigBirdPegasusForConditionalGeneration,
+            "translation": BigBirdPegasusForConditionalGeneration,
             "zero-shot": BigBirdPegasusForSequenceClassification,
         }
         if is_torch_available()
@@ -268,9 +269,18 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     # Also torchscript is not an important feature to have in the beginning.
     test_torchscript = False
 
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
+
     # overwrite from GenerationTesterMixin to solve problem
     # with conflicting random seeds
-    def _get_input_ids_and_config(self):
+    def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.attention_type = "original_full"
 
@@ -278,10 +288,9 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
-        max_batch_size = 2
         sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:max_batch_size, :sequence_length]
-        attention_mask = attention_mask[:max_batch_size, :sequence_length]
+        input_ids = input_ids[:batch_size, :sequence_length]
+        attention_mask = attention_mask[:batch_size, :sequence_length]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3

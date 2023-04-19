@@ -60,6 +60,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
+        ("pix2struct", "Pix2StructProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
@@ -188,7 +189,7 @@ class AutoProcessor:
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> processor = AutoProcessor.from_pretrained("./test/saved_model/")
+        >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
@@ -253,17 +254,10 @@ class AutoProcessor:
                         "in that repo on your local machine. Make sure you have read the code there to avoid "
                         "malicious use, then set the option `trust_remote_code=True` to remove this error."
                     )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a feature extractor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
 
-                module_file, class_name = processor_auto_map.split(".")
                 processor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                    processor_auto_map, pretrained_model_name_or_path, **kwargs
                 )
-                processor_class.register_for_auto_class()
             else:
                 processor_class = processor_class_from_name(processor_class)
 

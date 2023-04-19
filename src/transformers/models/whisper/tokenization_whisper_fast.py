@@ -266,7 +266,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
@@ -283,8 +283,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):

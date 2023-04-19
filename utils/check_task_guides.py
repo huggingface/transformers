@@ -70,6 +70,7 @@ TASK_GUIDE_TO_MODELS = {
     "translation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     "video_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     "document_question_answering.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    "monocular_depth_estimation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES,
 }
 
 # This list contains model types used in some task guides that are not in `CONFIG_MAPPING_NAMES` (therefore not in any

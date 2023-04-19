@@ -22,6 +22,7 @@ from transformers import BitConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -55,6 +56,7 @@ class BitModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         num_groups=1,
     ):
         self.parent = parent
@@ -71,6 +73,7 @@ class BitModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
         self.num_groups = num_groups
 
     def prepare_config_and_inputs(self):
@@ -93,6 +96,7 @@ class BitModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_groups=self.num_groups,
         )
 
@@ -317,3 +321,14 @@ class BitModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[-0.6526, -0.5263, -1.4398]]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (BitBackbone,) if is_torch_available() else ()
+    config_class = BitConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = BitModelTester(self)

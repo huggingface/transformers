@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     require_vision,
 )
-from transformers.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import, logging
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
@@ -93,7 +93,14 @@ for task, task_info in pipeline_test_mapping.items():
     }
 
 
-TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
+# The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
+# For debugging purpose, we can specify a local path which is the `output_path` argument of a previous run of
+# `utils/create_dummy_models.py`.
+TRANSFORMERS_TINY_MODEL_PATH = os.environ.get("TRANSFORMERS_TINY_MODEL_PATH", "hf-internal-testing")
+if TRANSFORMERS_TINY_MODEL_PATH == "hf-internal-testing":
+    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
+else:
+    TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, "reports", "tiny_model_summary.json")
 with open(TINY_MODEL_SUMMARY_FILE_PATH) as fp:
     tiny_model_summary = json.load(fp)
 
@@ -103,6 +110,8 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent, "src/transform
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
 transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
+
+logger = logging.get_logger(__name__)
 
 
 class PipelineTesterMixin:
@@ -140,18 +149,25 @@ class PipelineTesterMixin:
 
             tokenizer_names = []
             processor_names = []
+            commit = None
             if model_arch_name in tiny_model_summary:
                 tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
                 processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
+                if "sha" in tiny_model_summary[model_arch_name]:
+                    commit = tiny_model_summary[model_arch_name]["sha"]
             # Adding `None` (if empty) so we can generate tests
             tokenizer_names = [None] if len(tokenizer_names) == 0 else tokenizer_names
             processor_names = [None] if len(processor_names) == 0 else processor_names
 
             repo_name = f"tiny-random-{model_arch_name}"
+            if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
+                repo_name = model_arch_name
 
-            self.run_model_pipeline_tests(task, repo_name, model_architecture, tokenizer_names, processor_names)
+            self.run_model_pipeline_tests(
+                task, repo_name, model_architecture, tokenizer_names, processor_names, commit
+            )
 
-    def run_model_pipeline_tests(self, task, repo_name, model_architecture, tokenizer_names, processor_names):
+    def run_model_pipeline_tests(self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
 
         Args:
@@ -179,14 +195,15 @@ class PipelineTesterMixin:
                     tokenizer_name,
                     processor_name,
                 ):
-                    self.skipTest(
+                    logger.warning(
                         f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: test is "
                         f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                         f"`{tokenizer_name}` | processor `{processor_name}`."
                     )
-                self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name)
+                    continue
+                self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name, commit)
 
-    def run_pipeline_test(self, task, repo_name, model_architecture, tokenizer_name, processor_name):
+    def run_pipeline_test(self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
 
         The model will be loaded from a model repository on the Hub.
@@ -203,40 +220,46 @@ class PipelineTesterMixin:
             processor_name (`str`):
                 The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
         """
-        repo_id = f"hf-internal-testing/{repo_name}"
+        repo_id = f"{TRANSFORMERS_TINY_MODEL_PATH}/{repo_name}"
+        if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
+            model_type = model_architecture.config_class.model_type
+            repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
 
         tokenizer = None
         if tokenizer_name is not None:
             tokenizer_class = getattr(transformers_module, tokenizer_name)
-            tokenizer = tokenizer_class.from_pretrained(repo_id)
+            tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
 
         processor = None
         if processor_name is not None:
             processor_class = getattr(transformers_module, processor_name)
             # If the required packages (like `Pillow` or `torchaudio`) are not installed, this will fail.
             try:
-                processor = processor_class.from_pretrained(repo_id)
+                processor = processor_class.from_pretrained(repo_id, revision=commit)
             except Exception:
-                self.skipTest(
+                logger.warning(
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not load the "
                     f"processor from `{repo_id}` with `{processor_name}`."
                 )
+                return
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
-            self.skipTest(
+            logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"any tokenizer / processor from `{repo_id}`."
             )
+            return
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
-            model = model_architecture.from_pretrained(repo_id)
+            model = model_architecture.from_pretrained(repo_id, revision=commit)
         except Exception:
-            self.skipTest(
+            logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"the model from `{repo_id}` with `{model_architecture}`."
             )
+            return
 
         # validate
         validate_test_components(self, task, model, tokenizer, processor)
@@ -252,10 +275,11 @@ class PipelineTesterMixin:
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-            self.skipTest(
+            logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
                 "pipeline for testing."
             )
+            return
 
         task_test.run_pipeline_test(pipeline, examples)
 
@@ -404,9 +428,19 @@ class PipelineTesterMixin:
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
+    # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
+        # No fix is required for this case.
+        if (
+            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `DocumentQuestionAnsweringPipelineTests` requires a fast tokenizer.
+            return True
+
         return False
 
 
@@ -428,11 +462,4 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
         if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
             raise ValueError(
                 "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."
-            )
-        # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
-        if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
-            test_case.skipTest(
-                f"{test_case.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: tokenizer "
-                f"(`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is greater than "
-                f"`config_vocab_size` ({config_vocab_size}). Something is wrong."
             )

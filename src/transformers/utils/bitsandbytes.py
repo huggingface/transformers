@@ -1,6 +1,8 @@
 from copy import deepcopy
 
-from .import_utils import is_accelerate_available, is_bitsandbytes_available
+from packaging import version
+
+from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -13,7 +15,7 @@ if is_accelerate_available():
     from accelerate.utils import find_tied_parameters
 
 
-def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
+def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -29,6 +31,8 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             The device on which to set the tensor.
         value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
+        fp16_statistics (`torch.HalfTensor`, *optional*):
+            The list of fp16 statistics to set on the module, used for serialization.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -61,14 +65,21 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
-                    raise ValueError(
-                        "You cannot load weights that are saved in int8 using `load_in_8bit=True`, make sure you are",
-                        " using `load_in_8bit=True` on float32/float16/bfloat16 weights.",
+                    is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
+                        "0.37.2"
                     )
+                    if not is_8bit_serializable:
+                        raise ValueError(
+                            "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
+                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                        )
             else:
                 new_value = torch.tensor(value, device="cpu")
             new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
             module._parameters[tensor_name] = new_value
+
+            if fp16_statistics is not None:
+                setattr(module.weight, "SCB", fp16_statistics.to(device))
     else:
         if value is None:
             new_value = old_value.to(device)
@@ -84,7 +95,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", current_key_name=None):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert=None, current_key_name=None):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
@@ -105,14 +116,15 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
         threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
-        modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
-            Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
+        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
         current_key_name (`List[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
@@ -132,6 +144,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
                         has_fp16_weights=False,
                         threshold=threshold,
                     )
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model
@@ -153,7 +167,12 @@ def get_keys_to_not_convert(model):
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
 
-    tied_keys = list(find_tied_parameters(tied_model).values())
+    tied_params = find_tied_parameters(tied_model)
+    # For compatibility with Accelerate < 0.18
+    if isinstance(tied_params, dict):
+        tied_keys = list(tied_params.values())
+    else:
+        tied_keys = sum([x[1:] for x in tied_params], [])
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
