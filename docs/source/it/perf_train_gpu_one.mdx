@@ -1,0 +1,747 @@
+<!--Copyright 2022 Il team di HuggingFace. Tutti i diritti riservati. 
+
+Concesso in licenza in base alla Licenza Apache, Versione 2.0 (la "Licenza"); non è possibile utilizzare questo file se non in conformità con 
+la Licenza. È possibile ottenere una copia della Licenza all'indirizzo 
+
+http://www.apache.org/licenses/LICENSE-2.0 
+
+A meno che non sia richiesto dalla legge applicabile o concordato per iscritto, il software distribuito con la Licenza è distribuito su 
+BASE "COSÌ COM'È", SENZA GARANZIE O CONDIZIONI DI ALCUN TIPO, espresse o implicite. Consulta la licenza per  
+--> 
+
+# Addestramento efficiente su una singola GPU 
+
+Questa guida è incentrata sull'addestramento in maniera efficiente di modelli di grandi dimensioni su una singola GPU. Questi consigli sono ancora validi se hai accesso a una macchina con più GPU, ma ci sono metodi aggiuntivi descritti nella [sezione multi-GPU](perf_train_gpu_many). 
+
+Qui diamo uno sguardo ad alcuni consigli per ridurre la memoria e velocizzare l'addestramento di modelli e mostriamo come i seguenti metodi possono essere integrati in [`Trainer`] e [🤗 Accelerate](https://huggingface.co/docs /accelerare/). Ciascuno di essi può migliorare la velocità o l'utilizzo della memoria, come riassunto nella tabella seguente: 
+
+|Metodo|Velocità|Memoria| 
+|:-----|:----|:-----| 
+| Gradient accumulation | No | Sì | 
+| Gradient checkpointing | No| Sì | 
+| Addestramento a precisione mista | Sì | (No) | 
+| Dimensione del batch | Sì | Sì | 
+| Scelta dell’optimizer | Sì | Sì | 
+| DataLoader | Sì | No | 
+| DeepSpeed ZeRO | No | Sì | 
+
+Una parentesi indica che potrebbe non essere consigliato, ma di solito non è un problema importante o è trascurabile. Prima di iniziare assicurati di aver installato le seguenti librerie: 
+
+```bash 
+pip install transformers datasets accelerate nvidia-ml-py3 
+``` 
+
+La libreria `nvidia-ml-py3` ci permette di monitorare l'utilizzo di memoria da interfaccia Python. Potresti avere familiarità con il comando `nvidia-smi` nel terminale - `nvidia-ml-py3` consente l’accesso alle stesse informazioni direttamente da Python. 
+
+Quindi creiamo alcuni dati fittizi, ID token casuali tra 100 e 30000 ed etichette binarie per un classificatore. In totale otteniamo 512 sequenze, ciascuna con lunghezza 512, e le memorizziamo in un [`~datasets.Dataset`] con formato PyTorch. 
+
+
+```py 
+import numpy as np 
+from datasets import Dataset 
+
+
+seq_len, dataset_size = 512, 512 
+dummy_data = { 
+     "input_ids": np.random.randint(100, 30000, (dataset_size, seq_len)), 
+     "labels": np.random .randint(0, 1, (dataset_size)), 
+} 
+ds = Dataset.from_dict(dummy_data) 
+ds.set_format("pt") 
+``` 
+
+Vogliamo vedere le statistiche di riepilogo per l'utilizzo della GPU e per l'addestramento eseguito con [ `Trainer`]. Impostiamo due funzioni di supporto per fare proprio questo: 
+
+```py 
+from pynvml import * 
+
+
+def print_gpu_utilization(): 
+     nvmlInit() 
+     handle = nvmlDeviceGetHandleByIndex(0) 
+     info = nvmlDeviceGetMemoryInfo(handle) 
+     print(f"Memoria GPU occupata: {info. used//1024**2} MB.") 
+
+
+def print_summary(result): 
+     print(f"Time: {result.metrics['train_runtime']:.2f}") 
+     print(f"Samples/second: {result. metrics['train_samples_per_second']:.2f}") 
+     print_gpu_utilization() 
+``` 
+
+Accertiamoci di iniziare con una memoria GPU libera: 
+
+```py 
+>>> print_gpu_utilization() 
+Memoria GPU occupata: 0 MB. 
+``` 
+
+Sembra buono: la GPU non è occupata come ci aspetteremmo prima di caricare un modello. In caso contrario, assicurati di arrestare tutti i processi che utilizzano la GPU. Tuttavia, non tutta la GPU libera può essere utilizzata dall'utente. Quando un modello viene caricato sulla GPU, vengono caricati anche i kernel che possono occupare 1-2 GB di memoria. Per vedere quanto occupano, carichiamo un piccolo tensore nella GPU che attiva anche il caricamento dei kernel. 
+
+```py 
+>>> import torch 
+
+
+>>> torch.ones((1, 1)).to("cuda") 
+>>> print_gpu_utilization() 
+Memoria GPU occupata: 1343 MB. 
+``` 
+
+Vediamo che i kernel da soli occupano 1,3 GB di memoria. Ora vediamo quanto spazio utilizza il modello. 
+
+## Caricare il modello 
+
+Per prima cosa, carichiamo il modello `bert-large-uncased`. Carichiamo i weight del modello direttamente sulla GPU in modo da poter verificare quanto spazio viene utilizzato solo da essi. 
+
+
+```py 
+>>> from transformers import AutoModelForSequenceClassification 
+
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda") 
+>>> print_gpu_utilization() 
+Memoria GPU occupata: 2631 MB. 
+``` 
+
+Possiamo vedere che il solo weight occupa 1,3 GB di memoria. Il numero esatto dipende dalla GPU specifica che stai usando. Si noti che su quelle più recenti un modello a volte può occupare più spazio poiché i weight vengono caricati in modo tale da rendere più veloce l'utilizzo dello stesso. Ora possiamo anche verificare rapidamente se otteniamo lo stesso risultato con CLI `nvidia-smi`: 
+
+
+```bash 
+nvidia-smi 
+``` 
+
+```bash 
+Mar 11 Gen 08:58:05 2022 
++----- -------------------------------------------------- ----------------------+ 
+| NVIDIA-SMI 460.91.03    Versione driver: 460.91.03    Versione CUDA: 11.2 | 
+|----------------------------------------+----------------- -----+----------------------+ 
+| Nome GPU	 Persistenza-M| Bus-Id 	Disp.A | Volatile Uncorr. ECC | 
+| Fan Temp Perf Pwr:Usage/Cap| Utilizzo della memoria | GPU-Util Compute M. | 
+| | | MIG M. | 
+|================================================== =====+=======================| 
+| 0 Tesla V100-SXM2... Acceso | 00000000:00:04.0 Spento | 		0 | 
+| N/A   37C   P0   39W / 300W | 2631MiB/16160MiB |      0%     Predefinito | 
+| 	|	 |	 N/A | 
++----------------------------------------+----------------- -----+----------------------+ 
+
++-------------------- -------------------------------------------------- -------+ 
+| Processi: | 
+| GPU   GI   CI      PID    Tipo         Nome processo          Memoria GPU | 
+| 	ID        ID 					Utilizzo | 
+|================================================= =============================| 
+| 0 N/AN/D 3721 C ...nvs/codeparrot/bin/python    2629MiB | 
++------------------------------------------------ ----------------------------+ 
+``` 
+
+Otteniamo lo stesso numero di prima e puoi anche vedere che stiamo usando una GPU V100 con 16 GB di memoria. Quindi ora possiamo iniziare ad addestrare il modello e vedere come varia la quantità di memoria occupata. Innanzitutto, impostiamo alcuni argomenti di addestramento standard che utilizzeremo in tutti i nostri esperimenti: 
+
+```py 
+default_args = {
+	“output_dir": "tmp", 
+	"evaluation_strategy": "steps", 
+	"num_train_epochs": 1, 
+	"log_level ": "error", 
+	"report_to": "none", 
+} 
+``` 
+
+<Tip> 
+
+Nota: per liberare correttamente la memoria dopo una prova è necessario riavviare ogni volta il kernel Python. Quindi esegui sempre tutti i passaggi precedenti e poi solo uno degli esperimenti seguenti. 
+
+</Tip> 
+
+## Vanilla Training 
+
+Come primo esperimento useremo [`Trainer`] e addestreremo il modello senza ulteriori modifiche e una dimensione del batch di 4: 
+
+```py 
+from transformers import TrainingArguments, Trainer, logging 
+
+logging. set_verbosity_error() 
+
+
+training_args = TrainingArguments(per_device_train_batch_size=4, **default_args) 
+trainer = Trainer(model=model, args=training_args, train_dataset=ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 57.82 
+Campioni/secondo: 8.86 
+Memoria GPU occupata: 14949 MB. 
+``` 
+
+Vediamo che già un batch di dimensioni relativamente piccole riempie quasi interamente la memoria della nostra GPU. Tuttavia, un batch di dimensioni maggiori può portare alla convergenza più velocemente o a migliori prestazioni finali. Quindi idealmente vogliamo adattare la dimensione del batch alle esigenze del nostro modello e non alle limitazioni della GPU. È da notare però che usiamo molta più memoria rispetto alla dimensione del modello. Per capirne meglio il motivo, diamo un'occhiata alle operazioni di un modello e alle esigenze di memoria. 
+
+## Anatomia delle operazioni del modello 
+
+L'architettura dei trasformatori include 3 gruppi principali di operazioni raggruppate di seguito per intensità di calcolo. 
+
+1. **Contrazioni tensoriali** 
+
+	I layer lineari e i componenti di Multi-Head Attention eseguono tutti **moltiplicazioni matrice-matrice**. Queste operazioni sono la parte a più alta intensità di calcolo dell'addestramento di transformer. 
+
+2. **Normalizzazioni statistiche** 
+
+	Il softmax e la normalizzazione dei layer richiedono meno calcoli rispetto alle contrazioni tensoriali e comportano una o più **operazioni di riduzione**, il cui risultato viene quindi applicato tramite una mappa. 
+
+3. **Operatori Element-wise** 
+
+	Questi sono gli operatori rimanenti: **distorsioni, dropout, attivazioni e connessioni residue**. Queste sono le operazioni con minori calcoli. 
+
+Questa conoscenza può essere utile quando si analizzano i bottleneck delle prestazioni. 
+
+Questo riepilogo è tratto da [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072) 
+
+## Struttura della memoria del modello 
+Abbiamo visto che l'addestramento del modello utilizza molta più memoria rispetto al semplice inserimento dello stesso nella GPU. Questo succede perché ci sono molti componenti durante l'addestramento che usano la GPU. Essi sono i seguenti: 
+1. i weight del modello 
+2. gli stati dell'optimizer
+3. i gradienti 
+4. le future attivazioni salvate per il calcolo del gradiente 
+5. i buffer temporanei 
+6. la memoria specifica per le funzionalità 
+
+Un tipico modello addestrato in precisione mista con AdamW richiede 18 byte per parametro più la memoria di attivazione. Per l'inferenza non ci sono stati dell’optimizer e gradienti, quindi possiamo sottrarli. Così finiamo con 6 byte per parametro per l'inferenza in precisione mista oltre alla memoria di attivazione. 
+
+Diamo un'occhiata ai dettagli. 
+
+**Weight del modello:** 
+
+- 4 byte * numero di parametri per l'allenamento in fp32 
+- 6 byte * numero di parametri per l'allenamento in precisione mista (mantiene in memoria un modello in fp32 e uno in fp16) 
+
+**Stati dell’optimizer:** 
+
+- 8 byte * numero di parametri per il normale AdamW (mantiene 2 stati) 
+- 2 byte * numero di parametri per gli optimizer AdamW a 8 bit come  [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) 
+- 4 byte * numero di parametri per gli optimizer
+ come SGD con momentum (mantiene solo 1 stato) 
+
+**Gradienti** 
+
+- 4 byte * numero di parametri sia in fp32 sia con allenamento in precisione mista (i gradienti sono sempre mantenuti in fp32) 
+
+**Attivazioni successive** 
+
+- la dimensione dipende da molti fattori: quelli chiave sono la lunghezza della sequenza, la dimensione nascosta e la dimensione del batch. 
+
+L'input e l'output vengono passati e restituiti dalle funzioni in forward e in backward e le attivazioni successive vengono salvate per il calcolo del gradiente. 
+
+**Memoria temporanea** 
+
+Inoltre ci sono tutti i tipi di variabili temporanee che vengono cancellate una volta terminato il calcolo, ma sul momento potrebbero richiedere memoria aggiuntiva e potrebbero portare ad un OOM (out of memory). Pertanto, durante la programmazione è fondamentale pensare alla gestione di tali variabili temporanee e talvolta liberarsene esplicitamente non appena non sono più necessarie. 
+
+**Memoria specifica per funzionalità** 
+
+Il tuo software potrebbe avere esigenze di memoria speciali. Ad esempio, quando si genera testo utilizzando la ricerca beam, il software deve conservare più copie degli input e degli output. 
+
+**Velocità di esecuzione in `forward` e in `backward`** 
+
+Per le convolution e i layer lineari ci sono il doppio dei flop in backward rispetto a quelli in forward, che generalmente si traduce in una velocità circa 2 volte minore (a volte di più, perché le dimensioni in backward tendono ad essere più ingombranti). Le attivazioni sono solitamente limitate dalla larghezza di banda ed è tipico che un'attivazione debba leggere più dati in backward che in forward (as es. l'attivazione in forward legge una volta, scrive una volta, mentre l'attivazione in backward legge due volte: il gradOutput e l'output del forward, e scrive una volta, il gradInput). 
+
+Quindi ci sono potenzialmente alcuni passaggi in cui potremmo risparmiare memoria o velocizzare le operazioni. Iniziamo con una semplice ottimizzazione: scegliere la giusta dimensione del batch. 
+
+## Dimensioni dei batch 
+
+Puoi ottenere le prestazioni più efficienti quando le dimensioni dei batch e i neuroni di input/output sono divisibili per un certo numero, che in genere parte da 8, ma può anche essere più elevato. Quel numero varia molto a seconda dell'hardware specifico utilizzato e del dtype del modello. 
+
+Ad esempio, per i layer completamente connessi (che corrispondono ai GEMM), NVIDIA fornisce questi consigli per [il numero di neuroni input/output]( 
+https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.html #input-features) e la [dimensione del batch](https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.html#batch-size). 
+
+[I requisiti dei Tensor Core](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc) definiscono il moltiplicatore in base al dtype e all'hardware. Ad esempio, per fp16 è consigliato un multiplo di 8, ma su A100 è 64! 
+
+Per piccoli parametri, vanno anche considerati gli [Effetti della quantizzazione delle dimensioni](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization), perché qui è dove avviene il tiling e con il giusto moltiplicatore si può avere un notevole aumento di velocità. 
+
+## Gradient accumulation
+
+Il gradient accumulation si basa sull’idea che, invece di calcolare i gradienti per l'intero batch in una volta, questo viene fatto in piccoli passi. Si calcolano i gradienti con un’iterazione su batch più piccoli eseguendo un passaggio in forward e in backward attraverso il modello e si accumulano i gradienti nel processo. Quando vengono accumulati abbastanza gradienti, eseguiamo la fase di ottimizzazione del modello. In questo modo possiamo facilmente aumentare la dimensione complessiva del batch a numeri superiori a quelli consentiti dalla GPU. A loro volta, tuttavia, i passaggi aggiuntivi in forward e in backward possono rallentare un po' l'allenamento. 
+
+Possiamo usare il gradient accumulation in [`Trainer`] semplicemente aggiungendo l'argomento `gradient_accumulation_steps` a [`TrainingArguments`]. Vediamo come influisce sulla memoria dei modelli: 
+
+```py 
+training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumulation_steps=4, **default_args) 
+
+trainer = Trainer(model=model, args=training_args, train_dataset=ds) 
+result = trainer. train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 66.03 
+Campioni/secondo: 7.75 
+Memoria GPU occupata: 8681 MB. 
+``` 
+
+Possiamo vedere che l’uso di memoria è stato drasticamente ridotto rendendo l’esecuzione solo leggermente più lenta rispetto a quella standard. Ovviamente, questo cambia man mano che aumenti il numero di passaggi di accumulo. In generale, dovresti massimizzare l'utilizzo della GPU il più possibile. Quindi, nel nostro caso, con batch_size pari a 4 si è già abbastanza vicini al limite della GPU. Se vuoi addestrare con una dimensione batch di 64 non devi usare `per_device_train_batch_size=1` e `gradient_accumulation_steps=64` ma invece `per_device_train_batch_size=4` e `gradient_accumulation_steps=16` che ha la stessa dimensione effettiva del batch pur facendo un uso migliore delle risorse disponibili. 
+
+Per maggiori dettagli, vedi i benchmark per [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004392537) 
+e [A100](https://github.com/huggingface/transformers/ problemi/15026#issuecomment-1005033957). 
+
+Ora diamo un'occhiata ad un altro trucco, chiamato gradient checkpointing, per risparmiare GPU.
+
+## Gradient Checkpointing 
+
+Anche quando impostiamo la dimensione del batch su 1 e utilizziamo il gradient accumulation, potremmo comunque esaurire la memoria lavorando con modelli troppo grandi. Per calcolare i gradienti durante il passaggio in backward vengono normalmente salvate tutte le attivazioni in forward. Questo può creare un grande sovraccarico di memoria. In alternativa, si potrebbero tralasciare tutte le attivazioni durante il passaggio in forward e ricalcolarle su richiesta durante il passaggio in backward. Ciò tuttavia aggiungerebbe un sovraccarico computazionale significativo e rallenterebbe l'addestramento. 
+
+Il gradient checkpointing raggiunge un compromesso tra i due approcci e salva alcune attivazioni selezionate strategicamente nell’intero grafo computazionale, in modo da ricalcolare solo una parte di esse per i gradienti. Vedi [questo fantastico articolo](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9) che spiega le idee alla base del gradient checkpointing. 
+
+Per abilitare il gradient checkpointing in [`Trainer`] dobbiamo solo passarlo come flag a [`TrainingArguments`]. Tutto il resto viene gestito in automatico: 
+
+```py 
+training_args = TrainingArguments( 
+per_device_train_batch_size=1, gradient_accumulation_steps=4, gradient_checkpointing=True, **default_args 
+) 
+
+trainer = Trainer(model=model, args=training_args, train_dataset=ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 85.47 
+Campioni/secondo: 5.99 
+Memoria GPU occupata: 6775 MB. 
+``` 
+
+Possiamo vedere che questo ha permesso di risparmiare memoria, ma allo stesso tempo l'allenamento è diventato più lento. Una regola convenzionale è che il gradient checkpointing rallenta l'allenamento di circa il 20%. Diamo un'occhiata a un altro metodo con cui possiamo recuperare un po' di velocità: l’addestramento a precisione mista. 
+
+
+## Tipi di dati in virgola mobile 
+
+L'idea dell'addestramento a precisione mista è che non tutte le variabili devono essere memorizzate con precisione in virgola mobile completa (32 bit). Se possiamo ridurre la precisione, le variabili e i loro calcoli sono più veloci. Di seguito sono riportati i tipi di dati in virgola mobile comunemente usati, la cui scelta influisce sia sull'utilizzo della memoria che sul rapporto campioni/secondo (throughput): 
+
+- fp32 (`float32`) 
+- fp16 (`float16`) 
+- bf16 (`bfloat16`) 
+- tf32 (tipo di dati interno CUDA) 
+
+Ecco un diagramma che mostra come questi tipi di dati sono correlati tra loro. 
+
+![tipi di dati](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/tf32-bf16-fp16-fp32.png) 
+(fonte: [Blog NVIDIA](https://developer. nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/)) 
+
+Mentre fp16 e fp32 esistono da un po' di tempo, bf16 e tf32 sono disponibili solo sulle GPU con architettura Ampere e anche le TPU supportano bf16. Cominciamo con il metodo più comunemente usato che è l’addestramento con FP16/ 
+
+
+### Addestramento con FP16 
+
+L'idea dell'addestramento a precisione mista è che non tutte le variabili devono essere memorizzate con precisione in virgola mobile completa (32 bit). Se possiamo ridurre la precisione, le variabili e i loro calcoli sono più veloci. Ciò che ci permette di velocizzare considerevolmente il modello è salvare le attivazioni con precisione dimezzata (16 bit). Sebbene anche i gradienti siano calcolati con precisione dimezzata, vengono riconvertiti a quella massima nella fase di ottimizzazione, quindi qui non viene risparmiata memoria. Anzi, poiché il modello è presente sulla GPU sia con precisione a 16 bit che a 32 bit, questo può utilizzare più memoria GPU (viene caricato un modello 1,5 volte quello originale), specialmente per batch di piccole dimensioni. Poiché alcuni calcoli vengono eseguiti con precisione completa e altri con precisione ridotta, questo approccio è chiamato addestramento a precisione mista. Per abilitarlo basta solo impostare il flag `fp16` su `True`: 
+
+```py 
+training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args) 
+
+trainer = Trainer(model=model, args =training_args, train_dataset=ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 27.46 
+Campioni/secondo: 18.64 
+Memoria GPU occupata: 13939 MB. 
+``` 
+
+Possiamo vedere che questo è quasi il doppio più veloce dell'allenamento standard. Aggiungiamolo ai metodi precedenti: 
+
+
+```py 
+training_args = TrainingArguments( 
+    per_device_train_batch_size=1, 
+    gradient_accumulation_steps=4, 
+    gradient_checkpointing=True, 
+    fp16=True, 
+    **default_args, 
+) 
+
+trainer = Trainer(model=model, args= training_args, train_dataset=ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 50.76 
+Campioni/secondo: 10.09 
+Memoria GPU occupata: 7275 MB. 
+``` 
+
+Possiamo vedere che con queste modifiche usiamo circa la metà della GPU rispetto all'inizio, pur essendo leggermente più veloci. 
+
+### BF16 
+Se disponi di un Ampere o di un hardware più recente, puoi usare bf16 per l'addestramento e la valutazione. Sebbene bf16 abbia una precisione peggiore di fp16, ha una gamma dinamica molto più ampia. Pertanto, se in passato hai riscontrato problemi di overflow durante l'addestramento del modello, bf16 eviterà che ciò accada la maggior parte delle volte.
+ Ricorda che in fp16 il valore massimo che puoi avere è "65535" e qualsiasi numero superiore andrà in overflow. Un numero bf16 può essere fino a `3.39e+38` (!) che è simile a fp32 - perché entrambi hanno 8 bit usati per l'intervallo numerico. 
+
+Puoi abilitare BF16 in 🤗 Trainer con: 
+
+```python 
+TrainingArguments(bf16=True) 
+``` 
+
+### TF32 
+L'hardware Ampere utilizza un tipo di dati speciale chiamato tf32. Ha lo stesso intervallo numerico di fp32 (8 bit), ma invece di 23 bit di precisione, ne ha solo 10 (come fp16) e 19 bit in totale. 
+
+È speciale nel senso che puoi utilizzare il normale codice di addestramento e/o inferenza fp32 e abilitando il supporto tf32 puoi ottenere un miglioramento del throughput fino a 3 volte. Tutto quello che devi fare è aggiungere questo al tuo codice: 
+
+``` 
+import torch 
+torch.backends.cuda.matmul.allow_tf32 = True 
+``` 
+
+In questo modo CUDA passerà automaticamente all'uso di tf32 invece di fp32 se è possibile. Questo, ovviamente, presuppone che la GPU utilizzata sia della serie Ampere. 
+
+Come tutti i casi con precisione ridotta, questo interveno potrebbe non essere d’aiuto per le tue esigenze, quindi devi testare e decidere. Secondo la [ricerca NVIDIA](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/) la maggior parte degli allenamenti di machine learning non dovrebbe essere influenzato e ha mostrato la stessa perplexity e convergence come la formazione fp32. 
+
+Se stai già utilizzando la precisione mista bf16 oppure fp16, potrebbe essere utile anche con il throughput. 
+
+Puoi abilitare questa modalità in 🤗 Trainer con: 
+```python 
+TrainingArguments(tf32=True) 
+``` 
+Di default viene utilizzata l'impostazione predefinita di PyTorch. 
+
+Nota: la modalità tf32 è interna a CUDA e non è possibile accedervi direttamente tramite `tensor.to(dtype=torch.tf32)` poiché `torch.tf32` non esiste. 
+
+Nota: è necessario `torch>=1.7` per usufruire di questa funzione. 
+
+Puoi anche vedere alcuni benchmark su tf32 rispetto ad altre precisioni: 
+[RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004390803) e 
+[A100](https://github .com/huggingface/transformers/issues/15026#issuecomment-1004543189). 
+
+Ora abbiamo visto come modificare i float per aumentare il throughput, ma non abbiamo ancora finito! C'è un'altra area in cui possiamo salvare la memoria della GPU: l’optimizer. 
+
+## Optimizer 
+
+L'optimizer più utilizzato per addestrare il modello transformer è Adam o AdamW (Adam con weight decay). Adam ottiene una buona convergence memorizzando la media mobile dei gradienti precedenti portando però ad un uso maggiore di memoria che dipende dal numero di parametri del modello. Una soluzione è utilizzare un optimizer alternativo come Adafactor, che funziona bene per alcuni modelli ma spesso presenta problemi di instabilità. 
+
+HF Trainer integra una varietà di optimizer che possono essere utilizzati immediatamente. Per attivare l’optimizer desiderato è sufficiente passare il flag `--optim` alla riga di comando. 
+
+Per vedere quali optimizer sono attualmente supportati: 
+
+```bash 
+$ python examples/pytorch/translation/run_translation.py -h | grep "\-optim" 
+	[--optim {adamw_hf,adamw_torch,adamw_torch_xla,adamw_apex_fused,adafactor}] `` 
+` 
+
+Ad esempio, se hai installato [NVIDIA/apex](https://github.com/NVIDIA/apex) `--optim adamw_apex_fused` ti offrirà l'esperienza di allenamento più veloce tra tutti gli optimizer AdamW supportati. 
+
+D'altra parte l’[optimizer BNB a 8 bit](https://github.com/TimDettmers/bitsandbytes) può risparmiare 3/4 della memoria normalmente utilizzata da un tipico optimizer AdamW se è configurato per quantizzare tutti gli stati dell'optimizer, ma in alcuni casi non tutti gli stati vengono quantizzati e quindi viene utilizzata più memoria. 
+
+Diamo un'idea quantitativa usando, ad esempio, un modello di parametri 3B, come `t5-3b`. Si noti che poiché un Gigabyte corrisponde a un miliardo di byte, possiamo semplicemente moltiplicare il numero di parametri (in miliardi) per il numero di byte necessari per parametro e otteniamo i Gigabyte di utilizzo della GPU:
+
+- Un optimizer standard AdamW utilizza 8 byte per ogni parametro, quindi avrà bisogno di (`8*3`) 24 GB di memoria GPU. 
+- Adafactor utilizza poco più di 4 byte, quindi qualcosa in più di (`4*3`) 12 GB. 
+- L'optimizer quantizzato BNB a 8 bit utilizza solo (`2*3`) 6 GB se tutti gli stati sono quantizzati. 
+
+Diamo prima un'occhiata ad Adafactor.
+
+### Adafactor
+
+Invece di mantenere la media mobile di ogni elemento nelle matrici di peso, Adafactor memorizza solo informazioni aggregate (somme per righe e colonne delle medie mobili) che riducono considerevolmente l'impronta. Uno svantaggio di Adafactor è che in alcuni casi la convergence può essere più lenta di quella di Adam, quindi si consiglia di fare qualche tentativo. Possiamo usare Adafactor semplicemente impostando `optim="adafactor"`: 
+
+
+```py 
+training_args = TrainingArguments(per_device_train_batch_size=4, optim="adafactor", **default_args) 
+
+trainer = Trainer(model=model, args=training_args, train_dataset =ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 64.31 
+Campioni/secondo: 7.96 
+Memoria GPU occupata: 12295 MB. 
+``` 
+
+Possiamo vedere che possiamo risparmiare qualche GB di GPU. Vediamo cosa accade quando lo aggiungiamo agli altri metodi che abbiamo introdotto in precedenza: 
+
+
+```py 
+training_args = TrainingArguments( 
+	per_device_train_batch_size=1, 
+	gradient_accumulation_steps=4, 
+	gradient_checkpointing=True, 
+	fp16=True, 
+	optim="adafactor", 
+	**default_args , 
+) 
+
+trainer = Trainer(model=model, args=training_args, train_dataset=ds) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 56.54 
+Campioni/secondo: 9.06 
+Memoria GPU occupata: 4847 MB. 
+``` 
+
+Siamo passati da 15 GB a 5 GB: un miglioramento di 3 volte pur mantenendo il throughput! Tuttavia, come accennato in precedenza, la convergence di Adafactor può essere peggiore di Adam. Esiste un'alternativa ad Adafactor chiamata 8-bit Adam che adotta un approccio leggermente diverso. 
+
+### 8-bit Adam
+
+Invece di aggregare stati dell’optimizer come Adafactor, Adam a 8 bit mantiene lo stato completo e lo quantizza. Quantizzazione significa che memorizza lo stato con una precisione inferiore e lo de-quantizza solo per l’ottimizzazione. Questo è simile all'idea alla base dell’allenamento con FP16 in cui l'utilizzo di variabili con una precisione inferiore consente di risparmiare memoria. 
+
+Contrariamente agli approcci precedenti, questo non è integrato in [`Trainer`] come un semplice flag. Dobbiamo installare l’optimizer a 8 bit e poi passarlo come personalizzato a [`Trainer`]. Segui la guida nella [repo](https://github.com/TimDettmers/bitsandbytes) di Github per installare la libreria `bitsandbytes` che implementa l’optimizer 8-bit Adam. 
+
+Una volta installato, dobbiamo solo inizializzare l'optimizer. Anche se sembra difficile, in realtà richiede solo due passaggi: prima dobbiamo raggruppare i parametri del modello in due gruppi: a un gruppo applichiamo il weight decay e all'altro no. Di solito, i bias e i parametri layer norm non sono weight decay. Quindi, in una seconda fase, eseguiamo solo la pulizia degli argomenti per utilizzare gli stessi parametri dell’optimizer AdamW utilizzato in precedenza. 
+
+<Tip> 
+Tieni presente che per utilizzare l’optimizer a 8 bit con un modello preaddestrato esistente è necessaria una modifica all’embending. 
+Leggi [questo issue](https://github.com/huggingface/transformers/issues/14819) per maggiori informazioni. 
+</Tip> 
+
+```py 
+import bitsandbytes as bnb 
+from torch import nn 
+from transformers.trainer_pt_utils import get_parameter_names 
+
+training_args = TrainingArguments(per_device_train_batch_size=4, **default_args) 
+
+decay_parameters = get_parameter_names(model, [nn.LayerNorm]) 
+decay_parameters = [name for name in decay_parameters if "bias" not in name] 
+optimizer_grouped_parameters = [ 
+	{ 
+	     "params": [p for n, p in model.named_parameters() if n in decay_parameters], 
+	     "weight_decay": training_args.weight_decay, 
+	}, 
+	{ 
+	     " params": [p for n, p in model.named_parameters() if n not in decay_parameters], 
+	     "weight_decay": 0.0, 
+	}, 
+] 
+
+optimizer_kwargs = { 
+	"betas": (training_args.adam_beta1, training_args.adam_beta2), 
+	"eps ": training_args.adam_epsilon, 
+} 
+optimizer_kwargs["lr"] = training_args.learning_rate 
+adam_bnb_optim = bnb.optim.Adam8bit( 
+	optimizer_grouped_parameters, 
+	betas=(training_args.adam_beta1, training_args.adam_beta2), 
+	eps=training_args.adam_epsilon, 
+	lr=training_args.learningrate , 
+) 
+``` 
+Ora possiamo passare l’optimizer personalizzato come argomento a `Trainer`: 
+```py 
+trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=(adam_bnb_optim, None)) 
+result = trainer.train() 
+print_summary(result ) 
+``` 
+
+``` 
+Tempo: 55.95 
+Campioni/secondo: 9.15 
+Memoria GPU occupata: 13085 MB. 
+``` 
+
+Possiamo vedere che otteniamo un miglioramento simile a quello dato da Adafactor mantenendo interamente la media mobile dei gradienti. Ripetiamo l'esperimento con le impostazioni complete: 
+
+```py 
+training_args = TrainingArguments( 
+	per_device_train_batch_size=1, 
+	gradient_accumulation_steps=4, 
+	gradient_checkpointing=True, 
+	fp16=True, 
+	**default_args, 
+) 
+
+trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=(adam_bnb_optim, None)) 
+result = trainer.train() 
+print_summary(result) 
+``` 
+
+``` 
+Tempo: 49.46 
+Campioni/secondo: 10.35 
+Memoria GPU occupata: 5363 MB. 
+``` 
+
+Ancora una volta, otteniamo un risparmio di memoria triplo e un throughput anche leggermente migliore rispetto all'utilizzo di Adafactor. Quindi abbiamo visto come possiamo ottimizzare l’uso di memoria con modelli di grandi dimensioni. Il seguente grafico riassume tutti i nostri esperimenti: 
+
+![png](https://huggingface.co/datasets/lvwerra/repo-images/raw/main/gpu-memory-savings.png) 
+
+### `_multi_tensor` 
+pytorch-nightly ha introdotto `torch.optim._multi_tensor`, che dovrebbe velocizzare significativamente gli optimizer per situazioni con tanti piccoli tensori di feature. Dovrebbe diventare l'impostazione predefinita, ma se vuoi sperimentarlo ora per essere bleed-edge (all’avaguardia a tuo rischio e pericolo) , vedi: https://github.com/huggingface/transformers/issues/9965 
+
+
+## Usare 🤗 Accelerate 
+
+Finora abbiamo utilizzato [`Trainer`] per eseguire gli esperimenti, ma un'alternativa più flessibile a tale approccio consiste nell'utilizzare
+🤗 Accelerate. Con 🤗 Accelerate hai il pieno controllo del ciclo di addestramento e puoi scriverlo interamente in PyTorch con alcune piccole modifiche. Inoltre, ti consente di scalare facilmente su diverse infrastrutture come CPU, GPU, TPU o configurazioni distributed multi-GPU senza modificare alcun codice. Vediamo cosa serve per implementare tutte le modifiche mostrate in precedenza in 🤗 Accelerate. Possiamo ancora usare [`TrainingArguments`] per racchiudere le impostazioni di addestramento: 
+
+
+```py 
+training_args = TrainingArguments( 
+	per_device_train_batch_size=1, 
+	gradient_accumulation_steps=4, 
+	gradient_checkpointing=True, 
+	fp16=True, 
+	**default_args, 
+) 
+``` 
+
+L’esempio di un ciclo di addestramento con 🤗 Accelerate è lungo solo una manciata di righe di codice: 
+
+
+```py 
+from accelerate import Accelerator 
+from torch.utils.data.dataloader import DataLoader 
+
+dataloader = DataLoader(ds, batch_size=training_args.per_device_train_batch_size) 
+
+if training_args.gradient_checkpointing : 
+	model.gradient_checkpointing_enable() 
+
+accelerator = Accelerator(fp16=training_args.fp16) 
+model, optimizer, dataloader = accelerator.prepare(model, adam_bnb_optim, dataloader) 
+
+model.train() 
+for step, batch in enumerate(dataloader, start=1) : 
+	loss = model(**batch).loss 
+	loss = loss / training_args.gradient_accumulation_steps 
+	accelerator.backward(loss) 
+	if step % training_args.gradient_accumulation_steps == 0: 
+		optimizer.step() 
+		optimizer.zero_grad() 
+``` 
+
+Prima carichiamo il set di dati in un [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Quindi possiamo abilitare il gradient checkpoint chiamando il metodo [`~PreTrainedModel.gradient_checkpointing_enable`] del modello. Quando inizializziamo l'[`Accelerator`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator) possiamo specificare se vogliamo utilizzare l'allenamento a precisione mista e se ne occuperà per noi durante la chiamata di [`prepare`]. Durante la chiamata di [`prepare`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.prepare), il dataloader verrà distribuito anche tra i worker se dovessimo utilizzare più GPU. Usiamo lo stesso optimizer a 8 bit delle prove precedenti. 
+
+Infine, possiamo scrivere il ciclo di allenamento principale. Nota che la chiamata in `backward` è gestita da 🤗 Accelerate. Possiamo anche vedere come funziona il gradient accumulation: normalizziamo la funzione loss in modo da ottenere la media alla fine dell'accumulo e una volta che abbiamo abbastanza passaggi eseguiamo l'ottimizzazione. Ora la domanda è: utilizza la stessa quantità di memoria dei passaggi precedenti? Controlliamo: 
+
+
+```py 
+>>> print_gpu_utilization() 
+Memoria GPU occupata: 5363 MB. 
+``` 
+
+In effetti lo fa. L'implementazione di queste tecniche di ottimizzazione con 🤗 Accelerate richiede solo una manciata di righe di codice e offre il vantaggio di una maggiore flessibilità nel ciclo di allenamento. Per una documentazione completa di tutte le funzionalità, dai un'occhiata alla [documentazione di Accelerate](https://huggingface.co/docs/accelerate/index). 
+
+## DataLoader 
+
+Uno dei requisiti importanti per aumentare la velocità di addestramento è la capacità di portare la GPU alla massima velocità che può gestire. Per impostazione predefinita, ciò accade nel processo principale e potrebbe non essere in grado di leggere i dati dal disco abbastanza velocemente, creando così un bottleneck, che porta al sottoutilizzo della GPU. 
+
+- `DataLoader(pin_memory=True, ...)` garantisce che i dati vengano precaricati nella pinned memory sulla CPU e in genere porta a trasferimenti molto più veloci dalla CPU alla GPU. 
+- `DataLoader(num_workers=4, ...)` - genera diversi worker per precaricare i dati più velocemente - durante l'addestramento osserva le statistiche di utilizzo della GPU e se è lontano dal 100% prova ad aumentare il numero di worker. Naturalmente, il problema potrebbe essere altrove, quindi un numero molto elevato di worker non porterà necessariamente a prestazioni migliori. 
+
+## DeepSpeed ZeRO
+
+I dettagli approfonditi su come utilizzare Deepspeed possono essere trovati [qui](main_classes/deepspeed). 
+
+Innanzitutto, ci sono due possibiltà: 
+
+1. Il modello si adatta a una singola GPU e hai spazio sufficiente per un batch di piccole dimensioni - non è necessario utilizzare Deepspeed poiché in questo caso rallenterà l’addestramento. 
+2. Il modello non si adatta a una sola GPU o non è possibile caricare un piccolo batch: utilizzare DeepSpeed ZeRO + CPU Offload e per modelli molto più grandi NVMe Offload. 
+
+Ora, se ti serve utilizzare DeepSpeed, devi prima [installarlo](main_classes/deepspeed#installation), poi segui una delle seguenti guide per creare un file di configurazione e avviare DeepSpeed. 
+
+Attivazione: 
+
+- Esempi basati su HF Trainer: vedi questa [guida](main_classes/deepspeed#deployment-with-one-gpu). 
+- Programma personalizzato basato su HF Trainer: come sopra, ma aggiungi: 
+
+	```python 
+	TrainingArguments(deepspeed="/path/to/ds_config.json") 
+	``` 
+- Distribuzione nei notebook: vedi questa [guida](main_classes/ deepspeed#deployment-in-notebooks). 
+
+- Ciclo di allenamento personalizzato: questo è piuttosto complesso ma puoi studiare come viene implementato in [HF Trainer] ( 
+https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) - cerca semplicemente `deepspeed` nel codice. 
+
+
+## Scelta della GPU 
+A volte, anche applicando tutte le modifiche di cui sopra, il throughput su una determinata GPU potrebbe non essere ancora abbastanza buono. Una soluzione semplice è cambiare il tipo di GPU. Ad esempio, passando da un K80 (che in genere ottieni su Google Colab) a una GPU più elaborata come V100 o A100. Sebbene siano più costose, di solito sono più convenienti rispetto alle GPU più economiche grazie alla loro memoria più ampia e all'architettura più veloce. 
+
+Ora, facciamo un passo indietro e discutiamo su cosa va ottimizzato quando si fa lo scaling per l'addestramento di grandi modelli.
+
+## GPU scaling
+
+Quando addestriamo i modelli ci sono due aspetti che vogliamo ottimizzare contemporaneamente: 
+
+- Velocità di throughput/tempo di addestramento 
+- Prestazioni del modello 
+
+Abbiamo visto che ogni metodo modifica l'utilizzo della memoria e il throughput. In generale vogliamo massimizzare il throughput (campioni/secondo) per minimizzare i costi di allenamento. Ciò si ottiene generalmente utilizzando la GPU il più possibile e quindi riempiendo la memoria della GPU al limite. Ad esempio, come accennato in precedenza, utilizziamo il gradient accumulation solo quando vogliamo utilizzare una dimensione del batch superiore alla dimensione della memoria della GPU. Se la dimensione del batch desiderata si adatta alla memoria, non c'è motivo di applicarlo perché rallenterà solo l'allenamento. 
+
+Il secondo obiettivo è la performance del modello. Solo perché possiamo non significa che dovremmo usare un batch di grandi dimensioni. Nell'ambito dell'ottimizzazione degli iperparametri è necessario determinare quale dimensione del batch produce il risultato migliore e quindi ottimizzare il throughput di conseguenza. 
+
+
+## Efficient Software Prebuilds
+
+[Le build pip e conda](https://pytorch.org/get-started/locally/#start-locally) di PyTorch vengono fornite con il toolkit cuda che è sufficiente per eseguire PyTorch, ma non lo è se devi creare estensioni cuda. 
+
+A volte sono richieste azioni aggiuntive per pre-compilare alcuni componenti, ad esempio, se stai usando librerie come `apex` che non sono pre-compilate. In altre situazioni capire come installare il toolkit cuda giusto a livello di sistema può essere complicato. Per soddisfare le esigenze di questi utenti, PyTorch e NVIDIA rilasciano una nuova versione del contenitore docker NGC che viene fornito con tutto preimpostato e devi solo installare i tuoi programmi su di esso e funzionerà immediatamente. 
+
+Questo approccio è utile anche se si desidera modificare la sorgente pytorch e/o creare una nuova build personalizzata. 
+
+Per trovare la versione dell'immagine docker che desideri, inizia [qui](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/), scegli una delle ultime versioni mensili. Entra nelle note della versione desiderata, verifica che i componenti dell'ambiente corrispondano alle tue esigenze (inclusi i requisiti del driver NVIDIA!) e nella parte superiore di quel documento vai alla pagina NGC corrispondente. Se per qualche motivo ti perdi, ecco [l'indice di tutte le immagini PyTorch NGC](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch). 
+
+Poi segui le istruzioni per scaricare e distribuire l'immagine docker. 
+
+## Scarsità 
+
+### Mixture of Experts 
+
+Diversi articoli recenti hanno riportato un aumento della velocità di addestramento di 4-5 volte e un'inferenza più rapida integrando 
+Mixture of Experts (MoE) nei modelli Transformer. 
+
+Poiché si è scoperto che più parametri portano a prestazioni migliori, con questa tecnica si aumenta il numero di parametri di un ordine di grandezza senza influire i costi di allenamento. 
+
+Con questo approccio ogni altro layer FFN viene sostituito con uno MoE composto da molti expert, con una funzione gated che addestra ogni expert in modo bilanciato a seconda della posizione del token di input in una sequenza. 
+
+![MoE Transformer 2x block](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf-moe-transformer.png) 
+
+(fonte: [GLAM](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html)) 
+
+Puoi trovare dettagli esaustivi e tabelle di confronto nei documenti elencati alla fine di questa sezione. 
+
+Lo svantaggio principale di questo approccio è che richiede quantità enormi di memoria GPU, quasi un ordine di grandezza maggiore del suo equivalente denso. Vengono proposte varie soluzioni per superare la richiesta di memoria molto più elevata. 
+
+Ne esiste una più diretta: utilizzare pochi expert con un modello base 2-3 volte più piccolo invece di dozzine o centinaia di expert che portano a un modello 5 volte più piccolo e quindi migliorare moderatamente sia la velocità di addestramento sia i requisiti di memoria. 
+
+La maggior parte dei documenti e delle implementazioni correlati sono basati su Tensorflow/TPU: 
+
+- [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/abs/2006.16668) 
+- [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) 
+- [GLaM: Generalist Language Model (GLaM)](https://ai.googleblog.com/2021/12/more-efficient-in- contesto-apprendimento-con.html) 
+
+Per
+Pytorch anche DeepSpeed ha un MoE: [DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale](https://arxiv.org/abs/2201.05596), [Mixture of Experts] (https://www.deepspeed.ai/tutorials/mixture-of-experts/) - post del blog: [1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers- 8x-larger-moe-model-training-with-high-performance/), [2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training- for-multitask-multilingual-models/) e un’implementazione specifica con modelli di generazione del linguaggio naturale basati su transformer: [post del blog](https://www.deepspeed.ai/news/2021/12/09/deepspeed-moe-nlg .html), [Megatron-Deepspeed branch](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training). 
+
+## Uso di più GPU 
+
+Per alcune applicazioni, come il pre-addestramento di grandi modelli di linguaggio, l'applicazione di tutti gli approcci elencati sopra potrebbe non essere ancora abbastanza. In questo caso devi portare il tuo progetto su più GPU. 
+
+Un altro caso in cui si usa l'addestramento su molte GPU è se il modello non si adatta ad una singola con tutti i suggerimenti citati. Ci sono ancora altri metodi che possiamo applicare, anche se inizia a diventare tutto più complicato. Questi metodi di solito si basano su alcune pipeline oppure tensor parallelism in cui il modello stesso è distribuito su diverse GPU. Si può anche utilizzare DeepSpeed che implementa alcune di queste strategie insieme a qualche ulteriore ottimizzazione per ridurre l’uso di memoria come il partizionamento degli stati dell’optimizer. Puoi leggere ulteriori informazioni in merito nella [sezione "addestramento Multi-GPU"](perf_train_gpu_many). 
+
+## Usare torch.compile 
+
+PyTorch 2.0 introduce una nuova funzione di compilazione e puoi saperne di più [nella documentazione](https://pytorch.org/get-started/pytorch-2.0/). Utilizza l'API di valutazione dei frame di Python per creare automaticamente un grafo dai programmi PyTorch esistenti. Dopo averlo creato, è possibile distribuire diversi backend per ridurlo ad un engine ottimizzato. Puoi scegliere una delle seguenti opzioni per aumentare le prestazioni. 
+
+`torch.compile` ha un elenco crescente di backend, che possono essere trovati in [backends.py](https://github.com/pytorch/pytorch/blob/master/torch/_dynamo/optimizations/backends.py) 
+o `torchdynamo.list_backends()` ognuno dei quali con le sue dipendenze opzionali. 
+
+Alcuni dei backend più comunemente usati sono:
+
+**Backend di debug**: 
+* `dynamo.optimize("eager")` - Usa PyTorch per eseguire il GraphModule estratto. Questo è abbastanza utile per il debug dei problemi di TorchDynamo. 
+* `dynamo.optimize("aot_eager")` - Usa AotAutograd senza compilatore, cioè, usando solo PyTorch per i grafi in forward e in backward estratti da AotAutograd. Questo è utile per il debug ed è improbabile che aumenti la velocità. 
+
+**Backend di addestramento e inferenza**: 
+* `dynamo.optimize("inductor")` - Utilizza il backend TorchInductor con AotAutograd e cudagraph sfruttando i kernel Triton codificati [Ulteriori informazioni](https://dev-discuss.pytorch.org/ t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
+* `dynamo.optimize("nvfuser")` - nvFuser con TorchScript. [Leggi di più](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593) 
+* `dynamo.optimize("aot_nvfuser")` - nvFuser con AotAutograd. [Leggi di più](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593) 
+* `dynamo.optimize("aot_cudagraphs")` - cudagraph con AotAutograd. [Leggi di più](https://github.com/pytorch/torchdynamo/pull/757) 
+
+**Backend di sola inferenza**s: 
+* `dynamo.optimize("ofi")` - Utilizza optimize_for_inference di Torchscript. [Leggi di più](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html) 
+* `dynamo.optimize("fx2trt")` - Utilizza TensorRT di Nvidia per le ottimizzazioni dell'inferenza. [Leggi di più](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst) 
+* `dynamo.optimize("onnxrt")` - Utilizza ONNXRT per l'inferenza su CPU/GPU. [Leggi di più](https://onnxruntime.ai/) 
+* `dynamo.optimize("ipex")` - Utilizza IPEX per l'inferenza sulla CPU. [Leggi di più](https://github.com/intel/intel-extension-for-pytorch)
+
+
