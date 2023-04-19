@@ -19,13 +19,11 @@ from typing import Dict
 import numpy as np
 
 from transformers import (
-    MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING,
-    AutoImageProcessor,
-    SamForMaskGeneration,
+    MODEL_FOR_MASK_GENERATION_MAPPING,
     is_vision_available,
     pipeline,
 )
-from transformers.pipelines import AutomaticMaskGenerationPipeline
+from transformers.pipelines import MaskGenerationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -67,17 +65,17 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
 @is_pipeline_test
 @require_vision
 @require_torch
-class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
+class MaskGenerationPipelineTests(unittest.TestCase):
     model_mapping = dict(
         (
-            list(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING.items())
-            if MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING
+            list(MODEL_FOR_MASK_GENERATION_MAPPING.items())
+            if MODEL_FOR_MASK_GENERATION_MAPPING
             else []
         )
     )
 
     def get_test_pipeline(self, model, tokenizer, processor):
-        image_segmenter = AutomaticMaskGenerationPipeline(model=model, image_processor=processor)
+        image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -141,7 +139,7 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
     @slow
     def test_threshold(self):
         model_id = "ybelkada/sam-vit-s"
-        image_segmenter = pipeline("automatic-mask-generation", model=model_id)
+        image_segmenter = pipeline("mask-generation", model=model_id)
 
         outputs = image_segmenter(
             "http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256
@@ -167,7 +165,7 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
     @slow
     def test_other_args(self):
         model_id = "ybelkada/sam-vit-s"
-        image_segmenter = pipeline("automatic-mask-generation", model=model_id)
+        image_segmenter = pipeline("mask-generation", model=model_id)
 
         # n_layers to test more than 1 crop boxes.
         image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", n_layers=3, points_per_batch=256)

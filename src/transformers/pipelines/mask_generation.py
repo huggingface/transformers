@@ -23,13 +23,13 @@ if is_torchvision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class AutomaticMaskGenerationPipeline(ChunkPipeline):
+class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
     image, given an image. It is a `ChunkPipeline` because you can seperate the points in a mini-batch in order to
@@ -77,7 +77,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> generator = pipeline(model="facebook/sam-vit-h", task="automatic-mask-generation")
+    >>> generator = pipeline(model="facebook/sam-vit-h", task="mask-generation")
     >>> generator(
     ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
     ... )
@@ -90,10 +90,10 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This segmentation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
-    `"automatic-mask-generation"`.
+    `"mask-generation"`.
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=automatic-mask-generation).
+    [huggingface.co/models](https://huggingface.co/models?filter=mask-generation).
     """
 
     def __init__(self, **kwargs):
@@ -104,7 +104,7 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
-        self.check_model_type(MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING)
+        self.check_model_type(MODEL_FOR_MASK_GENERATION_MAPPING)
 
     def _sanitize_parameters(self, **kwargs):
         preprocessor_kwargs = {}
