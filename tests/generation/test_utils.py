@@ -1457,13 +1457,13 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    def test_assisted_greedy_search_matches_greedy_search(self):
+    def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # It breaks the pattern in the tests above, for multiple reasons:
-        # - assisted_greedy_search, contrarily to the other methods, can't be called on its own (e.g. needs to
+        # - assisted_decoding, contrarily to the other methods, can't be called on its own (e.g. needs to
         # prepare the assistant encoder outputs in the main generate body);
-        # - assisted_greedy_search does not support `use_cache = False`
-        # - assisted_greedy_search does not support `batch_size > 1`
+        # - assisted_decoding does not support `use_cache = False`
+        # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
