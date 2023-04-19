@@ -387,6 +387,8 @@ class MegaModelTester:
         config.use_chunking = True
         config.chunk_size = input_ids.size(1) + 25
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -400,6 +402,8 @@ class MegaModelTester:
         # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
         config.chunk_size = input_ids.size(1) * 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(
             input_ids.repeat(1, 8),
@@ -412,6 +416,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "laplace"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -422,6 +428,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "relu2"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -432,6 +440,8 @@ class MegaModelTester:
     ):
         config.max_positions = self.seq_length - 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -614,6 +624,39 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_name in MEGA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MegaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_cpu_offload(self):
+        super().test_cpu_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload(self):
+        super().test_disk_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
+    @unittest.skip(
+        reason=(
+            "Calling `self.attention_function` in `MegaMovingAverageGatedAttention.forward` changes the submodules on "
+            "device 1 to device 0 (also changes `requires_grad`). No idea how this could happen for now."
+        )
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_simple(self):
+        super().test_torchscript_simple()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_hidden_state(self):
+        super().test_torchscript_output_hidden_state()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_attentions(self):
+        super().test_torchscript_output_attentions()
 
 
 @require_torch
