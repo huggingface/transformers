@@ -927,6 +927,26 @@ class SamVisionLayer(nn.Module):
         return outputs
 
 
+class SamVisionNeck(nn.Module):
+    def __init__(self, config: SamVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = SamLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
+        self.layer_norm2 = SamLayerNorm(config.output_channels, data_format="channels_first")
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.layer_norm1(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
+        return hidden_states
+
+
 class SamVisionEncoder(nn.Module):
     def __init__(self, config: SamVisionConfig):
         super().__init__()
@@ -955,12 +975,8 @@ class SamVisionEncoder(nn.Module):
             )
             self.layers.append(layer)
 
-        self.neck_conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.neck_layer_norm1 = SamLayerNorm(config.output_channels, data_format="channels_first")
-        self.neck_conv2 = nn.Conv2d(
-            config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False
-        )
-        self.neck_layer_norm2 = SamLayerNorm(config.output_channels, data_format="channels_first")
+        self.neck = SamVisionNeck(config)
+
         self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
@@ -1016,13 +1032,7 @@ class SamVisionEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # Should neck have nn module of its own?
-        hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.neck_conv1(hidden_states)
-        hidden_states = self.neck_layer_norm1(hidden_states)
-
-        hidden_states = self.neck_conv2(hidden_states)
-        hidden_states = self.neck_layer_norm2(hidden_states)
+        hidden_states = self.neck(hidden_states)
 
         if not return_dict:
             outputs = (hidden_states,)
