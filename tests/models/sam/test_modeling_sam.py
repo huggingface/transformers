@@ -483,7 +483,40 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
 
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
+        
+    def test_inference_mask_generation_batched_points_batched_images(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
 
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        input_points = [[[[820, 1080]], [[820, 1080]], [[820, 1080]] ,[[820, 1080]]], [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]]]
+
+        inputs = processor(
+            images=[raw_image,raw_image], input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze().cpu()
+
+        EXPECTED_SCORES = torch.tensor(
+        [[[0.9673, 0.9441, 0.9084],
+         [0.9673, 0.9441, 0.9084],
+         [0.9673, 0.9441, 0.9084],
+         [0.9673, 0.9441, 0.9084]],
+
+        [[0.8405, 0.6292, 0.3840],
+         [0.9673, 0.9441, 0.9084],
+         [0.9673, 0.9441, 0.9084],
+         [0.9673, 0.9441, 0.9084]]]
+        )
+        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-4))
+
+        
+        
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
         processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
