@@ -36,6 +36,29 @@ Tips:
 This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/facebookresearch/segment-anything).
 
+Below is an example on how to run mask generation given an image and a 2D point:
+
+```python
+from PIL import Image
+import requests
+from transformers import SamModelForMaskedGeneration, SamProcessor
+
+model = SamModelForMaskedGeneration.from_pretrained("facebook/sam-vit-huge")
+processsor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+
+img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+input_points = [[[450, 600]]]
+
+inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
+outputs = model(**inputs)
+
+masks = processor.image_processor.post_process_masks(
+    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+)
+scores = outputs.iou_scores
+```
+
 Resources:
 
 - Demo notebook for using the model
@@ -68,7 +91,7 @@ Resources:
 [[autodoc]] SamImageProcessor
 
 
-## SamForMaskGeneration
+## SamModel
 
-[[autodoc]] SamForMaskGeneration
+[[autodoc]] SamModel
     - forward

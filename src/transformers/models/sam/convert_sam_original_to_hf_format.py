@@ -26,7 +26,7 @@ from PIL import Image
 
 from transformers import (
     SamConfig,
-    SamForMaskGeneration,
+    SamModel,
     SamImageProcessor,
     SamProcessor,
     SamVisionConfig,
@@ -88,8 +88,8 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
-    checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{model_name}.pth")
+def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_hub_id="ybelkada/segment-anything"):
+    checkpoint_path = hf_hub_download(model_hub_id, f"checkpoints/{model_name}.pth")
 
     if "sam_vit_b" in model_name:
         config = SamConfig()
@@ -122,7 +122,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
     image_processor = SamImageProcessor()
 
     processor = SamProcessor(image_processor=image_processor)
-    hf_model = SamForMaskGeneration(config)
+    hf_model = SamModel(config)
 
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to("cuda")
@@ -193,7 +193,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    parser.add_argument(
+        "--model_hub_id",
+        default="ybelkada/segment-anything",
+        choices=choices,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
 
     args = parser.parse_args()
 
-    convert_sam_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_sam_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.model_hub_id)

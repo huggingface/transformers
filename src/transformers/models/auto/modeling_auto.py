@@ -156,6 +156,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
+        ("sam", "SamModel"),
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
@@ -978,7 +979,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
-        ("sam", "SamForMaskGeneration"),
+        ("sam", "SamModel"),
     ]
 )
 

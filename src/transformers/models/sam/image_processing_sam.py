@@ -368,11 +368,11 @@ class SamImageProcessor(BaseImageProcessor):
 
         Args:
             masks (`torch.Tensor`):
-                Batched masks from the mask_decoder in BxCxHxW format.
+                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
             original_sizes (`torch.Tensor`):
-                The original size of the images before resizing for input to the model, in (H, W) format.
+                The original size of the images before resizing for input to the model, in (height, width) format.
             reshaped_input_sizes (`torch.Tensor`):
-                The size of the image input to the model, in (H, W) format. Used to remove padding.
+                The size of the image input to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
             binarize (`bool`, *optional*, defaults to `True`):
@@ -381,7 +381,8 @@ class SamImageProcessor(BaseImageProcessor):
                 The target size the images were padded to before being passed to the model. If None, the target size is
                 assumed to be the processor's `pad_size`.
         Returns:
-            (`torch.Tensor`): Batched masks in BxCxHxW format, where (H, W) is given by original_size.
+            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            is given by original_size.
         """
         requires_backends(self, ["torch"])
         pad_size = self.pad_size if pad_size is None else pad_size

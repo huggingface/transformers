@@ -476,10 +476,7 @@ def is_valid_size_dict(size_dict):
 
 
 def convert_to_size_dict(
-    size: Optional[int] = None,
-    max_size: Optional[int] = None,
-    default_to_square: bool = True,
-    height_width_order: bool = True,
+    size, max_size: Optional[int] = None, default_to_square: bool = True, height_width_order: bool = True
 ):
     # By default, if size is an int we assume it represents a tuple of (size, size).
     if isinstance(size, int) and default_to_square:
