@@ -672,7 +672,10 @@ class SamPromptEncoder(nn.Module):
         if input_boxes is not None:
             batch_size = input_boxes.shape[0]
             box_embeddings = self._embed_boxes(input_boxes)
-            sparse_embeddings = box_embeddings
+            if sparse_embeddings is None:
+                sparse_embeddings = box_embeddings
+            else:
+                sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=2)
         if input_masks is not None:
             dense_embeddings = self.mask_embed(input_masks)
         else:
