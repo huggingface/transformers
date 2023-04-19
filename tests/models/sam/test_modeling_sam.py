@@ -448,8 +448,8 @@ def prepare_dog_img():
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -485,8 +485,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9966), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -518,8 +518,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -549,8 +549,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -572,8 +572,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9716), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -591,8 +591,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -620,8 +620,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -646,8 +646,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
-        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()

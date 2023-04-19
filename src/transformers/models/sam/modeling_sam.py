@@ -40,7 +40,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/sam-vit-huge",
     "facebook/sam-vit-large",
-    "facebook/sam-vit-base",
+    "facebook/sam-vit-big",
     # See all SAM models at https://huggingface.co/models?filter=sam
 ]
 
@@ -494,7 +494,7 @@ class SamMaskDecoder(nn.Module):
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
-        # image_embeddings = image_embeddings.repeat(sparse_prompt_embeddings.shape[0], 1, 1, 1)
+        
         image_embeddings = image_embeddings + dense_prompt_embeddings
 
         # Run the transformer, image_positional_embedding are consumed
