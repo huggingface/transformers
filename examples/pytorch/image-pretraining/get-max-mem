@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+MEM_LOG_FILE="gpu-mem.log"
+
+for model in vit deit swin swinv2; do
+    max_mem=$(awk -F'|' '/model_type '"${model}"' / {print $2}' $MEM_LOG_FILE | sort -rh | head -n1)
+    echo $model $max_mem
+done
+
+mae_max_mem=$(awk -F'|' '/run_mae.py/ {print $2}' $MEM_LOG_FILE | sort -rh | head -n1)
+echo vitmae $mae_max_mem
