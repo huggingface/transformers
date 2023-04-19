@@ -174,6 +174,4 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
         image_segmenter = pipeline("automatic-mask-generation", model=model_id)
 
         # n_layers to test more than 1 crop boxes.
-        image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", n_layers=3, points_per_batch=256
-        )
+        image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", n_layers=3, points_per_batch=256)
