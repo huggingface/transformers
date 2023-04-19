@@ -4,14 +4,14 @@ from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
 from .base import Tool
 
 
-class TextClassificationPipeline(Tool):
+class TextClassificationTool(Tool):
     """
     Example:
 
     ```py
-    from transformers.new_pipelines import TextClassificationPipeline
+    from transformers.tools import TextClassificationTool
 
-    classifier = TextClassificationPipeline("distilbert-base-uncased-finetuned-sst-2-english")
+    classifier = TextClassificationTool("distilbert-base-uncased-finetuned-sst-2-english")
     classifier("This is a super nice API!")
     ```
     """

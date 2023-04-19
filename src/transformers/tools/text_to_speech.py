@@ -6,7 +6,7 @@ from transformers import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Proce
 from .base import Tool
 
 
-class TextToSpeech(Tool):
+class TextToSpeechTool(Tool):
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
