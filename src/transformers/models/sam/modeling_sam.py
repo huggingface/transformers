@@ -1079,32 +1079,52 @@ SAM_INPUTS_DOCSTRING = r"""
             details.
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
-            better results. The points can be obtained by passing a list of list of list, corresponding to the batch,
-            the number of points per image and the x and y coordinate of the point. If a batch of images is passed,
-            "PAD" points are automatically generated and ignored by the prompt encoder.
-        input_labels (`torch.LongTensor` of shape `(batch_size, num_points)`):
-            Input labels for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
-            according to the official implementation, there are 3 types of labels
+            better results. The points can be obtained by passing a list of list of list to the processor that will
+            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
+            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
+            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
+            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
+            coordinates of the point. If a different number of points is passed either for each image, or for each
+            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
+            computation of the embedding will be skipped for these points using the labels.
+        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
+            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
+            official implementation, there are 3 types of labels
+
             - `1`: the point is a point that contains the object of interest
             - `0`: the point is a point that does not contain the object of interest
             - `-1`: the point corresponds to the background
+
             We added the label:
+
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
+
             The padding labels should be automatically done by the processor.
         input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
-            much better results. The boxes can be obtained by passing a list of list of list, corresponding to the
-            batch, the number of boxes per image and the x1, y1, x2, y2 coordinates of the box.
+            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
+            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
+            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            In the order (`x1`, `y1`, `x2`, `y2`):
+
+            - `x1`: the x coordinate of the top left point of the input box
+            - `y1`: the y coordinate of the top left point of the input box
+            - `x2`: the x coordinate of the bottom right point of the input box
+            - `y2`: the y coordinate of the bottom right point of the input box
+
         input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
-            Input masks for the points, this is used by the prompt encoder to encode the prompt. This can yield to
-            better results. The masks needs to be manually fed by the user.
+            SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
+            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
+
         image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
         multimask_output (`bool`, *optional*):
-            Whether or not to return 3 masks instead of 1, as described in the original paper.
-
+            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
+            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
+            "best" mask, by specifying `multimask_output=False`.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
