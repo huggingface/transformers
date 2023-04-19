@@ -48,7 +48,7 @@ class SamProcessor(ProcessorMixin):
         super().__init__(image_processor)
         self.current_processor = self.image_processor
         self.point_pad_value = -10
-        self.target_size = self.image_processor.target_size
+        self.target_size = self.image_processor.size["longest_edge"]
 
     def __call__(
         self,

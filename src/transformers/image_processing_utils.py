@@ -461,7 +461,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
 
-VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"})
+VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
 
 
 def is_valid_size_dict(size_dict):
@@ -476,7 +476,10 @@ def is_valid_size_dict(size_dict):
 
 
 def convert_to_size_dict(
-    size, max_size: Optional[int] = None, default_to_square: bool = True, height_width_order: bool = True
+    size: Optional[int] = None,
+    max_size: Optional[int] = None,
+    default_to_square: bool = True,
+    height_width_order: bool = True,
 ):
     # By default, if size is an int we assume it represents a tuple of (size, size).
     if isinstance(size, int) and default_to_square:
@@ -495,6 +498,10 @@ def convert_to_size_dict(
         return {"height": size[0], "width": size[1]}
     elif isinstance(size, (tuple, list)) and not height_width_order:
         return {"height": size[1], "width": size[0]}
+    elif size is None and max_size is not None:
+        if default_to_square:
+            raise ValueError("Cannot specify both default_to_square=True and max_size")
+        return {"longest_edge": max_size}
 
     raise ValueError(f"Could not convert size input to size dict: {size}")
 
