@@ -309,7 +309,6 @@ class SamConfig(PretrainedConfig):
         vision_config=None,
         prompt_encoder_config=None,
         mask_decoder_config=None,
-        initializer_factor=1.0,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -328,8 +327,6 @@ class SamConfig(PretrainedConfig):
         self.vision_config = SamVisionConfig(**vision_config)
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
-
-        self.initializer_factor = initializer_factor
         self.initializer_range = initializer_range
 
     def to_dict(self):
