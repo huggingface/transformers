@@ -1483,18 +1483,14 @@ class GenerationMixin:
                 )
                 model_kwargs["assistant_encoder_outputs"] = assistant_model_kwargs["encoder_outputs"]
 
-            # 12. prepare logits warper if needed
-            if generation_config.do_sample:
-                logits_warper = self._get_logits_warper(generation_config)
-
-            # 13. run assisted generate
+            # 12. run assisted generate
             return self.assisted_decoding(
                 input_ids,
                 assistant_model=assistant_model,
                 assisted_keep_proba=generation_config.assisted_keep_proba,
                 do_sample=generation_config.do_sample,
                 logits_processor=logits_processor,
-                logits_warper=logits_warper,
+                logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
@@ -4417,20 +4413,18 @@ class GenerationMixin:
 
                 if "past_key_values" not in model_kwargs:
                     last_matching_idx = new_cur_len - 1
-                    prompt_length = cur_len
                 else:
                     last_matching_idx = n_matches
-                    prompt_length = 0
 
                 if output_attentions:
                     if self.config.is_encoder_decoder:
                         cross_attentions = _split_model_outputs(
-                            cross_attentions, outputs.cross_attentions, prompt_length, last_matching_idx
+                            cross_attentions, outputs.cross_attentions, cur_len, last_matching_idx
                         )
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.decoder_attentions,
-                            prompt_length,
+                            cur_len,
                             last_matching_idx,
                             is_decoder_attention=True,
                         )
@@ -4438,18 +4432,18 @@ class GenerationMixin:
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
-                            prompt_length,
+                            cur_len,
                             last_matching_idx,
                             is_decoder_attention=True,
                         )
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.decoder_hidden_states, prompt_length, last_matching_idx
+                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, last_matching_idx
                         )
                     else:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, prompt_length, last_matching_idx
+                            decoder_hidden_states, outputs.hidden_states, cur_len, last_matching_idx
                         )
 
             # finished sentences should have their next token be a padding token
@@ -4542,24 +4536,26 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
     return past_key_values
 
 
-def _split_model_outputs(outputs, new_outputs, prompt_length, last_matching_idx, is_decoder_attention=False):
+def _split_model_outputs(outputs, new_outputs, previous_cur_len, last_matching_idx, is_decoder_attention=False):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
     """
     # Retrocompatibility: in our generation functions, the first iteration includes the attention/hidden states for the
     # prompt.
-    if prompt_length > 0:
+    if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = prompt_length if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., :prompt_length, :last_dim_size],)
+            last_dim_size = previous_cur_len if is_decoder_attention else layer.shape[-1]
+            new_tuple += (layer[..., :previous_cur_len, :last_dim_size],)
         outputs += (new_tuple,)
+        last_matching_idx -= previous_cur_len
+        previous_cur_len += 1
 
-    for i in range(prompt_length, last_matching_idx + 1):
+    for i in range(last_matching_idx + 1):
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = i + 1 if is_decoder_attention else layer.shape[-1]
+            last_dim_size = previous_cur_len + i if is_decoder_attention else layer.shape[-1]
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
