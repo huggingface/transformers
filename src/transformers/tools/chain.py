@@ -4,7 +4,7 @@ class SimpleChainer:
 
     ```py
     from transformers import pipeline
-    from transformers.new_pipelines import SimpleChainer
+    from transformers.tools import SimpleChainer
 
     chain = SimpleChainer(
         pipeline("translation", model="facebook/nllb-200-distilled-600M", src_lang="fra_Latn", tgt_lang="eng_Latn"),
