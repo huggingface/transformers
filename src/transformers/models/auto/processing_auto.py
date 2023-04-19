@@ -61,6 +61,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
+        ("sam", "SamProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
