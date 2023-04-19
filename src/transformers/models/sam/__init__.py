@@ -36,7 +36,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_sam"] = [
         "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SamForMaskGeneration",
+        "SamModel",
         "SamPreTrainedModel",
     ]
 try:
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST, SamForMaskGeneration, SamPreTrainedModel
+        from .modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST, SamModel, SamPreTrainedModel
 
     try:
         if not is_vision_available():

@@ -5990,7 +5990,7 @@ def load_tf_weights_in_roformer(*args, **kwargs):
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SamForMaskGeneration(metaclass=DummyObject):
+class SamModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -1154,7 +1154,7 @@ SAM_INPUTS_DOCSTRING = r"""
     " optional 2D location and bounding boxes.",
     SAM_START_DOCSTRING,
 )
-class SamForMaskGeneration(SamPreTrainedModel):
+class SamModel(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config) -> None:
