@@ -69,7 +69,9 @@ class SamProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor.pop("original_sizes")
+        encoding_image_processor.pop("reshaped_input_sizes")
 
         if isinstance(original_sizes, torch.Tensor):
             original_sizes = original_sizes.numpy()

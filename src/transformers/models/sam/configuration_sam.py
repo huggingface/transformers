@@ -62,6 +62,7 @@ class SamPromptEncoderConfig(PretrainedConfig):
         mask_input_channels=16,
         num_point_embeddings=4,
         hidden_act="gelu",
+        layer_norm_eps=1e-6,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -72,6 +73,7 @@ class SamPromptEncoderConfig(PretrainedConfig):
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
 
 
 class SamMaskDecoderConfig(PretrainedConfig):

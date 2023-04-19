@@ -25,10 +25,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -239,7 +236,7 @@ class SamModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
-        self.parent.assertEqual(result.low_resolution_masks.shape[:3], (self.batch_size, 1, 3))
+        self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
 
     def create_and_check_get_image_features(self, config, pixel_values):
         model = SamForMaskGeneration(config=config)
@@ -610,9 +607,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         raw_image = prepare_image()
 
         # fmt: off
-        input_points = torch.Tensor(
-            [[[400, 650]], [[220, 470]]]
-        ).cpu()
+        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()
         # fmt: on
 
         input_points = input_points.unsqueeze(0)
@@ -636,9 +631,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         raw_image = prepare_image()
 
         # fmt: off
-        input_boxes = torch.Tensor(
-            [[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]
-        ).cpu()
+        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
         # fmt: on
         input_boxes = input_boxes.unsqueeze(0)
 

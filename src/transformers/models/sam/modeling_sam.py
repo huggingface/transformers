@@ -85,6 +85,11 @@ class SamImageSegmentationOutput(ModelOutput):
             The iou scores of the predicted masks.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
             The predicted low resolutions masks. Needs to be post-processed by the processor
+        vision_hidden_states  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the vision model at the output of each layer plus the optional initial embedding outputs.
         vision_attentions  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -101,6 +106,7 @@ class SamImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1219,9 +1225,11 @@ class SamForMaskGeneration(SamPreTrainedModel):
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
         output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict=None,
     ) -> List[Dict[str, torch.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
@@ -1257,7 +1265,8 @@ class SamForMaskGeneration(SamPreTrainedModel):
 
         vision_attentions = None
         mask_decoder_attentions = None
-        
+        vision_hidden_states = None
+
         if pixel_values is not None:
             vision_outputs = self.vision_encoder(
                 pixel_values,
@@ -1267,6 +1276,8 @@ class SamForMaskGeneration(SamPreTrainedModel):
             )
             image_embeddings = vision_outputs[0]
 
+            if output_hidden_states:
+                vision_hidden_states = vision_outputs[1]
             if output_attentions:
                 vision_attentions = vision_outputs[-1]
 
@@ -1305,6 +1316,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
+            vision_hidden_states=vision_hidden_states if output_hidden_states else None,
             vision_attentions=vision_attentions if output_attentions else None,
             mask_decoder_attentions=mask_decoder_attentions if output_attentions else None,
         )
