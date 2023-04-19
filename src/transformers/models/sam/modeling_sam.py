@@ -1257,6 +1257,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict=None,
+        **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

@@ -70,8 +70,7 @@ class SamProcessor(ProcessorMixin):
         )
 
         # pop arguments that are not used in the foward but used nevertheless
-        original_sizes = encoding_image_processor.pop("original_sizes")
-        encoding_image_processor.pop("reshaped_input_sizes")
+        original_sizes = encoding_image_processor["original_sizes"]
 
         if isinstance(original_sizes, torch.Tensor):
             original_sizes = original_sizes.numpy()
@@ -244,5 +243,5 @@ class SamProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(image_processor_input_names))
 
-    def postprocess_masks(self, *args, **kwargs):
-        return self.image_processor.postprocess_masks(*args, **kwargs)
+    def post_process_masks(self, *args, **kwargs):
+        return self.image_processor.post_process_masks(*args, **kwargs)
