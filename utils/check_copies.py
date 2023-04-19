@@ -502,6 +502,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
+    "SAM": "Segment Anything",
     "ViT": "Vision Transformer (ViT)",
 }
 
