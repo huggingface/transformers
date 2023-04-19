@@ -696,6 +696,8 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
