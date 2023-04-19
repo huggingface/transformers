@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, CHUNKS) relying on the accelerate library
-without using a Trainer.
+Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, CHUNKS)
 """
 
 import json
