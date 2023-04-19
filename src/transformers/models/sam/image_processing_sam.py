@@ -581,7 +581,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     for count in rle["counts"]:
         mask[idx : idx + count] = parity
         idx += count
-        parity ^= True
+        parity = not parity
     mask = mask.reshape(width, height)
     return mask.transpose()  # Put in C order
 
