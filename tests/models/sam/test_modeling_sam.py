@@ -463,6 +463,27 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
 
+    def test_inference_mask_generation_one_point_one_bb(self):
+        model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        input_boxes = [[650, 900, 1000, 1250]]
+        input_points = [[[820, 1080]]]
+
+        inputs = processor(
+            images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9966), atol=1e-4))
+
     def test_inference_mask_generation_one_point(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
         processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
