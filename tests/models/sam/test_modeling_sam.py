@@ -448,8 +448,8 @@ def prepare_dog_img():
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -464,8 +464,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamModel.from_pretrained("facebook/sam-vit-h")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-h")
 
         model.to(torch_device)
         model.eval()
@@ -485,8 +485,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -524,8 +524,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -550,8 +550,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9689), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -583,8 +583,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -614,8 +614,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -637,8 +637,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9716), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -656,8 +656,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -685,8 +685,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -711,8 +711,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
