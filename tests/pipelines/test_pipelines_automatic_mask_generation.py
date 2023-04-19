@@ -17,9 +17,7 @@ import unittest
 from typing import Dict
 
 import numpy as np
-import requests
-from datasets import load_dataset
-from transformers.pipelines import AutomaticMaskGenerationPipeline
+
 from transformers import (
     MODEL_FOR_AUTOMATIC_MASK_GENERATION_MAPPING,
     AutoImageProcessor,
@@ -27,6 +25,7 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
+from transformers.pipelines import AutomaticMaskGenerationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -95,16 +94,14 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
 
         model = SamForMaskGeneration.from_pretrained(model_id)
         image_processor = AutoImageProcessor.from_pretrained(model_id)
-        image_segmenter = AutomaticMaskGenerationPipeline(model=model,image_processor=image_processor)
+        image_segmenter = AutomaticMaskGenerationPipeline(model=model, image_processor=image_processor)
 
-        outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch = 256
-        )
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
 
         # Shortening by hashing
-        new_outupt =[]
+        new_outupt = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt+= [{"mask":mask_to_test_readable(o), "scores":outputs["scores"][i]}]
+            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         # fmt: off
         self.assertEqual(
@@ -143,7 +140,6 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
             ],
         )
         # fmt: on
-        
 
     @require_torch
     @slow
@@ -151,21 +147,33 @@ class AutomaticMaskGenerationPipelineTests(unittest.TestCase):
         model_id = "ybelkada/sam-vit-s"
         image_segmenter = pipeline("automatic-mask-generation", model=model_id)
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256)
+        outputs = image_segmenter(
+            "http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256
+        )
 
         # Shortening by hashing
-        new_outupt =[]
+        new_outupt = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt+= [{"mask":mask_to_test_readable(o), "scores":outputs["scores"][i]}]
-
+            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         self.assertEqual(
             nested_simplify(new_outupt, decimals=4),
             [
-                {'mask': {'hash': '115ad19f5f', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0444},
-                {'mask': {'hash': '6affa964c6', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0210},
-                {'mask': {'hash': 'dfe28a0388', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0167},
-                {'mask': {'hash': 'c0a5f4a318', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0132},
-                {'mask': {'hash': 'fe8065c197', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0053}
+                {"mask": {"hash": "115ad19f5f", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0444},
+                {"mask": {"hash": "6affa964c6", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0210},
+                {"mask": {"hash": "dfe28a0388", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0167},
+                {"mask": {"hash": "c0a5f4a318", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0132},
+                {"mask": {"hash": "fe8065c197", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0053},
             ],
+        )
+
+    @require_torch
+    @slow
+    def test_other_args(self):
+        model_id = "ybelkada/sam-vit-s"
+        image_segmenter = pipeline("automatic-mask-generation", model=model_id)
+
+        # n_layers to test more than 1 crop boxes.
+        image_segmenter(
+            "http://images.cocodataset.org/val2017/000000039769.jpg", n_layers=3, points_per_batch=256
         )
