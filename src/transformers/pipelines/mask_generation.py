@@ -67,9 +67,11 @@ class MaskGenerationPipeline(ChunkPipeline):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         points_per_batch (*optional*, int, default to 64): Sets the number of points run simultaneously
                 by the model. heightigher numbers may be faster but use more GPU memory.
-        output_bboxes_mask defaults to False
+        output_bboxes_mask :
+            defaults to False
 
-        output_rle_masks defaults to False
+        output_rle_masks :
+            defaults to False
 
 
     Example:
@@ -113,19 +115,19 @@ class MaskGenerationPipeline(ChunkPipeline):
             preprocessor_kwargs["points_per_batch"] = kwargs["points_per_batch"]
         if "points_per_crop" in kwargs:
             preprocessor_kwargs["points_per_crop"] = kwargs["points_per_crop"]
-        if "n_layers" in kwargs:
-            preprocessor_kwargs["n_layers"] = kwargs["n_layers"]
-        if "overlap_ratio" in kwargs:
-            preprocessor_kwargs["overlap_ratio"] = kwargs["overlap_ratio"]
-        if "scale_per_layer" in kwargs:
-            preprocessor_kwargs["scale_per_layer"] = kwargs["scale_per_layer"]
+        if "crops_n_layers" in kwargs:
+            preprocessor_kwargs["crops_n_layers"] = kwargs["crops_n_layers"]
+        if "crop_overlap_ratio" in kwargs:
+            preprocessor_kwargs["crop_overlap_ratio"] = kwargs["crop_overlap_ratio"]
+        if "crop_n_points_downscale_factor" in kwargs:
+            preprocessor_kwargs["crop_n_points_downscale_factor"] = kwargs["crop_n_points_downscale_factor"]
         # postprocess args
         if "pred_iou_thresh" in kwargs:
             postprocess_kwargs["pred_iou_thresh"] = kwargs["pred_iou_thresh"]
         if "stability_score_offset" in kwargs:
             postprocess_kwargs["stability_score_offset"] = kwargs["stability_score_offset"]
-        if "box_nms_thresh" in kwargs:
-            postprocess_kwargs["box_nms_thresh"] = kwargs["box_nms_thresh"]
+        if "crops_nms_thresh" in kwargs:
+            postprocess_kwargs["crops_nms_thresh"] = kwargs["crops_nms_thresh"]
         if "mask_threshold" in kwargs:
             postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         if "output_rle_mask" in kwargs:
@@ -140,37 +142,24 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
-
-            points_per_side (int or None):
-                The number of points to be sampled along one side of the image. The total number of points is
-                points_per_side**2. If None, 'point_grids' must provide explicit point sampling.
-            pred_iou_thresh (float): A filtering threshold in [0,1], using the
-                model's predicted mask quality.
-            stability_score_thresh (float): A filtering threshold in [0,1], using
-                the stability of the mask under changes to the cutoff used to binarize the model's mask predictions.
-            stability_score_offset (float): The amount to shift the cutoff when
-                calculated the stability score.
-            box_nms_thresh (float): The box IoU cutoff used by non-maximal
-                suppression to filter duplicate masks.
-            crops_n_layers (int): If >0, mask prediction will be run again on
-                crops of the image. Sets the number of layers to run, where each layer has 2**i_layer number of image
-                crops.
-            crops_nms_thresh (float): The box IoU cutoff used by non-maximal
-                suppression to filter duplicate masks between different crops.
-            crop_overlap_ratio (float): Sets the degree to which crops overlap.
-                In the first crop layer, crops will overlap by this fraction of the image length. Later layers with
-                more crops scale down this overlap.
-            crop_n_points_downscale_factor (int): The number of points-per-side
-                sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
-            point_grids (list(np.ndarray) or None): A list over explicit grids
-                of points used for sampling, normalized to [0,1]. The nth grid in the list is used in the nth crop
-                layer. Exclusive with points_per_side.
-            min_mask_region_area (int): If >0, postprocessing will be applied
-                to remove disconnected regions and holes in masks with area smaller than min_mask_region_area. Requires
-                opencv.
-            output_mode (str): The form masks are returned in. Can be 'binary_mask',
-                'uncompressed_rle', or 'coco_rle'. 'coco_rle' requires pycocotools. For large resolutions,
-                'binary_mask' may consume large amounts of memory.
+                Image or list of images.
+            pred_iou_thresh (`float`, *optional*, default to `0.88`):
+                A filtering threshold in `[0,1]` applied on the model's predicted mask quality.
+            stability_score_thresh (`float`, *optional*, default to `0.95`):
+                A filtering threshold in [0,1], using the stability of the mask under changes to the cutoff used to
+                binarize the model's mask predictions.
+            stability_score_offset (`int`, *optional*, default to `1`):
+                The amount to shift the cutoff when calculated the stability score.
+            crops_nms_thresh (`float`, *optional*, default to `0.7`):
+                The box IoU cutoff used by non-maximal suppression to filter duplicate masks.
+            crops_n_layers (`int`, *optional*, default to `0`):
+                If >0, mask prediction will be run again on crops of the image. Sets the number of layers to run, where
+                each layer has 2**i_layer number of image crops.
+            crop_overlap_ratio (`float`, *optional*, default to `512 / 1500`):
+                Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of
+                the image length. Later layers with more crops scale down this overlap.
+            crop_n_points_downscale_factor (`int`, *optional*, default to `1`):
+                The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
 
         Return:
             `Dict`: A dictionary with the following keys:
@@ -188,15 +177,15 @@ class MaskGenerationPipeline(ChunkPipeline):
         self,
         image,
         points_per_batch=64,
-        n_layers: int = 0,
-        overlap_ratio: float = 512 / 1500,
+        crops_n_layers: int = 0,
+        crop_overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
-        scale_per_layer: Optional[List[int]] = 1,
+        crop_n_points_downscale_factor: Optional[List[int]] = 1,
     ):
         image = load_image(image)
         target_size = self.image_processor.target_size
         crop_boxes, grid_points, cropped_images, input_labels = _generate_crop_boxes(
-            image, target_size, n_layers, overlap_ratio, points_per_crop, scale_per_layer
+            image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
 
@@ -244,7 +233,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         model_outputs,
         output_rle_mask=False,
         output_bboxes_mask=False,
-        box_nms_thresh=0.7,
+        crops_nms_thresh=0.7,
         pred_iou_thresh=0.88,
         stability_score_thresh=0.95,
         mask_threshold=0,
@@ -281,7 +270,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         all_scores = torch.cat(all_scores)
         all_boxes = torch.cat(all_boxes)
         output_masks, iou_scores, rle_mask, bounding_boxes = _postprocess_for_amg(
-            all_masks, all_scores, all_boxes, box_nms_thresh
+            all_masks, all_scores, all_boxes, crops_nms_thresh
         )
 
         extra = defaultdict(list)
@@ -311,7 +300,8 @@ def _build_point_grid(n_per_side: int) -> np.ndarray:
 
 def _normalize_coordinates(target_size, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
     """
-    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width) format.
+    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width)
+    format.
     """
     old_height, old_width = original_size
 
@@ -342,7 +332,7 @@ def _generate_crop_boxes(
     n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
-    scale_per_layer: Optional[List[int]] = 1,
+    crop_n_points_downscale_factor: Optional[List[int]] = 1,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -354,7 +344,7 @@ def _generate_crop_boxes(
 
     points_grid = []
     for i in range(n_layers + 1):
-        n_points = int(points_per_crop / (scale_per_layer**i))
+        n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
         points_grid.append(_build_point_grid(n_points))
 
     crop_boxes, layer_idxs = [], []
@@ -440,8 +430,8 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 def _batched_mask_to_box(masks):
     """
-    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape C1xC2x...xheightxwidth,
-    the output shape is C1xC2x...x4.
+    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape
+    C1xC2x...xheightxwidth, the output shape is C1xC2x...x4.
     """
     # torch.max below raises an error on empty inputs, just skip in this case
 
@@ -589,12 +579,12 @@ def _filter_masks(
     return masks, scores, converted_boxes
 
 
-def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_box_nms_thresh=0.7):
+def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     keep_by_nms = batched_nms(
         mask_boxes.float(),
         iou_scores,
         torch.zeros(mask_boxes.shape[0]),  # categories
-        iou_threshold=amg_box_nms_thresh,
+        iou_threshold=amg_crops_nms_thresh,
     )
 
     iou_scores = iou_scores[keep_by_nms]
