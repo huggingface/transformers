@@ -40,10 +40,6 @@ from ...utils import (
     requires_backends,
 )
 
-
-if is_vision_available():
-    pass
-
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
     from torchvision.transforms.functional import resize, to_pil_image
