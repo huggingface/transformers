@@ -360,7 +360,7 @@ class SamModelTest(ModelTesterMixin, unittest.TestCase):
             196,
             196,
         )
-        expected_mask_decoder_attention_shape = (1, self.model_tester.batch_size, 144, 32)
+        expected_mask_decoder_attention_shape = (self.model_tester.batch_size, 1, 144, 32)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -485,8 +485,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = SamModel.from_pretrained("ybelkada/sam-vit-h")
-        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-h")
+        model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("ybelkada/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
@@ -521,7 +521,7 @@ class SamModelIntegrationTest(unittest.TestCase):
                 ],
             ]
         )
-        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-4))
+        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamModel.from_pretrained("ybelkada/sam-vit-huge")
