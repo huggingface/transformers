@@ -65,9 +65,8 @@ class MaskGenerationPipeline(ChunkPipeline):
             [`PreTrainedTokenizer`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
-        points_per_batch (*optional*, int, default to 64):
-            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more
-            GPU memory.
+        points_per_batch (*optional*, int, default to 64): 
+            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more GPU memory.
         output_bboxes_mask (`bool`, *optional*, default to `False`):
            Whether or not to output the bounding box predictions.
         output_rle_masks (`bool`, *optional*, default to `False`):
@@ -142,6 +141,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
                 Image or list of images.
+            mask_threshold (`float`, *optional*, default to `0.0`):
+                Threshold to use when turning the predicted masks into binary values.
             pred_iou_thresh (`float`, *optional*, default to `0.88`):
                 A filtering threshold in `[0,1]` applied on the model's predicted mask quality.
             stability_score_thresh (`float`, *optional*, default to `0.95`):
@@ -152,7 +153,7 @@ class MaskGenerationPipeline(ChunkPipeline):
             crops_nms_thresh (`float`, *optional*, default to `0.7`):
                 The box IoU cutoff used by non-maximal suppression to filter duplicate masks.
             crops_n_layers (`int`, *optional*, default to `0`):
-                If >0, mask prediction will be run again on crops of the image. Sets the number of layers to run, where
+                If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers to run, where
                 each layer has 2**i_layer number of image crops.
             crop_overlap_ratio (`float`, *optional*, default to `512 / 1500`):
                 Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of
