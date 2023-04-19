@@ -65,8 +65,9 @@ class MaskGenerationPipeline(ChunkPipeline):
             [`PreTrainedTokenizer`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
-        points_per_batch (*optional*, int, default to 64): 
-            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more GPU memory.
+        points_per_batch (*optional*, int, default to 64):
+            Sets the number of points run simultaneously by the model. heightigher numbers may be faster but use more
+            GPU memory.
         output_bboxes_mask (`bool`, *optional*, default to `False`):
            Whether or not to output the bounding box predictions.
         output_rle_masks (`bool`, *optional*, default to `False`):
@@ -153,8 +154,8 @@ class MaskGenerationPipeline(ChunkPipeline):
             crops_nms_thresh (`float`, *optional*, default to `0.7`):
                 The box IoU cutoff used by non-maximal suppression to filter duplicate masks.
             crops_n_layers (`int`, *optional*, default to `0`):
-                If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers to run, where
-                each layer has 2**i_layer number of image crops.
+                If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of
+                layers to run, where each layer has 2**i_layer number of image crops.
             crop_overlap_ratio (`float`, *optional*, default to `512 / 1500`):
                 Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of
                 the image length. Later layers with more crops scale down this overlap.
@@ -366,8 +367,8 @@ def _generate_crop_boxes(
         crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
 
         # Crops in XYwidthheight format
-        for x0, y0 in product(crop_box_x0, crop_box_y0):
-            box = [x0, y0, min(x0 + crop_width, im_width), min(y0 + crop_height, im_height)]
+        for left, top in product(crop_box_x0, crop_box_y0):
+            box = [left, top, min(left + crop_width, im_width), min(top + crop_height, im_height)]
             crop_boxes.append(box)
             layer_idxs.append(i_layer + 1)
 
@@ -375,8 +376,8 @@ def _generate_crop_boxes(
     cropped_images = []
     total_points_per_crop = []
     for i, crop_box in enumerate(crop_boxes):
-        x0, y0, x1, y1 = crop_box
-        cropped_im = image[y0:y1, x0:x1, :]
+        left, top, right, bottom = crop_box
+        cropped_im = image[top:bottom, left:right, :]
         cropped_images.append(cropped_im)
 
         cropped_im_size = cropped_im.shape[:2]
@@ -401,12 +402,12 @@ def _generate_crop_boxes(
 
 
 def _uncrop_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
-    x0, y0, x1, y1 = crop_box
-    if x0 == 0 and y0 == 0 and x1 == orig_width and y1 == orig_height:
+    left, top, right, bottom = crop_box
+    if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
         return masks
     # Coordinate transform masks
-    pad_x, pad_y = orig_width - (x1 - x0), orig_height - (y1 - y0)
-    pad = (x0, pad_x - x0, y0, pad_y - y0)
+    pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
+    pad = (left, pad_x - left, top, pad_y - top)
     return torch.nn.functional.pad(masks, pad, value=0)
 
 
@@ -415,8 +416,8 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
     orig_box_torch = torch.as_tensor(orig_box, dtype=torch.float, device=boxes.device)
 
-    x0, y0, _, _ = crop_box
-    offset = torch.tensor([[x0, y0, x0, y0]], device=boxes.device)
+    left, top, _, _ = crop_box
+    offset = torch.tensor([[left, top, left, top]], device=boxes.device)
     # Check if boxes has a channel dimension
     if len(boxes.shape) == 3:
         offset = offset.unsqueeze(1)
@@ -516,7 +517,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
         idx += count
         parity = not parity
     mask = mask.reshape(width, height)
-    return mask.transpose()  # Put in C order
+    return mask.transpose()  # Reshape to original shape
 
 
 def _filter_masks(
