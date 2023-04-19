@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+TRAINER_LOGS="./logs"
+NOTRAINER_LOGS="./logs-no-trainer"
+
+get_trainer_throughput() {
+    grep train_samples_per_second\ = $1 | awk '{print $NF}'
+}
+
+get_notrainer_avg_throughput() {
+    grep Throughput $1 | awk '{sum += $NF} END {if (NR > 0) print sum/NR}'
+}
+
+
+printf "Modelname,Trainer,No-trainer\n"
+while read model discard; do
+    model_name=${model#*/}
+
+    trainer_logfile="${TRAINER_LOGS}/${model_name}.log"
+    notrainer_logfile="${NOTRAINER_LOGS}/${model_name}.log"
+
+    trainer_throughput=$(get_trainer_throughput $trainer_logfile)
+    notrainer_throughput=$(get_notrainer_avg_throughput $notrainer_logfile)
+
+    printf "%s,%.3f,%.3f\n" $model_name $trainer_throughput $notrainer_throughput
+done < $1
