@@ -1229,7 +1229,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         return_dict=None,
     ) -> List[Dict[str, torch.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
@@ -1316,7 +1316,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
-            vision_hidden_states=vision_hidden_states if output_hidden_states else None,
-            vision_attentions=vision_attentions if output_attentions else None,
-            mask_decoder_attentions=mask_decoder_attentions if output_attentions else None,
+            vision_hidden_states=vision_hidden_states,
+            vision_attentions=vision_attentions,
+            mask_decoder_attentions=mask_decoder_attentions,
         )
