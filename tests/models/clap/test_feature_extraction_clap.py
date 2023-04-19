@@ -274,7 +274,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             ["repeat", "repeatpad", None, "pad"], EXPECTED_INPUT_FEATURES, MEL_BIN
         ):
             input_features = feature_extractor(input_speech, return_tensors="pt", padding=padding).input_features
-            self.assertEquals(input_features.shape, (1, 4, 1001, 64))
+            self.assertEqual(input_features.shape, (1, 4, 1001, 64))
 
             self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel[0]], EXPECTED_VALUES[0], atol=1e-4))
             self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel[1]], EXPECTED_VALUES[1], atol=1e-4))
@@ -398,7 +398,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             input_features = feature_extractor(
                 input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding
             ).input_features
-            self.assertEquals(input_features.shape, (1, 1, 1001, 64))
+            self.assertEqual(input_features.shape, (1, 1, 1001, 64))
             self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel[0]], EXPECTED_VALUES[0], atol=1e-4))
             self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel[1]], EXPECTED_VALUES[1], atol=1e-4))
 
@@ -465,7 +465,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         ):
             set_seed(987654321)
             input_features = feature_extractor(input_speech, return_tensors="pt", padding=padding).input_features
-            self.assertEquals(input_features.shape, (1, 4, 1001, 64))
+            self.assertEqual(input_features.shape, (1, 4, 1001, 64))
             self.assertTrue(torch.allclose(input_features[0, block_idx, MEL_BIN], EXPECTED_VALUES, atol=1e-4))
 
     def test_integration_rand_trunc_long_input(self):
@@ -534,5 +534,5 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             input_features = feature_extractor(
                 input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding
             ).input_features
-            self.assertEquals(input_features.shape, (1, 1, 1001, 64))
+            self.assertEqual(input_features.shape, (1, 1, 1001, 64))
             self.assertTrue(torch.allclose(input_features[0, 0, MEL_BIN], EXPECTED_VALUES, atol=1e-4))
