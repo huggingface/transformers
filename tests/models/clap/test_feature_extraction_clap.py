@@ -160,6 +160,69 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
         return [x["array"] for x in speech_samples]
 
+    def test_integration_fusion_short_input(self):
+        # fmt: off
+        EXPECTED_INPUT_FEATURES = torch.tensor(
+            [
+                [
+                    -31.4897, -31.8836, -28.5246, -20.3667, -15.7675, -20.8252, -24.9852,
+                    -24.3609, -26.7176, -35.1011, -29.9410, -28.8808, -32.9967, -27.1163,
+                    -23.4414, -27.2408, -28.1140, -27.0278, -35.3932, -31.2363, -28.6563,
+                    -30.5986, -27.0273, -25.5642, -26.5161, -27.3810, -21.4945, -23.1438,
+                    -21.9563, -21.1530, -21.8027, -21.6166, -23.1705, -23.5455, -24.7405,
+                    -25.0442, -28.8903, -37.4691, -42.7592, -37.9336, -37.4475, -36.7911,
+                    -38.4222, -39.2670, -40.5971, -44.0499, -44.4566, -41.1936, -39.3091,
+                    -33.0541, -26.2162, -20.3374, -16.0830, -19.7818, -27.3550, -31.5544,
+                    -39.3470, -35.8299, -30.7186, -24.9793, -16.9644, -13.9974, -28.9275,
+                    -32.8179
+                ],
+            ]
+        )
+        # fmt: on
+        MEL_BIN = [963, 963, 963]
+        input_speech = self._load_datasamples(1)
+        feature_extractor = ClapFeatureExtractor()
+        for padding, EXPECTED_VALUES, idx_in_mel in zip(
+            ["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES, MEL_BIN
+        ):
+            input_features = feature_extractor(input_speech, return_tensors="pt", padding=padding).input_features
+            self.assertEquals(input_features.shape, (1, 4, 1001, 64))
+            self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel], EXPECTED_VALUES, atol=1e-4))
+            self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 1]))
+            self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 2]))
+            self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 3]))
+
+    def test_integration_rand_trunc_short_input(self):
+        # fmt: off
+        EXPECTED_INPUT_FEATURES = torch.tensor(
+            [
+                [
+                    -46.6997, -40.5216, -33.9434, -34.9428, -41.0734, -40.8453, -46.1212,
+                    -52.1113, -46.3411, -48.0314, -50.1488, -44.4313, -41.4034, -44.2689,
+                    -49.8047, -44.9534, -45.7702, -54.6047, -53.9873, -49.5832, -47.8417,
+                    -50.7548, -47.8888, -46.5488, -45.7829, -46.1124, -48.8562, -44.6606,
+                    -41.1969, -46.9161, -41.7349, -42.9788, -43.2269, -43.1812, -45.2678,
+                    -45.1584, -46.8845, -47.9311, -49.6091, -59.6006, -66.2816, -61.5206,
+                    -61.2616, -60.2390, -62.2890, -63.2951, -65.0391, -68.6216, -69.1934,
+                    -65.3913, -62.2194, -56.3727, -47.9670, -43.3525, -43.7095, -52.3037,
+                    -57.8282, -65.8889, -62.2096, -55.2755, -49.6361, -41.6378, -48.2226,
+                    -61.1353
+                ],
+            ]
+        )
+        # fmt: on
+        MEL_BIN = [963, 963, 963]
+        input_speech = self._load_datasamples(1)
+        feature_extractor = ClapFeatureExtractor()
+        for padding, EXPECTED_VALUES, idx_in_mel in zip(
+            ["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES, MEL_BIN
+        ):
+            input_features = feature_extractor(
+                input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding
+            ).input_features
+            self.assertEquals(input_features.shape, (1, 1, 1001, 64))
+            self.assertTrue(torch.allclose(input_features[0, 0, idx_in_mel], EXPECTED_VALUES, atol=1e-4))
+
     def test_integration_fusion(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
