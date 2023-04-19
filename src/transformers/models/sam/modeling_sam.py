@@ -35,12 +35,12 @@ from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoder
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SamConfig"
-_CHECKPOINT_FOR_DOC = "facebook/sam-vit-h"
+_CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/sam-vit-h",
-    "facebook/sam-vit-l",
-    "facebook/sam-vit-b",
+    "facebook/sam-vit-huge",
+    "facebook/sam-vit-large",
+    "facebook/sam-vit-base",
     # See all SAM models at https://huggingface.co/models?filter=sam
 ]
 
@@ -83,7 +83,7 @@ class SamImageSegmentationOutput(ModelOutput):
     Args:
         iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
             The iou scores of the predicted masks.
-        low_resolution_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
             The predicted low resolutions masks. Needs to be post-processed by the processor
         vision_attentions  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -100,7 +100,7 @@ class SamImageSegmentationOutput(ModelOutput):
     """
 
     iou_scores: torch.FloatTensor = None
-    low_resolution_masks: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
     vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -257,9 +257,9 @@ class SamTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`SamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, default to 2):
+            attention_downsample_rate (*optionalk*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, default to `False`):
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
         """
         super().__init__()
@@ -572,8 +572,8 @@ class SamMaskEmbedding(nn.Module):
         self.conv1 = nn.Conv2d(1, self.mask_input_channels, kernel_size=2, stride=2)
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
-        self.layer_norm1 = SamLayerNorm(self.mask_input_channels)
-        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4)
+        self.layer_norm1 = SamLayerNorm(self.mask_input_channels, config.layer_norm_eps)
+        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps)
 
     def forward(self, masks):
         hidden_states = self.conv1(masks)
@@ -759,8 +759,9 @@ class SamVisionAttention(nn.Module):
 
         Args:
             attn (`torch.Tensor`):
-                attention map. q (Tensor): query q in the attention layer with shape (batch_size, query_height *
-                query_width, channel).
+                attention map. 
+            query (`torch.Tensor`): 
+                query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`torch.Tensor`):
                 relative position embeddings (Lh, channel) for height axis.
             rel_pos_w (`torch.Tensor`):
@@ -783,14 +784,9 @@ class SamVisionAttention(nn.Module):
         reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-
-        attn = (
-            attn.reshape(batch_size, query_height, query_width, key_height, key_width)
-            + rel_h[:, :, :, :, None]
-            + rel_w[:, :, :, None, :]
-        )
+        attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
+        attn = attn + rel_h[:, :, :, :, None]+ rel_w[:, :, :, None, :]
         attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
-
         return attn
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
@@ -1222,32 +1218,18 @@ class SamForMaskGeneration(SamPreTrainedModel):
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
-        output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        return_dict=True,
-        **kwargs,
+        return_dict=None,
     ) -> List[Dict[str, torch.Tensor]]:
-        r"""
-        Args:
-            multimask_output (`bool`, *optional*):
-                Whether or not to return 3 scores and binary mask for each image as described in the original paper.
-
-        Returns:
-            iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
-                The predicted iou scores of the 3 predicted masks
-            low_resolution_masks (`torch.FloatTensor`):
-                Raw low resolution masks
-        Example:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
+        if pixel_values is not None and image_embeddings is not None:
+            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
+        
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
@@ -1273,8 +1255,9 @@ class SamForMaskGeneration(SamPreTrainedModel):
         batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
         image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
 
-        all_attentions = ()
-
+        vision_attentions = None
+        mask_decoder_attentions = None
+        
         if pixel_values is not None:
             vision_outputs = self.vision_encoder(
                 pixel_values,
@@ -1285,11 +1268,7 @@ class SamForMaskGeneration(SamPreTrainedModel):
             image_embeddings = vision_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (vision_outputs[-1],)
-            else:
-                all_attentions = all_attentions + (None,)
-        else:
-            all_attentions = all_attentions + (None,)
+                vision_attentions = vision_outputs[-1]
 
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
@@ -1318,20 +1297,14 @@ class SamForMaskGeneration(SamPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        if output_attentions:
-            all_attentions = all_attentions + (mask_decoder_attentions,)
-        else:
-            all_attentions = all_attentions + (None,)
-
         if not return_dict:
             output = (iou_predictions, low_res_masks)
             if output_attentions:
-                output = output + (all_attentions[0], all_attentions[1])
-            return output
+                output = output + (vision_attentions, mask_decoder_attentions)
 
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
-            low_resolution_masks=low_res_masks,
-            vision_attentions=all_attentions[0],
-            mask_decoder_attentions=all_attentions[1],
+            pred_masks=low_res_masks,
+            vision_attentions=vision_attentions if output_attentions else None,
+            mask_decoder_attentions=mask_decoder_attentions if output_attentions else None,
         )
