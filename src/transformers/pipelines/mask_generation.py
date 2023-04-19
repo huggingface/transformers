@@ -66,7 +66,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         points_per_batch (*optional*, int, default to 64): Sets the number of points run simultaneously
-                by the model. Higher numbers may be faster but use more GPU memory.
+                by the model. heightigher numbers may be faster but use more GPU memory.
         output_bboxes_mask defaults to False
 
         output_rle_masks defaults to False
@@ -311,14 +311,14 @@ def _build_point_grid(n_per_side: int) -> np.ndarray:
 
 def _normalize_coordinates(target_size, coords: np.ndarray, original_size, is_bounding_box=False) -> np.ndarray:
     """
-    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
+    Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width) format.
     """
-    old_h, old_w = original_size
+    old_height, old_width = original_size
 
-    scale = target_size * 1.0 / max(old_h, old_w)
-    new_h, new_w = old_h * scale, old_w * scale
-    new_w = int(new_w + 0.5)
-    new_h = int(new_h + 0.5)
+    scale = target_size * 1.0 / max(old_height, old_width)
+    new_height, new_width = old_height * scale, old_width * scale
+    new_width = int(new_width + 0.5)
+    new_height = int(new_height + 0.5)
 
     coords = deepcopy(coords).astype(float)
 
@@ -326,8 +326,8 @@ def _normalize_coordinates(target_size, coords: np.ndarray, original_size, is_bo
         # reshape to .reshape(-1, 2, 2)
         coords = coords.reshape(-1, 2, 2)
 
-    coords[..., 0] = coords[..., 0] * (new_w / old_w)
-    coords[..., 1] = coords[..., 1] * (new_h / old_h)
+    coords[..., 0] = coords[..., 0] * (new_width / old_width)
+    coords[..., 1] = coords[..., 1] * (new_height / old_height)
 
     if is_bounding_box:
         # reshape back to .reshape(-1, 4)
@@ -358,26 +358,26 @@ def _generate_crop_boxes(
         points_grid.append(_build_point_grid(n_points))
 
     crop_boxes, layer_idxs = [], []
-    im_h, im_w = original_size
-    short_side = min(im_h, im_w)
+    im_height, im_width = original_size
+    short_side = min(im_height, im_width)
 
     # Original image
-    crop_boxes.append([0, 0, im_w, im_h])
+    crop_boxes.append([0, 0, im_width, im_height])
     layer_idxs.append(0)
 
     for i_layer in range(n_layers):
         n_crops_per_side = 2 ** (i_layer + 1)
         overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
 
-        crop_w = int(math.ceil((overlap * (n_crops_per_side - 1) + im_w) / n_crops_per_side))
-        crop_h = int(math.ceil((overlap * (n_crops_per_side - 1) + im_h) / n_crops_per_side))
+        crop_width = int(math.ceil((overlap * (n_crops_per_side - 1) + im_width) / n_crops_per_side))
+        crop_height = int(math.ceil((overlap * (n_crops_per_side - 1) + im_height) / n_crops_per_side))
 
-        crop_box_x0 = [int((crop_w - overlap) * i) for i in range(n_crops_per_side)]
-        crop_box_y0 = [int((crop_h - overlap) * i) for i in range(n_crops_per_side)]
+        crop_box_x0 = [int((crop_width - overlap) * i) for i in range(n_crops_per_side)]
+        crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
 
-        # Crops in XYWH format
+        # Crops in XYwidthheight format
         for x0, y0 in product(crop_box_x0, crop_box_y0):
-            box = [x0, y0, min(x0 + crop_w, im_w), min(y0 + crop_h, im_h)]
+            box = [x0, y0, min(x0 + crop_width, im_width), min(y0 + crop_height, im_height)]
             crop_boxes.append(box)
             layer_idxs.append(i_layer + 1)
 
@@ -410,12 +410,12 @@ def _generate_crop_boxes(
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
 
-def _uncrop_masks(masks, crop_box: List[int], orig_h: int, orig_w: int):
+def _uncrop_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
     x0, y0, x1, y1 = crop_box
-    if x0 == 0 and y0 == 0 and x1 == orig_w and y1 == orig_h:
+    if x0 == 0 and y0 == 0 and x1 == orig_width and y1 == orig_height:
         return masks
     # Coordinate transform masks
-    pad_x, pad_y = orig_w - (x1 - x0), orig_h - (y1 - y0)
+    pad_x, pad_y = orig_width - (x1 - x0), orig_height - (y1 - y0)
     pad = (x0, pad_x - x0, y0, pad_y - y0)
     return torch.nn.functional.pad(masks, pad, value=0)
 
@@ -440,7 +440,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 def _batched_mask_to_box(masks):
     """
-    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape C1xC2x...xHxW,
+    Calculates boxes in XYXY format around masks. Return [0,0,0,0] for an empty mask. For input shape C1xC2x...xheightxwidth,
     the output shape is C1xC2x...x4.
     """
     # torch.max below raises an error on empty inputs, just skip in this case
@@ -448,7 +448,7 @@ def _batched_mask_to_box(masks):
     if torch.numel(masks) == 0:
         return torch.zeros(*masks.shape[:-2], 4, device=masks.device)
 
-    # Normalize shape to CxHxW
+    # Normalize shape to Cxheightxwidth
     shape = masks.shape
     height, width = shape[-2:]
     if len(shape) > 2:
