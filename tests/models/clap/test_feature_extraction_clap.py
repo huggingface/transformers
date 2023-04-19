@@ -284,7 +284,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 3]))
 
     def test_integration_rand_trunc_short_input(self):
-
+        # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [
                 [
