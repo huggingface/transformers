@@ -1026,6 +1026,12 @@ class FlaxModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             model(**inputs, params=params)
 
+            # test apply
+            apply_ready_modules = ["FlaxBertModule"]
+            module = model.module
+            if type(module).__name__ in apply_ready_modules:
+                module.apply({"params": params}, **inputs)
+
     def test_from_pretrained_with_no_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
