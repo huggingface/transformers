@@ -240,7 +240,7 @@ class SamImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: Optional["PILImageResampling"] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
