@@ -1353,6 +1353,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
+            # move labels to the correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
