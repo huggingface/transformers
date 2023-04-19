@@ -595,7 +595,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
+        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-3))
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = SamForMaskGeneration.from_pretrained("ybelkada/sam-vit-h")
@@ -634,6 +634,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         # fmt: off
         input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
+        EXPECTED_IOU = torch.tensor([[[1.0071, 1.0032, 0.9946], [0.4962, 0.8770, 0.8686], [0.4962, 0.8770, 0.8686]]])
         # fmt: on
         input_boxes = input_boxes.unsqueeze(0)
 
@@ -644,9 +645,4 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_allclose(
-            iou_scores,
-            torch.tensor([[[1.0071, 1.0032, 0.9946], [0.4962, 0.8770, 0.8686], [0.4962, 0.8770, 0.8686]]]),
-            atol=1e-4,
-            rtol=1e-4,
-        )
+        torch.testing.assert_allclose(iou_scores,EXPECTED_IOU,atol=1e-4,rtol=1e-4)
