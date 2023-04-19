@@ -222,26 +222,16 @@ class AutomaticMaskGenerationPipeline(ChunkPipeline):
                 **model_inputs,
             }
 
-    def forward(self, model_inputs, **forward_params):
-        with self.device_placement():
-            if self.framework == "pt":
-                inference_context = self.get_inference_context()
-                with inference_context():
-                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    if "image_embeddings" not in forward_params.keys():
-                        image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
-                        forward_params["image_embeddings"] = image_embeddings
-                    model_outputs = self._forward(model_inputs, **forward_params)
-                    model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
-        return model_outputs
-
-    def _forward(self, model_inputs, **forward_kwargs):
+    def _forward(self, model_inputs, **forward_params):
+        if "image_embeddings" not in forward_params.keys():
+          image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+          model_inputs["image_embeddings"] = image_embeddings
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
         original_sizes = model_inputs.pop("original_sizes")
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes")
 
-        model_outputs = self.model(**model_inputs, **forward_kwargs)
+        model_outputs = self.model(**model_inputs)
         return {
             "is_last": is_last,
             "crop_boxes": input_boxes,
@@ -412,7 +402,8 @@ def _generate_crop_boxes(
         )
 
     crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32)
-    points_per_crop = torch.stack([torch.tensor([p]) for p in np.array(normalized_total_points_per_crop)], dim=0)
+    normalized_total_points_per_crop = np.array([normalized_total_points_per_crop])
+    points_per_crop = torch.tensor(normalized_total_points_per_crop)
     points_per_crop = points_per_crop.permute(0, 2, 1, 3)
 
     input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long)
