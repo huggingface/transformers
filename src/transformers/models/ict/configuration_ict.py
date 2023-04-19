@@ -41,14 +41,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
 
 
     Args:
-        learning_rate (`float`, *optional*, defaults to 0.0001):
-            The desired learning rate of the [`ICTGuidedUpsampler`] model.
-        dis_gen_learning_rate (`float`, *optional*, defaults to 0.1):
-            The discriminator/generator learning rate ratio.
-        adam_beta1 (`float`, *optional*, defaults to 0.0):
-            The beta1 to use in Adam.
-        adam_beta2 (`float`, *optional*, defaults to 0.9):
-            The beta2 to use in Adam.
         batch_size (`int`, *optional*, defaults to 64):
             The batch size for training.
         input_size (`int`, *optional*, defaults to 256):
@@ -87,10 +79,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        learning_rate=0.0001,
-        dis_gen_learning_rate=0.1,
-        adam_beta1=0.0,
-        adam_beta2=0.9,
         batch_size=64,
         input_size=256,
         max_iteration=5e7,
@@ -104,10 +92,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.learning_rate = learning_rate
-        self.dis_gen_learning_rate = dis_gen_learning_rate
-        self.adam_beta1 = adam_beta1
-        self.adam_beta2 = adam_beta2
         self.batch_size = batch_size
         self.input_size = input_size
         self.max_iteration = max_iteration
