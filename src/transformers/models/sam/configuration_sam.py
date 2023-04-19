@@ -33,8 +33,8 @@ class SamPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamPromptEncoder`]. The [`SamPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield
-    a similar configuration to that of the SAM-vit-h [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge)
-    architecture.
+    a similar configuration to that of the SAM-vit-h
+    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

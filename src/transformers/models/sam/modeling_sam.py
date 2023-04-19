@@ -494,7 +494,7 @@ class SamMaskDecoder(nn.Module):
         point_embeddings = tokens.to(self.iou_token.weight.dtype)
 
         # Expand per-image data in batch direction to be per-mask
-        
+
         image_embeddings = image_embeddings + dense_prompt_embeddings
 
         # Run the transformer, image_positional_embedding are consumed
