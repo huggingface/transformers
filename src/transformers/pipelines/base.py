@@ -115,8 +115,8 @@ def _pad(items, key, padding_value, padding_side):
                 if padding_side == "left":
                     tensor[i, -len(item[key][0]) :, :, :] = item[key][0].clone()
                 else:
-                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone() 
-                    
+                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone()
+
         return tensor
     else:
         return [item[key] for item in items]

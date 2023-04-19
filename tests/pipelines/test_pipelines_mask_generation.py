@@ -67,11 +67,7 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
 @require_torch
 class MaskGenerationPipelineTests(unittest.TestCase):
     model_mapping = dict(
-        (
-            list(MODEL_FOR_MASK_GENERATION_MAPPING.items())
-            if MODEL_FOR_MASK_GENERATION_MAPPING
-            else []
-        )
+        (list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
     )
 
     def get_test_pipeline(self, model, tokenizer, processor):

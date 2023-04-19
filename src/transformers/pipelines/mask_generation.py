@@ -92,8 +92,7 @@ class MaskGenerationPipeline(ChunkPipeline):
     This segmentation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"mask-generation"`.
 
-    See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=mask-generation).
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=mask-generation).
     """
 
     def __init__(self, **kwargs):
@@ -224,8 +223,8 @@ class MaskGenerationPipeline(ChunkPipeline):
 
     def _forward(self, model_inputs, **forward_params):
         if "image_embeddings" not in forward_params.keys():
-          image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
-          model_inputs["image_embeddings"] = image_embeddings
+            image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+            model_inputs["image_embeddings"] = image_embeddings
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
         original_sizes = model_inputs.pop("original_sizes")
