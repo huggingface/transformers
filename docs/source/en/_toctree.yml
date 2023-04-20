@@ -46,7 +46,8 @@
       title: Inference for multilingual models
     - local: generation_strategies
       title: Text generation strategies
-    - sections:
+    - isExpanded: false
+      sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -64,7 +65,6 @@
       - local: tasks/multiple_choice
         title: Multiple choice
       title: Task guides
-      isExpanded: false
     title: Natural Language Processing
   - sections:
     - local: tasks/audio_classification
@@ -299,8 +299,6 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
-      - local: model_doc/open-llama
-        title: OpenLLaMA
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -367,6 +365,8 @@
         title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/open-llama
+        title: OpenLLaMA
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus

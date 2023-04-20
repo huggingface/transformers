@@ -25,13 +25,13 @@ from transformers import OpenLlamaConfig, OpenLlamaForCausalLM, OpenLlamaTokeniz
 
 
 try:
-    from transformers import LlamaTokenizerFast
+    from transformers import OpenLlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    LlamaTokenizerFast = None
+    OpenLlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -243,7 +243,7 @@ def write_model(model_path, input_base_path, model_size):
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = OpenLlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    tokenizer_class = OpenLlamaTokenizer if OpenLlamaTokenizerFast is None else OpenLlamaTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)

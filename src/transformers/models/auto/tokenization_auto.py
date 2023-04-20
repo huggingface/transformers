@@ -247,8 +247,8 @@ else:
             (
                 "open-llama",
                 (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                    "OpenLlamaTokenizer" if is_sentencepiece_available() else None,
+                    "OpenLlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
