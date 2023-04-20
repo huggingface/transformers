@@ -325,7 +325,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         tokens = [top_mask["token_str"] for top_mask in outputs]
         scores = [top_mask["score"] for top_mask in outputs]
 
-        # For some BEP tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
         if set(tokens) == set(targets):
             unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
             target_scores = [top_mask["score"] for top_mask in unmasked_targets]
@@ -374,7 +374,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         # If we use the most probably targets, and filter differently, we should still
         # have the same results
         targets2 = [el["token_str"] for el in sorted(outputs, key=lambda x: x["score"], reverse=True)]
-        # For some BEP tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
         if set(targets2).issubset(targets):
             outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
             # They should yield exactly the same result
