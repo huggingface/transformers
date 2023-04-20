@@ -1212,23 +1212,21 @@ class TFEsmLMHead(Layer):
         )
 
         self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-
-        self.decoder = None
+        if config.tie_word_embeddings:
+            self.decoder = None
+        else:
+            self.decoder = Dense(
+                config.vocab_size,
+                kernel_initializer=get_initializer(config.initializer_range),
+                name="decoder",
+                use_bias=False,
+            )
         self.config = config
 
     def build(self, input_shape):
         super().build(input_shape)
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
-        if not self.config.tie_word_embeddings:
-            if self.decoder is not None:
-                raise ValueError("Expected decoder not to be initialized before build when not tying weights!")
-            self.decoder = self.add_weight(
-                "decoder.weight",
-                shape=(self.config.hidden_size, self.config.vocab_size),
-                initializer=get_initializer(self.config.initializer_range),
-                trainable=True,
-            )
         self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
 
     def get_bias(self):
@@ -1240,7 +1238,10 @@ class TFEsmLMHead(Layer):
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        x = tf.matmul(x, self.decoder, transpose_b=True) + self.bias
+        if self.config.tie_word_embeddings:
+            x = tf.matmul(x, self.decoder, transpose_b=True) + self.bias
+        else:
+            x = self.decoder(x) + self.bias
         return x
 
 
