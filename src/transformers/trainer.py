@@ -3182,8 +3182,6 @@ class Trainer:
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
@@ -3194,10 +3192,13 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
+                logits = self._nested_gather(logits)
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+            if labels is not None:
+                labels = self._nested_gather(labels)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.

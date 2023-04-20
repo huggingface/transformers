@@ -1531,11 +1531,13 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
+        if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
+            raise ImportError(
+                "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
+            )
         if self.no_cuda:
             self.distributed_state = PartialState(cpu=True)
-            device = self.distributed_state.device
             self._n_gpu = 0
-            self.local_rank = self.distributed_state.local_process_index
         elif is_sagemaker_mp_enabled():
             local_rank = smp.local_rank()
             device = torch.device("cuda", local_rank)
@@ -1544,18 +1546,19 @@ class TrainingArguments:
         elif self.deepspeed:
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self._n_gpu = 1
-            device = self.distributed_state.device
         else:
             self.distributed_state = PartialState(backend=self.xpu_backend)
-            device = self.distributed_state.device
             self._n_gpu = 1
+        if not is_sagemaker_mp_enabled():
+            device = self.distributed_state.device
+            self.local_rank = self.distributed_state.local_process_index
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
-            and self.distributed_state.distributed_type != DistributedType.NO
+            and self.distributed_state.distributed_type == DistributedType.NO
         ):
             logger.warning(
-                "torch.distributed process group is initialized, but parallel_mode == ParallelMode.DISTRIBUTED. "
+                "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
 
