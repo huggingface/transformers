@@ -174,7 +174,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
     ):
         image = load_image(image)
-        target_size = self.image_processor.target_size
+        target_size = self.image_processor.size["longest_edge"]
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
@@ -237,8 +237,8 @@ class MaskGenerationPipeline(ChunkPipeline):
             original_sizes = model_output.pop("original_sizes")
             reshaped_input_sizes = model_output.pop("reshaped_input_sizes")
             low_resolution_masks = model_output.pop("pred_masks")
-            masks = self.image_processor.postprocess_masks(
-                original_sizes, reshaped_input_sizes, low_resolution_masks, mask_threshold, binarize=False
+            masks = self.image_processor.post_process_masks(
+                low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
             )
 
             crop_boxes = model_output.pop("crop_boxes")

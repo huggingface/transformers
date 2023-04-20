@@ -708,26 +708,22 @@ def _mask_to_rle_pytorch(input_mask):
     """
     Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
     """
-    # Put in fortran order and flatten h,w
+    # Put in fortran order and flatten height and width
     batch_size, height, width = input_mask.shape
     input_mask = input_mask.permute(0, 2, 1).flatten(1)
 
     # Compute change indices
     diff = input_mask[:, 1:] ^ input_mask[:, :-1]
-    change_indices = diff.nonzero()
+    change_indices = diff.nonzero().detach().cpu()
 
     # Encode run length
     out = []
     for i in range(batch_size):
-        cur_idxs = change_indices[change_indices[:, 0] == i, 1].detach().cpu().tolist()
-        cur_idxs = [[0] + [cur_idxs + 1] + [height * width]]
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1] +1
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts.extend(btw_idxs)
-        # counts.extend(btw_idxs.detach().cpu().tolist())
+        counts = [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width]
         out.append({"size": [height, width], "counts": counts})
-
-    out = torch.cat(out).to()
     return out
 
 
