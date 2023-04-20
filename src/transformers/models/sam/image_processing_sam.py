@@ -719,7 +719,7 @@ def _mask_to_rle_pytorch(input_mask):
     # Encode run length
     out = []
     for i in range(batch_size):
-        cur_idxs = change_indices[change_indices[:, 0] == i, 1] +1
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
         counts = [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width]
