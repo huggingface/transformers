@@ -3,7 +3,7 @@ name: Self-hosted runner (nightly-past-ci-caller)
 on:
   schedule:
     # 2 am on each Sunday and Thursday
-    - cron: "0 2 * * 0,4"
+    - cron: "17 2 * * 0,4"
   push:
     branches:
       - run_nightly_ci*
