@@ -493,7 +493,7 @@ class SamImageProcessor(BaseImageProcessor):
         return masks, scores, converted_boxes
 
 
-def _compute_stability_score(masks: torch.Tensor, mask_threshold: float, stability_score_offset: int):
+def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
     # Save memory by preventing unnecesary cast to torch.int64
     intersections = (
@@ -685,7 +685,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     return torch.any(near_crop_edge, dim=1)
 
 
-def _batched_mask_to_box(masks: torch.Tensor):
+def _batched_mask_to_box(masks: "torch.Tensor"):
     """
     Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
     corresponds the following required indices:
@@ -736,7 +736,7 @@ def _batched_mask_to_box(masks: torch.Tensor):
     return out
 
 
-def _mask_to_rle_pytorch(input_mask: torch.Tensor):
+def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
     """
     Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
     """
