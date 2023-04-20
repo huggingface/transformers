@@ -299,6 +299,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/open-llama
+        title: OpenLLaMA
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
