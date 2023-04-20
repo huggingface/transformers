@@ -27,7 +27,6 @@ from typing import Any, Dict, List, Optional, Union
 from packaging import version
 
 from .debug_utils import DebugOption
-from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
