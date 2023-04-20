@@ -449,7 +449,7 @@ class SamImageProcessor(BaseImageProcessor):
             original_size (`Tuple[int,int]`):
                 Size of the orginal image.
             cropped_box_image (``):
-                Croping bounding boxes used to crop the images. 
+                Croping bounding boxes used to crop the images.
 
         """
         requires_backends(self, ["torch"])
@@ -497,7 +497,7 @@ class SamImageProcessor(BaseImageProcessor):
         return masks, scores, converted_boxes
 
 
-def _compute_stability_score(masks:torch.Tensor, mask_threshold:float, stability_score_offset:int):
+def _compute_stability_score(masks: torch.Tensor, mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
     # Save memory by preventing unnecesary cast to torch.int64
     intersections = (
@@ -518,7 +518,9 @@ def _build_point_grid(n_per_side: int) -> np.ndarray:
     return points
 
 
-def _normalize_coordinates(target_size:int, coords: np.ndarray, original_size:Tuple[int,int], is_bounding_box=False) -> np.ndarray:
+def _normalize_coordinates(
+    target_size: int, coords: np.ndarray, original_size: Tuple[int, int], is_bounding_box=False
+) -> np.ndarray:
     """
     Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width)
     format.
@@ -546,7 +548,7 @@ def _normalize_coordinates(target_size:int, coords: np.ndarray, original_size:Tu
 
 def _generate_crop_boxes(
     image,
-    target_size:int, # Is it tuple here? 
+    target_size: int,  # Is it tuple here?
     n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
@@ -554,8 +556,7 @@ def _generate_crop_boxes(
     device: Optional[torch.device] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
-    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
-    TODO doctring
+    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer. TODO doctring
     """
     if device is None:
         device = torch.device("cpu")
@@ -588,9 +589,8 @@ def _generate_crop_boxes(
 
 def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
     """
-    TODO more details
-    Generates 2 ** (layers idx + 1) crops for each n_layers. Crops are in the XYWH format : The XYWH format consists of
-    the following required indices:
+    TODO more details Generates 2 ** (layers idx + 1) crops for each n_layers. Crops are in the XYWH format : The XYWH
+    format consists of the following required indices:
         X: X coordinate of the left of the bounding box Y: Y coordinate of the top of the bounding box WIDTH: width of
         the bounding box HEIGHT: height of the bounding box
     """
@@ -621,8 +621,7 @@ def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
 
 def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, original_size):
     """
-    TODO 
-    What is this doing? Takes as an input bounding boxes that are used to crop the image. Based in the crops, the
+    TODO What is this doing? Takes as an input bounding boxes that are used to crop the image. Based in the crops, the
     corresponding points are also passed.
     """
     cropped_images = []
@@ -672,8 +671,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 def _batched_mask_to_box(masks):
     """
-    TODO 
-    Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
+    TODO Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
     corresponds the following required indices:
         - LEFT: left hand side of the bounding box
         - TOP: top of the bounding box
