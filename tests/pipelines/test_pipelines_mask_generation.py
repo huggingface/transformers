@@ -68,7 +68,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_small_model_pt(self):
-        image_segmenter = pipeline("mask-generation",model="facebook/sam-vit-huge")
+        image_segmenter = pipeline("mask-generation", model="facebook/sam-vit-huge")
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
 
