@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/sam-vit-huge": "https://huggingface.co/facebook/sam-vit-huge/resolve/main/config.json",
     "facebook/sam-vit-large": "https://huggingface.co/facebook/sam-vit-large/resolve/main/config.json",
-    "facebook/sam-vit-big": "https://huggingface.co/facebook/sam-vit-big/resolve/main/config.json",
+    "facebook/sam-vit-base": "https://huggingface.co/facebook/sam-vit-base/resolve/main/config.json",
 }
 
 
