@@ -390,7 +390,7 @@ SUPPORTED_TASKS = {
         "impl": MaskGenerationPipeline,
         "tf": (),
         "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("facebook/sam-vit-huge", "")}},
+        "default": {"model": {"pt": ("facebook/sam-vit-huge", "997b15")}},
         "type": "multimodal",
     },
 }
