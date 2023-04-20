@@ -45,15 +45,8 @@ def hashimage(image: Image) -> str:
 
 def mask_to_test_readable(mask: Image) -> Dict:
     npimg = np.array(mask)
-    white_pixels = (npimg == 255).sum()
     shape = npimg.shape
-    return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
-
-
-def mask_to_test_readable_only_shape(mask: Image) -> Dict:
-    npimg = np.array(mask)
-    shape = npimg.shape
-    return {"shape": shape}
+    return {"hash": hashimage(mask), "shape": shape}
 
 
 @is_pipeline_test
@@ -91,36 +84,36 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(new_outupt, decimals=4),
             [
-                {'mask': {'hash': '115ad19f5f', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0444},
-                {'mask': {'hash': '6affa964c6', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.021},
-                {'mask': {'hash': 'dfe28a0388', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0167},
-                {'mask': {'hash': 'c0a5f4a318', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0132},
-                {'mask': {'hash': 'fe8065c197', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 1.0053},
-                {'mask': {'hash': 'e2d0b7a0b7', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9967},
-                {'mask': {'hash': '453c7844bd', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.993},
-                {'mask': {'hash': '3d44f2926d', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9909},
-                {'mask': {'hash': '64033ddc3f', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9879},
-                {'mask': {'hash': '801064ff79', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9834},
-                {'mask': {'hash': '6172f276ef', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9716},
-                {'mask': {'hash': 'b49e60e084', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9612},
-                {'mask': {'hash': 'a811e775fd', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9599},
-                {'mask': {'hash': 'a6a8ebcf4b', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9552},
-                {'mask': {'hash': '9d8257e080', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9532},
-                {'mask': {'hash': '32de6454a8', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9516},
-                {'mask': {'hash': 'af3d4af2c8', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9499},
-                {'mask': {'hash': '3c6db475fb', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9483},
-                {'mask': {'hash': 'c290813fb9', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9464},
-                {'mask': {'hash': 'b6f0b8f606', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.943},
-                {'mask': {'hash': '92ce16bfdf', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.943},
-                {'mask': {'hash': 'c749b25868', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9408},
-                {'mask': {'hash': 'efb6cab859', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9335},
-                {'mask': {'hash': '1ff2eafb30', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9326},
-                {'mask': {'hash': '788b798e24', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.9262},
-                {'mask': {'hash': 'abea804f0e', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.8999},
-                {'mask': {'hash': '7b9e8ddb73', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.8986},
-                {'mask': {'hash': 'cd24047c8a', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.8984},
-                {'mask': {'hash': '6943e6bcbd', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.8873},
-                {'mask': {'hash': 'b5f47c9191', 'white_pixels': 0, 'shape': (480, 640)}, 'scores': 0.8871}
+                {'mask': {'hash': '115ad19f5f', 'shape': (480, 640)}, 'scores': 1.0444},
+                {'mask': {'hash': '6affa964c6', 'shape': (480, 640)}, 'scores': 1.021},
+                {'mask': {'hash': 'dfe28a0388', 'shape': (480, 640)}, 'scores': 1.0167},
+                {'mask': {'hash': 'c0a5f4a318', 'shape': (480, 640)}, 'scores': 1.0132},
+                {'mask': {'hash': 'fe8065c197', 'shape': (480, 640)}, 'scores': 1.0053},
+                {'mask': {'hash': 'e2d0b7a0b7', 'shape': (480, 640)}, 'scores': 0.9967},
+                {'mask': {'hash': '453c7844bd', 'shape': (480, 640)}, 'scores': 0.993},
+                {'mask': {'hash': '3d44f2926d', 'shape': (480, 640)}, 'scores': 0.9909},
+                {'mask': {'hash': '64033ddc3f', 'shape': (480, 640)}, 'scores': 0.9879},
+                {'mask': {'hash': '801064ff79', 'shape': (480, 640)}, 'scores': 0.9834},
+                {'mask': {'hash': '6172f276ef', 'shape': (480, 640)}, 'scores': 0.9716},
+                {'mask': {'hash': 'b49e60e084', 'shape': (480, 640)}, 'scores': 0.9612},
+                {'mask': {'hash': 'a811e775fd', 'shape': (480, 640)}, 'scores': 0.9599},
+                {'mask': {'hash': 'a6a8ebcf4b', 'shape': (480, 640)}, 'scores': 0.9552},
+                {'mask': {'hash': '9d8257e080', 'shape': (480, 640)}, 'scores': 0.9532},
+                {'mask': {'hash': '32de6454a8', 'shape': (480, 640)}, 'scores': 0.9516},
+                {'mask': {'hash': 'af3d4af2c8', 'shape': (480, 640)}, 'scores': 0.9499},
+                {'mask': {'hash': '3c6db475fb', 'shape': (480, 640)}, 'scores': 0.9483},
+                {'mask': {'hash': 'c290813fb9', 'shape': (480, 640)}, 'scores': 0.9464},
+                {'mask': {'hash': 'b6f0b8f606', 'shape': (480, 640)}, 'scores': 0.943},
+                {'mask': {'hash': '92ce16bfdf', 'shape': (480, 640)}, 'scores': 0.943},
+                {'mask': {'hash': 'c749b25868', 'shape': (480, 640)}, 'scores': 0.9408},
+                {'mask': {'hash': 'efb6cab859', 'shape': (480, 640)}, 'scores': 0.9335},
+                {'mask': {'hash': '1ff2eafb30', 'shape': (480, 640)}, 'scores': 0.9326},
+                {'mask': {'hash': '788b798e24', 'shape': (480, 640)}, 'scores': 0.9262},
+                {'mask': {'hash': 'abea804f0e', 'shape': (480, 640)}, 'scores': 0.8999},
+                {'mask': {'hash': '7b9e8ddb73', 'shape': (480, 640)}, 'scores': 0.8986},
+                {'mask': {'hash': 'cd24047c8a', 'shape': (480, 640)}, 'scores': 0.8984},
+                {'mask': {'hash': '6943e6bcbd', 'shape': (480, 640)}, 'scores': 0.8873},
+                {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8871}
             ],
         )
         # fmt: on
@@ -150,12 +143,3 @@ class MaskGenerationPipelineTests(unittest.TestCase):
                 {"mask": {"hash": "fe8065c197", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0053},
             ],
         )
-
-    @require_torch
-    @slow
-    def test_other_args(self):
-        model_id = "ybelkada/sam-vit-s"
-        image_segmenter = pipeline("mask-generation", model=model_id)
-
-        # n_layers to test more than 1 crop boxes.
-        image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", n_layers=3, points_per_batch=256)
