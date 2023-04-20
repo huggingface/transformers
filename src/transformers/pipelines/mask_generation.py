@@ -193,13 +193,13 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         n_points = grid_points.shape[1]
         points_per_batch = points_per_batch if points_per_batch is not None else n_points
-            
+
         if points_per_batch <= 0:
             raise ValueError(
                 "Cannot have points_per_batch<=0. Must be >=1 to returned batched outputs. "
                 "To return all points at once, set points_per_batch to None"
             )
-        
+
         for i in range(0, n_points, points_per_batch):
             batched_points = grid_points[:, i : i + points_per_batch, :, :]
             labels = input_labels[:, i : i + points_per_batch]
