@@ -257,7 +257,9 @@ class OpenLlamaModelTester:
 
 @require_torch
 class OpenLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (OpenLlamaModel, OpenLlamaForCausalLM, OpenLlamaForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (OpenLlamaModel, OpenLlamaForCausalLM, OpenLlamaForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (OpenLlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

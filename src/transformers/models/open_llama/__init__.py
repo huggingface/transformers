@@ -81,7 +81,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_open_llama import OpenLlamaForCausalLM, OpenLlamaForSequenceClassification, OpenLlamaModel, OpenLlamaPreTrainedModel
+        from .modeling_open_llama import (
+            OpenLlamaForCausalLM,
+            OpenLlamaForSequenceClassification,
+            OpenLlamaModel,
+            OpenLlamaPreTrainedModel,
+        )
 
 
 else:

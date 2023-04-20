@@ -32,13 +32,14 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_open_llama import OpenLlamaConfig
 
+
 try:
     from xformers import ops as xops
 except ImportError:
     xops = None
     print("xformers is not installed correctly.")
 
-    
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OpenLlamaConfig"
@@ -148,7 +149,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->OpenLlama
 class OpenLlamaMLP(nn.Module):
     def __init__(
         self,
@@ -168,7 +168,6 @@ class OpenLlamaMLP(nn.Module):
         return self.dropout(self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->OpenLlama
 class OpenLlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -229,8 +228,9 @@ class OpenLlamaAttention(nn.Module):
             query_states = query_states.transpose(1, 2)
             key_states = key_states.transpose(1, 2)
             value_states = value_states.transpose(1, 2)
-            attn_output = xops.memory_efficient_attention(query_states, key_states, value_states, 
-                                                          attn_bias=xops.LowerTriangularMask(), p=self.dropout_prob)
+            attn_output = xops.memory_efficient_attention(
+                query_states, key_states, value_states, attn_bias=xops.LowerTriangularMask(), p=self.dropout_prob
+            )
         else:
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -269,7 +269,6 @@ class OpenLlamaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->OpenLlama
 class OpenLlamaDecoderLayer(nn.Module):
     def __init__(self, config: OpenLlamaConfig):
         super().__init__()
@@ -360,7 +359,6 @@ OPEN_LLAMA_START_DOCSTRING = r"""
     "The bare Open-Llama Model outputting raw hidden-states without any specific head on top.",
     OPEN_LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->OpenLlama
 class OpenLlamaPreTrainedModel(PreTrainedModel):
     config_class = OpenLlamaConfig
     base_model_prefix = "model"
@@ -455,7 +453,6 @@ OPEN_LLAMA_INPUTS_DOCSTRING = r"""
     "The bare Open-Llama Model outputting raw hidden-states without any specific head on top.",
     OPEN_LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->OPEN_LLAMA,Llama->OpenLlama
 class OpenLlamaModel(OpenLlamaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OpenLlamaDecoderLayer`]
@@ -643,7 +640,6 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OPEN_LLAMA,Llama->OpenLlama
 class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -736,7 +732,7 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.shared_input_output_embedding:
-            logits = torch.einsum('blh,vh->blv', hidden_states, self.model.embed_tokens.weight)
+            logits = torch.einsum("blh,vh->blv", hidden_states, self.model.embed_tokens.weight)
         else:
             logits = self.lm_head(hidden_states)
 
@@ -807,8 +803,8 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
 
-    [`OpenLlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
+    [`OpenLlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If

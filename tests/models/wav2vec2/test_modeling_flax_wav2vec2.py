@@ -464,7 +464,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         negative_indices = _sample_negative_indices(features.shape, num_negatives, attention_mask=attention_mask)
 
         # make sure that no padding tokens are sampled
-        self.assertTrue(all([idx not in negative_indices for idx in forbidden_indices]))
+        self.assertTrue(all(idx not in negative_indices for idx in forbidden_indices))
 
         features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
         # take negative vectors from sampled indices

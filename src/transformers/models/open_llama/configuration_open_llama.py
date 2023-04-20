@@ -29,11 +29,12 @@ OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Bayes/Open-Llama-3k": "https://huggingface.co/Bayes/Open-Llama-3k/resolve/main/config.json",
 }
 
+
 class OpenLlamaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OpenLlamaModel`]. It is used to instantiate an Open-Llama
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Open-Llama-7B.
+    This is the configuration class to store the configuration of a [`OpenLlamaModel`]. It is used to instantiate an
+    Open-Llama model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Open-Llama-7B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -41,8 +42,8 @@ class OpenLlamaConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Open-Llama model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OpenLlamaModel`]
+            Vocabulary size of the Open-Llama model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`OpenLlamaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
