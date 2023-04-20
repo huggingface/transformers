@@ -87,11 +87,12 @@ jobs:
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
+          python3 -m pip install git+https://github.com/huggingface/accelerate -U
           DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install "deepspeed<0.9.0" --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
-      - name: Install dev Acceleraet
+      - name: Install dev Accelerate
         run: |
-          python3 -m pip install git+https://github.com/huggingface/accelerate
+          
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
