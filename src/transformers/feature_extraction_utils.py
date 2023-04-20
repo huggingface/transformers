@@ -210,10 +210,10 @@ class BatchFeature(UserDict):
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
-            if torch.is_floating_point(v):
+            if torch.is_tensor(v) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
+            elif torch.is_tensor(v) and device is not None:
                 new_data[k] = v.to(device=device)
             else:
                 new_data[k] = v

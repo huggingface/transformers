@@ -468,9 +468,9 @@ class SamImageProcessor(BaseImageProcessor):
     ):
         """
         Filters the predicted masks by selecting only the ones that meets several criteria. The first criterion being
-        that the iou scores needs to be greater than `pred_iou_thresh`. The second criterion is that the stability score
-        needs to be greater than `stability_score_thresh`. The method also converts the predicted masks to bounding
-        boxes and pad the predicted masks if necessary.
+        that the iou scores needs to be greater than `pred_iou_thresh`. The second criterion is that the stability
+        score needs to be greater than `stability_score_thresh`. The method also converts the predicted masks to
+        bounding boxes and pad the predicted masks if necessary.
 
         Args:
             masks (`torch.Tensor`):
