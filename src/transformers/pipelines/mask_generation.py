@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Optional
+from typing import Optional
 
 from ..image_utils import load_image
 from ..utils import (
@@ -174,7 +174,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         crops_n_layers: int = 0,
         crop_overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[List[int]] = 1,
+        crop_n_points_downscale_factor: Optional[int] = 1,
     ):
         image = load_image(image)
         target_size = self.image_processor.size["longest_edge"]

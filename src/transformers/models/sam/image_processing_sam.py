@@ -29,6 +29,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -620,7 +621,7 @@ def _generate_crop_boxes(
     if isinstance(image, list):
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
-    original_size = image.shape[:2]
+    original_size = get_image_size(image)
 
     points_grid = []
     for i in range(crop_n_layers + 1):
@@ -686,10 +687,16 @@ def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_siz
     total_points_per_crop = []
     for i, crop_box in enumerate(crop_boxes):
         left, top, right, bottom = crop_box
-        cropped_im = image[top:bottom, left:right, :]
+
+        channel_dim = infer_channel_dimension_format(image)
+        if channel_dim == ChannelDimension.LAST:
+            cropped_im = image[top:bottom, left:right, :]
+        else:
+            cropped_im = image[:, top:bottom, left:right]
+
         cropped_images.append(cropped_im)
 
-        cropped_im_size = cropped_im.shape[:2]
+        cropped_im_size = get_image_size(cropped_im)
         points_scale = np.array(cropped_im_size)[None, ::-1]
 
         points = points_grid[layer_idxs[i]] * points_scale
@@ -750,8 +757,6 @@ def _batched_mask_to_box(masks: "torch.Tensor"):
     # Normalize shape to Cxheightxwidth
     shape = masks.shape
     height, width = shape[-2:]
-    # TODO this was not doing anything as the shape was always 3
-    masks = masks.flatten(0, -3)
 
     # Get top and bottom edges
     in_height, _ = torch.max(masks, dim=-1)
