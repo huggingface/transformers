@@ -81,11 +81,11 @@ class ImageSegmentationPipeline(Pipeline):
         )
 
     def _sanitize_parameters(self, **kwargs):
-        preprocessor_kwargs = {}
+        preprocess_kwargs = {}
         postprocess_kwargs = {}
         if "subtask" in kwargs:
             postprocess_kwargs["subtask"] = kwargs["subtask"]
-            preprocessor_kwargs["subtask"] = kwargs["subtask"]
+            preprocess_kwargs["subtask"] = kwargs["subtask"]
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         if "mask_threshold" in kwargs:
@@ -93,7 +93,7 @@ class ImageSegmentationPipeline(Pipeline):
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
 
-        return preprocessor_kwargs, {}, postprocess_kwargs
+        return preprocess_kwargs, {}, postprocess_kwargs
 
     def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
