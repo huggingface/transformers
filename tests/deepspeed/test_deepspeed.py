@@ -123,7 +123,6 @@ def get_launcher(distributed=False):
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
     master_port = get_master_port(real_launcher=True)
-    # return f"accelerate launch --num_processes {num_gpus} --main_process_port {master_port}".split()
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
@@ -1083,11 +1082,11 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             remove_args = remove_args_str.split()
             args = [x for x in args if x not in remove_args]
 
-        ds_args = f"--deepspeed_config_file {self.test_file_dir_str}/ds_config_{stage}.json".split()
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
         launcher = get_launcher(distributed)
 
-        cmd = launcher + ds_args + script + args
+        cmd = launcher + script + args + ds_args
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
@@ -1125,7 +1124,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
         launcher = get_launcher(distributed=True)
 
-        cmd = launcher + ds_args + script + args
+        cmd = launcher + script + args + ds_args
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
@@ -1155,8 +1154,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
         script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
         launcher = get_launcher(distributed=True)
-        # cmd = launcher + ds_args + script + args
-        # raise ValueError(launcher)
+
         cmd = launcher + script + args + ds_args
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
