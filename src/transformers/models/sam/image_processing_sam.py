@@ -490,20 +490,17 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, scores, converted_boxes
 
+
 def _compute_stability_score(masks, mask_threshold, stability_score_offset):
-        # One mask is always contained inside the other.
-        # Save memory by preventing unnecesary cast to torch.int64
-        intersections = (
-            (masks > (mask_threshold + stability_score_offset))
-            .sum(-1, dtype=torch.int16)
-            .sum(-1, dtype=torch.int32)
-        )
-        unions = (
-            (masks > (mask_threshold - stability_score_offset))
-            .sum(-1, dtype=torch.int16)
-            .sum(-1, dtype=torch.int32)
-        )
-        stability_scores = intersections / unions
+    # One mask is always contained inside the other.
+    # Save memory by preventing unnecesary cast to torch.int64
+    intersections = (
+        (masks > (mask_threshold + stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
+    )
+    unions = (masks > (mask_threshold - stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
+    stability_scores = intersections / unions
+    return stability_scores
+
 
 def _build_point_grid(n_per_side: int) -> np.ndarray:
     """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
@@ -568,6 +565,29 @@ def _generate_crop_boxes(
         n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
         points_grid.append(_build_point_grid(n_points))
 
+    crop_boxes, layer_idxs = _generate_per_layer_crops(n_layers, overlap_ratio, original_size)
+
+    cropped_images, point_grid_per_crop = _generate_crop_images(
+        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+    )
+
+    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32, device=device)
+    point_grid_per_crop = np.array([point_grid_per_crop])
+    points_per_crop = torch.tensor(point_grid_per_crop, device=device)
+    points_per_crop = points_per_crop.permute(0, 2, 1, 3)
+
+    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long, device=device)
+
+    return crop_boxes, points_per_crop, cropped_images, input_labels
+
+
+def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
+    """
+    Generates 2 ** (layers idx + 1) crops for each n_layers. Crops are in the XYWH format : The XYWH format consists of
+    the following required indices:
+        X: X coordinate of the left of the bounding box Y: Y coordinate of the top of the bounding box WIDTH: width of
+        the bounding box HEIGHT: height of the bounding box
+    """
     crop_boxes, layer_idxs = [], []
     im_height, im_width = original_size
     short_side = min(im_height, im_width)
@@ -575,7 +595,6 @@ def _generate_crop_boxes(
     # Original image
     crop_boxes.append([0, 0, im_width, im_height])
     layer_idxs.append(0)
-
     for i_layer in range(n_layers):
         n_crops_per_side = 2 ** (i_layer + 1)
         overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
@@ -586,19 +605,19 @@ def _generate_crop_boxes(
         crop_box_x0 = [int((crop_width - overlap) * i) for i in range(n_crops_per_side)]
         crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
 
-        # Crops are in the XYWH format :
-        # The XYWH format consists of the following required indices:
-        #     X: X coordinate of the left of the bounding box
-        #     Y: Y coordinate of the top of the bounding box
-        #     WIDTH: width of the bounding box
-        #     HEIGHT: height of the bounding box
-
         for left, top in product(crop_box_x0, crop_box_y0):
             box = [left, top, min(left + crop_width, im_width), min(top + crop_height, im_height)]
             crop_boxes.append(box)
             layer_idxs.append(i_layer + 1)
 
-    # generate cropped images
+    return crop_boxes, layer_idxs
+
+
+def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, original_size):
+    """
+    What is this doing? Takes as an input bounding boxes that are used to crop the image. Based in the crops, the
+    corresponding points are also passed.
+    """
     cropped_images = []
     total_points_per_crop = []
     for i, crop_box in enumerate(crop_boxes):
@@ -609,22 +628,11 @@ def _generate_crop_boxes(
         cropped_im_size = cropped_im.shape[:2]
         points_scale = np.array(cropped_im_size)[None, ::-1]
 
-        total_points_per_crop.append(points_grid[layer_idxs[i]] * points_scale)
+        points = points_grid[layer_idxs[i]] * points_scale
+        normalized_points = _normalize_coordinates(target_size, points, original_size)
+        total_points_per_crop.append(normalized_points)
 
-    normalized_total_points_per_crop = []
-    for points_per_crop in total_points_per_crop:
-        normalized_total_points_per_crop.append(
-            [_normalize_coordinates(target_size, point, original_size) for point in points_per_crop]
-        )
-
-    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32, device=device)
-    normalized_total_points_per_crop = np.array([normalized_total_points_per_crop])
-    points_per_crop = torch.tensor(normalized_total_points_per_crop, device=device)
-    points_per_crop = points_per_crop.permute(0, 2, 1, 3)
-
-    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long, device=device)
-
-    return crop_boxes, points_per_crop, cropped_images, input_labels
+    return cropped_images, total_points_per_crop
 
 
 def _pad_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
@@ -702,11 +710,7 @@ def _batched_mask_to_box(masks):
     out = out * (~empty_filter).unsqueeze(-1)
 
     # Return to original shape
-    if len(shape) > 2:
-        out = out.reshape(*shape[:-2], 4)
-    else:
-        out = out[0]
-
+    out = out.reshape(*shape[:-2], 4)
     return out
 
 
@@ -720,7 +724,7 @@ def _mask_to_rle_pytorch(input_mask):
 
     # Compute change indices
     diff = input_mask[:, 1:] ^ input_mask[:, :-1]
-    change_indices = diff.nonzero().detach().cpu()
+    change_indices = diff.nonzero()
 
     # Encode run length
     out = []
