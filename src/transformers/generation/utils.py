@@ -1347,12 +1347,11 @@ class GenerationMixin:
         elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
             if not has_default_max_length:
-                logger.warn(
+                logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
-                    UserWarning,
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
