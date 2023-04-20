@@ -417,7 +417,7 @@ class SamImageProcessor(BaseImageProcessor):
         overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
-        device: Optional[torch.device] = None,
+        device: Optional["torch.device"] = None,
     ):
         return _generate_crop_boxes(
             image, target_size, crop_n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor, device
@@ -549,7 +549,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
-    device: Optional[torch.device] = None,
+    device: Optional["torch.device"] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
