@@ -399,7 +399,7 @@ class SamImageProcessor(BaseImageProcessor):
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = F.interpolate(
-                interpolated_mask, [*original_size.numpy()], mode="bilinear", align_corners=False
+                interpolated_mask, [*original_size.cpu().numpy()], mode="bilinear", align_corners=False
             )
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
@@ -445,6 +445,7 @@ class SamImageProcessor(BaseImageProcessor):
                 describe this input. Image in a crop box
 
         """
+        requires_backends(self, ["torch"])
         original_height, original_width = original_size
         iou_scores = iou_scores.flatten(0, 1)
         masks = masks.flatten(0, 1)
@@ -578,7 +579,7 @@ def _generate_crop_boxes(
         crop_box_x0 = [int((crop_width - overlap) * i) for i in range(n_crops_per_side)]
         crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
 
-        # Crops in XYWH format :
+        # Crops are in the XYWH format :
         # The XYWH format consists of the following required indices:
         #     X: X coordinate of the left of the bounding box
         #     Y: Y coordinate of the top of the bounding box
@@ -660,7 +661,7 @@ def _batched_mask_to_box(masks):
     is channel_1 x channel_2 x ... x 4.
 
     Args:
-        - masks (`torch.tensor` of shape `(???????)`)
+        - masks (`torch.tensor` of shape `(batch, nb_mask, height, width)`)
     """
     # torch.max below raises an error on empty inputs, just skip in this case
 
@@ -670,10 +671,9 @@ def _batched_mask_to_box(masks):
     # Normalize shape to Cxheightxwidth
     shape = masks.shape
     height, width = shape[-2:]
-    if len(shape) > 2:
-        masks = masks.flatten(0, -3)
-    else:
-        masks = masks.unsqueeze(0)
+    # TODO this was not doing anything as the shape was always 3 
+    masks = masks.flatten(0, -3)
+
 
     # Get top and bottom edges
     in_height, _ = torch.max(masks, dim=-1)

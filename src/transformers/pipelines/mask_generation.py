@@ -99,6 +99,7 @@ class MaskGenerationPipeline(ChunkPipeline):
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
         postprocess_kwargs = {}
+        forward_params = {}
         # preprocess args
         if "points_per_batch" in kwargs:
             preprocess_kwargs["points_per_batch"] = kwargs["points_per_batch"]
@@ -112,18 +113,20 @@ class MaskGenerationPipeline(ChunkPipeline):
             preprocess_kwargs["crop_n_points_downscale_factor"] = kwargs["crop_n_points_downscale_factor"]
         # postprocess args
         if "pred_iou_thresh" in kwargs:
-            postprocess_kwargs["pred_iou_thresh"] = kwargs["pred_iou_thresh"]
+            forward_params["pred_iou_thresh"] = kwargs["pred_iou_thresh"]
         if "stability_score_offset" in kwargs:
-            postprocess_kwargs["stability_score_offset"] = kwargs["stability_score_offset"]
+            forward_params["stability_score_offset"] = kwargs["stability_score_offset"]
+        if "mask_threshold" in kwargs:
+            forward_params["mask_threshold"] = kwargs["mask_threshold"]
+        if "stability_score_thresh" in kwargs:
+            forward_params["stability_score_thresh"] = kwargs["stability_score_thresh"]
         if "crops_nms_thresh" in kwargs:
             postprocess_kwargs["crops_nms_thresh"] = kwargs["crops_nms_thresh"]
-        if "mask_threshold" in kwargs:
-            postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         if "output_rle_mask" in kwargs:
             postprocess_kwargs["output_rle_mask"] = kwargs["output_rle_mask"]
         if "output_bboxes_mask" in kwargs:
             postprocess_kwargs["output_bboxes_mask"] = kwargs["output_bboxes_mask"]
-        return preprocess_kwargs, {}, postprocess_kwargs
+        return preprocess_kwargs, forward_params, postprocess_kwargs
 
     def __call__(self, image, *args, num_workers=None, batch_size=None, **kwargs):
         """
@@ -180,6 +183,14 @@ class MaskGenerationPipeline(ChunkPipeline):
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
 
+        with self.device_placement():
+            if self.framework == "pt":
+                inference_context = self.get_inference_context()
+                with inference_context():
+                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+                    image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    model_inputs["image_embeddings"] = image_embeddings
+            
         if points_per_batch:
             for i in range(0, grid_points.shape[1], points_per_batch):
                 batched_points = grid_points[:, i : i + points_per_batch, :, :]
@@ -202,21 +213,44 @@ class MaskGenerationPipeline(ChunkPipeline):
             }
 
     def _forward(self, model_inputs, **forward_params):
-        if "image_embeddings" not in forward_params.keys():
-            image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
-            model_inputs["image_embeddings"] = image_embeddings
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
         original_sizes = model_inputs.pop("original_sizes")
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes")
+        
+        # forward kwargs
+        pred_iou_thresh=forward_params.pop("pred_iou_thresh")
+        stability_score_thresh=forward_params.pop("stability_score_thresh"),
+        mask_threshold=forward_params.pop("mask_threshold"),
+        stability_score_offset=forward_params.pop("stability_score_offset"),
+
+
 
         model_outputs = self.model(**model_inputs)
+        
+        low_resolution_masks = model_outputs["pred_masks"]
+        masks = self.image_processor.post_process_masks(
+            low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
+        )
+
+        crop_boxes = input_boxes
+        iou_scores = model_outputs["iou_scores"]
+        masks, iou_scores, boxes = self.image_processor.filter_masks(
+            masks[0],
+            iou_scores[0],
+            original_sizes[0],
+            crop_boxes[0],
+            pred_iou_thresh,
+            stability_score_thresh,
+            mask_threshold,
+            stability_score_offset,
+        )
         return {
             "is_last": is_last,
-            "crop_boxes": input_boxes,
-            "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
-            **model_outputs,
+            "boxes": boxes,
+            "masks":masks,
+            "iou_scores":iou_scores,
+            # **model_outputs,
         }
 
     def postprocess(
@@ -225,39 +259,15 @@ class MaskGenerationPipeline(ChunkPipeline):
         output_rle_mask=False,
         output_bboxes_mask=False,
         crops_nms_thresh=0.7,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.95,
-        mask_threshold=0,
-        stability_score_offset=1,
     ):
         all_scores = []
         all_masks = []
         all_boxes = []
         for model_output in model_outputs:
-            original_sizes = model_output.pop("original_sizes")
-            reshaped_input_sizes = model_output.pop("reshaped_input_sizes")
-            low_resolution_masks = model_output.pop("pred_masks")
-            masks = self.image_processor.post_process_masks(
-                low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
-            )
-
-            crop_boxes = model_output.pop("crop_boxes")
-            iou_scores = model_output.pop("iou_scores")
-            masks, iou_scores, boxes = self.image_processor.filter_masks(
-                masks[0],
-                iou_scores[0],
-                original_sizes[0],
-                crop_boxes[0],
-                pred_iou_thresh,
-                stability_score_thresh,
-                mask_threshold,
-                stability_score_offset,
-            )
-
-            all_scores.append(iou_scores)
-            all_masks.extend(masks)
-            all_boxes.append(boxes)
-
+            all_scores.append(model_output.pop("iou_scores"))
+            all_masks.extend(model_output.pop("masks"))
+            all_boxes.append(model_output.pop("boxes"))
+        
         all_scores = torch.cat(all_scores)
         all_boxes = torch.cat(all_boxes)
         output_masks, iou_scores, rle_mask, bounding_boxes = self.image_processor.post_process_for_mask_generation(
