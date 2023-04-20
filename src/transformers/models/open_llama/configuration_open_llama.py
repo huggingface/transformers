@@ -26,7 +26,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Bayes/Open-Llama-3k": "https://huggingface.co/Bayes/Open-Llama-3k/resolve/main/config.json",
+    "s-JoL/Open-Llama-V1": "https://huggingface.co/s-JoL/Open-Llama-V1/blob/main/config.json",
 }
 
 
