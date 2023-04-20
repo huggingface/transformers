@@ -1547,7 +1547,10 @@ class TrainingArguments:
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self._n_gpu = 1
         else:
-            self.distributed_state = PartialState(backend=self.xpu_backend)
+            partial_state_kwargs = {}
+            if self.xpu_backend is not None:
+                partial_state_kwargs["backend"] = self.xpu_backend
+            self.distributed_state = PartialState(**partial_state_kwargs)
             self._n_gpu = 1
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
