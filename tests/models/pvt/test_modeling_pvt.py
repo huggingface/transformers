@@ -145,7 +145,7 @@ class PvtModelTester:
 
     fx_compatible = True
 
-    test_pruning = False
+    test_pruning = True
     test_resize_embeddings = False
     test_head_masking = False
 

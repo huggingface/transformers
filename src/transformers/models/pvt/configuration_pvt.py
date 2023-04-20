@@ -74,9 +74,9 @@ class PvtConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1.0):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
@@ -89,7 +89,7 @@ class PvtConfig(PretrainedConfig):
     ```python
     >>> from transformers import PvtModel, PvtConfig
 
-    >>> # Initializing a PVT Xrenya/pvt-tiny-224  style configuration
+    >>> # Initializing a PVT Xrenya/pvt-tiny-224 style configuration
     >>> configuration = PvtConfig()
 
     >>> # Initializing a model from the Xrenya/pvt-tiny-224 style configuration
