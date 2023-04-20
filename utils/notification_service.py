@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_job_links
+from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
 
@@ -274,6 +275,43 @@ class Message:
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
 
+    def compute_diff_for_failure_reports(self, curr_failure_report, prev_failure_report):  # noqa
+        # Remove the leading and training parts that don't contain failure count information.
+        model_failures = curr_failure_report.split("\n")[3:-2]
+        prev_model_failures = prev_failure_report.split("\n")[3:-2]
+        entries_changed = set(model_failures).difference(prev_model_failures)
+
+        prev_map = {}
+        for f in prev_model_failures:
+            items = [x.strip() for x in f.split("| ")]
+            prev_map[items[-1]] = [int(x) for x in items[:-1]]
+
+        curr_map = {}
+        for f in entries_changed:
+            items = [x.strip() for x in f.split("| ")]
+            curr_map[items[-1]] = [int(x) for x in items[:-1]]
+
+        diff_map = {}
+        for k, v in curr_map.items():
+            if k not in prev_map:
+                diff_map[k] = v
+            else:
+                diff = [x - y for x, y in zip(v, prev_map[k])]
+                if max(diff) > 0:
+                    diff_map[k] = diff
+
+        entries_changed = []
+        for model_name, diff_values in diff_map.items():
+            diff = [str(x) for x in diff_values]
+            diff = [f"+{x}" if (x != "0" and not x.startswith("-")) else x for x in diff]
+            diff = [x.rjust(9) for x in diff]
+            device_report = " | ".join(diff) + " | "
+            report = f"{device_report}{model_name}"
+            entries_changed.append(report)
+        entries_changed = sorted(entries_changed, key=lambda s: s.split("| ")[-1])
+
+        return entries_changed
+
     @property
     def model_failures(self) -> Dict:
         # Obtain per-model failures
@@ -331,44 +369,86 @@ class Message:
 
                 model_reports.append(report)
 
+        # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
         model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
-        sorted_model_reports = sorted(model_reports, key=lambda s: s.split("] ")[-1])
+        sorted_model_reports = sorted(model_reports, key=lambda s: s.split("| ")[-1])
         model_failures_report = prepare_reports(
             title="These following model modules had failures", header=model_header, reports=sorted_model_reports
         )
 
         module_header = "Single |  Multi | Category\n"
-        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("] ")[-1])
+        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("| ")[-1])
         module_failures_report = prepare_reports(
             title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
         )
 
+        # To be sent to Slack channels
         model_failure_sections = [
             {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
             {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
         ]
 
-        # Save complete tables (for past CI) - to be uploaded as artifacts
-        if ci_event.startswith("Past CI"):
-            model_failures_report = prepare_reports(
-                title="These following model modules had failures",
-                header=model_header,
-                reports=sorted_model_reports,
-                to_truncate=False,
-            )
-            file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                fp.write(model_failures_report)
+        # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
+        # (to be uploaded as artifacts)
+        if not os.path.isdir(os.path.join(os.getcwd(), "test_failure_tables")):
+            os.makedirs(os.path.join(os.getcwd(), "test_failure_tables"))
 
-            module_failures_report = prepare_reports(
-                title="The following non-model modules had failures",
-                header=module_header,
-                reports=sorted_module_reports,
-                to_truncate=False,
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures",
+            header=model_header,
+            reports=sorted_model_reports,
+            to_truncate=False,
+        )
+        file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(model_failures_report)
+
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures",
+            header=module_header,
+            reports=sorted_module_reports,
+            to_truncate=False,
+        )
+        file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(module_failures_report)
+
+        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
+        if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+            # Get the last previously completed CI's failure tables
+            artifact_names = ["test_failure_tables"]
+            output_dir = os.path.join(os.getcwd(), "previous_reports")
+            os.makedirs(output_dir, exist_ok=True)
+            prev_tables = get_last_daily_ci_reports(
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
-            file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                fp.write(module_failures_report)
+
+            # The last run doesn't produce `test_failure_tables` (by some issues or have no model failure at all)
+            if len(prev_tables) > 0:
+                # Compute the difference of the previous/current (model failure) table
+                prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
+                entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
+                if len(entries_changed) > 0:
+                    # Save the complete difference
+                    diff_report = prepare_reports(
+                        title="Changed model modules failures",
+                        header=model_header,
+                        reports=entries_changed,
+                        to_truncate=False,
+                    )
+                    file_path = os.path.join(os.getcwd(), "test_failure_tables/changed_model_failures_report.txt")
+                    with open(file_path, "w", encoding="UTF-8") as fp:
+                        fp.write(diff_report)
+
+                    # To be sent to Slack channels
+                    diff_report = prepare_reports(
+                        title="*Changed model modules failures*",
+                        header=model_header,
+                        reports=entries_changed,
+                    )
+                    model_failure_sections.append(
+                        {"type": "section", "text": {"type": "mrkdwn", "text": diff_report}},
+                    )
 
         return model_failure_sections
 
@@ -487,14 +567,15 @@ class Message:
         )
 
     def post(self):
+        payload = self.payload
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(self.payload)}))
+        print(json.dumps({"blocks": json.loads(payload)}))
 
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            blocks=self.payload,
+            blocks=payload,
             text=text,
         )
 
@@ -590,23 +671,20 @@ class Message:
                     time.sleep(1)
 
 
-def retrieve_artifact(name: str, gpu: Optional[str]):
+def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
-    if gpu is not None:
-        name = f"{gpu}-gpu_{name}"
-
     _artifact = {}
 
-    if os.path.exists(name):
-        files = os.listdir(name)
+    if os.path.exists(artifact_path):
+        files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(name, file)) as f:
+                with open(os.path.join(artifact_path, file)) as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
-                raise ValueError(f"Could not open {os.path.join(name, file)}.") from e
+                raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
 
     return _artifact
 
@@ -629,8 +707,14 @@ def retrieve_available_artifacts():
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
-        if directory.startswith("single-gpu"):
-            artifact_name = directory[len("single-gpu") + 1 :]
+        artifact_name = directory
+
+        name_parts = artifact_name.split("_postfix_")
+        if len(name_parts) > 1:
+            artifact_name = name_parts[0]
+
+        if artifact_name.startswith("single-gpu"):
+            artifact_name = artifact_name[len("single-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
@@ -639,7 +723,7 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
-        elif directory.startswith("multi-gpu"):
+        elif artifact_name.startswith("multi-gpu"):
             artifact_name = directory[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
@@ -649,7 +733,6 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="multi")
         else:
-            artifact_name = directory
             if artifact_name not in _available_artifacts:
                 _available_artifacts[artifact_name] = Artifact(artifact_name)
 
@@ -746,6 +829,9 @@ if __name__ == "__main__":
         else:
             ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
 
+    elif ci_sha:
+        ci_title = f"<{ci_url}|commit: {ci_sha}>"
+
     else:
         ci_title = ""
 
@@ -805,10 +891,12 @@ if __name__ == "__main__":
         framework, version = ci_event.replace("Past CI - ", "").split("-")
         framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
         job_name_prefix = f"{framework} {version}"
+    elif ci_event.startswith("Nightly CI"):
+        job_name_prefix = "Nightly CI"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
@@ -901,7 +989,7 @@ if __name__ == "__main__":
             else:
                 additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
 
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])

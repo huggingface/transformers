@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "accelerate": "accelerate>=0.10.0",
+    "accelerate": "accelerate>=0.17.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "black": "black~=23.1",
@@ -59,7 +59,7 @@ deps = {
     "rhoknp": "rhoknp>=1.1.0",
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff": "ruff>=0.0.241",
+    "ruff": "ruff>=0.0.241,<=0.0.259",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.2.1",
