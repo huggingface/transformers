@@ -778,7 +778,7 @@ def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh
     Args:
     Perform NMS (Non Maxium Suppression) on the outputs. Formats the outputs to perform.
         rle_masks (`torch.Tensor`):
-            binary masks in the rel formath
+            binary masks in the RLE format
         iou_scores (`torch.Tensor` of shape (???)):
             iou_scores predicted by the model
         mask_boxes (`torch.Tensor`):
