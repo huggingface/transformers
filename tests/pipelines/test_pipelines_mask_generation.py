@@ -18,9 +18,7 @@ from typing import Dict
 
 import numpy as np
 
-from transformers import MODEL_FOR_MASK_GENERATION_MAPPING
-
-from transformers import is_vision_available,pipeline
+from transformers import MODEL_FOR_MASK_GENERATION_MAPPING, is_vision_available, pipeline
 from transformers.pipelines import MaskGenerationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -70,7 +68,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_small_model_pt(self):
-        image_segmenter = pipeline(model="facebook/sam-vit-huge")
+        image_segmenter = pipeline("mask-generation",model="facebook/sam-vit-huge")
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
 
