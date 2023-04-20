@@ -361,8 +361,14 @@ class SamImageProcessor(BaseImageProcessor):
             images = [self.pad_image(image=image, pad_size=pad_size) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
-        encoded_outputs.update({"original_sizes": original_sizes, "reshaped_input_sizes": reshaped_input_sizes})
+        encoded_outputs = BatchFeature(
+            data={
+                "pixel_values": images,
+                "original_sizes": original_sizes,
+                "reshaped_input_sizes": reshaped_input_sizes,
+            },
+            tensor_type=return_tensors,
+        )
         return encoded_outputs
 
     def post_process_masks(
