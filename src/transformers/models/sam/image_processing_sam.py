@@ -417,14 +417,14 @@ class SamImageProcessor(BaseImageProcessor):
         self,
         image,
         target_size,
-        n_layers: int = 0,
+        crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
         device: Optional[torch.device] = None,
     ):
         return _generate_crop_boxes(
-            image, target_size, n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor, device
+            image, target_size, crop_n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor, device
         )
 
     def filter_masks(
@@ -549,7 +549,7 @@ def _normalize_coordinates(
 def _generate_crop_boxes(
     image,
     target_size: int,  # Is it tuple here?
-    n_layers: int = 0,
+    crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
@@ -557,7 +557,24 @@ def _generate_crop_boxes(
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
-    TODO doctring
+
+    Args:
+        image (Union[`numpy.ndarray`, `PIL.Image`, `torch.Tensor`]):
+            Image to generate crops for.
+        target_size (int):
+            Size of the smallest crop.
+        crop_n_layers (int, **optional**):
+            If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers
+            to run, where each layer has 2**i_layer number of image crops.
+        overlap_ratio (int, **optional**):
+            Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of the
+            image length. Later layers with more crops scale down this overlap.
+        points_per_crop (int, **optional**):
+            Number of points to sample per crop.
+        crop_n_points_downscale_factor (int, **optional**):
+            The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
+        device (torch.device, **optional**):
+            Device to run the crop generation on. Defaults to CPU.
     """
     if device is None:
         device = torch.device("cpu")
@@ -568,11 +585,11 @@ def _generate_crop_boxes(
     original_size = image.shape[:2]
 
     points_grid = []
-    for i in range(n_layers + 1):
+    for i in range(crop_n_layers + 1):
         n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
         points_grid.append(_build_point_grid(n_points))
 
-    crop_boxes, layer_idxs = _generate_per_layer_crops(n_layers, overlap_ratio, original_size)
+    crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
         crop_boxes, image, points_grid, layer_idxs, target_size, original_size
@@ -588,12 +605,14 @@ def _generate_crop_boxes(
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
 
-def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
+def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
     """
-    TODO more details Generates 2 ** (layers idx + 1) crops for each n_layers. Crops are in the XYWH format : The XYWH
-    format consists of the following required indices:
-        X: X coordinate of the left of the bounding box Y: Y coordinate of the top of the bounding box WIDTH: width of
-        the bounding box HEIGHT: height of the bounding box
+    Generates 2 ** (layers idx + 1) crops for each crop_n_layers. Crops are in the XYWH format : The XYWH format
+    consists of the following required indices:
+        - X: X coordinate of the top left of the bounding box
+        - Y: Y coordinate of the top left of the bounding box
+        - W: width of the bounding box
+        - H: height of the bounding box
     """
     crop_boxes, layer_idxs = [], []
     im_height, im_width = original_size
@@ -602,7 +621,7 @@ def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
     # Original image
     crop_boxes.append([0, 0, im_width, im_height])
     layer_idxs.append(0)
-    for i_layer in range(n_layers):
+    for i_layer in range(crop_n_layers):
         n_crops_per_side = 2 ** (i_layer + 1)
         overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
 
@@ -622,8 +641,8 @@ def _generate_per_layer_crops(n_layers, overlap_ratio, original_size):
 
 def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, original_size):
     """
-    TODO What is this doing? Takes as an input bounding boxes that are used to crop the image. Based in the crops, the
-    corresponding points are also passed.
+    Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
+    also passed.
     """
     cropped_images = []
     total_points_per_crop = []
@@ -672,7 +691,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 def _batched_mask_to_box(masks: torch.Tensor):
     """
-    TODO Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
+    Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
     corresponds the following required indices:
         - LEFT: left hand side of the bounding box
         - TOP: top of the bounding box
