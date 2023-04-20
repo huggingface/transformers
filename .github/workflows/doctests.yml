@@ -6,7 +6,7 @@ on:
       - doctest*
   repository_dispatch:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "17 2 * * *"
 
 
 env:

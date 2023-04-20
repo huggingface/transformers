@@ -11,7 +11,7 @@ on:
         required: true
         type: string
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "17 0 * * *"
 
 concurrency:
   group: docker-images-builds
