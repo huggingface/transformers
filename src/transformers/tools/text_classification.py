@@ -16,6 +16,7 @@ class TextClassificationTool(PipelineTool):
     ```
     """
 
+    default_checkpoint = "distilbert-base-uncased-finetuned-sst-2-english"  # Needs to be updated
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 
