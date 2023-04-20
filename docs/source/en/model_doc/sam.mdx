@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-SAM (Segment Anything Model) was proposed in [Segment Anything](https://ai.facebook.com/research/publications/segment-anything/) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+SAM (Segment Anything Model) was proposed in [Segment Anything](https://arxiv.org/pdf/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
 
 The model can be used to predict segmentation masks of any object of interest given an input image. 
 
@@ -39,12 +39,14 @@ The original code can be found [here](https://github.com/facebookresearch/segmen
 Below is an example on how to run mask generation given an image and a 2D point:
 
 ```python
+import torch
 from PIL import Image
 import requests
-from transformers import SamModelForMaskedGeneration, SamProcessor
+from transformers import SamModel, SamProcessor
 
-model = SamModelForMaskedGeneration.from_pretrained("facebook/sam-vit-huge")
-processsor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
+processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")

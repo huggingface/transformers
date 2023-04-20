@@ -40,7 +40,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/sam-vit-huge",
     "facebook/sam-vit-large",
-    "facebook/sam-vit-big",
+    "facebook/sam-vit-base",
     # See all SAM models at https://huggingface.co/models?filter=sam
 ]
 
