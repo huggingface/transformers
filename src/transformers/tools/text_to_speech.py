@@ -3,10 +3,10 @@ from datasets import load_dataset
 
 from transformers import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
 
-from .base import Tool
+from .base import PipelineTool
 
 
-class TextToSpeechTool(Tool):
+class TextToSpeechTool(PipelineTool):
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
