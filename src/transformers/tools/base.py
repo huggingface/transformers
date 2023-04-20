@@ -4,7 +4,7 @@ from accelerate.utils import send_to_device
 from ..models.auto import AutoProcessor
 
 
-class Tool:
+class PipelineTool:
     pre_processor_class = AutoProcessor
     model_class = None
     post_processor_class = AutoProcessor
@@ -51,6 +51,11 @@ class Tool:
         self.device = device
         if device_map is None:
             self.model.to(self.device)
+
+        self.post_init()
+
+    def post_init(self):
+        pass
 
     def encode(self, raw_inputs):
         return self.pre_processor(raw_inputs)
