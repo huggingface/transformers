@@ -16,7 +16,6 @@
 # limitations under the License.
 """ Pvt model configuration"""
 
-import warnings
 from collections import OrderedDict
 from typing import Callable, Iterable, List, Mapping
 
