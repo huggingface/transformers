@@ -136,10 +136,10 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(new_outupt, decimals=4),
             [
-                {"mask": {"hash": "115ad19f5f", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0444},
-                {"mask": {"hash": "6affa964c6", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0210},
-                {"mask": {"hash": "dfe28a0388", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0167},
-                {"mask": {"hash": "c0a5f4a318", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0132},
-                {"mask": {"hash": "fe8065c197", "white_pixels": 0, "shape": (480, 640)}, "scores": 1.0053},
+                {"mask": {"hash": "115ad19f5f", "shape": (480, 640)}, "scores": 1.0444},
+                {"mask": {"hash": "6affa964c6", "shape": (480, 640)}, "scores": 1.0210},
+                {"mask": {"hash": "dfe28a0388", "shape": (480, 640)}, "scores": 1.0167},
+                {"mask": {"hash": "c0a5f4a318", "shape": (480, 640)}, "scores": 1.0132},
+                {"mask": {"hash": "fe8065c197", "shape": (480, 640)}, "scores": 1.0053},
             ],
         )
