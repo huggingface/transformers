@@ -124,12 +124,6 @@ class PvtConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
-            warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
-                " removed, as the behaviour will default to that of reshape_last_stage = True.",
-                FutureWarning,
-            )
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
@@ -148,7 +142,6 @@ class PvtConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.num_labels = num_labels
         self.qkv_bias = qkv_bias
-        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
 
 
 class PvtOnnxConfig(OnnxConfig):
