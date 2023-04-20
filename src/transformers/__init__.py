@@ -6905,10 +6905,10 @@ if TYPE_CHECKING:
             FlaxWav2Vec2PreTrainedModel,
         )
         from .models.whisper import (
+            FlaxWhisperForAudioClassification,
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,
-            FlaxWhisperForAudioClassification,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
