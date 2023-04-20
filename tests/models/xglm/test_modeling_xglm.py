@@ -341,46 +341,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester.create_and_check_xglm_weight_initialization(*config_and_inputs)
 
     @slow
-    def test_batch_generation(self):
-        model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
-        model.to(torch_device)
-        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-
-        tokenizer.padding_side = "left"
-
-        # use different length sentences to test batching
-        sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
-        ]
-
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-        expected_output_sentence = [
-            "Hello, my dog is a little bit of a shy one, but he is very friendly",
-            "Today, I am going to share with you a few of my favorite things",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
     def test_model_from_pretrained(self):
         for model_name in XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XGLMModel.from_pretrained(model_name)
@@ -408,6 +368,49 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+
+    @slow
+    def test_batch_generation(self):
+        model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
+        model.to(torch_device)
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+
+        tokenizer.padding_side = "left"
+
+        # use different length sentences to test batching
+        sentences = [
+            "This is an extremelly long sentence that only exists to test the ability of the model to cope with "
+            "left-padding, such as in batched generation. The output for the sequence below should be the same "
+            "regardless of whether left padding is applied or not. When",
+            "Hello, my dog is a little",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device), max_new_tokens=12
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=12)
+
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=12)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "This is an extremelly long sentence that only exists to test the ability of the model to cope with "
+            "left-padding, such as in batched generation. The output for the sequence below should be the same "
+            "regardless of whether left padding is applied or not. When left padding is applied, the sequence will be "
+            "a single",
+            "Hello, my dog is a little bit of a shy one, but he is very friendly",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
     def test_lm_generate_xglm(self):
