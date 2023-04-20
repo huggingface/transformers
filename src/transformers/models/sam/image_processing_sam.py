@@ -556,7 +556,8 @@ def _generate_crop_boxes(
     device: Optional[torch.device] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
-    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer. TODO doctring
+    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
+    TODO doctring
     """
     if device is None:
         device = torch.device("cpu")
@@ -669,7 +670,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     return torch.any(near_crop_edge, dim=1)
 
 
-def _batched_mask_to_box(masks):
+def _batched_mask_to_box(masks: torch.Tensor):
     """
     TODO Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
     corresponds the following required indices:
@@ -682,7 +683,7 @@ def _batched_mask_to_box(masks):
     is channel_1 x channel_2 x ... x 4.
 
     Args:
-        - masks (`torch.tensor` of shape `(batch, nb_mask, height, width)`)
+        - masks (`torch.Tensor` of shape `(batch, nb_mask, height, width)`)
     """
     # torch.max below raises an error on empty inputs, just skip in this case
 
@@ -720,7 +721,7 @@ def _batched_mask_to_box(masks):
     return out
 
 
-def _mask_to_rle_pytorch(input_mask):
+def _mask_to_rle_pytorch(input_mask: torch.Tensor):
     """
     Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
     """
@@ -758,6 +759,18 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
 
 
 def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+    """
+    Args:
+    Perform NMS (Non Maxium Suppression) on the outputs. Formats the outputs to perform.
+        rle_masks (`torch.Tensor`):
+            binary masks in the rel formath
+        iou_scores (`torch.Tensor` of shape (???)):
+            iou_scores predicted by the model
+        mask_boxes (`torch.Tensor`):
+            ??? @younes
+        amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
+            NMS threshold.
+    """
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),
         scores=iou_scores,

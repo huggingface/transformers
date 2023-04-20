@@ -228,6 +228,7 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         model_outputs = self.model(**model_inputs)
 
+        # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]
         masks = self.image_processor.post_process_masks(
             low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
