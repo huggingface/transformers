@@ -71,13 +71,13 @@ class MaskGenerationPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> generator = pipeline(model="facebook/sam-vit-h", task="mask-generation")
-    >>> generator(
+    >>> outputs = generator(
     ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
     ... )
-    []
 
-    >>> generator("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", points_per_batch=128)
-    []
+    >>> outputs = generator(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", points_per_batch=128
+    ... )
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
