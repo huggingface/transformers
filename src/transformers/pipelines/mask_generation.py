@@ -191,24 +191,24 @@ class MaskGenerationPipeline(ChunkPipeline):
                     image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
                     model_inputs["image_embeddings"] = image_embeddings
 
-        if points_per_batch > 1:
-            for i in range(0, grid_points.shape[1], points_per_batch):
-                batched_points = grid_points[:, i : i + points_per_batch, :, :]
-                labels = input_labels[:, i : i + points_per_batch]
-                is_last = i == grid_points.shape[1] - points_per_batch
-                yield {
-                    "input_points": batched_points,
-                    "input_labels": labels,
-                    "input_boxes": crop_boxes,
-                    "is_last": is_last,
-                    **model_inputs,
-                }
-        else:
+        n_points = grid_points.shape[1]
+        points_per_batch = points_per_batch if points_per_batch is not None else n_points
+            
+        if points_per_batch <= 0:
+            raise ValueError(
+                "Cannot have points_per_batch<=0. Must be >=1 to returned batched outputs. "
+                "To return all points at once, set points_per_batch to None"
+            )
+        
+        for i in range(0, n_points, points_per_batch):
+            batched_points = grid_points[:, i : i + points_per_batch, :, :]
+            labels = input_labels[:, i : i + points_per_batch]
+            is_last = i == n_points - points_per_batch
             yield {
-                "input_points": grid_points,
-                "input_labels": input_labels,
+                "input_points": batched_points,
+                "input_labels": labels,
                 "input_boxes": crop_boxes,
-                "is_last": True,
+                "is_last": is_last,
                 **model_inputs,
             }
 
