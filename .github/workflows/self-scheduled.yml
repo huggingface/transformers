@@ -12,7 +12,7 @@ on:
     - cron: "0 2 * * *"
   push:
     branches:
-      - muellerzr_deepspeed_tests
+      - muellerzr-deepspeed-tests
 
 env:
   HF_HOME: /mnt/cache
