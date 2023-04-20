@@ -589,12 +589,12 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    init_cache=init_cache,
-                    output_attentions=output_attentions,
-                    deterministic=deterministic,
+                    attention_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    init_cache,
+                    output_attentions,
+                    deterministic,
                 )
 
             hidden_states = layer_outputs[0]
@@ -742,13 +742,13 @@ class FlaxWhisperDecoder(nn.Module):
 
         outputs = self.layers(
             hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            deterministic=deterministic,
-            init_cache=init_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            attention_mask,
+            encoder_hidden_states,
+            deterministic,
+            init_cache,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
         )
 
         last_hidden_states = outputs[0]
