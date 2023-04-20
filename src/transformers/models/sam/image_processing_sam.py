@@ -557,19 +557,19 @@ def _generate_crop_boxes(
     Args:
         image (Union[`numpy.ndarray`, `PIL.Image`, `torch.Tensor`]):
             Image to generate crops for.
-        target_size (int):
+        target_size (`int`):
             Size of the smallest crop.
-        crop_n_layers (int, **optional**):
+        crop_n_layers (`int`, *optional*):
             If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers
             to run, where each layer has 2**i_layer number of image crops.
-        overlap_ratio (int, **optional**):
+        overlap_ratio (`int`, *optional*):
             Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of the
             image length. Later layers with more crops scale down this overlap.
-        points_per_crop (int, **optional**):
+        points_per_crop (`int`, *optional*):
             Number of points to sample per crop.
-        crop_n_points_downscale_factor (int, **optional**):
+        crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
-        device (torch.device, **optional**):
+        device (`torch.device`, *optional*):
             Device to run the crop generation on. Defaults to CPU.
     """
     if device is None:
@@ -782,7 +782,7 @@ def _postprocess_for_amg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh
         iou_scores (`torch.Tensor` of shape (???)):
             iou_scores predicted by the model
         mask_boxes (`torch.Tensor`):
-            ??? @younes
+            The bounding boxes corresponding to segmentation masks
         amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
             NMS threshold.
     """
