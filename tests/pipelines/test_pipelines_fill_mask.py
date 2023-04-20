@@ -302,7 +302,6 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        # For some BEP tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
         processed_targets = [tokenizer.decode([x]) for x in target_ids]
         self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
@@ -318,7 +317,6 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        # For some BEP tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
         processed_targets = [tokenizer.decode([x]) for x in target_ids]
         self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
