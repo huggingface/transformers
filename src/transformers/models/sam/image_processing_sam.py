@@ -722,7 +722,7 @@ def _mask_to_rle_pytorch(input_mask):
         cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts = [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width]
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
         out.append({"size": [height, width], "counts": counts})
     return out
 
