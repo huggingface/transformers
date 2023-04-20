@@ -205,8 +205,8 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     if push_to_hub:
         print(f"Pushing model and processor of {model_name} to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"{model_name}")
+        processor.push_to_hub(f"{model_name}")
 
 
 if __name__ == "__main__":

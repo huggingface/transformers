@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -474,7 +474,9 @@ class FocalNetStage(nn.Module):
     def __init__(self, config, index, input_resolution):
         super().__init__()
 
+        self.config = config
         self.num_stages = len(config.depths)
+
         embed_dim = [config.embed_dim * (2**i) for i in range(self.num_stages)]
         dim = embed_dim[index]
         out_dim = embed_dim[index + 1] if (index < self.num_stages - 1) else None
