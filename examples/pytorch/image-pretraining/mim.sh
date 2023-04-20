@@ -30,7 +30,7 @@ COMMON_ARGS="""
     --evaluation_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
-    --save_total_limit 3 \
+    --save_total_limit 1 \
     --seed 42 \
     --report_to tensorboard \
     --disable_tqdm True \
