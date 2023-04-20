@@ -1,3 +1,4 @@
+from .agents import Agent, OpenAIAgent
 from .base import PipelineTool
 from .chain import SimpleChainer
 from .text_classification import TextClassificationTool
