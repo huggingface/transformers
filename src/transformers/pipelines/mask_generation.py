@@ -40,11 +40,11 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         3. `postprocess`: The most important part of the automatic mask generation happens here. Three steps
             are induced:
-                - postprocess_masks (run on each minibatch loop): takes in the raw output masks, resizes them according
+                - image_processor.postprocess_masks (run on each minibatch loop): takes in the raw output masks, resizes them according
                 to the image size, and transforms there to binary masks.
-                - _filter_masks (on each minibatch loop): uses both `pred_iou_thresh` and `stability_scores`. Also
+                - image_processor.filter_masks (on each minibatch loop): uses both `pred_iou_thresh` and `stability_scores`. Also
                 applies a variety of filters based on non maximum suppression to remove bad masks.
-                - _postprocess_masks_for_amg:
+                - image_processor.postprocess_masks_for_amg applies the NSM on the mask to only keep relevant ones.
 
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
