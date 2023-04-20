@@ -466,19 +466,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         # Calculate stability score
         if stability_score_thresh > 0.0:
-            # One mask is always contained inside the other.
-            # Save memory by preventing unnecesary cast to torch.int64
-            intersections = (
-                (masks > (mask_threshold + stability_score_offset))
-                .sum(-1, dtype=torch.int16)
-                .sum(-1, dtype=torch.int32)
-            )
-            unions = (
-                (masks > (mask_threshold - stability_score_offset))
-                .sum(-1, dtype=torch.int16)
-                .sum(-1, dtype=torch.int32)
-            )
-            stability_scores = intersections / unions
+            stability_scores = _compute_stability_score(masks, mask_threshold, stability_score_offset)
             keep_mask = keep_mask & (stability_scores > stability_score_thresh)
 
         scores = iou_scores[keep_mask]
@@ -502,6 +490,20 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, scores, converted_boxes
 
+def _compute_stability_score(masks, mask_threshold, stability_score_offset):
+        # One mask is always contained inside the other.
+        # Save memory by preventing unnecesary cast to torch.int64
+        intersections = (
+            (masks > (mask_threshold + stability_score_offset))
+            .sum(-1, dtype=torch.int16)
+            .sum(-1, dtype=torch.int32)
+        )
+        unions = (
+            (masks > (mask_threshold - stability_score_offset))
+            .sum(-1, dtype=torch.int16)
+            .sum(-1, dtype=torch.int32)
+        )
+        stability_scores = intersections / unions
 
 def _build_point_grid(n_per_side: int) -> np.ndarray:
     """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
@@ -676,9 +678,8 @@ def _batched_mask_to_box(masks):
     # Normalize shape to Cxheightxwidth
     shape = masks.shape
     height, width = shape[-2:]
-    # TODO this was not doing anything as the shape was always 3 
+    # TODO this was not doing anything as the shape was always 3
     masks = masks.flatten(0, -3)
-
 
     # Get top and bottom edges
     in_height, _ = torch.max(masks, dim=-1)

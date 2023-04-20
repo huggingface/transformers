@@ -190,7 +190,7 @@ class MaskGenerationPipeline(ChunkPipeline):
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
                     model_inputs["image_embeddings"] = image_embeddings
-            
+
         if points_per_batch:
             for i in range(0, grid_points.shape[1], points_per_batch):
                 batched_points = grid_points[:, i : i + points_per_batch, :, :]
@@ -212,34 +212,32 @@ class MaskGenerationPipeline(ChunkPipeline):
                 **model_inputs,
             }
 
-    def _forward(self, model_inputs, **forward_params):
+    def _forward(
+        self,
+        model_inputs,
+        pred_iou_thresh=0.88,
+        stability_score_thresh=0.95,
+        mask_threshold=0,
+        stability_score_offset=1,
+    ):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
+        # these size do not need ot be tensors and should stay on CPU
         original_sizes = model_inputs.pop("original_sizes")
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes")
-        
-        # forward kwargs
-        pred_iou_thresh=forward_params.pop("pred_iou_thresh")
-        stability_score_thresh=forward_params.pop("stability_score_thresh"),
-        mask_threshold=forward_params.pop("mask_threshold"),
-        stability_score_offset=forward_params.pop("stability_score_offset"),
-
-
 
         model_outputs = self.model(**model_inputs)
-        
+
         low_resolution_masks = model_outputs["pred_masks"]
         masks = self.image_processor.post_process_masks(
             low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
         )
-
-        crop_boxes = input_boxes
         iou_scores = model_outputs["iou_scores"]
         masks, iou_scores, boxes = self.image_processor.filter_masks(
             masks[0],
             iou_scores[0],
             original_sizes[0],
-            crop_boxes[0],
+            input_boxes[0],
             pred_iou_thresh,
             stability_score_thresh,
             mask_threshold,
@@ -248,9 +246,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         return {
             "is_last": is_last,
             "boxes": boxes,
-            "masks":masks,
-            "iou_scores":iou_scores,
-            # **model_outputs,
+            "masks": masks,
+            "iou_scores": iou_scores,
         }
 
     def postprocess(
@@ -267,7 +264,7 @@ class MaskGenerationPipeline(ChunkPipeline):
             all_scores.append(model_output.pop("iou_scores"))
             all_masks.extend(model_output.pop("masks"))
             all_boxes.append(model_output.pop("boxes"))
-        
+
         all_scores = torch.cat(all_scores)
         all_boxes = torch.cat(all_boxes)
         output_masks, iou_scores, rle_mask, bounding_boxes = self.image_processor.post_process_for_mask_generation(
