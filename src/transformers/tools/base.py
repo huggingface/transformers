@@ -8,11 +8,12 @@ class PipelineTool:
     pre_processor_class = AutoProcessor
     model_class = None
     post_processor_class = AutoProcessor
+    default_checkpoint = None
     description = ""
 
     def __init__(
         self,
-        model,
+        model=None,
         pre_processor=None,
         post_processor=None,
         device=None,
@@ -20,6 +21,10 @@ class PipelineTool:
         model_kwargs=None,
         **hub_kwargs,
     ):
+        if model is None:
+            if self.default_checkpoint is None:
+                raise ValueError("This tool does not implement a default checkpoint, you need to pass one.")
+            model = self.default_checkpoint
         if pre_processor is None:
             pre_processor = model
 
