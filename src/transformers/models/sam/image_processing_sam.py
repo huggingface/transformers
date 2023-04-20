@@ -360,10 +360,8 @@ class SamImageProcessor(BaseImageProcessor):
             images = [self.pad_image(image=image, pad_size=pad_size) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
-
-        data = {"pixel_values": images, "original_sizes": original_sizes, "reshaped_input_sizes": reshaped_input_sizes}
-        encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
-
+        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs.update({"original_sizes": original_sizes, "reshaped_input_sizes": reshaped_input_sizes})
         return encoded_outputs
 
     def post_process_masks(
@@ -398,9 +396,7 @@ class SamImageProcessor(BaseImageProcessor):
         for i, original_size in enumerate(original_sizes):
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F.interpolate(
-                interpolated_mask, [*original_size.cpu().numpy()], mode="bilinear", align_corners=False
-            )
+            interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
