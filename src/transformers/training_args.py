@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Union
 from packaging import version
 
 from .debug_utils import DebugOption
+from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
@@ -1544,17 +1545,35 @@ class TrainingArguments:
             self._n_gpu = 1
             torch.cuda.set_device(device)
         elif self.deepspeed:
-            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
+            # deepspeed inits torch.distributed internally
+            from .deepspeed import is_deepspeed_available
+
+            if not is_deepspeed_available():
+                raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
+            import deepspeed
+
+            deepspeed.init_distributed(timeout=timedelta(seconds=self.ddp_timeout))
+
+            # workaround for setups like notebooks where the launcher can't be used,
+            # but deepspeed requires a dist env.
+            # env LOCAL_RANK could be set manually by the user, or via init_distributed if mpi4py is installed
+            self.local_rank = int(os.environ.get("LOCAL_RANK", "-1"))
+
+            device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
+
+            # self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
+            # self._n_gpu = 1
         else:
             self.distributed_state = PartialState(backend=self.xpu_backend)
             self._n_gpu = 1
-        if not is_sagemaker_mp_enabled():
+        if not is_sagemaker_mp_enabled() and not self.deepspeed:
             device = self.distributed_state.device
             self.local_rank = self.distributed_state.local_process_index
         if (
             torch.distributed.is_available()
             and torch.distributed.is_initialized()
+            and hasattr(self, "distributed_state")
             and self.distributed_state.distributed_type == DistributedType.NO
         ):
             logger.warning(
@@ -1567,7 +1586,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled():
             self._n_gpu = 1
-        elif self.distributed_state.distributed_type == DistributedType.NO:
+        elif hasattr(self, "distributed_state") and self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 if not torch.backends.mps.is_available():
                     if not torch.backends.mps.is_built():
