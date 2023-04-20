@@ -421,9 +421,10 @@ class SamImageProcessor(BaseImageProcessor):
         overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
+        device: Optional[torch.device] = None,
     ):
         return _generate_crop_boxes(
-            image, target_size, n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor
+            image, target_size, n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor, device
         )
 
     def filter_masks(
@@ -547,10 +548,14 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
+    device: Optional[torch.device] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
     """
+    if device is None:
+        device = torch.device("cpu")
+
     if isinstance(image, list):
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
@@ -610,12 +615,12 @@ def _generate_crop_boxes(
             [_normalize_coordinates(target_size, point, original_size) for point in points_per_crop]
         )
 
-    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32)
+    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32, device=device)
     normalized_total_points_per_crop = np.array([normalized_total_points_per_crop])
-    points_per_crop = torch.tensor(normalized_total_points_per_crop)
+    points_per_crop = torch.tensor(normalized_total_points_per_crop, device=device)
     points_per_crop = points_per_crop.permute(0, 2, 1, 3)
 
-    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long)
+    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long, device=device)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
