@@ -299,6 +299,12 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
 
+    # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
     def setUp(self):
         self.model_tester = SamModelTester(self)
         self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)

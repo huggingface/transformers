@@ -359,6 +359,12 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_vision
+    @require_torch
+    def test_pipeline_mask_generation(self):
+        self.run_task_tests(task="mask-generation")
+
+    @is_pipeline_test
+    @require_vision
     @require_timm
     @require_torch
     def test_pipeline_object_detection(self):
