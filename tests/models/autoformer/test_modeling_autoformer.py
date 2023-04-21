@@ -390,10 +390,6 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             [self.model_tester.num_attention_heads, encoder_seq_length, dim],
         )
 
-    @unittest.skip(reason="Result of the model is a tuple")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
 
 def prepare_batch(filename="train-batch.pt"):
     file = hf_hub_download(repo_id="kashif/tourism-monthly-batch", filename=filename, repo_type="dataset")
