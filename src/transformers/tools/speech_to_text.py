@@ -1,4 +1,3 @@
-from datasets import load_dataset
 
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
@@ -21,4 +20,3 @@ class SpeechToTextTool(PipelineTool):
 
     def decode(self, outputs):
         return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0]
-
