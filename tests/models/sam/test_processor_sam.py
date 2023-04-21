@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torchvision, require_vision
+from transformers.testing_utils import require_torchvision, require_vision, require_torch
 from transformers.utils import is_vision_available, is_torch_available
 
 
@@ -80,7 +80,8 @@ class SamProcessorTest(unittest.TestCase):
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-            
+    
+    @require_torch    
     def test_post_process_masks(self):
         
         image_processor = self.get_image_processor()
@@ -100,6 +101,7 @@ class SamProcessorTest(unittest.TestCase):
         
         # should also work with np
         dummy_masks = np.ones((1,3,5,5))
+        masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
         
         
         
