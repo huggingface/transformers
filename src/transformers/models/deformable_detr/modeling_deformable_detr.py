@@ -616,6 +616,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
+        self.disable_custom_kernels = False
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -692,19 +694,24 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             )
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-        try:
-            # custom kernel
-            output = MultiScaleDeformableAttentionFunction.apply(
-                value,
-                spatial_shapes,
-                level_start_index,
-                sampling_locations,
-                attention_weights,
-                self.im2col_step,
-            )
-        except Exception:
+
+        if self.disable_custom_kernels:
             # PyTorch implementation
             output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+        else:
+            try:
+                # custom kernel
+                output = MultiScaleDeformableAttentionFunction.apply(
+                    value,
+                    spatial_shapes,
+                    level_start_index,
+                    sampling_locations,
+                    attention_weights,
+                    self.im2col_step,
+                )
+            except Exception:
+                # PyTorch implementation
+                output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
