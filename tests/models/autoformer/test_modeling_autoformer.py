@@ -116,8 +116,6 @@ class AutoformerModelTester:
         _past_length = config.context_length + max(config.lags_sequence)
 
         static_categorical_features = ids_tensor([self.batch_size, 1], config.cardinality[0])
-        static_real_features = floats_tensor([self.batch_size, 1])
-
         past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
         past_values = floats_tensor([self.batch_size, _past_length])
         past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
