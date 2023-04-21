@@ -553,7 +553,7 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
             FlaxWhisperDecoderCheckpointLayer = remat(FlaxWhisperDecoderLayer, static_argnums=(4, 5, 6))
             self.layers = [
                 FlaxWhisperDecoderCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
-                for i in range(self.config.encoder_layers)
+                for i in range(self.config.decoder_layers)
             ]
         else:
             self.layers = [
