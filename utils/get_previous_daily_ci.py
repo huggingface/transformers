@@ -23,7 +23,7 @@ def get_daily_ci_runs(token, num_runs=7):
 
     result = requests.get(url, headers=headers).json()
 
-    return result["workflow_runs"]
+    return 4738843671
 
 
 def get_last_daily_ci_runs(token):
