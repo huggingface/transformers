@@ -1,6 +1,3 @@
-from huggingface_hub import hf_hub_download
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from .base import Tool, PipelineTool
 from .text_classification import TextClassificationTool
 
 
@@ -22,4 +19,4 @@ class LanguageIdentificationTool(TextClassificationTool):
     )
 
     def decode(self, outputs):
-        return super().decode(outputs)['label']
+        return super().decode(outputs)["label"]
