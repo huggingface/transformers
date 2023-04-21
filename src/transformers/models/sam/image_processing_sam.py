@@ -381,7 +381,7 @@ class SamImageProcessor(BaseImageProcessor):
             masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
             original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
-                The original sizes of each image before it was resize to the model's expected input shape, in (height,
+                The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
             reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
