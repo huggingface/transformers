@@ -111,6 +111,14 @@ NVIDIA [NeMo](https://github.com/NVIDIA/NeMo) is a conversational AI toolkit bui
 
 Keywords: Conversational, ASR, TTS, LLMs, NLP
 
+## [Runhouse](https://github.com/run-house/runhouse)
+
+[Runhouse](https://github.com/run-house/runhouse) allows to send code and data to any of your compute or data infra, all in Python, and continue to interact with them normally from your existing code and environment. Runhouse developers mention:
+
+> Think of it as an expansion pack to your Python interpreter that lets it take detours to remote machines or manipulate remote data.
+
+Keywords: MLOps, Infrastructure, Data storage, Modeling
+
 ## [MONAI](https://github.com/Project-MONAI/MONAI)
 
 [MONAI](https://github.com/Project-MONAI/MONAI) is a PyTorch-based, open-source framework for deep learning in healthcare imaging, part of PyTorch Ecosystem. Its ambitions are:
