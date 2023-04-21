@@ -460,7 +460,7 @@ class NllbMoeSparseMLP(nn.Module):
                 Attention mask. Can be in the causal form or not.
 
         Returns:
-            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_lenght, hidden_dim)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`):
                 Updated hidden states
             router_logits (`torch.Tensor` of shape `(batch_size, sequence_length, num_experts)`):
                 Needed for computing the loss
