@@ -139,7 +139,7 @@ class ICTTransformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `32`):
+        image_size (`int`, *optional*, defaults to `1024`):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to `3`):
             The number of input channels.
@@ -175,7 +175,7 @@ class ICTTransformerConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        image_size=32,
+        image_size=1024,
         num_channels=3,
         qkv_bias=False,
         **kwargs,
@@ -194,7 +194,6 @@ class ICTTransformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
-        self.block_size = self.image_size * self.image_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
 

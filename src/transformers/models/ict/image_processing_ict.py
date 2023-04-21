@@ -312,7 +312,7 @@ class ICTImageProcessor(BaseImageProcessor):
         # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
         if do_discretize:
             images = [to_channel_dimension_format(image, data_format) for image in images]
-            # reshape each image to (image_size * image_size)
+            # reshape each image to image_size
             images = [self.discretize(image=image) for image in images]
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]

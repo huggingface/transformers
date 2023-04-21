@@ -64,7 +64,7 @@ class ICTEmbeddings(nn.Module):
         super().__init__()
 
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.position_embedding = nn.Parameter(torch.zeros(1, config.block_size, config.hidden_size))
+        self.position_embedding = nn.Parameter(torch.zeros(1, config.image_size, config.hidden_size))
         self.dropout = nn.Dropout(config.residual_dropout_prob)
         
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
@@ -826,8 +826,6 @@ class ICTModel(ICTPretrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        height, width = pixel_values.shape[2:]
-
         outputs = self.tranformer(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -838,17 +836,19 @@ class ICTModel(ICTPretrainedModel):
 
         sequence_output = outputs[0]
 
-        # TODO: Reshaping
+        sequence_output = sequence_output[:, 1:]
+        batch_size, sequence_length, num_channels = sequence_output.shape
+        height = width = math.floor(sequence_length**0.5)
+        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
         reconstructed_pixel_values = self.guided_upsampler(sequence_output)
 
         loss = None
         if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+            bool_masked_pos = bool_masked_pos.reshape(-1, self.config.image_size, self.config.image_size)
             mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
+                bool_masked_pos.repeat_interleave(1, 1)
+                .repeat_interleave(1, 2)
                 .unsqueeze(1)
                 .contiguous()
             )
