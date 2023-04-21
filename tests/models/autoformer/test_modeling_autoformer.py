@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Autoformer model. """
 
-import copy
 import inspect
 import tempfile
 import unittest
@@ -22,7 +21,7 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
