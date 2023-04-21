@@ -639,6 +639,13 @@ class AutoModelForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AutoModelForMaskGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
