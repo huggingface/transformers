@@ -302,7 +302,8 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        self.assertEqual({el["token_str"] for el in outputs}, set(targets))
+        processed_targets = [tokenizer.decode([x]) for x in target_ids]
+        self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
         # Call argument
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
@@ -316,24 +317,29 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        self.assertEqual({el["token_str"] for el in outputs}, set(targets))
+        processed_targets = [tokenizer.decode([x]) for x in target_ids]
+        self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
         # Score equivalence
         outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=targets)
         tokens = [top_mask["token_str"] for top_mask in outputs]
         scores = [top_mask["score"] for top_mask in outputs]
 
-        unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
-        target_scores = [top_mask["score"] for top_mask in unmasked_targets]
-        self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        if set(tokens) == set(targets):
+            unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
+            target_scores = [top_mask["score"] for top_mask in unmasked_targets]
+            self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
 
         # Raises with invalid
         with self.assertRaises(ValueError):
-            outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[""])
-        with self.assertRaises(ValueError):
             outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[])
-        with self.assertRaises(ValueError):
-            outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets="")
+        # For some tokenizers, `""` is actually in the vocabulary and the expected error won't raised
+        if "" not in tokenizer.get_vocab():
+            with self.assertRaises(ValueError):
+                outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[""])
+            with self.assertRaises(ValueError):
+                outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets="")
 
     def run_test_top_k(self, model, tokenizer):
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer, top_k=2)
@@ -368,10 +374,11 @@ class FillMaskPipelineTests(unittest.TestCase):
         # If we use the most probably targets, and filter differently, we should still
         # have the same results
         targets2 = [el["token_str"] for el in sorted(outputs, key=lambda x: x["score"], reverse=True)]
-        outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
-
-        # They should yield exactly the same result
-        self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        if set(targets2).issubset(targets):
+            outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
+            # They should yield exactly the same result
+            self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
 
     def fill_mask_with_duplicate_targets_and_top_k(self, model, tokenizer):
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
