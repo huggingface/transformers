@@ -798,7 +798,6 @@ class AutoformerDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerPreTrainedModel with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
 class AutoformerPreTrainedModel(PreTrainedModel):
     config_class = AutoformerConfig
     base_model_prefix = "model"
