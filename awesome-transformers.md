@@ -490,21 +490,31 @@ Keywords: Semi-structured documents, Unstructured documents, LLM, Document Quest
 - Crosslingual code translation
 - Is a customizable programming assistant
 
+Keywords: Code Generation Model
+
 ## [ktrain](https://github.com/amaiya/ktrain)
 
 [ktrain](https://github.com/amaiya/ktrain) is a lightweight wrapper for the deep learning library TensorFlow Keras (and other libraries) to help build, train, and deploy neural networks and other machine learning models. Inspired by ML framework extensions like fastai and ludwig, [ktrain](https://github.com/amaiya/ktrain) is designed to make deep learning and AI more accessible and easier to apply for both newcomers and experienced practitioners.
+
+Keywords: Keras wrapper, Model building, Training, Deployment
 
 ## [FastDeploy](https://github.com/PaddlePaddle/FastDeploy)
 
 [FastDeploy](https://github.com/PaddlePaddle/FastDeploy) is an Easy-to-use and High Performance AI model deployment toolkit for Cloud, Mobile and Edge with packageout-of-the-box and unified experience, endend-to-end optimization for over fire160+ Text, Vision, Speech and Cross-modal AI models. Including image classification, object detection, OCR, face detection, matting, pp-tracking, NLP, stable diffusion, TTS and other tasks to meet developers' industrial deployment needs for multi-scenario, multi-hardware and multi-platform.
 
+Keywords: Model deployment, CLoud, Mobile, Edge
+
 ## [underthesea](https://github.com/undertheseanlp/underthesea)
 
 [underthesea](https://github.com/undertheseanlp/underthesea) is a Vietnamese NLP toolkit. Underthesea is a suite of open source Python modules data sets and tutorials supporting research and development in Vietnamese Natural Language Processing. We provides extremely easy API to quickly apply pretrained NLP models to your Vietnamese text, such as word segmentation, part-of-speech tagging (PoS), named entity recognition (NER), text classification and dependency parsing.
 
+Keywords: Vietnamese, NLP
+
 ## [hasktorch](https://github.com/hasktorch/hasktorch)
 
 Hasktorch is a library for tensors and neural networks in Haskell. It is an independent open source community project which leverages the core C++ libraries shared by PyTorch.
+
+Keywords: Haskell, Neural Networks
 
 ## [donut](https://github.com/clovaai/donut)
 
@@ -512,19 +522,27 @@ Donut, or Document understanding transformer, is a new method of document unders
 
 Donut does not require off-the-shelf OCR engines/APIs, yet it shows state-of-the-art performances on various visual document understanding tasks, such as visual document classification or information extraction (a.k.a. document parsing).
 
+Keywords: Document Understanding
+
 ## [transformers-interpret](https://github.com/cdpierse/transformers-interpret)
 
-Transformers Interpret is a model explainability tool designed to work exclusively with the hugs transformers package.
+Transformers Interpret is a model explainability tool designed to work exclusively with the transformers package.
 
 In line with the philosophy of the Transformers package Transformers Interpret allows any transformers model to be explained in just two lines. Explainers are available for both text and computer vision models. Visualizations are also available in notebooks and as savable png and html files
+
+Keywords: Model interpretation, Visualization
 
 ## [mlrun](https://github.com/mlrun/mlrun)
 
 MLRun is an open MLOps platform for quickly building and managing continuous ML applications across their lifecycle. MLRun integrates into your development and CI/CD environment and automates the delivery of production data, ML pipelines, and online applications, significantly reducing engineering efforts, time to production, and computation resources. With MLRun, you can choose any IDE on your local machine or on the cloud. MLRun breaks the silos between data, ML, software, and DevOps/MLOps teams, enabling collaboration and fast continuous improvements.
 
+Keywords: MLOps
+
 ## [FederatedScope](https://github.com/alibaba/FederatedScope)
 
 [FederatedScope](https://github.com/alibaba/FederatedScope) is a comprehensive federated learning platform that provides convenient usage and flexible customization for various federated learning tasks in both academia and industry. Based on an event-driven architecture, [FederatedScope](https://github.com/alibaba/FederatedScope) integrates rich collections of functionalities to satisfy the burgeoning demands from federated learning, and aims to build up an easy-to-use platform for promoting learning safely and effectively.
+
+Keywords: Federated learning, Event-driven
 
 ## [pythainlp](https://github.com/PyThaiNLP/pythainlp)
 
@@ -535,6 +553,8 @@ Keywords: Thai, NLP, NLTK
 ## [FlagAI](https://github.com/FlagAI-Open/FlagAI)
 
 [FlagAI](https://github.com/FlagAI-Open/FlagAI) (Fast LArge-scale General AI models) is a fast, easy-to-use and extensible toolkit for large-scale model. Our goal is to support training, fine-tuning, and deployment of large-scale models on various downstream tasks with multi-modality.
+
+Keywords: Large models, Training, Fine-tuning, Deployment, Multi-modal
 
 ## [pyserini](https://github.com/castorini/pyserini)
 
