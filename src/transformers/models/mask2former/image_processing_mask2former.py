@@ -1053,7 +1053,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
     def _post_process_instance_segmentation(
         self,
         num_predictions: int,
-        pred_masks: torch.Tensor,
+        pred_masks: "torch.Tensor",
         pred_classes: torch.Tensor,
         pred_scores: torch.Tensor,
         segmentation: torch.Tensor,
