@@ -191,7 +191,7 @@ class FocalNetEmbeddings(nn.Module):
         self.patch_grid = self.patch_embeddings.grid_size
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
 
-        self.norm = nn.LayerNorm(config.embed_dim)
+        self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
@@ -214,7 +214,15 @@ class FocalNetEmbeddings(nn.Module):
 
 class FocalNetPatchEmbeddings(nn.Module):
     def __init__(
-        self, image_size, patch_size, num_channels, embed_dim, add_norm=False, use_conv_embed=False, is_stem=False
+        self,
+        config,
+        image_size,
+        patch_size,
+        num_channels,
+        embed_dim,
+        add_norm=False,
+        use_conv_embed=False,
+        is_stem=False,
     ):
         super().__init__()
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
@@ -243,7 +251,7 @@ class FocalNetPatchEmbeddings(nn.Module):
             self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
         if add_norm:
-            self.norm = nn.LayerNorm(embed_dim)
+            self.norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         else:
             self.norm = None
 
@@ -343,7 +351,7 @@ class FocalNetModulation(nn.Module):
             )
             self.kernel_sizes.append(kernel_size)
         if self.use_post_layernorm_in_modulation:
-            self.layernorm = nn.LayerNorm(dim)
+            self.layernorm = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_state):
         """
@@ -430,7 +438,7 @@ class FocalNetLayer(nn.Module):
         self.drop = config.hidden_dropout_prob
         self.use_post_layernorm = config.use_post_layernorm
 
-        self.norm1 = nn.LayerNorm(dim)
+        self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.modulation = FocalNetModulation(
             config=config,
             index=index,
@@ -439,7 +447,7 @@ class FocalNetLayer(nn.Module):
         )
 
         self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(dim * config.mlp_ratio)
         self.mlp = FocalNetMlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=self.drop)
 
@@ -501,6 +509,7 @@ class FocalNetStage(nn.Module):
 
         if downsample is not None:
             self.downsample = downsample(
+                config=config,
                 image_size=input_resolution,
                 patch_size=2,
                 num_channels=dim,
@@ -716,6 +725,10 @@ class FocalNetModel(FocalNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FocalNetModelOutput]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

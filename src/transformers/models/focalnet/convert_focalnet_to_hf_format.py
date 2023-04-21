@@ -28,21 +28,25 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 def get_focalnet_config(model_name):
-    focal_windows = [3, 3, 3, 3]
     depths = [2, 2, 6, 2] if "tiny" in model_name else [2, 2, 18, 2]
     use_conv_embed = True if "large" in model_name or "huge" in model_name else False
     use_post_layernorm = True if "large" in model_name or "huge" in model_name else False
     use_layerscale = True if "large" in model_name or "huge" in model_name else False
 
-    if "lrf" in model_name:
-        if "large" in model_name or "huge" in model_name:
-            focal_levels = [4, 4, 4, 4]
-        else:
+    if "large" in model_name or "xlarge" in model_name or "huge" in model_name:
+        if "fl3" in model_name:
             focal_levels = [3, 3, 3, 3]
-    elif "large" in model_name or "huge" in model_name:
-        focal_levels = [3, 3, 3, 3]
-    else:
-        focal_levels = [2, 2, 2, 2]
+            focal_windows = [5, 5, 5, 5]
+        elif "fl4" in model_name:
+            focal_levels = [4, 4, 4, 4]
+            focal_windows = [3, 3, 3, 3]
+
+    if "tiny" in model_name or "small" in model_name or "base" in model_name:
+        focal_windows = [3, 3, 3, 3]
+        if "lrf" in model_name:
+            focal_levels = [3, 3, 3, 3]
+        else:
+            focal_levels = [2, 2, 2, 2]
 
     if "tiny" in model_name:
         embed_dim = 96
@@ -54,9 +58,9 @@ def get_focalnet_config(model_name):
         embed_dim = 192
         focal_windows = [5, 5, 5, 5]
     elif "xlarge" in model_name:
-        raise NotImplementedError("To do")
+        embed_dim = 256
     elif "huge" in model_name:
-        depths = (2, 2, 18, 2)
+        embed_dim = 352
 
     # set label information
     repo_id = "huggingface/label-files"
