@@ -181,6 +181,7 @@ class FocalNetEmbeddings(nn.Module):
         super().__init__()
 
         self.patch_embeddings = FocalNetPatchEmbeddings(
+            config=config,
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
