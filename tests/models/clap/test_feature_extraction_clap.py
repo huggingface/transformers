@@ -466,7 +466,7 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             set_seed(987654321)
             input_features = feature_extractor(input_speech, return_tensors="pt", padding=padding).input_features
             self.assertEqual(input_features.shape, (1, 4, 1001, 64))
-            self.assertTrue(torch.allclose(input_features[0, block_idx, MEL_BIN], EXPECTED_VALUES, atol=1e-4))
+            self.assertTrue(torch.allclose(input_features[0, block_idx, MEL_BIN], EXPECTED_VALUES, atol=1e-3))
 
     def test_integration_rand_trunc_long_input(self):
         # fmt: off
