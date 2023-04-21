@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -28,16 +27,7 @@ _import_structure = {
         "VGCNBertConfig",
         "VGCNBertOnnxConfig",
     ],
-    "tokenization_vgcn_bert": ["VGCNBertTokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_vgcn_bert_fast"] = ["VGCNBertTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -62,16 +52,7 @@ if TYPE_CHECKING:
         VGCNBertConfig,
         VGCNBertOnnxConfig,
     )
-    from .tokenization_vgcn_bert import VGCNBertTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_vgcn_bert_fast import VGCNBertTokenizerFast
-
+    
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
