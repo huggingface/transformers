@@ -64,8 +64,6 @@ class ConvNextConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -92,7 +90,6 @@ class ConvNextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
         patch_size=4,
         num_stages=4,
         hidden_sizes=None,
@@ -102,14 +99,12 @@ class ConvNextConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
-        image_size=224,
         out_features=None,
         out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.num_stages = num_stages
         self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
@@ -119,7 +114,6 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
-        self.image_size = image_size
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
 
         if out_features is not None and out_indices is not None:

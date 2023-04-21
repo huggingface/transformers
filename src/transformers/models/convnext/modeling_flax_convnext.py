@@ -54,24 +54,25 @@ class FlaxConvNextDropPath(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, hidden_states: jnp.ndarray, train: bool = False) -> jnp.ndarray:
-        if self.drop_prob == 0.0 or not train:
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
+        if self.drop_prob == 0.0 or deterministic:
             return hidden_states
         keep_prob = 1 - self.drop_prob
         shape = (hidden_states.shape[0],) + (1,) * (
             hidden_states.ndim - 1
         )  # work with diff dim tensors, not just 2D ConvNets
-        random_tensor = keep_prob + random.uniform(random.PRNGKey(0), shape, dtype=self.dtype)
+        random_tensor = keep_prob + random.uniform(self.make_rng("dropout"), shape, dtype=self.dtype)
         random_tensor = jnp.floor(random_tensor)  # binarize
         output = jnp.divide(hidden_states, keep_prob) * random_tensor
         return output
 
 
+# Copied from transformers.models.resnet.modeling_flax_resnet.Identity
 class Identity(nn.Module):
     """Identity function."""
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, **kwargs):
         return x
 
 
@@ -94,11 +95,6 @@ class FlaxConvNextEmbeddings(nn.Module):
         self.layernorm = nn.LayerNorm(epsilon=1e-6, dtype=self.dtype)
 
     def __call__(self, pixel_values: jnp.ndarray) -> jnp.ndarray:
-        num_channels = pixel_values.shape[-1]
-        if num_channels != self.config.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
@@ -142,9 +138,11 @@ class FlaxConvNextLayer(nn.Module):
         layer_scale_parameter_init = jax.nn.initializers.constant(layer_scale_init_value)
         self.layer_scale_parameter = self.param("layer_scale_parameter", layer_scale_parameter_init, (self.dim))
 
-        self.drop_path_func = FlaxConvNextDropPath(self.drop_path, dtype=self.dtype) if self.drop_path > 0.0 else None
+        self.drop_path_func = (
+            FlaxConvNextDropPath(self.drop_path, dtype=self.dtype) if self.drop_path > 0.0 else Identity()
+        )
 
-    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         input = hidden_states
         x = self.dwconv(hidden_states)
         x = self.layernorm(x)
@@ -153,7 +151,7 @@ class FlaxConvNextLayer(nn.Module):
         x = self.pwconv2(x)
         x = self.layer_scale_parameter * x
 
-        x = input + (self.drop_path_func(x) if self.drop_path_func is not None else x)
+        x = input + self.drop_path_func(x, deterministic=deterministic)
         return x
 
 
@@ -173,9 +171,9 @@ class FlaxNextLayerCollection(nn.Module):
             for j in range(self.depth)
         ]
 
-    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         for layer_module in self.layers:
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, deterministic=True)
         return hidden_states
 
 
@@ -242,9 +240,9 @@ class FlaxConvNextStage(nn.Module):
             dtype=self.dtype,
         )
 
-    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
         hidden_states = self.downsampling_layer(hidden_states)
-        hidden_states = self.layers(hidden_states)
+        hidden_states = self.layers(hidden_states, deterministic=deterministic)
         return hidden_states
 
 
@@ -287,7 +285,7 @@ class FlaxStageCollection(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        deterministic: bool = True,
     ) -> Tuple[jnp.ndarray, Tuple]:
         all_hidden_states = () if output_hidden_states else None
 
@@ -295,7 +293,7 @@ class FlaxStageCollection(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.transpose(0, 3, 1, 2),)
 
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, deterministic=deterministic)
 
         return hidden_states, all_hidden_states
 
@@ -312,8 +310,11 @@ class FlaxConvNextEncoder(nn.Module):
         hidden_states: jnp.ndarray,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
+        deterministic: bool = True,
     ) -> Union[Tuple, FlaxBaseModelOutputWithNoAttention]:
-        hidden_states, all_hidden_states = self.stages(hidden_states, output_hidden_states, return_dict)
+        hidden_states, all_hidden_states = self.stages(
+            hidden_states, output_hidden_states, deterministic=deterministic
+        )
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states.transpose(0, 3, 1, 2),)
@@ -341,23 +342,14 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: ConvNextConfig,
-        input_shape=None,
+        input_shape=(1, 224, 224, 3),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        if input_shape is None:
-            input_shape = (1, config.image_size, config.image_size, config.num_channels)
-        super().__init__(
-            config,
-            module,
-            input_shape=input_shape,
-            seed=seed,
-            dtype=dtype,
-            _do_init=_do_init,
-        )
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -381,6 +373,7 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         params: dict = None,
+        train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -399,9 +392,11 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         return self.module.apply(
             {"params": params or self.params},
             jnp.array(pixel_values, dtype=jnp.float32),
+            not train,
             output_hidden_states,
             return_dict,
             rngs=rngs,
+            mutable=["batch_stats"] if train else False,  # Returing tuple with batch_stats only when train is True
         )
 
 
@@ -468,6 +463,7 @@ class FlaxConvNextModule(nn.Module):
     def __call__(
         self,
         pixel_values: jnp.ndarray = None,
+        deterministic: bool = True,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxBaseModelOutputWithPoolingAndNoAttention]:
@@ -476,15 +472,13 @@ class FlaxConvNextModule(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -560,12 +554,18 @@ class FlaxConvNextForImageClassificationModule(nn.Module):
     def __call__(
         self,
         pixel_values=None,
+        deterministic: bool = True,
         output_hidden_states=None,
         return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.convnext(
+            pixel_values,
+            deterministic=deterministic,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 

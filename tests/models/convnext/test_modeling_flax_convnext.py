@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ class FlaxConvNextModelTester(unittest.TestCase):
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=3,
         image_size=32,
         num_channels=3,
         num_stages=4,
@@ -245,7 +245,7 @@ class FlaxConvNextModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = FlaxConvNextForImageClassification.from_pretrained("Shubhamai/convnext-tiny-224")
+        model = FlaxConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
