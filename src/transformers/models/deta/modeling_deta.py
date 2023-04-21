@@ -720,7 +720,6 @@ class DetaMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Adapted from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer
 class DetaEncoderLayer(nn.Module):
     def __init__(self, config: DetaConfig):
         super().__init__()
