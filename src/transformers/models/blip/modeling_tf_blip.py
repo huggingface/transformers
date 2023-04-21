@@ -47,13 +47,13 @@ _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Salesforce/blip-vqa-base",
-    "Salesforce/blip-vqa-capfit-large",
+    "Salesforce/blip-vqa-capfilt-large",
     "Salesforce/blip-image-captioning-base",
     "Salesforce/blip-image-captioning-large",
     "Salesforce/blip-itm-base-coco",
     "Salesforce/blip-itm-large-coco",
-    "Salesforce/blip-itm-base-flikr",
-    "Salesforce/blip-itm-large-flikr",
+    "Salesforce/blip-itm-base-flickr",
+    "Salesforce/blip-itm-large-flickr",
     # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
 
@@ -1020,7 +1020,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         )
 
         pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        text_features = self.blip.text_projection(pooled_output)
 
         return text_features
 
@@ -1057,7 +1057,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         vision_outputs = self.blip.vision_model(pixel_values=pixel_values, return_dict=return_dict)
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.blip.visual_projection(pooled_output)
 
         return image_features
 
@@ -1238,7 +1238,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         >>> outputs = model.generate(**inputs)
         >>> print(processor.decode(outputs[0], skip_special_tokens=True))
-        two cats are laying on a couch
+        two cats sleeping on a couch
         ```
         """
 
@@ -1410,7 +1410,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
-        >>> loss.backward()
 
         >>> # inference
         >>> text = "How many cats are in the picture?"

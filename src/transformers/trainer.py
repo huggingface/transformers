@@ -416,8 +416,7 @@ class Trainer:
                 raise ValueError(
                     "Using --sharded_ddp xxx together with --fsdp is not possible, deactivate one of those flags."
                 )
-
-            if args.local_rank == -1:
+            if args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
@@ -439,7 +438,7 @@ class Trainer:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and args.local_rank == -1:
+            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
             # dep_version_check("torch>=1.12.0")
@@ -462,9 +461,9 @@ class Trainer:
             if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
-            self.forword_prefetch = False
-            if self.args.fsdp_config.get("forword_prefect", False):
-                self.forword_prefetch = True
+            self.forward_prefetch = False
+            if self.args.fsdp_config.get("forward_prefect", False):
+                self.forward_prefetch = True
 
             self.limit_all_gathers = False
             if self.args.fsdp_config.get("limit_all_gathers", False):
@@ -551,7 +550,7 @@ class Trainer:
             # In case of pull, we need to make sure every process has the latest.
             if is_torch_tpu_available():
                 xm.rendezvous("init git repo")
-            elif args.local_rank != -1:
+            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
                 dist.barrier()
 
         if self.args.should_save:
@@ -929,7 +928,7 @@ class Trainer:
                     rank=smp.dp_rank(),
                     batch_size=self.args.per_device_eval_batch_size,
                 )
-            elif self.args.local_rank != -1:
+            elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 return SequentialDistributedSampler(eval_dataset)
             else:
                 return SequentialSampler(eval_dataset)
@@ -1406,8 +1405,8 @@ class Trainer:
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
+        if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
@@ -1481,6 +1480,11 @@ class Trainer:
                     mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
                 if type(model) != FSDP:
                     # XXX: Breaking the self.model convention but I see no way around it for now.
+                    signature = inspect.signature(FSDP.__init__).parameters.keys()
+                    kwargs = {}
+                    for arg in ["limit_all_gathers", "forward_prefetch", "backward_prefetch"]:
+                        if arg in signature:
+                            kwargs[arg] = getattr(self, arg)
                     self.model = model = FSDP(
                         model,
                         sharding_strategy=self.fsdp,
@@ -1488,9 +1492,7 @@ class Trainer:
                         auto_wrap_policy=auto_wrap_policy,
                         mixed_precision=mixed_precision_policy,
                         device_id=self.args.device,
-                        backward_prefetch=self.backward_prefetch,
-                        forward_prefetch=self.forword_prefetch,
-                        limit_all_gathers=self.limit_all_gathers,
+                        **kwargs,
                     )
             else:
                 try:
@@ -1548,7 +1550,7 @@ class Trainer:
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
             )
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
                 kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
@@ -1764,13 +1766,13 @@ class Trainer:
 
         # Train!
         logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {num_examples}")
-        logger.info(f"  Num Epochs = {num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
+        logger.info(f"  Num examples = {num_examples:,}")
+        logger.info(f"  Num Epochs = {num_train_epochs:,}")
+        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size:,}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-        logger.info(f"  Total optimization steps = {max_steps}")
-        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True)}")
+        logger.info(f"  Total optimization steps = {max_steps:,}")
+        logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
 
         self.state.epoch = 0
         start_time = time.time()
@@ -1916,7 +1918,7 @@ class Trainer:
 
                 if (
                     (total_batched_samples % args.gradient_accumulation_steps != 0)
-                    and args.local_rank != -1
+                    and args.parallel_mode == ParallelMode.DISTRIBUTED
                     and args._no_sync_in_gradient_accumulation
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
@@ -2038,7 +2040,7 @@ class Trainer:
             # Wait for everyone to get here so we are sur the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
-            elif args.local_rank != -1:
+            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
                 dist.barrier()
             elif is_sagemaker_mp_enabled():
                 smp.barrier()
@@ -2316,7 +2318,7 @@ class Trainer:
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
-            if self.args.local_rank != -1:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
             else:
                 try:
@@ -2410,7 +2412,7 @@ class Trainer:
             "cpu": torch.random.get_rng_state(),
         }
         if torch.cuda.is_available():
-            if self.args.local_rank == -1:
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
                 # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
                 rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
             else:
@@ -2892,7 +2894,7 @@ class Trainer:
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
-        if self.args.local_rank != -1:
+        if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             self.state.total_flos += (
                 distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
             )
@@ -3180,8 +3182,6 @@ class Trainer:
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
@@ -3192,10 +3192,13 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
+                logits = self._nested_gather(logits)
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+            if labels is not None:
+                labels = self._nested_gather(labels)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
@@ -3307,7 +3310,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -3831,7 +3834,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif self.args.local_rank != -1:
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
 
         return nested_numpify(tensors)

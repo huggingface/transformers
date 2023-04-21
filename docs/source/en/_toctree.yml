@@ -263,6 +263,8 @@
         title: ConvBERT
       - local: model_doc/cpm
         title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
       - local: model_doc/deberta
@@ -309,6 +311,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -572,6 +576,8 @@
         title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
       - local: model_doc/flava
@@ -592,6 +598,8 @@
         title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/oneformer
@@ -602,6 +610,8 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/sam
+        title: Segment Anything
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas

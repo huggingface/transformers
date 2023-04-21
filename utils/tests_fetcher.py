@@ -51,6 +51,7 @@ PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
 # List here the models to always test.
 IMPORTANT_MODELS = [
+    "auto",
     # Most downloaded models
     "bert",
     "clip",

@@ -239,9 +239,10 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "fill-mask": MBartForConditionalGeneration,
             "question-answering": MBartForQuestionAnswering,
             "summarization": MBartForConditionalGeneration,
-            "text2text-generation": MBartForConditionalGeneration,
             "text-classification": MBartForSequenceClassification,
             "text-generation": MBartForCausalLM,
+            "text2text-generation": MBartForConditionalGeneration,
+            "translation": MBartForConditionalGeneration,
             "zero-shot": MBartForSequenceClassification,
         }
         if is_torch_available()
@@ -256,8 +257,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name != "FeatureExtractionPipelineTests":
-            # IndexError: index out of range in self
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False

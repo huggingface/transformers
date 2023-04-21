@@ -1522,6 +1522,7 @@ class Blip2Model(Blip2PreTrainedModel):
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
+                labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
@@ -1757,6 +1758,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
+                labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
