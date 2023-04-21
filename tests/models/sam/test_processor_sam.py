@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torchvision, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_vision_available, is_torch_available
 
 
 if is_vision_available():
@@ -26,7 +26,8 @@ if is_vision_available():
 
     from transformers import AutoProcessor, SamImageProcessor, SamProcessor
 
-
+if is_torch_available():
+    import torch
 @require_vision
 @require_torchvision
 class SamProcessorTest(unittest.TestCase):
@@ -79,3 +80,28 @@ class SamProcessorTest(unittest.TestCase):
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            
+    def test_post_process_masks(self):
+        
+        image_processor = self.get_image_processor()
+
+        processor = SamProcessor(image_processor=image_processor)
+        dummy_masks = torch.ones((1,3,5,5))
+        
+        original_sizes = [[1764, 2646]]
+        
+        reshaped_input_size = [[ 683, 1024]]
+        masks = processor.post_process_masks(dummy_masks, original_sizes, reshaped_input_size)
+        self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
+        
+        
+        masks = processor.post_process_masks(dummy_masks, torch.tensor(original_sizes), torch.tensor(reshaped_input_size))
+        self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
+        
+        # should also work with np
+        dummy_masks = np.ones((1,3,5,5))
+        
+        
+        
+        self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
+        
