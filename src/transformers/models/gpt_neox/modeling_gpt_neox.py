@@ -718,6 +718,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
