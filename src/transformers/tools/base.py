@@ -4,7 +4,29 @@ from accelerate.utils import send_to_device
 from ..models.auto import AutoProcessor
 
 
-class PipelineTool:
+class Tool:
+    '''
+    Example of a super 'Tool' class that could live in huggingface_hub
+    '''
+    def __init__(self, model) -> None:
+        self.model = model
+
+    def encode(self, raw_inputs):
+        return raw_inputs
+
+    def forward(self, inputs):
+        return self.model(**inputs)
+
+    def decode(self, outputs):
+        return outputs
+
+    def __call__(self, *args, **kwargs):
+        encoded_inputs = self.encode(*args, **kwargs)
+        outputs = self.forward(encoded_inputs)
+        return self.decode(outputs)
+
+
+class PipelineTool(Tool):
     pre_processor_class = AutoProcessor
     model_class = None
     post_processor_class = AutoProcessor
