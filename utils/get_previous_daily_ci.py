@@ -57,9 +57,9 @@ def get_last_daily_ci_reports(artifact_names, output_dir, token):
 
     results = {}
     for artifact_name in artifact_names:
-        results[artifact_name] = {}
         artifact_zip_path = os.path.join(output_dir, f"{artifact_name}.zip")
         if os.path.isfile(artifact_zip_path):
+            results[artifact_name] = {}
             with zipfile.ZipFile(artifact_zip_path) as z:
                 for filename in z.namelist():
                     if not os.path.isdir(filename):
