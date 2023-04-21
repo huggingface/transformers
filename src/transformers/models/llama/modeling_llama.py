@@ -558,6 +558,10 @@ class LlamaModel(LlamaPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
+            layer_dev = next(decoder_layer.parameters()).device
+            attention_mask = attention_mask.to(layer_dev)
+            position_ids = position_ids.to(layer_dev)
+
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
