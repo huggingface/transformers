@@ -733,3 +733,20 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
         torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+
+    def test_post_process_masks(self):
+
+        model = SamModel.from_pretrained("facebook/sam-vit-huge").to(torch_device)
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+        
+        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+
+        input_points = [[[450, 600]]]
+        inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs = model(**inputs)
+    
+        masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
+        
+        self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
