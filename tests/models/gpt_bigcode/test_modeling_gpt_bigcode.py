@@ -407,7 +407,7 @@ class GPTBigCodeModelTester:
 
 
 @require_torch
-class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # TODO: Update the tests to use valid pretrained models.
     all_model_classes = (
         (
@@ -521,7 +521,7 @@ class GPTBigCodeMQAModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
 
 @require_torch
-class GPTBigCodeMHAModelTest(GPTBigCodeMQAModelTest):
+class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
     # `parameterized_class` breaks with mixins, so we use inheritance instead
     multi_query = False
 
