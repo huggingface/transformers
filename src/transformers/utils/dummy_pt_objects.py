@@ -475,6 +475,9 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_MASK_GENERATION_MAPPING = None
+
+
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
 
 
@@ -6009,6 +6012,23 @@ class RoFormerPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
+
+
+SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SamModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SamPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
