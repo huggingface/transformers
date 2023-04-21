@@ -55,6 +55,7 @@ ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all ICT models at https://huggingface.co/models?filter=ict
 ]
 
+
 class ICTEmbeddings(nn.Module):
     """
     Construct the embeddings. Optionally, also the mask token.
@@ -66,14 +67,14 @@ class ICTEmbeddings(nn.Module):
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embedding = nn.Parameter(torch.zeros(1, config.image_size, config.hidden_size))
         self.dropout = nn.Dropout(config.residual_dropout_prob)
-        
+
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
 
     def forward(
         self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
     ) -> Tuple[torch.Tensor]:
         batch_size, num_pixel = pixel_values.shape
-        
+
         embeddings = self.token_embedding(pixel_values)
 
         if bool_masked_pos is not None:
@@ -85,7 +86,7 @@ class ICTEmbeddings(nn.Module):
 
         # each position maps to a learnable vector
         # NOTE: Need [:, :num_pixel, :]?
-        position_embeds = self.position_embedding[:, :num_pixel, :] 
+        position_embeds = self.position_embedding[:, :num_pixel, :]
         embeddings = embeddings + position_embeds
         embeddings = self.dropout(embeddings)
 
@@ -207,7 +208,7 @@ class ICTEncoder(nn.Module):
         self.config = config
         self.layers = nn.ModuleList([ICTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -217,7 +218,7 @@ class ICTEncoder(nn.Module):
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        
+
         for _, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -250,6 +251,7 @@ class ICTEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ICT,vit->ict
 class ICTPretrainedModel(PreTrainedModel):
@@ -376,9 +378,9 @@ class ICTTransformerModel(ICTPretrainedModel):
 
         # Unlike ViT, each value in pixel_values is an index that corresponds to the visual vocabulary
         pixel_values = pixel_values.to(torch.long)
-        
+
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        
+
         encoder_outputs = self.encoder(
             embedding_output,
             output_attentions=output_attentions,
@@ -388,11 +390,11 @@ class ICTTransformerModel(ICTPretrainedModel):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.head(sequence_output)
-        
+
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:]
-        
+
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -422,6 +424,7 @@ class ResnetBlock(nn.Module):
         # http://torch.ch/blog/2016/02/04/resnets.html
 
         return out
+
 
 class InpaintGenerator(nn.Module):
     def __init__(self, residual_blocks=8):
@@ -716,7 +719,7 @@ class ICTGuidedUpsampler(ICTPretrainedModel):
         super().__init__(config)
 
         self.generator = InpaintGenerator(config.residual_blocks)
-        
+
         self.post_init()
 
     def forward(self, images, edges, masks):
@@ -797,31 +800,29 @@ class ICTModel(ICTPretrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-                Returns:
+        Returns:
 
-                Example:
-                ```python
-                >>> import torch
-                >>> import numpy as np
-                >>> from PIL import Image
-                >>> import requests
+        Example:
+        ```python
+        >>> import torch
+        >>> import numpy as np
+        >>> from PIL import Image
+        >>> import requests
 
-                >>> from transformers import AutoImageProcessor, ICTModel
+        >>> from transformers import AutoImageProcessor, ICTModel
 
-                >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
-                >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
 
-                >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-                >>> image = Image.open(requests.get(url, stream=True).raw)
-                >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
 
-                >>> # create random boolean mask of shape (batch_size, num_patches)
-                >>> bool_masked_pos = torch.randint(
-                ...     low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])
-                ... ).bool()
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
 
-                >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-                ```"""
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -846,16 +847,9 @@ class ICTModel(ICTPretrainedModel):
         loss = None
         if bool_masked_pos is not None:
             bool_masked_pos = bool_masked_pos.reshape(-1, self.config.image_size, self.config.image_size)
-            mask = (
-                bool_masked_pos.repeat_interleave(1, 1)
-                .repeat_interleave(1, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
+            mask = bool_masked_pos.repeat_interleave(1, 1).repeat_interleave(1, 2).unsqueeze(1).contiguous()
             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            loss = (
-                (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
-            )
+            loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
         if not return_dict:
             output = (reconstructed_pixel_values,) + outputs[1:]
