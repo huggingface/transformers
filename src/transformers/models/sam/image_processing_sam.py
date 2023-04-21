@@ -407,7 +407,7 @@ class SamImageProcessor(BaseImageProcessor):
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
-            else:
+            elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
