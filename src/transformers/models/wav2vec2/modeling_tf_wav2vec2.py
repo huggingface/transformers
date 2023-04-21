@@ -1668,8 +1668,11 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             pooled_output = tf.reduce_mean(hidden_states, axis=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            padding_mask_float = tf.cast(padding_mask, tf.float32)
-            pooled_output = tf.divide(tf.reduce_sum(hidden_states, axis=1), tf.reduce_sum(padding_mask_float, axis=1))
+            padding_mask_float = tf.cast(padding_mask, hidden_states.dtype)
+            hidden_states = tf.multiply(hidden_states, tf.expand_dims(padding_mask_float, axis=-1))
+            pooled_output = tf.divide(
+                tf.reduce_sum(hidden_states, axis=1), tf.expand_dims(tf.reduce_sum(padding_mask_float, axis=1), axis=1)
+            )
         logits = self.classifier(pooled_output)
         loss = None
         if labels is not None:
