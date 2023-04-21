@@ -1220,8 +1220,12 @@ class NeptuneCallback(TrainerCallback):
             self._run = None
 
     def _initialize_run(self, **additional_neptune_kwargs):
-        from neptune.new import init_run
-        from neptune.new.exceptions import NeptuneMissingApiTokenException, NeptuneMissingProjectNameException
+        try:
+            from neptune import init_run
+            from neptune.exceptions import NeptuneMissingApiTokenException, NeptuneMissingProjectNameException
+        except ImportError:
+            from neptune.new import init_run
+            from neptune.new.exceptions import NeptuneMissingApiTokenException, NeptuneMissingProjectNameException
 
         self._stop_run_if_exists()
 
