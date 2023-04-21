@@ -19,7 +19,7 @@ class TranslationTool(PipelineTool):
     model_class = AutoModelForSeq2SeqLM
 
     description = (
-        "text from {src_lang} to {tgt_lang}. It takes an input named `text` which should be the text in {src_lang} "
+        "translates text from {src_lang} to {tgt_lang}. It takes an input named `text` which should be the text in {src_lang} "
         "and returns a dictionary with a single key `'translated_text'` that contains the translation in {tgt_lang}."
     )
 
