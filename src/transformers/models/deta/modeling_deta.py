@@ -492,7 +492,6 @@ class DetaMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    # Adapted from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
     def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
         super().__init__()
         if embed_dim % num_heads != 0:
