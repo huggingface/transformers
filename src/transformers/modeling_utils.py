@@ -28,6 +28,7 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+from accelerate.utils.modeling import find_tied_parameters
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
@@ -2938,31 +2939,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        def _tensor_hash(tensor):
-            # This is better than `tensor.data_ptr()`
-            # Since A = torch.zeros((10, 10))
-            # B = A[2, :]
-            # Then A.data_ptr() != B.data_ptr()
-            # But actually the storage is still shared
-            try:
-                ptr = tensor.untyped_storage().data_ptr()
-            except AttributeError:
-                # Fallback for torch==1.10
-                try:
-                    ptr = tensor.storage().data_ptr()
-                except NotImplementedError:
-                    # Fallback for meta storage like in 2.0
-                    ptr = 0
-            return (ptr, tensor.device)
+        tied_params = find_tied_parameters(model)
+        _missing = []
+        for k in missing_keys:
+            found = False
+            for group in tied_params:
+                if k in group:
+                    found = True
+                    if len(group) > 2:
+                        group.remove(k)
+                    else:
+                        _missing.append(k)
+            if not found:
+                _missing.append(k)
+        missing_keys = _missing
 
-        existing_ptrs = {
-            _tensor_hash(model_state_dict[k])
-            for k in loaded_keys
-            if k in model_state_dict and model_state_dict[k].device != torch.device("meta")
-        }
-        missing_keys = [
-            k for k in missing_keys if k in model_state_dict and _tensor_hash(model_state_dict[k]) not in existing_ptrs
-        ]
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:
