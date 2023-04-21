@@ -424,7 +424,10 @@ class Message:
             )
 
             # if the last run produces artifact named `test_failure_tables`
-            if "test_failure_tables" in prev_tables and "model_failures_report.txt" in prev_tables["test_failure_tables"]:
+            if (
+                "test_failure_tables" in prev_tables
+                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+            ):
                 # Compute the difference of the previous/current (model failure) table
                 prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
