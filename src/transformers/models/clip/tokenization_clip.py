@@ -129,8 +129,6 @@ class BasicTokenizer(object):
         do_split_on_punc (`bool`, *optional*, defaults to `True`):
             In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
             the full context of the words, such as contractions.
-        remove_control_chars (`bool`, *optional*, defaults to `True`):
-            Whether to allow or remove control characers, as some vocabs includes them.
     """
 
     def __init__(
@@ -140,7 +138,6 @@ class BasicTokenizer(object):
         tokenize_chinese_chars=True,
         strip_accents=None,
         do_split_on_punc=True,
-        remove_control_chars=True,
     ):
         if never_split is None:
             never_split = []
@@ -149,7 +146,6 @@ class BasicTokenizer(object):
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
         self.do_split_on_punc = do_split_on_punc
-        self.remove_control_chars = remove_control_chars
 
     def tokenize(self, text, never_split=None):
         """
@@ -172,9 +168,7 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        # prevents treating the same character with different unicode codepoints as different characters
-        unicode_normalized_text = unicodedata.normalize("NFC", text)
-        orig_tokens = whitespace_tokenize(unicode_normalized_text)
+        orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -264,7 +258,7 @@ class BasicTokenizer(object):
         output = []
         for char in text:
             cp = ord(char)
-            if cp == 0 or cp == 0xFFFD or (self.remove_control_chars and _is_control(char)):
+            if cp == 0 or cp == 0xFFFD or _is_control(char):
                 continue
             if _is_whitespace(char):
                 output.append(" ")
@@ -332,7 +326,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
-            self.nlp = BasicTokenizer(strip_accents=False, do_split_on_punc=False, remove_control_chars=False)
+            self.nlp = BasicTokenizer(strip_accents=False, do_split_on_punc=False)
             self.fix_text = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:

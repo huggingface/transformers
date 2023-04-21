@@ -74,6 +74,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @require_ftfy
     def test_check_encoding_slow_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
