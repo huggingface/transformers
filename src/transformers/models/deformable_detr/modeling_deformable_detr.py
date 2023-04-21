@@ -589,7 +589,9 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
+    def __init__(
+        self, embed_dim: int, num_heads: int, n_levels: int, n_points: int, disable_custom_kernels: bool = False
+    ):
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
@@ -616,9 +618,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
-        # This option is necessary for the ONNX export, as the try/catch in the forward
-        # is not supported by PyTorch ONNX export
-        self.disable_custom_kernels = False
+        self.disable_custom_kernels = disable_custom_kernels
 
         self._reset_parameters()
 
@@ -845,6 +845,7 @@ class DeformableDetrEncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.encoder_n_points,
+            disable_custom_kernels=config.disable_custom_kernels,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -946,6 +947,7 @@ class DeformableDetrDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
+            disable_custom_kernels=config.disable_custom_kernels,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # feedforward neural networks
