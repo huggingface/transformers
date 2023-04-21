@@ -263,15 +263,11 @@ class TFWav2Vec2ModelTester:
         for i in range(len(input_lengths)):
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
-
-        # disable dropout and batch normalization
-        tf.keras.backend.set_learning_phase(0)
-
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.numpy().item()
-        unmasked_loss = model(input_values, labels=labels).loss.numpy().item()
-
-        # enable dropout and batch normalization
-        tf.keras.backend.set_learning_phase(1)
+        training = False
+        masked_loss = (
+            model(input_values, attention_mask=attention_mask, labels=labels, training=training).loss.numpy().item()
+        )
+        unmasked_loss = model(input_values, labels=labels, training=training).loss.numpy().item()
 
         assert isinstance(masked_loss, float)
         assert isinstance(unmasked_loss, float)
@@ -736,7 +732,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
         expected_labels = [7, 6, 10, 9]
         expected_logits = tf.convert_to_tensor([6.1186, 11.8961, 10.2931, 6.0898])
-        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertListEqual(predicted_ids.numpy().tolist(), expected_labels)
         self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
@@ -763,9 +759,9 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_labels_location = [0, 0, 0, 1]
         expected_logits_location = tf.convert_to_tensor([1.5335, 6.5096, 10.5704, 11.0569])
 
-        self.assertListEqual(predicted_ids_action.tolist(), expected_labels_action)
-        self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
-        self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
+        self.assertListEqual(predicted_ids_action.numpy().tolist(), expected_labels_action)
+        self.assertListEqual(predicted_ids_object.numpy().tolist(), expected_labels_object)
+        self.assertListEqual(predicted_ids_location.numpy().tolist(), expected_labels_location)
 
         self.assertTrue(np.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
         self.assertTrue(np.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
@@ -784,7 +780,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         predicted_logits, predicted_ids = tf.math.reduce_max(output_logits, axis=-1), tf.argmax(output_logits, axis=-1)
         expected_labels = [251, 1, 1, 3]
         expected_logits = tf.convert_to_tensor([37.5627, 71.6362, 64.2419, 31.7778])
-        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertListEqual(predicted_ids.numpy().tolist(), expected_labels)
         self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_emotion_recognition(self):
@@ -804,5 +800,5 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         # s3prl logits for the same batch
         expected_logits = tf.convert_to_tensor([2.1722, 3.0779, 8.0287, 6.6797])
 
-        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertListEqual(predicted_ids.numpy().tolist(), expected_labels)
         self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
