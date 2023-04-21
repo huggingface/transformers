@@ -808,7 +808,6 @@ class DetaEncoderLayer(nn.Module):
         return outputs
 
 
-# Adapted from from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer
 class DetaDecoderLayer(nn.Module):
     def __init__(self, config: DetaConfig):
         super().__init__()
