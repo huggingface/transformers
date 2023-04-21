@@ -1404,6 +1404,13 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         hidden_states = self.fc_proj_out(hidden_states)  # Predictions
         loss_fn = nn.CrossEntropyLoss()
+
+        lm_logits = lm_logits.view(-1, lm_logits.size(-1))
+        labels = labels.view(-1)
+        # move labels to corect devide
+        labels = labels.to(lm_logits.device)
+        loss = loss_fn(lm_logits, labels)
+
         if get_sep_loss:
             lyric_hidden_states = hidden_states[:, : self.encoder_len].reshape(-1, self.embed_dim)
             token_hidden_states = hidden_states[:, self.encoder_len :].reshape(-1, self.embed_dim)
