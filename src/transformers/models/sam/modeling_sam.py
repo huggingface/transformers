@@ -623,15 +623,16 @@ class SamPromptEncoder(nn.Module):
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
-        minus_one_labels_mask = labels == -1
+        # torch.whereh and expanding the labels tensor is required by the ONNX export
+        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
+
         # This is required for the ONNX export. The dtype, device need to be explicitely
         # specificed as otherwise torch.onnx.export interprets as double
-        fill_value = torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device)
-
-        point_embedding = torch.where(minus_one_labels_mask[..., None] != -1, point_embedding, fill_value)
-        point_embedding[minus_one_labels_mask] += self.not_a_point_embed.weight
-
-        point_embedding = torch.where(labels[..., None] != -10, point_embedding, fill_value)
+        point_embedding = torch.where(
+            labels[..., None] != -10,
+            point_embedding,
+            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
+        )
 
         point_embedding[labels == 0] += self.point_embed[0].weight
         point_embedding[labels == 1] += self.point_embed[1].weight
