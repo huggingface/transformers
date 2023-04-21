@@ -89,7 +89,6 @@ class VocabGraphConvolution(nn.Module):
     Params:
         `wgraphs`: List of vocabulary graph, normally adjacency matrix
         `wgraph_id_to_tokenizer_id_maps`: wgraph.vocabulary to tokenizer.vocabulary id-mapping
-        `word_embeddings`: word_emeddings from VGCNEmbeddings class
         `hid_dim`: The hidden dimension after `GCN=XAW` (GCN layer)
         `out_dim`: The output dimension after `out=Relu(XAW)W`  (GCN output)
         `activation`: The activation function in `out=act(XAW)W`
@@ -107,17 +106,12 @@ class VocabGraphConvolution(nn.Module):
         self,
         wgraphs: list,
         wgraph_id_to_tokenizer_id_maps: List[dict],
-        word_embeddings: nn.Embedding,
-        # position_embeddings: nn.Embedding,
         hid_dim: int,
         out_dim: int,
         activation=None,
         dropout_rate=0.1,
     ):
         super().__init__()
-        self.word_embeddings = word_embeddings
-        # self.position_embeddings = position_embeddings
-
         self._check_wgraphs(wgraphs)
         self.wgraphs = wgraphs  # List[torch.sparse.FloatTensor]
         self.gvocab_order_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inversion_arrays(
@@ -127,12 +121,10 @@ class VocabGraphConvolution(nn.Module):
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
-        self.W_vh_list: List[torch.Tensor] = []
-        for g in self.wgraphs:
-            self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
-            # self.W_vh_list.append(nn.Parameter(torch.zeros(g.shape[0], hid_dim)))
-            # setattr(self, "W%d_vh" % i, nn.Parameter(torch.randn(g.shape[0], hid_dim)))
-            # self.fc_vh_list.append(nn.Linear(g.shape[0], hid_dim, bias=False)) # nn.Linear does not support sparse
+        # self.W_vh_list: List[torch.Tensor] = []
+        for i, g in enumerate(self.wgraphs):
+            setattr(self, "W%d_vh" % i, nn.Parameter(torch.randn(g.shape[0], hid_dim)))
+            # self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
 
         self.fc_hg = nn.Linear(hid_dim, out_dim)
         self.activation = get_activation(activation) if activation else None
@@ -140,14 +132,25 @@ class VocabGraphConvolution(nn.Module):
 
         self.reset_parameters()
 
+    def set_transparent_parameters(self):
+        for n, p in self.named_parameters():
+            if n.startswith("W"):
+                nn.init.constant_(p, 1.0)
+        # nn.init.constant_(self.fc_hg.weight, 1.0)
+        self.fc_hg.weight.data.fill_(1.0)
+        # nn.init.constant_(self.fc_hg.bias, 0.0)
+        self.fc_hg.bias.data.zero_()
+
     def reset_parameters(self):
-        # TODO: check this func do not init self.word_embeddings and self.position_embeddings
         # TODO: move to _init_weights func
-        for w in self.W_vh_list:
-            w.data.normal_(mean=0.0, std=0.02)  # config.initializer_range
-        # for n, p in self.named_parameters():
-        # if n.startswith("W") or n.startswith("a") or n in ("W", "a", "dense"):
-        # nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+        # for w in self.W_vh_list:
+        #     w.data.normal_(mean=0.0, std=0.02)  # config.initializer_range
+        for n, p in self.named_parameters():
+            if n.startswith("W"):
+                p.data.normal_(mean=0.0, std=0.02)
+                # nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+                # stdv = 1. / math.sqrt(p.size(1))
+                # init.uniform_(p, -stdv, stdv)
 
     def _prepare_inversion_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
@@ -210,8 +213,11 @@ class VocabGraphConvolution(nn.Module):
 
         return batch_sub_adj_matrix.coalesce()
 
-    def forward(self, input_ids: torch.Tensor):  # , position_ids: torch.Tensor = None):
+    def forward(self, word_embeddings: nn.Embedding, input_ids: torch.Tensor):  # , position_ids: torch.Tensor = None):
         device = input_ids.device
+        batch_size = input_ids.shape[0]
+        word_emb_dim = word_embeddings.weight.shape[1]
+
         gx_ids_list = []
         # positon_embeddings_in_gvocab_order_list=[]
         for m in self.tokenizer_id_to_wgraph_id_arrays:
@@ -232,21 +238,23 @@ class VocabGraphConvolution(nn.Module):
             gx_ids_list.append(torch.unique(tmp_ids, dim=1))
 
         # G_embedding=(act(V1*A1_sub*W1_vh)+act(V2*A2_sub*W2_vh)）*W_hg
-        fused_H = torch.zeros((input_ids.shape[0], self.word_embeddings.weight.shape[1], self.hid_dim), device=device)
-        for gv_ids, g, gx_ids, W_vh in zip(  # , position_in_gvocab_ev
-            self.gvocab_order_tokenizer_id_arrays,
-            self.wgraphs,
-            gx_ids_list,
-            self.W_vh_list,
-            # positon_embeddings_in_gvocab_order_list,
+        fused_H = torch.zeros((batch_size, word_emb_dim, self.hid_dim), device=device)
+        for i, (gv_ids, g, gx_ids) in enumerate(
+            zip(  # , position_in_gvocab_ev
+                self.gvocab_order_tokenizer_id_arrays,
+                self.wgraphs,
+                gx_ids_list,
+                # self.W_vh_list,
+                # positon_embeddings_in_gvocab_order_list,
+            )
         ):
             # A1_sub*W1_vh
             sub_wgraphs = self.get_subgraphs(g, gx_ids)
-            # H_vh = sub_wgraph.mm(getattr(self, "W%d_vh" % i))
-            H_vh = torch.bmm(sub_wgraphs, W_vh.unsqueeze(0).expand(gx_ids.shape[0], *W_vh.shape))
+            W_vh = getattr(self, "W%d_vh" % i)
+            H_vh = torch.bmm(sub_wgraphs, W_vh.unsqueeze(0).expand(batch_size, *W_vh.shape))
 
             # V1*A1_sub*W1_vh
-            gvocab_ev = self.word_embeddings(gv_ids).t()
+            gvocab_ev = word_embeddings(gv_ids).t()
             # if position_ids:
             #     gvocab_ev += position_in_gvocab_ev
             H_eh = gvocab_ev.matmul(H_vh)
@@ -265,7 +273,7 @@ class VocabGraphConvolution(nn.Module):
         return out_ge
 
 
-# class VocabGraphConvolutionModel(nn.Module) # -> Pretrain_VGCN
+# class VocabGraphConvolutionModel(nn.Module) # -> Pretrain_VGCN (maybe need first pretrain vgcn)
 
 
 class VGCNEmbeddings(nn.Module):
@@ -281,8 +289,6 @@ class VGCNEmbeddings(nn.Module):
         self.vgcn = VocabGraphConvolution(
             vgcn_graphs,
             wgraph_id_to_tokenizer_id_maps,
-            self.word_embeddings,
-            # self.position_embeddings,
             config.vgcn_hidden_dim,
             config.vgcn_graph_embds_dim,
             config.vgcn_activation,
@@ -338,7 +344,7 @@ class VGCNEmbeddings(nn.Module):
 
         if self.vgcn_graph_embds_dim > 0:
             # TODO: check input_ids/position_ids donot include [CLS], [SEP][SEP]
-            graph_embeds = self.vgcn(input_ids)  # , position_ids)
+            graph_embeds = self.vgcn(self.word_embeddings, input_ids)  # , position_ids)
 
             # vgcn_words_embeddings = input_embeds.clone()
             # for i in range(self.vgcn_graph_embds_dim):
