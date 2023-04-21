@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
 
@@ -83,3 +84,22 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             "help": "Model id, file path or url pointing to a GenerationConfig json file, to use during prediction."
         },
     )
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values and `GenerationConfig` by dictionaries (for JSON
+        serialization support). It obfuscates the token values by removing their value.
+        """
+        # filter out fields that are defined as field(init=False)
+        d = {field.name: getattr(self, field.name) for field in fields(self) if field.init}
+
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+            if isinstance(v, GenerationConfig):
+                d[k] = v.to_dict()
+        return d
