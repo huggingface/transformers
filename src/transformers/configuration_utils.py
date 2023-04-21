@@ -30,6 +30,7 @@ from .dynamic_module_utils import custom_object_save
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -667,6 +668,10 @@ class PretrainedConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
+        if "auto_map" in config_dict and not is_local:
+            config_dict["auto_map"] = add_model_info_to_auto_map(
+                config_dict["auto_map"], pretrained_model_name_or_path
+            )
         return config_dict, kwargs
 
     @classmethod
