@@ -655,7 +655,7 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f"Number of failures: {sum(job_result['failed'].values())}",
+                        text=f'Number of failures: {job_result["failed"][device]}',
                     )
 
                     print("Sending the following reply")
@@ -958,7 +958,7 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event == "push":
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
