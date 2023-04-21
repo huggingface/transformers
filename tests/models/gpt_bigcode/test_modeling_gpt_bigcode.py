@@ -420,11 +420,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else ()
     )
     all_generative_model_classes = (GPTBigCodeForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
-    test_missing_keys = False
-    test_pruning = False
-    test_torchscript = False
-    multi_query = True
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
@@ -436,6 +431,11 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
+    fx_compatible = False
+    test_missing_keys = False
+    test_pruning = False
+    test_torchscript = False
+    multi_query = True
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
