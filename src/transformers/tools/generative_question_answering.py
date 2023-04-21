@@ -1,4 +1,3 @@
-
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from .base import PipelineTool

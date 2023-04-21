@@ -1,4 +1,3 @@
-
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from .base import PipelineTool

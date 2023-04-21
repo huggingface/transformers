@@ -11,7 +11,7 @@ class InterpretorError(ValueError):
     pass
 
 
-def evaluate(code: str, tools: Dict[str, Callable]):
+def evaluate(code: str, tools: Dict[str, Callable], variables=None):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
@@ -29,7 +29,7 @@ def evaluate(code: str, tools: Dict[str, Callable]):
             `InterpretorError`.
     """
     expression = ast.parse(code)
-    state = {}
+    state = {} if variables is None else variables.copy()
     result = None
     for node in expression.body:
         result = evaluate_ast(node, state, tools)
@@ -76,9 +76,14 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Expr):
         # Expression -> evaluate the content
         evaluate_ast(expression.value, state, tools)
+    elif isinstance(expression, ast.FormattedValue):
+        # Formatted value (part of f-string) -> evaluate the content and return
+        return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.If):
         # If -> execute the right branch
         evaluate_if(expression, state, tools)
+    elif isinstance(expression, ast.JoinedStr):
+        return "".join([evaluate_ast(v, state, tools) for v in expression.values])
     elif isinstance(expression, ast.Name):
         # Name -> pick up the value in the state
         return state[expression.id]
