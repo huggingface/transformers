@@ -2450,7 +2450,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> # compute loss
         >>> loss = model(**inputs).loss
         >>> round(loss.item(), 2)
-        19.88
+        19.68
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2724,7 +2724,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([16384])
+        torch.Size([15872])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
