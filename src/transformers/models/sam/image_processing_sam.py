@@ -398,7 +398,10 @@ class SamImageProcessor(BaseImageProcessor):
         requires_backends(self, ["torch"])
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
-
+        if isinstance(original_sizes, torch.Tensor):
+            original_sizes = original_sizes.tolist()
+        if isinstance(reshaped_input_sizes, torch.Tensor):
+            reshaped_input_sizes = reshaped_input_sizes.tolist()
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
