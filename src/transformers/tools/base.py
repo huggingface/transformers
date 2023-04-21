@@ -5,9 +5,10 @@ from ..models.auto import AutoProcessor
 
 
 class Tool:
-    '''
+    """
     Example of a super 'Tool' class that could live in huggingface_hub
-    '''
+    """
+
     def __init__(self, model) -> None:
         self.model = model
 
