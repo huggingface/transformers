@@ -928,6 +928,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
     GPT Neo model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
