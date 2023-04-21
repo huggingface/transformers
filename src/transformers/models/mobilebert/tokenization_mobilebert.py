@@ -359,7 +359,6 @@ class BasicTokenizer(object):
         # prevents treating the same character with different unicode codepoints as different characters
         unicode_normalized_text = unicodedata.normalize("NFC", text)
         orig_tokens = whitespace_tokenize(unicode_normalized_text)
-        orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
