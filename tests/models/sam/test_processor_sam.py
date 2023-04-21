@@ -88,7 +88,7 @@ class SamProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
 
         processor = SamProcessor(image_processor=image_processor)
-        dummy_masks = torch.ones((1, 3, 5, 5))
+        dummy_masks = [torch.ones((1, 3, 5, 5))]
 
         original_sizes = [[1764, 2646]]
 
@@ -102,7 +102,11 @@ class SamProcessorTest(unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         # should also work with np
-        dummy_masks = np.ones((1, 3, 5, 5))
+        dummy_masks = [np.ones((1, 3, 5, 5))]
         masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
 
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
+
+        dummy_masks = [[1, 0], [0, 1]]
+        with self.assertRaises(ValueError):
+            masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
