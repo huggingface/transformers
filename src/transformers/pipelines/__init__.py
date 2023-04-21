@@ -63,6 +63,7 @@ from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_to_text import ImageToTextPipeline
+from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -124,6 +125,7 @@ if is_torch_available():
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
+        AutoModelForMaskGeneration,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSemanticSegmentation,
@@ -384,6 +386,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
         "type": "video",
     },
+    "mask-generation": {
+        "impl": MaskGenerationPipeline,
+        "tf": (),
+        "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("facebook/sam-vit-huge", "997b15")}},
+        "type": "multimodal",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -536,6 +545,7 @@ def pipeline(
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
             - `"image-to-text"`: will return a [`ImageToTextPipeline`].
+            - `"mask-generation"`: will return a [`MaskGenerationPipeline`].
             - `"object-detection"`: will return a [`ObjectDetectionPipeline`].
             - `"question-answering"`: will return a [`QuestionAnsweringPipeline`].
             - `"summarization"`: will return a [`SummarizationPipeline`].
