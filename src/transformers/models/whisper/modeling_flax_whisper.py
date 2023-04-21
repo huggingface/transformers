@@ -851,10 +851,11 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def enable_gradient_checkpointing(self):
+        self.gradient_checkpointing = True
         self._module = self.module_class(
             config=self.config,
             dtype=self.dtype,
-            gradient_checkpointing=True,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
