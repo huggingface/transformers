@@ -37,7 +37,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    get_tf_activation,
     shape_list,
     unpack_inputs,
 )
@@ -484,12 +483,11 @@ class TFEsmIntermediate(tf.keras.layers.Layer):
             units=config.intermediate_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
-            activation=get_tf_activation("gelu"),
         )
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-
+        hidden_states = tf.nn.gelu(hidden_states)
         return hidden_states
 
 
