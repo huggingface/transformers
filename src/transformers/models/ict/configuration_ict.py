@@ -47,7 +47,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
             The input image size for training. (0 for the original size.)
         max_iteration (`float`, *optional*, defaults to 5e7):
             The maximum number of iterations to train the model.
-        residual_blocks (`int`, *optional*, defaults to 8):
+        num_residual_blocks (`int`, *optional*, defaults to 8):
             The number of residual blocks.
         l1_loss_weight (`float`, *optional*, defaults to 1.0):
             The weight of the L1 loss function.
@@ -82,7 +82,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
         batch_size=64,
         input_size=256,
         max_iteration=5e7,
-        residual_blocks=8,
+        num_residual_blocks=8,
         l1_loss_weight=1.0,
         style_loss_weight=25.0,
         content_loss_weight=0.1,
@@ -95,7 +95,7 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
         self.batch_size = batch_size
         self.input_size = input_size
         self.max_iteration = max_iteration
-        self.residual_blocks = residual_blocks
+        self.num_residual_blocks = num_residual_blocks
         self.l1_loss_weight = l1_loss_weight
         self.style_loss_weight = style_loss_weight
         self.content_loss_weight = content_loss_weight
