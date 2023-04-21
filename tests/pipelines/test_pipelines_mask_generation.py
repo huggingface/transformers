@@ -32,6 +32,12 @@ from transformers.testing_utils import (
 
 if is_vision_available():
     from PIL import Image
+else:
+
+    class Image:
+        @staticmethod
+        def open(*args, **kwargs):
+            pass
 
 
 def hashimage(image: Image) -> str:
