@@ -1776,7 +1776,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ptrs[tensor.data_ptr()].append(name)
+                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
+                ptrs[ident].append(name)
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
@@ -1785,10 +1786,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
                 if self._keys_to_ignore_on_load_missing is not None:
+                    del_names = set()
                     for name in names:
                         matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
                         if matches_pattern and name in state_dict:
-                            del state_dict[name]
+                            del_names.add(name)
+                    # This makes sure even if the pattern covers all names
+                    # that we keep at least 1 copy of the name.
+                    for name in sorted(del_names)[: len(names) - 1]:
+                        del state_dict[name]
 
                 # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
                 # If the link between tensors was done at runtime then `from_pretrained` will not get
@@ -2934,12 +2940,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        # Some tensors maybe have been already filled by another key (tied weights).
-        # TODO: Sylvain -> make this work even on meta device.
-        # existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
-        # missing_keys = [
-        #     k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
-        # ]
+        def _tensor_hash(tensor):
+            # This is better than `tensor.data_ptr()`
+            # Since A = torch.zeros((10, 10))
+            # B = A[2, :]
+            # Then A.data_ptr() != B.data_ptr()
+            # But actually the storage is still shared
+            try:
+                ptr = tensor.untyped_storage().data_ptr()
+            except AttributeError:
+                # Fallback for torch==1.10
+                try:
+                    ptr = tensor.storage().data_ptr()
+                except NotImplementedError:
+                    # Fallback for meta storage like in 2.0
+                    ptr = 0
+            return (ptr, tensor.device)
+
+        existing_ptrs = {
+            _tensor_hash(model_state_dict[k])
+            for k in loaded_keys
+            if k in model_state_dict and model_state_dict[k].device != torch.device("meta")
+        }
+        missing_keys = [
+            k for k in missing_keys if k in model_state_dict and _tensor_hash(model_state_dict[k]) not in existing_ptrs
+        ]
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:
