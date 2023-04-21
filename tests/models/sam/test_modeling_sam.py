@@ -282,13 +282,14 @@ class SamModelTester:
 
 
 @require_torch
-class SamModelTest(ModelTesterMixin, unittest.TestCase):
+class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (SamModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
