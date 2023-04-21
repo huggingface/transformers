@@ -520,6 +520,10 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
+        # This option is necessary for the ONNX export, as the try/catch in the forward
+        # is not supported by PyTorch ONNX export
+        self.disable_custom_kernels = False
+
         self._reset_parameters()
 
     def _reset_parameters(self):
