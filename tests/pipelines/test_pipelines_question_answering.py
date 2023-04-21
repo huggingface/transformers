@@ -46,7 +46,9 @@ class QAPipelineTests(unittest.TestCase):
     if model_mapping is not None:
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
     if tf_model_mapping is not None:
-        tf_model_mapping = {config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP}
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, LxmertConfig):
