@@ -63,7 +63,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_seaformer import (
             SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeaformerDecodeHead,
             SeaformerForSemanticSegmentation,
             SeaformerLayer,
             SeaformerModel,
