@@ -589,22 +589,29 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
-        if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
-            vocab_size = self.config.vocab_size
-        elif (
-            hasattr(self.config, "decoder")
-            and hasattr(self.config.decoder, "vocab_size")
-            and self.config.decoder.vocab_size is not None
-        ):
-            vocab_size = self.config.decoder.vocab_size
-        elif (
-            hasattr(self.config, "encoder")
-            and hasattr(self.config.encoder, "vocab_size")
-            and self.config.encoder.vocab_size is not None
-        ):
-            vocab_size = self.config.encoder.vocab_size
-
-        scores = jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7)
+        if output_scores:
+            if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
+                vocab_size = self.config.vocab_size
+            elif (
+                hasattr(self.config, "decoder")
+                and hasattr(self.config.decoder, "vocab_size")
+                and self.config.decoder.vocab_size is not None
+            ):
+                vocab_size = self.config.decoder.vocab_size
+            elif (
+                hasattr(self.config, "encoder")
+                and hasattr(self.config.encoder, "vocab_size")
+                and self.config.encoder.vocab_size is not None
+            ):
+                vocab_size = self.config.encoder.vocab_size
+            else:
+                raise TypeError(
+                    f"The current model class ({self.__class__.__name__}) has not a recognized "
+                    f"`vocab_size` , as it doesn't support output_scores."
+                )
+            scores = jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7)
+        else:
+            scores = None
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
@@ -641,7 +648,7 @@ class FlaxGenerationMixin:
             next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
             next_token = jnp.argmax(next_tokens_scores, axis=-1)
-            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores)
+            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores) if output_scores else None
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
