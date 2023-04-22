@@ -698,7 +698,7 @@ class SeaformerDecodeHead(SeaformerPreTrainedModel):
 
         self.config = config
 
-    def forward(self, encoder_hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         # batch_size = encoder_hidden_states[-1].shape[0]
         xx = [encoder_hidden_states[i] for i in self.in_index]
         x_detail = xx[0]
