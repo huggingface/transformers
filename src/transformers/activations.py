@@ -238,7 +238,7 @@ ACT2CLS = {
     "silu": SiLUActivation,
     "swish": SiLUActivation,
     "tanh": nn.Tanh,
-    "h_sigmoid": h_sigmoid,
+    "h_sigmoid": HSigmoidActivation,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 
