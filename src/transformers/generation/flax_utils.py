@@ -339,8 +339,8 @@ class FlaxGenerationMixin:
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         if generation_config.num_return_sequences > generation_config.num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-        
+            raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
