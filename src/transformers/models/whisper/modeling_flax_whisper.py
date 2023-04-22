@@ -390,7 +390,7 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayerCollection with MBart->Whisper
+# Adapted from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayerCollection with MBart->Whisper
 class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -542,7 +542,7 @@ class FlaxWhisperDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayerCollection with MBart->Whisper
+# Adapted from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayerCollection with MBart->Whisper
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
