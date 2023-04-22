@@ -1294,7 +1294,6 @@ class UdopStack(UdopPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # ======================================================
         # input embeddings processing
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1327,25 +1326,9 @@ class UdopStack(UdopPreTrainedModel):
 
         if pixel_values is not None:
             image_embeddings = self.embed_patches(pixel_values)
-            # image_embeddings = None
-            # if encoder_outputs is None:
-            #     print("hello world")
-            #     if image is not None:
-            #         x = self.udop.patch_embed(image)
-            #         if ids_keep is not None:
-            #             x = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.size(-1)))
-            #             pad_tokens = self.pad_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
-            #             x_padded = torch.cat([x, pad_tokens], dim=1)  # no cls token
-            #             x_padded = torch.gather(
-            #                 x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2])
-            #             )
-            #             image_embeddings = x_padded
-            #         else:
-            #             image_embeddings = x
 
         if image_embeddings is not None:
-            # ===========================
-            # combine OCR text and visual embed
+            # combine visual and OCR text embeddings
             if num_patches is None:
                 num_patches = self.config.image_size // self.config.patch_size
             inputs_embeds, bbox, attention_mask = combine_image_text_embeddings(
@@ -1365,9 +1348,6 @@ class UdopStack(UdopPreTrainedModel):
             inputs_embeds += self.cell2dembedding(bbox)
 
         batch_size, seq_length = input_shape
-
-        # ======================================================
-        # input masking/pos embed processing
 
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
