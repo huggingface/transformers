@@ -457,6 +457,7 @@ exotic_models_job = CircleCIJob(
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
         "tests/models/deta",
+        "tests/models/udop",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
