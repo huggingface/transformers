@@ -352,8 +352,8 @@ else:
             (
                 "udop",
                 (
-                    "T5Tokenizer" if is_sentencepiece_available() else None,
-                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                    "UdopTokenizer" if is_sentencepiece_available() else None,
+                    "UdopTokenizerFast" if is_tokenizers_available() else None,
                 ),
             )
             (
