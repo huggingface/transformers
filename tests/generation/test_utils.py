@@ -1517,8 +1517,9 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    def test_assisted_decoding_matches_sample(self):
-        # When `assisted_keep_proba` is `1.0`, assisted decoding should be equivalent to sampling.
+    def test_assisted_decoding_sample(self):
+        # Seeded assisted decoding will not match sample for the same seed, as there are >1 sampling steps per output
+        # token. As such, this test only checks that the output format is correct.
 
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
@@ -1541,19 +1542,6 @@ class GenerationTesterMixin:
             config.use_cache = True
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
-            torch.manual_seed(0)
-            output_sample = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_beams=1,
-                do_sample=True,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            torch.manual_seed(0)
             output_assisted = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
@@ -1561,19 +1549,13 @@ class GenerationTesterMixin:
                 num_beams=1,
                 do_sample=True,
                 assistant_model=model,  # triggers assisted decoding
-                assisted_keep_proba=1.0,  # effectivelly forces sampling at each step = sampling
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
             )
 
-            # if the model does not have internal sampling operations, the output sequences must match
-            if not any(model_name in model_class.__name__.lower() for model_name in ["switchtransformers"]):
-                self.assertListEqual(output_sample.sequences.tolist(), output_assisted.sequences.tolist())
-
-            for output in (output_sample, output_assisted):
-                self._check_outputs(output, input_ids, model.config, use_cache=True)
+            self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""

@@ -361,11 +361,10 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, the `assisted_keep_proba` argument will balance speed with
-pure sampling behavior. The greedily decoded candidate tokens whose main model's predicted probability are below
-this threshold are discarded, which force an anticipated sampling step. If `assisted_keep_proba` is set to 1.0,
-assisted decoding degenerates into a slow multinomial sampling. Conversely, if `assisted_keep_proba` is set to 0.0,
-the outcome will approximate an accelerated greedy decoding, with a few sampling steps in between.
+When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
+just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
+
+<!-- TODO: link the blog post again to explain why the tradeoff exists -->
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -379,7 +378,7 @@ the outcome will approximate an accelerated greedy decoding, with a few sampling
 
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
->>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, assisted_keep_proba=0.1)
+>>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are in a room watching television. They are both on the same channel. Alice']
+["Alice and Bob are sitting on the sofa. Alice says, 'I'm going to my room"]
 ```

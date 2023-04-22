@@ -1487,7 +1487,6 @@ class GenerationMixin:
             return self.assisted_decoding(
                 input_ids,
                 assistant_model=assistant_model,
-                assisted_keep_proba=generation_config.assisted_keep_proba,
                 do_sample=generation_config.do_sample,
                 logits_processor=logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
@@ -4064,7 +4063,6 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         do_sample: bool = False,
-        assisted_keep_proba: Optional[float] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -4101,11 +4099,6 @@ class GenerationMixin:
                 assistant model should be much smaller.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
-            assisted_keep_proba (`float`, *optional*):
-                When `do_sample` is true, this controls the threshold at which the model will resample candidate
-                tokens. When the model's predicted probability for a candidate token is below this threshold, the
-                candidate token is invalidated and a sampling step. Decreasing this value will aproximate the decoding
-                process to greedy search, but it will be faster.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -4188,9 +4181,6 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        assisted_keep_proba = (
-            assisted_keep_proba if assisted_keep_proba is not None else self.generation_config.assisted_keep_proba
-        )
         if eos_token_id is not None and pad_token_id is None:
             raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
         if isinstance(eos_token_id, int):
@@ -4346,21 +4336,19 @@ class GenerationMixin:
                 for i in range(candidate_length):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
 
-            # 3. Obtain the argmax from the original model logits. If `do_sample` is True, only logits with high enough
-            # probability are valid (if the most likely token has a probability below `assisted_keep_proba`, we
-            # invalidate the candidate token)
+            # 3. Obtain the next tokens from the original model logits. If `do_sample` is True, use multinomial
+            # sampling, otherwise use argmax.
             if do_sample:
                 probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
-                max_probs, max_logits = probs[:, :-1, :].topk(1, dim=-1)
-                max_logits[max_probs < assisted_keep_proba] = -1  # invalidate candidate tokens with low proba
-                max_logits = max_logits.squeeze(-1)
+                sampled_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                next_tokens = sampled_tokens[:, :-1]
             else:
-                max_logits = new_logits[:, -candidate_length - 1 : -1, :].argmax(dim=-1)
+                next_tokens = new_logits[:, -candidate_length - 1 : -1, :].argmax(dim=-1)
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
             candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
-            n_matches = ((~(candidate_new_tokens == max_logits)).cumsum(dim=-1) < 1).sum()
+            n_matches = ((~(candidate_new_tokens == next_tokens)).cumsum(dim=-1) < 1).sum()
 
             # 5. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
             # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
@@ -4390,11 +4378,11 @@ class GenerationMixin:
             next_token_scores = new_logits[:, n_matches, :]
 
             # 7. Use the set of logits after the last matching assistant token to obtain the next token. Note that,
-            # because of this step, assisted greedy search reduces to a normal greedy search/sample if there is no
+            # because of this step, assisted generation search reduces to a normal greedy search/sample if there is no
             # match.
             if do_sample:
                 probs = probs[:, n_matches, :]
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                next_tokens = sampled_tokens[:, n_matches]
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
