@@ -45,7 +45,7 @@ class UdopProcessor(ProcessorMixin):
     image_processor_class = "UdopImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+    def __init__(self, image_processor=None, tokenizer=None):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -168,6 +168,7 @@ class UdopProcessor(ProcessorMixin):
 
             return encoded_inputs
 
+    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.get_overflowing_images
     def get_overflowing_images(self, images, overflow_to_sample_mapping):
         # in case there's an overflow, ensure each `input_ids` sample is mapped to its corresponding image
         images_with_overflow = []
@@ -182,6 +183,7 @@ class UdopProcessor(ProcessorMixin):
 
         return images_with_overflow
 
+    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.batch_decode
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -189,6 +191,7 @@ class UdopProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.decode
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
