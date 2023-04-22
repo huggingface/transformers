@@ -231,7 +231,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
-            input_feat_extract = image_processor(images[0], return_tensors="pt")
+            input_image_processor = image_processor(images[0], return_tensors="pt")
             input_processor = processor(images[0], return_tensors="pt")
 
             # verify keys
@@ -241,19 +241,19 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify pixel_values
             self.assertTrue(
-                torch.allclose(input_feat_extract["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+                torch.allclose(input_image_processor["pixel_values"], input_processor["pixel_values"], atol=1e-2)
             )
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            # expected_decoding = "<s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
+            expected_decoding = "11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
-            # decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
-            # self.assertSequenceEqual(decoding, expected_decoding)
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
-            input_feat_extract = image_processor(images, return_tensors="pt")
+            input_image_processor = image_processor(images, return_tensors="pt")
             input_processor = processor(images, padding=True, return_tensors="pt")
 
             # verify keys
@@ -263,16 +263,16 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify pixel_values
             self.assertTrue(
-                torch.allclose(input_feat_extract["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+                torch.allclose(input_image_processor["pixel_values"], input_processor["pixel_values"], atol=1e-2)
             )
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            # expected_decoding = "<s> 7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
+            expected_decoding = "7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
             # fmt: on
-            # decoding = processor.decode(input_processor.input_ids[1].tolist())
-            # self.assertSequenceEqual(decoding, expected_decoding)
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
 
     @slow
     def test_processor_case_2(self):
@@ -416,10 +416,10 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            # expected_decoding = "<s> What's his name?</s></s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
+            expected_decoding = "What's his name?</s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
-            # decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
-            # self.assertSequenceEqual(decoding, expected_decoding)
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
             questions = ["How old is he?", "what's the time"]
@@ -434,9 +434,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            # expected_decoding = "<s> what's the time</s></s> 7 ITC Limited REPORT AND ACCOUNTS 2013</s>"
-            # decoding = processor.decode(input_processor.input_ids[1].tolist())
-            # self.assertSequenceEqual(decoding, expected_decoding)
+            expected_decoding = "what's the time</s> 7 ITC Limited REPORT AND ACCOUNTS 2013 I</s>"
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
             # fmt: off
