@@ -14,13 +14,12 @@
 # limitations under the License.
 """Image processor class for Mask-RCNN."""
 
-import pathlib
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, normalize, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -28,10 +27,11 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
     valid_coco_detection_annotations,
+    valid_images,
 )
 from ...nms import multiclass_nms
 from ...utils import ExplicitEnum, TensorType, is_torch_available, logging
@@ -61,6 +61,30 @@ BYTES_PER_FLOAT = 4
 # TODO: This memory limit may be too much or too little. It would be better to
 # determine it based on available resources.
 GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
+
+
+# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
+def max_across_indices(values: Iterable[Any]) -> List[Any]:
+    """
+    Return the maximum value across all indices of an iterable of values.
+    """
+    return [max(values_i) for values_i in zip(*values)]
+
+
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
+def get_max_height_width(images: List[np.ndarray]) -> List[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+    input_channel_dimension = infer_channel_dimension_format(images[0])
+
+    if input_channel_dimension == ChannelDimension.FIRST:
+        _, max_height, max_width = max_across_indices([img.shape for img in images])
+    elif input_channel_dimension == ChannelDimension.LAST:
+        max_height, max_width, _ = max_across_indices([img.shape for img in images])
+    else:
+        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
+    return (max_height, max_width)
 
 
 # Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
@@ -348,6 +372,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
+        do_pad: bool = True,
         test_cfg={
             "score_thr": 0.05,
             "nms": {"type": "nms", "iou_threshold": 0.5},
@@ -370,6 +395,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.do_pad = do_pad
         self.test_cfg = test_cfg
         self.num_classes = num_classes
         self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
@@ -396,7 +422,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
-    
+
     def resize(
         self,
         image: np.ndarray,
@@ -455,7 +481,62 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         to this number.
         """
         return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
-    
+
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    def _pad_image(
+        self,
+        image: np.ndarray,
+        output_size: Tuple[int, int],
+        constant_values: Union[float, Iterable[float]] = 0,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pad an image with zeros to the given size.
+        """
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = output_size
+
+        pad_bottom = output_height - input_height
+        pad_right = output_width - input_width
+        padding = ((0, pad_bottom), (0, pad_right))
+        padded_image = pad(
+            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+        )
+        return padded_image
+
+    def pad(
+        self,
+        images: List[np.ndarray],
+        constant_values: Union[float, Iterable[float]] = 0,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
+        in the batch and optionally returns their corresponding pixel mask.
+
+        Args:
+            image (`np.ndarray`):
+                Image to pad.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
+            input_channel_dimension (`ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        pad_size = get_max_height_width(images)
+
+        padded_images = [
+            self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format)
+            for image in images
+        ]
+        data = {"pixel_values": padded_images}
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
     def preprocess(
         self,
         images: ImageInput,
@@ -469,6 +550,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: Optional[bool] = None,
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
@@ -489,6 +571,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
+        do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
 
         if do_resize is not None and size is None:
@@ -514,7 +597,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         format = AnnotionFormat(format)
         if annotations is not None:
             if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
@@ -537,7 +620,10 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             prepared_annotations = []
             for image, target in zip(images, annotations):
                 target = self.prepare_annotation(
-                    image, target, format, return_segmentation_masks=return_segmentation_masks,
+                    image,
+                    target,
+                    format,
+                    return_segmentation_masks=return_segmentation_masks,
                 )
                 prepared_annotations.append(target)
             annotations = prepared_annotations
@@ -564,13 +650,16 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [self.normalize(image, image_mean, image_std) for image in images]
-            if annotations is not None:
-                raise NotImplementedError("To do")
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
-        image_shapes = [image.shape for image in images]
-        data = {"pixel_values": images}
+        if do_pad:
+            # Pads images up to the largest image in the batch
+            # TODO check img_metas when padding is activated
+            data = self.pad(images, data_format=data_format)
+        else:
+            images = [to_channel_dimension_format(image, data_format) for image in images]
+            data = {"pixel_values": images}
 
+        image_shapes = [image.shape for image in images]  
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         # add metadata
@@ -579,7 +668,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         encoded_inputs["img_metas"] = img_metas
 
         if annotations is not None:
-            raise NotImplementedError("To do")
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+            ]
 
         return encoded_inputs
 
