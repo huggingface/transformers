@@ -367,9 +367,6 @@ class UdopModelIntegrationTests(unittest.TestCase):
         prompt = "Question answering. In which year is the report made?"
         encoding = processor(images=self.image, text=prompt, return_tensors="pt")
 
-        # TODO fix this
-        encoding["bbox"] = encoding.bbox.float()
-
         predicted_ids = model.generate(**encoding)
 
         predicted_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]

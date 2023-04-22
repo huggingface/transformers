@@ -43,7 +43,8 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 logger = logging.getLogger(__name__)
 
 UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/udop-large",
+    # TODO update organization
+    "nielsr/udop-large",
     # See all UDOP models at https://huggingface.co/models?filter=udop
 ]
 
@@ -243,6 +244,8 @@ def combine_image_text_embeddings(
         * sequence_length
     )
     ocr_points = ocr_points_x + ocr_points_y
+    # make sure bounding boxes are of type float to calculate means
+    bbox = bbox.float()
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
         image_embeddings, 1, ocr_points.unsqueeze(-1).repeat(1, 1, image_embeddings.size(-1))
@@ -1561,8 +1564,8 @@ class UdopModel(UdopPreTrainedModel):
         >>> from PIL import Image
         >>> import torch
 
-        >>> tokenizer = AutoProcessor.from_pretrained("microsoft/udop-large")
-        >>> model = UdopModel.from_pretrained("microsoft/udop-large")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large")
+        >>> model = UdopModel.from_pretrained("nielsr/udop-large")
 
         >>> # load document image
         >>> filepath = hf_hub_download(
@@ -1578,6 +1581,8 @@ class UdopModel(UdopPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 1, 1024]
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1741,20 +1746,12 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         ... )
         >>> image = Image.open(filepath).convert("RGB")
 
-        >>> # training
-        >>> image = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
-
-        >>> labels = processor("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
-        >>> outputs = model(input_ids=input_ids, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-
         >>> # inference
         >>> prompt = "Question answering. In which year is the report made?"
-        >>> encoding = processor(images=self.image, text=prompt, return_tensors="pt")
+        >>> encoding = processor(images=image, text=prompt, return_tensors="pt")
         >>> predicted_ids = model.generate(**encoding)
-        >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
+        >>> print(processor.batch_decode(predicted_ids, skip_special_tokens=True)[0])
+        2013
         ```"""
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache

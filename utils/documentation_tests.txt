@@ -425,6 +425,7 @@ src/transformers/models/trocr/processing_trocr.py
 src/transformers/models/tvlt/feature_extraction_tvlt.py
 src/transformers/models/tvlt/image_processing_tvlt.py
 src/transformers/models/tvlt/processing_tvlt.py
+src/transformers/models/udop/modeling_udop.py
 src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
