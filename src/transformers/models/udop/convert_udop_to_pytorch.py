@@ -117,11 +117,6 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     # input_ids, bbox, image = prepare_dummy_inputs(tokenizer, image_processor)
     prompt = "Question answering. In which year is the report made?"
     encoding = processor(images=get_image(), text=prompt, return_tensors="pt")
-    for k, v in encoding.items():
-        print(k, v.shape)
-
-    for id, box in zip(encoding.input_ids.squeeze()[:20], encoding.bbox.squeeze().tolist()[:20]):
-        print(tokenizer.decode(id), box)
 
     input_ids = encoding.input_ids
     bbox = encoding.bbox.float()
