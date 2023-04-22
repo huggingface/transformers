@@ -1105,7 +1105,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
                 rp_bucket[idx, num_prefix_row:, :num_prefix_row] = self.relative_attention_num_buckets + 1
 
         values: Tensor = self.relative_attention_bias(rp_bucket)
-        assert values.dim() == 4, "Wrong dimension of values tensor"
+        if values.dim() != 4:
+            raise ValueError("Wrong dimension of values tensor")
         values = values.permute([0, 3, 1, 2])
 
         return values
@@ -1120,7 +1121,8 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
     def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
-        assert self.scaling_factor == 1, "No need to scale 1d features"
+        if self.scaling_factor != 1:
+            raise ValueError("No need to scale 1d features")
         relative_position = self.get_relative_position(
             torch.arange(attention_mask.size(1), dtype=torch.long, device=attention_mask.device)[None, :]
         )
@@ -1137,9 +1139,11 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
     def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
-        assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
+        if not self.scaling_factor > 1.0:
+            raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
+        if bbox is None:
+            raise ValueError("Bbox is required for horizontal relative position bias")
         # get x positions of left point of bbox
-        assert bbox is not None
         horizontal_position: Tensor = bbox[:, :, [0, 2]].mean(dim=-1)
 
         return self.get_relative_position(horizontal_position)
@@ -1154,9 +1158,11 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
     def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
-        assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
+        if not self.scaling_factor > 1.0:
+            raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
+        if bbox is None:
+            raise ValueError("Bbox is required for vertical relative position bias")
         # get y positions of middle of bbox
-        assert bbox is not None
         vertical_position: Tensor = bbox[:, :, [1, 3]].mean(dim=-1)
 
         return self.get_relative_position(vertical_position)
@@ -1199,15 +1205,13 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
     """
     bias_list = []
     if hasattr(config, "relative_bias_args"):
-        assert isinstance(config.relative_bias_args, list)
         for bias_kwargs_org in config.relative_bias_args:
             bias_kwargs = deepcopy(bias_kwargs_org)
             bias_type = bias_kwargs.pop("type")
             model_num_heads = config.num_heads if hasattr(config, "num_heads") else config.num_attention_heads
             if "num_heads" in bias_kwargs:
-                assert (
-                    bias_kwargs["num_heads"] == model_num_heads
-                ), "Number of heads must match num of heads in the model"
+                if bias_kwargs["num_heads"] != model_num_heads:
+                    raise ValueError("Number of heads must match num of heads in the model")
             else:
                 bias_kwargs["num_heads"] = model_num_heads
             bias_list.append(BIAS_CLASSES[bias_type](**bias_kwargs))  # type: ignore
@@ -1321,7 +1325,8 @@ class UdopStack(UdopPreTrainedModel):
             raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            if self.embed_tokens is None:
+                raise ValueError("You have to intialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
@@ -1723,22 +1728,31 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, UdopForConditionalGeneration
+        >>> from huggingface_hub import hf_hub_download
+        >>> from PIL import Image
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large")
-        >>> model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large")
+        >>> # load model and processor
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large")
+        >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-large")
+
+        >>> # load image
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
 
         >>> # training
-        >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
+        >>> image = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
+
         >>> labels = processor("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
         >>> outputs = model(input_ids=input_ids, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
 
         >>> # inference
-        >>> input_ids = tokenizer(
-        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model.generate(input_ids)
+        >>> prompt = "Question answering. In which year is the report made?"
+        >>> encoding = processor(images=self.image, text=prompt, return_tensors="pt")
+        >>> predicted_ids = model.generate(**encoding)
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""

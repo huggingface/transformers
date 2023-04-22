@@ -124,6 +124,8 @@ class UdopConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        if not isinstance(relative_bias_args, list):
+            raise ValueError("`relative_bias_args` should be a list of dictionaries.")
         self.relative_bias_args = relative_bias_args
 
         act_info = self.feed_forward_proj.split("-")
