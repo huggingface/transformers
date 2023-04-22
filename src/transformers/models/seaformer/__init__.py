@@ -40,7 +40,6 @@ else:
     _import_structure["modeling_seaformer"] = [
         "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SeaformerForSemanticSegmentation",
-        "SeaformerLayer",
         "SeaformerModel",
         "SeaformerPreTrainedModel",
     ]
