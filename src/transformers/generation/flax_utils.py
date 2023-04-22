@@ -837,6 +837,7 @@ class FlaxGenerationMixin:
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
+        num_return_sequences = self.generation_config.num_return_sequences
 
         batch_size, num_beams, cur_len = input_ids.shape
 
