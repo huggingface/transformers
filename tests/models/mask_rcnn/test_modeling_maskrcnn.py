@@ -261,7 +261,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         model = MaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
         image = prepare_img()
-        pixel_values = processor(image, return_tensors="pt").to(torch_device).pixel_values
+        pixel_values = processor(image, return_tensors="pt").pixel_values.to(torch_device)
 
         img_metas = [
             {

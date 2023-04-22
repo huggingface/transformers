@@ -4972,12 +4972,6 @@ if TYPE_CHECKING:
             CpmAntModel,
             CpmAntPreTrainedModel,
         )
-        from .models.convnext_maskrcnn import (
-            CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNextMaskRCNNForObjectDetection,
-            ConvNextMaskRCNNModel,
-            ConvNextMaskRCNNPreTrainedModel,
-        )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             CTRLForSequenceClassification,
