@@ -716,7 +716,9 @@ class FlaxWhisperDecoder(nn.Module):
         self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.d_model, dtype=self.dtype)
         self.embed_positions = nn.Embed(self.config.max_target_positions, self.config.d_model, dtype=self.dtype)
 
-        self.layers = FlaxWhisperDecoderLayerCollection(self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.layers = FlaxWhisperDecoderLayerCollection(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
@@ -778,8 +780,12 @@ class FlaxWhisperModule(nn.Module):
     gradient_checkpointing: bool = False
 
     def setup(self) -> None:
-        self.encoder = FlaxWhisperEncoder(self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
-        self.decoder = FlaxWhisperDecoder(self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.encoder = FlaxWhisperEncoder(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
+        self.decoder = FlaxWhisperDecoder(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
     def __call__(
         self,
@@ -1173,7 +1179,9 @@ class FlaxWhisperForConditionalGenerationModule(nn.Module):
     gradient_checkpointing: bool = False
 
     def setup(self) -> None:
-        self.model = FlaxWhisperModule(config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.model = FlaxWhisperModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
