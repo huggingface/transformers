@@ -113,18 +113,17 @@ class VocabGraphConvolution(nn.Module):
     ):
         super().__init__()
         self._check_wgraphs(wgraphs)
-        self.wgraphs = wgraphs  # List[torch.sparse.FloatTensor]
-        self.gvocab_order_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inversion_arrays(
+        self.wgraphs = nn.ParameterList(wgraphs)
+        self.gvocab_order_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
             wgraph_id_to_tokenizer_id_maps
         )
 
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
-        # self.W_vh_list: List[torch.Tensor] = []
-        for i, g in enumerate(self.wgraphs):
-            setattr(self, "W%d_vh" % i, nn.Parameter(torch.randn(g.shape[0], hid_dim)))
-            # self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
+        self.W_vh_list = nn.ParameterList()
+        for g in self.wgraphs:
+            self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
 
         self.fc_hg = nn.Linear(hid_dim, out_dim)
         self.activation = get_activation(activation) if activation else None
@@ -152,19 +151,25 @@ class VocabGraphConvolution(nn.Module):
                 # stdv = 1. / math.sqrt(p.size(1))
                 # init.uniform_(p, -stdv, stdv)
 
-    def _prepare_inversion_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
+    def _prepare_inverted_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
         assert all([list(m.keys())[-1] == len(m) - 1 for m in wgraph_id_to_tokenizer_id_maps])
         # self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
         # self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = tokenizer_id_to_wgraph_id_arrays
         # self.max_tokenizer_id_for_wgraph_list = [len(m) for m in self.tokenizer_id_to_wgraph_id_arrays]
-        gvocab_order_tokenizer_id_arrays: List[torch.LongTensor] = [
-            torch.LongTensor(list(m.values())) for m in wgraph_id_to_tokenizer_id_maps
-        ]
+        gvocab_order_tokenizer_id_arrays = nn.ParameterList(
+            [
+                nn.Parameter(torch.LongTensor(list(m.values())), requires_grad=False)
+                for m in wgraph_id_to_tokenizer_id_maps
+            ]
+        )
 
-        tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = [
-            torch.zeros(max(m.values()) + 1, dtype=torch.long) for m in wgraph_id_to_tokenizer_id_maps
-        ]
+        tokenizer_id_to_wgraph_id_arrays = nn.ParameterList(
+            [
+                nn.Parameter(torch.zeros(max(m.values()) + 1, dtype=torch.long), requires_grad=False)
+                for m in wgraph_id_to_tokenizer_id_maps
+            ]
+        )
         for m, t in zip(wgraph_id_to_tokenizer_id_maps, tokenizer_id_to_wgraph_id_arrays):
             for graph_id, tok_id in m.items():
                 t[tok_id] = graph_id
@@ -239,18 +244,15 @@ class VocabGraphConvolution(nn.Module):
 
         # G_embedding=(act(V1*A1_sub*W1_vh)+act(V2*A2_sub*W2_vh)）*W_hg
         fused_H = torch.zeros((batch_size, word_emb_dim, self.hid_dim), device=device)
-        for i, (gv_ids, g, gx_ids) in enumerate(
-            zip(  # , position_in_gvocab_ev
-                self.gvocab_order_tokenizer_id_arrays,
-                self.wgraphs,
-                gx_ids_list,
-                # self.W_vh_list,
-                # positon_embeddings_in_gvocab_order_list,
-            )
+        for gv_ids, g, gx_ids, W_vh in zip(  # , position_in_gvocab_ev
+            self.gvocab_order_tokenizer_id_arrays,
+            self.wgraphs,
+            gx_ids_list,
+            self.W_vh_list,
+            # positon_embeddings_in_gvocab_order_list,
         ):
             # A1_sub*W1_vh
             sub_wgraphs = self.get_subgraphs(g, gx_ids)
-            W_vh = getattr(self, "W%d_vh" % i)
             H_vh = torch.bmm(sub_wgraphs, W_vh.unsqueeze(0).expand(batch_size, *W_vh.shape))
 
             # V1*A1_sub*W1_vh
