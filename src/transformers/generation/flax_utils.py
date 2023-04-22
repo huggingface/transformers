@@ -58,9 +58,9 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
     Args:
-        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             The generated sequences.
-        scores (`jnp.ndarray` of shape `(batch_size, max_length, vocab_size)`):
+        scores (`jnp.ndarray` of shape `(batch_size, sequence_length, vocab_size)`):
             The scores (log probabilities) of the generated tokens.
     """
 
@@ -75,7 +75,7 @@ class FlaxSampleOutput(ModelOutput):
 
 
     Args:
-        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             The generated sequences.
     """
 
@@ -89,14 +89,14 @@ class FlaxBeamSearchOutput(ModelOutput):
 
 
     Args:
-        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, num_return_sequences, sequence_length)`):
             The generated sequences.
-        scores (`jnp.ndarray` of shape `(batch_size, num_beams)`):
+        sequences_scores (`jnp.ndarray` of shape `(batch_size, num_return_sequences)`):
             The scores (log probabilities) of the generated sequences.
     """
 
     sequences: jnp.ndarray = None
-    scores: jnp.ndarray = None
+    sequences_scores: jnp.ndarray = None
 
 
 @flax.struct.dataclass
@@ -338,6 +338,9 @@ class FlaxGenerationMixin:
         # set init values
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
+        if generation_config.num_return_sequences > generation_config.num_beams:
+                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+        
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
@@ -1037,13 +1040,7 @@ class FlaxGenerationMixin:
         sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
-        if output_scores:
-            # take all beam of each batch
-            sequences = sequences[:, :]
-            scores = scores[:, :]
-        else:
-            # take best beam for each batch
-            sequences = sequences[:, 0]
-            scores = scores[:, 0]
+        sequences = sequences[:, 0:num_return_sequences]
+        sequences_scores = scores[:, 0:num_return_sequences] if output_scores else None
 
-        return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
+        return FlaxBeamSearchOutput(sequences=sequences, sequences_scores=sequences_scores)
