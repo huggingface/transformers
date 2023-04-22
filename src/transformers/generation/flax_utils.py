@@ -60,6 +60,8 @@ class FlaxGreedySearchOutput(ModelOutput):
     Args:
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
+        scores (`jnp.ndarray` of shape `(batch_size, max_length, vocab_size)`):
+            The scores (log probabilities) of the generated tokens.
     """
 
     sequences: jnp.ndarray = None
@@ -89,7 +91,7 @@ class FlaxBeamSearchOutput(ModelOutput):
     Args:
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
-        scores (`jnp.ndarray` of shape `(batch_size,)`):
+        scores (`jnp.ndarray` of shape `(batch_size, num_beams)`):
             The scores (log probabilities) of the generated sequences.
     """
 
