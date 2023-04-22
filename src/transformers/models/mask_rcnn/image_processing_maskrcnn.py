@@ -15,7 +15,7 @@
 """Image processor class for Mask-RCNN."""
 
 import pathlib
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,6 +31,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    valid_coco_detection_annotations,
 )
 from ...nms import multiclass_nms
 from ...utils import ExplicitEnum, TensorType, is_torch_available, logging
@@ -53,10 +54,153 @@ class AnnotionFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
+SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION,)
+
+
 BYTES_PER_FLOAT = 4
 # TODO: This memory limit may be too much or too little. It would be better to
 # determine it based on available resources.
 GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
+
+
+# Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
+def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
+    """
+    Convert a COCO polygon annotation to a mask.
+
+    Args:
+        segmentations (`List[List[float]]`):
+            List of polygons, each polygon represented by a list of x-y coordinates.
+        height (`int`):
+            Height of the mask.
+        width (`int`):
+            Width of the mask.
+    """
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError:
+        raise ImportError("Pycocotools is not installed in your environment.")
+
+    masks = []
+    for polygons in segmentations:
+        rles = coco_mask.frPyObjects(polygons, height, width)
+        mask = coco_mask.decode(rles)
+        if len(mask.shape) < 3:
+            mask = mask[..., None]
+        mask = np.asarray(mask, dtype=np.uint8)
+        mask = np.any(mask, axis=2)
+        masks.append(mask)
+    if masks:
+        masks = np.stack(masks, axis=0)
+    else:
+        masks = np.zeros((0, height, width), dtype=np.uint8)
+
+    return masks
+
+
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
+def prepare_coco_detection_annotation(image, target, return_segmentation_masks: bool = False):
+    """
+    Convert the target in COCO format into the format expected by DETR.
+    """
+    image_height, image_width = get_image_size(image)
+
+    image_id = target["image_id"]
+    image_id = np.asarray([image_id], dtype=np.int64)
+
+    # Get all COCO annotations for the given image.
+    annotations = target["annotations"]
+    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
+
+    classes = [obj["category_id"] for obj in annotations]
+    classes = np.asarray(classes, dtype=np.int64)
+
+    # for conversion to coco api
+    area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
+    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=np.int64)
+
+    boxes = [obj["bbox"] for obj in annotations]
+    # guard against no boxes via resizing
+    boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
+    boxes[:, 2:] += boxes[:, :2]
+    boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
+    boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
+
+    keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+
+    new_target = {}
+    new_target["image_id"] = image_id
+    new_target["class_labels"] = classes[keep]
+    new_target["boxes"] = boxes[keep]
+    new_target["area"] = area[keep]
+    new_target["iscrowd"] = iscrowd[keep]
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
+
+    if annotations and "keypoints" in annotations[0]:
+        keypoints = [obj["keypoints"] for obj in annotations]
+        keypoints = np.asarray(keypoints, dtype=np.float32)
+        num_keypoints = keypoints.shape[0]
+        keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
+        new_target["keypoints"] = keypoints[keep]
+
+    if return_segmentation_masks:
+        segmentation_masks = [obj["segmentation"] for obj in annotations]
+        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width)
+        new_target["masks"] = masks[keep]
+
+    return new_target
+
+
+# Copied from transformers.models.detr.image_processing_detr.resize_annotation
+def resize_annotation(
+    annotation: Dict[str, Any],
+    orig_size: Tuple[int, int],
+    target_size: Tuple[int, int],
+    threshold: float = 0.5,
+    resample: PILImageResampling = PILImageResampling.NEAREST,
+):
+    """
+    Resizes an annotation to a target size.
+
+    Args:
+        annotation (`Dict[str, Any]`):
+            The annotation dictionary.
+        orig_size (`Tuple[int, int]`):
+            The original size of the input image.
+        target_size (`Tuple[int, int]`):
+            The target size of the image, as returned by the preprocessing `resize` step.
+        threshold (`float`, *optional*, defaults to 0.5):
+            The threshold used to binarize the segmentation masks.
+        resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
+            The resampling filter to use when resizing the masks.
+    """
+    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
+    ratio_height, ratio_width = ratios
+
+    new_annotation = {}
+    new_annotation["size"] = target_size
+
+    for key, value in annotation.items():
+        if key == "boxes":
+            boxes = value
+            scaled_boxes = boxes * np.asarray([ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32)
+            new_annotation["boxes"] = scaled_boxes
+        elif key == "area":
+            area = value
+            scaled_area = area * (ratio_width * ratio_height)
+            new_annotation["area"] = scaled_area
+        elif key == "masks":
+            masks = value[:, None]
+            masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
+            masks = masks.astype(np.float32)
+            masks = masks[:, 0] > threshold
+            new_annotation["masks"] = masks
+        elif key == "size":
+            new_annotation["size"] = target_size
+        else:
+            new_annotation[key] = value
+
+    return new_annotation
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -195,6 +339,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        format: Union[str, AnnotionFormat] = AnnotionFormat.COCO_DETECTION,
         do_resize: bool = True,
         size: Dict[str, int] = {"shortest_edge": 800, "longest_edge": 1333},
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -216,6 +361,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
     ):
         super().__init__(**kwargs)
 
+        self.format = format
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -232,6 +378,25 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         # TODO remove this attribute
         self.class_agnostic = False
 
+    def prepare_annotation(
+        self,
+        image: np.ndarray,
+        target: Dict,
+        format: Optional[AnnotionFormat] = None,
+        return_segmentation_masks: bool = None,
+    ) -> Dict:
+        """
+        Prepare an annotation for feeding into DETR model.
+        """
+        format = format if format is not None else self.format
+
+        if format == AnnotionFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            target = prepare_coco_detection_annotation(image, target, return_segmentation_masks)
+        else:
+            raise ValueError(f"Format {format} is not supported.")
+        return target
+    
     def resize(
         self,
         image: np.ndarray,
@@ -277,12 +442,25 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize_annotation
+    def resize_annotation(
+        self,
+        annotation,
+        orig_size,
+        size,
+        resample: PILImageResampling = PILImageResampling.NEAREST,
+    ) -> Dict:
+        """
+        Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
+        to this number.
+        """
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
+    
     def preprocess(
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample=None,  # PILImageResampling
@@ -294,7 +472,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -312,6 +489,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
+        format = self.format if format is None else format
 
         if do_resize is not None and size is None:
             raise ValueError("Size and max_size must be specified if do_resize is True.")
@@ -323,27 +501,63 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
         images = make_list_of_images(images)
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
+
+        if annotations is not None and len(images) != len(annotations):
+            raise ValueError(
+                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
+            )
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
+        
+        format = AnnotionFormat(format)
         if annotations is not None:
-            raise NotImplementedError("To do")
+            if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
+                raise ValueError(
+                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts"
+                    "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
+                    "being a list of annotations in the COCO format."
+                )
+            elif format not in SUPPORTED_ANNOTATION_FORMATS:
+                raise ValueError(
+                    f"Unsupported annotation format: {format} must be one of {SUPPORTED_ANNOTATION_FORMATS}"
+                )
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
         image_shapes = [image.shape for image in images]
 
+        # prepare (COCO annotations as a list of Dict -> target as a single Dict per image)
+        if annotations is not None:
+            prepared_annotations = []
+            for image, target in zip(images, annotations):
+                target = self.prepare_annotation(
+                    image, target, format, return_segmentation_masks=return_segmentation_masks,
+                )
+                prepared_annotations.append(target)
+            annotations = prepared_annotations
+            del prepared_annotations
+
         # transformations
         if do_resize:
             if annotations is not None:
-                raise NotImplementedError("To do")
+                resized_images, resized_annotations = [], []
+                for image, target in zip(images, annotations):
+                    orig_size = get_image_size(image)
+                    resized_image = self.resize(image, size=size, resample=resample)
+                    resized_annotation = self.resize_annotation(target, orig_size, get_image_size(resized_image))
+                    resized_images.append(resized_image)
+                    resized_annotations.append(resized_annotation)
+                images = resized_images
+                annotations = resized_annotations
+                del resized_images, resized_annotations
             else:
                 images = [self.resize(image, size=size, resample=resample) for image in images]
-                image_shapes = [image.shape for image in images]
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor) for image in images]
@@ -354,6 +568,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 raise NotImplementedError("To do")
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
+        image_shapes = [image.shape for image in images]
         data = {"pixel_values": images}
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
