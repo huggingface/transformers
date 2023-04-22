@@ -2689,7 +2689,6 @@ class MaskRCNNRoIHead(nn.Module):
         return rois, proposals, logits, pred_boxes
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->MaskRCNN,convnext->convnext_maskrcnn
 class MaskRCNNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2697,7 +2696,6 @@ class MaskRCNNPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MaskRCNNConfig
-    base_model_prefix = "maskrcnn"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 

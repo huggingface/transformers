@@ -4274,6 +4274,30 @@ class Mask2FormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MaskRCNNForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaskRCNNModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaskRCNNPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
