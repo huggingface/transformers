@@ -236,6 +236,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         vocab_file,
         eos_token="</s>",
         unk_token="<unk>",
+        sep_token="</s>",
         pad_token="<pad>",
         sep_token_box=[1000, 1000, 1000, 1000],
         pad_token_box=[0, 0, 0, 0],
@@ -272,6 +273,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
+            sep_token=sep_token,
             pad_token=pad_token,
             sep_token_box=sep_token_box,
             pad_token_box=pad_token_box,
