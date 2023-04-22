@@ -1370,11 +1370,6 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         else:
             decoder_input_length = 1
 
-        if kwargs is not None and "output_scores" in kwargs:
-            generation_config.output_scores = kwargs["output_scores"]
-        else:
-            generation_config.output_scores = False
-
         if kwargs is not None and "num_beams" in kwargs:
             generation_config.num_beams = kwargs["num_beams"]
         else:
