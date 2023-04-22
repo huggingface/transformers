@@ -191,6 +191,10 @@ class TokenClassificationPipeline(ChunkPipeline):
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
         if stride is not None:
+            if stride >= self.tokenizer.model_max_length:
+                raise ValueError(
+                    "`stride` must be less than `tokenizer.model_max_length` (or even lower if the tokenizer adds special tokens)"
+                )
             if aggregation_strategy == AggregationStrategy.NONE:
                 raise ValueError(
                     "`stride` was provided to process all the text but `aggregation_strategy="
