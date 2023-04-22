@@ -604,7 +604,7 @@ class FlaxGenerationMixin:
         ):
             vocab_size = self.config.encoder.vocab_size
 
-        scores = jnp.float16(jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7))
+        scores = jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7)
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
