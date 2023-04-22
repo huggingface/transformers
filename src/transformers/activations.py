@@ -175,8 +175,8 @@ class HSigmoidActivation(nn.Module):
         super(h_sigmoid, self).__init__()
         self.relu = nn.ReLU6(inplace=inplace)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.relu(hidden_states + 3) / 6
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.relu(input + 3) / 6
 
 
 class LinearActivation(nn.Module):
