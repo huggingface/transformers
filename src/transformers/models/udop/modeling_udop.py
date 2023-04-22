@@ -55,7 +55,7 @@ UDOP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
-    
+
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
@@ -1633,7 +1633,7 @@ class UdopModel(UdopPreTrainedModel):
 @add_start_docstrings(
     """The UDOP encoder-decoder Transformer with a language modeling head on top, enabling to generate text given document
     images and an optional prompt.
-    
+
     This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
     UDOP_START_DOCSTRING,
 )
