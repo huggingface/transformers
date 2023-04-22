@@ -1292,6 +1292,7 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         return batch_outputs
 
+    # Copied from transformers.models.layoutxlm.tokenization_layoutxlm.LayoutXLMTokenizer.truncate_sequences
     def truncate_sequences_boxes(
         self,
         ids: List[int],
@@ -1417,6 +1418,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             overflowing_labels,
         )
 
+    # Copied from transformers.models.layoutxlm.tokenization_layoutxlm.LayoutXLMTokenizer._pad
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
