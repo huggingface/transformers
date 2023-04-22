@@ -5159,6 +5159,7 @@ if TYPE_CHECKING:
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
             GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
