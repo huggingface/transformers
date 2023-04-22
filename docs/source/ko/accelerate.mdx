@@ -42,7 +42,7 @@ pip install accelerate
 
 ## 백워드(Backward)[[backward]]
 
-마지막 추가 사항은 훈련 루프의 일반적인 `loss.backward()`를 🤗 Accelerate의 [`~accelerate.Accelerator.backward`] 메소드로 대체하는 것입니다:
+마지막으로 훈련 루프의 일반적인 `loss.backward()`를 🤗 Accelerate의 [`~accelerate.Accelerator.backward`] 메소드로 대체하기만 하면 됩니다:
 
 ```py
 >>> for epoch in range(num_epochs):
