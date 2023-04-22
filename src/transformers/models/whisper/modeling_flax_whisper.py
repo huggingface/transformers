@@ -742,13 +742,13 @@ class FlaxWhisperDecoder(nn.Module):
 
         outputs = self.layers(
             hidden_states,
-            attention_mask,
-            encoder_hidden_states,
-            deterministic,
-            init_cache,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            deterministic=deterministic,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_states = outputs[0]
