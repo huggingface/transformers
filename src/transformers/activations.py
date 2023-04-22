@@ -170,7 +170,7 @@ class MishActivation(nn.Module):
         return self.act(input)
 
 
-class h_sigmoid(nn.Module):
+class HSigmoidActivation(nn.Module):
     def __init__(self, inplace=True):
         super(h_sigmoid, self).__init__()
         self.relu = nn.ReLU6(inplace=inplace)
