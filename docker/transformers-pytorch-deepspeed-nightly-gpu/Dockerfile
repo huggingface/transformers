@@ -21,6 +21,8 @@ RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio 
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
 # Uninstall `torch-tensorrt` and `apex` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt apex
 
@@ -29,7 +31,7 @@ RUN python3 -m pip uninstall -y deepspeed
 # This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
 # Issue: https://github.com/microsoft/DeepSpeed/issues/2010
 # RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
-#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
+#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
 ## For `torchdynamo` tests
 ## (see https://github.com/huggingface/transformers/pull/17765)

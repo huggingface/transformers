@@ -23,12 +23,12 @@ specific language governing permissions and limitations under the License.
 이 튜토리얼에서는 다음을 학습합니다:
 
 * 사전 학습된 토크나이저 로드하기.
-* 사전 학습된 이미지 프로세서 로드하기
+* 사전 학습된 이미지 프로세서 로드하기.
 * 사전 학습된 특징 추출기 로드하기.
 * 사전 훈련된 프로세서 로드하기.
 * 사전 학습된 모델 로드하기.
 
-## AutoTokenizer
+## AutoTokenizer[[autotokenizer]]
 
 거의 모든 NLP 작업은 토크나이저로 시작됩니다. 토크나이저는 사용자의 입력을 모델에서 처리할 수 있는 형식으로 변환합니다.
 [`AutoTokenizer.from_pretrained`]로 토크나이저를 로드합니다:
@@ -39,7 +39,7 @@ specific language governing permissions and limitations under the License.
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 ```
 
-그리고 다음 아래와 같이 입력을 토큰화합니다:
+그리고 아래와 같이 입력을 토큰화합니다:
 
 ```py
 >>> sequence = "In a hole in the ground there lived a hobbit."
@@ -49,7 +49,7 @@ specific language governing permissions and limitations under the License.
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-## AutoImageProcessor
+## AutoImageProcessor[[autoimageprocessor]]
 
 비전 작업의 경우 이미지 프로세서가 이미지를 올바른 입력 형식으로 처리합니다.
 
@@ -60,7 +60,7 @@ specific language governing permissions and limitations under the License.
 ```
 
 
-## AutoFeatureExtractor
+## AutoFeatureExtractor[[autofeatureextractor]]
 
 오디오 작업의 경우 특징 추출기가 오디오 신호를 올바른 입력 형식으로 처리합니다.
 
@@ -74,7 +74,7 @@ specific language governing permissions and limitations under the License.
 ... )
 ```
 
-## AutoProcessor
+## AutoProcessor[[autoprocessor]]
 
 멀티모달 작업에는 두 가지 유형의 전처리 도구를 결합한 프로세서가 필요합니다. 예를 들어 LayoutLMV2 모델에는 이미지를 처리하는 이미지 프로세서와 텍스트를 처리하는 토크나이저가 필요하며, 프로세서는 이 두 가지를 결합합니다.
 
@@ -86,7 +86,7 @@ specific language governing permissions and limitations under the License.
 >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 ```
 
-## AutoModel
+## AutoModel[[automodel]]
 
 <frameworkcontent>
 <pt>
