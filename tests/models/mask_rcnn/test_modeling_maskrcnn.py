@@ -73,35 +73,30 @@ class MaskRCNNModelTester:
         torch.manual_seed(0)
         pixel_values = torch.randn([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        img_metas = [
-            {
-                "img_shape": (self.num_channels, self.image_size, self.image_size),
-                "pad_shape": (self.num_channels, self.image_size, self.image_size),
-            }
-            for _ in range(self.batch_size)
-        ]
-
         labels = None
         if self.use_labels:
-            labels = {"gt_labels": [], "gt_bboxes": [], "gt_masks": [], "gt_bboxes_ignore": None}
+            labels = []
             for _ in range(self.batch_size):
                 # sample a number of objects
                 number_of_objects = random.randint(0, 10)
                 class_labels = torch.tensor([random.randint(0, self.num_labels - 1) for _ in range(number_of_objects)])
                 boxes = torch.randn(number_of_objects, 4)
                 masks = torch.randn(number_of_objects, self.image_size, self.image_size)
-                labels["gt_labels"].append(class_labels)
-                labels["gt_bboxes"].append(boxes)
-                labels["gt_masks"].append(masks)
+                target = dict()
+                target["class_labels"] = class_labels
+                target["boxes"] = boxes
+                target["masks"] = masks
+                target["size"] = torch.tensor((self.image_size, self.image_size))
+                labels.append(target)
 
         config = self.get_config()
 
-        return config, pixel_values, img_metas, labels
+        return config, pixel_values, labels
 
     def get_config(self):
         return MaskRCNNConfig(initializer_range=self.initializer_range, num_labels=self.num_labels)
 
-    def create_and_check_model_for_object_detection(self, config, pixel_values, img_metas, labels):
+    def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
         # we are setting a seed to make sure NMS returns the same number of proposals per image
         torch.manual_seed(2)
 
@@ -110,18 +105,18 @@ class MaskRCNNModelTester:
         model.eval()
 
         # inference
-        result = model(pixel_values, img_metas=img_metas)
+        result = model(pixel_values)
         # expected logits shape: (num_proposals_per_image stacked on top of each other, 4)
         self.parent.assertEqual(result.logits.shape, (478, self.num_labels + 1))
 
         # training
-        result = model(pixel_values, img_metas=img_metas, labels=labels)
+        result = model(pixel_values, labels=labels)
         self.parent.assertTrue(result.loss.item() > 0)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, img_metas, labels = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "img_metas": img_metas}
+        config, pixel_values, labels = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
@@ -146,18 +141,24 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
 
         if return_labels:
             if model_class.__name__ in ["MaskRCNNForObjectDetection"]:
-                labels = {"gt_labels": [], "gt_bboxes": [], "gt_masks": [], "gt_bboxes_ignore": None}
+                labels = []
                 for _ in range(self.model_tester.batch_size):
-                    # sample a number of objects
-                    number_of_objects = random.randint(0, 10)
-                    class_labels = torch.tensor(
-                        [random.randint(0, self.model_tester.num_labels - 1) for _ in range(number_of_objects)]
+                    target = {}
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.num_labels,), device=torch_device, dtype=torch.long
                     )
-                    boxes = torch.randn(number_of_objects, 4)
-                    masks = torch.randn(number_of_objects, self.model_tester.image_size, self.model_tester.image_size)
-                    labels["gt_labels"].append(class_labels)
-                    labels["gt_bboxes"].append(boxes)
-                    labels["gt_masks"].append(masks)
+                    target["boxes"] = torch.ones(
+                        self.model_tester.num_labels, 4, device=torch_device, dtype=torch.float
+                    )
+                    target["masks"] = torch.ones(
+                        self.model_tester.num_labels,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                        device=torch_device,
+                        dtype=torch.float,
+                    )
+                    target["size"] = torch.tensor((self.model_tester.image_size, self.model_tester.image_size))
+                    labels.append(target)
                 inputs_dict["labels"] = labels
 
         return inputs_dict
@@ -263,17 +264,9 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         pixel_values = processor(image, return_tensors="pt").pixel_values.to(torch_device)
 
-        img_metas = [
-            {
-                "img_shape": pixel_values.shape[1:],
-                "scale_factor": np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-            }
-            for _ in range(pixel_values.shape[0])
-        ]
-
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values, img_metas=img_metas)
+            outputs = model(pixel_values)
 
         # verify outputs
         self.assertListEqual(
@@ -298,7 +291,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
             outputs,
             threshold=0.5,
             target_sizes=[image.size[::-1]],
-            scale_factors=[meta["scale_factor"] for meta in img_metas],
+            scale_factors=[torch.tensor([1.6671875, 1.6666666, 1.6671875, 1.6666666])],
         )
 
         self.assertEqual(len(results), 1)
@@ -312,8 +305,9 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
 
         # verify mask predictions
         detected_boxes = [result["boxes"] for result in results]
+        scale_factors = [torch.tensor([1.6671875, 1.6666666, 1.6671875, 1.6666666])]
         mask_pred = model.roi_head.forward_test_mask(
-            outputs.fpn_hidden_states, img_metas, detected_boxes, rescale=True
+            outputs.fpn_hidden_states, scale_factors, detected_boxes, rescale=True
         )
 
         self.assertEquals(mask_pred.shape, torch.Size([6, 80, 28, 28]))
@@ -328,7 +322,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
             results,
             mask_pred,
             target_sizes=[image.size[::-1]],
-            scale_factors=[meta["scale_factor"] for meta in img_metas],
+            scale_factors=scale_factors,
         )
         self.assertEquals(len(mask_results[0]), 80)
         self.assertEquals(mask_results[0][15][0].sum(), 52418)
@@ -348,19 +342,21 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="pixel_values.pt")
         img = torch.load(local_path).unsqueeze(0)
 
-        labels = {}
+        labels = []
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="boxes.pt")
-        labels["gt_bboxes"] = [torch.load(local_path).to(torch_device)]
+        target = {}
+        target["boxes"] = torch.load(local_path).to(torch_device)
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="labels.pt")
-        labels["gt_labels"] = [torch.load(local_path).to(torch_device)]
+        target["class_labels"] = torch.load(local_path).to(torch_device)
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="masks.pt")
-        labels["gt_masks"] = [torch.load(local_path).to(torch_device)]
-        labels["gt_bboxes_ignore"] = None
-        img_metas = [{"pad_shape": img.shape[1:], "img_shape": img.shape[1:]}]
+        target["masks"] = torch.load(local_path).to(torch_device)
+        target["size"] = torch.tensor(img.shape[1:]).to(torch_device)
+        # labels["gt_bboxes_ignore"] = None
+        labels.append(target)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(img.to(torch_device), img_metas=img_metas, labels=labels)
+            outputs = model(img.to(torch_device), labels=labels)
             losses = outputs.loss_dict
 
         # verify the losses
