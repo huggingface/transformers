@@ -611,7 +611,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
-        image_shapes = [image.shape for image in images]
+        [image.shape for image in images]
 
         # prepare (COCO annotations as a list of Dict -> target as a single Dict per image)
         if annotations is not None:
@@ -657,13 +657,13 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             images = [to_channel_dimension_format(image, data_format) for image in images]
             data = {"pixel_values": images}
 
-        image_shapes = [image.shape for image in images]
+        [image.shape for image in images]
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         # add metadata
         # TODO perhaps remove?
-        img_metas = [{"img_shape": image_shape, "pad_shape": image_shape} for image_shape in image_shapes]
-        encoded_inputs["img_metas"] = img_metas
+        # img_metas = [{"img_shape": image_shape, "pad_shape": image_shape} for image_shape in image_shapes]
+        # encoded_inputs["img_metas"] = img_metas
 
         if annotations is not None:
             encoded_inputs["labels"] = [
@@ -690,7 +690,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 bboxes[:, [1, 3]].clamp_(min=0, max=img_shape[0])
 
         if rescale and bboxes.size(0) > 0:
-            scale_factor = bboxes.new_tensor(scale_factor)
+            scale_factor = scale_factor.clone().detach()
             bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
 
         if cfg is None:
