@@ -2,7 +2,6 @@ datasets >= 1.1.3
 pytest
 conllu
 nltk
-optax <= 0.1.4
 rouge-score
 seqeval
 tensorboard
