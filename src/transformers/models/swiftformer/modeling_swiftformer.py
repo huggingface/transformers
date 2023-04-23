@@ -271,7 +271,7 @@ class Mlp(nn.Module):
         return x
 
 
-class EfficientAdditiveAttnetion(nn.Module):
+class EfficientAdditiveAttention(nn.Module):
     """
     Efficient Additive Attention module for SwiftFormer. Input: tensor in shape [B, C, H, W] Output: tensor in shape
     [B, C, H, W]
@@ -372,7 +372,7 @@ class SwiftFormerEncoderBlk(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(
             dim=dim, kernel_size=3, drop_path=0.0, use_layer_scale=True
         )
-        self.attn = EfficientAdditiveAttnetion(in_dims=dim, token_dim=dim, num_heads=1)
+        self.attn = EfficientAdditiveAttention(in_dims=dim, token_dim=dim, num_heads=1)
         self.linear = Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer, drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
