@@ -78,6 +78,7 @@ from . import (
     flaubert,
     flava,
     fnet,
+    focalnet,
     fsmt,
     funnel,
     git,
