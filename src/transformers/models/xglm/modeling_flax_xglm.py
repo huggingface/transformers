@@ -124,18 +124,6 @@ def create_sinusoidal_positions(n_pos, dim, padding_idx=1):
     return jnp.array(emb)
 
 
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = shifted_input_ids.at[(..., 0)].set(decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
-
-    return shifted_input_ids
-
-
 class FlaxXGLMAttention(nn.Module):
     config: XGLMConfig
     embed_dim: int

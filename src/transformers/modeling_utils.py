@@ -2935,10 +2935,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
         # Some tensors maybe have been already filled by another key (tied weights).
-        existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
-        missing_keys = [
-            k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
-        ]
+        # TODO: Sylvain -> make this work even on meta device.
+        # existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
+        # missing_keys = [
+        #     k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
+        # ]
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:
