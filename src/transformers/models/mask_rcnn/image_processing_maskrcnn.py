@@ -907,7 +907,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         num_imgs = len(object_detection_results)
 
         rescale = True  # we rescale by default
-        scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
+        scale_factors = [torch.tensor(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
         _bboxes = [
             # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
             det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]

@@ -2581,10 +2581,9 @@ class MaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def forward_test_mask(self, hidden_states, img_metas, det_bboxes, rescale=True):
+    def forward_test_mask(self, hidden_states, scale_factors, det_bboxes, rescale=True):
         """Simple test for mask head without augmentation."""
-        # image shapes of images in the batch
-        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
+        # scale_factors = image shapes of images in the batch
 
         # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
         #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
@@ -2593,7 +2592,7 @@ class MaskRCNNRoIHead(nn.Module):
         # if det_bboxes is rescaled to the original image size, we need to
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
-            scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
+            scale_factors = [torch.tensor(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
         _bboxes = [
             # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
             det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
@@ -2785,7 +2784,6 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
-        img_metas: Optional[List] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2797,9 +2795,13 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        # TODO: remove img_metas, compute `img_shape`` based on pixel_values
+        # TODO: remove img_metas
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
-
+        if labels is not None:
+            img_metas = [{'img_shape': (3, *target["size"].tolist()), 'pad_shape': (3, *target["size"].tolist())} for target in labels]
+        else:
+            img_metas = [{"img_shape": pixel_values.shape[1:]} for _ in range(pixel_values.shape[0])]
+        
         # send pixel_values through backbone
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values,
@@ -2823,9 +2825,9 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             rpn_outputs = self.rpn_head(
                 hidden_states,
                 img_metas,
-                gt_bboxes=labels["gt_bboxes"],
+                gt_bboxes=[target["boxes"] for target in labels],
                 gt_labels=None,  # one explicitly sets them to None in TwoStageDetector
-                gt_bboxes_ignore=labels["gt_bboxes_ignore"],
+                gt_bboxes_ignore=None, # TODO remove this
                 proposal_cfg=self.config.rpn_proposal,
             )
             loss_dict.update(rpn_outputs.losses)
@@ -2834,10 +2836,10 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 hidden_states,
                 img_metas,
                 rpn_outputs.proposal_list,
-                labels["gt_bboxes"],
-                labels["gt_labels"],
-                labels["gt_bboxes_ignore"],
-                labels["gt_masks"],
+                gt_bboxes=[target["boxes"] for target in labels], 
+                gt_labels=[target["class_labels"] for target in labels],
+                gt_bboxes_ignore=None,
+                gt_masks=[target["masks"] for target in labels],
             )
             loss_dict.update(roi_losses)
             # compute final loss
