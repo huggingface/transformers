@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "accelerate": "accelerate>=0.10.0",
+    "accelerate": "accelerate>=0.17.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "black": "black~=23.1",
@@ -19,7 +19,7 @@ deps = {
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",
     "filelock": "filelock",
-    "flax": "flax>=0.4.1",
+    "flax": "flax>=0.4.1,<=0.6.9",
     "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
@@ -41,7 +41,7 @@ deps = {
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
     "optuna": "optuna",
-    "optax": "optax>=0.0.8",
+    "optax": "optax>=0.0.8,<=0.1.4",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "phonemizer": "phonemizer",
