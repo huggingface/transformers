@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# AutoClass로 사전 학습된 인스턴스 로드[[Load pretrained instances with an AutoClass]]
+# AutoClass로 사전 학습된 인스턴스 로드[[load-pretrained-instances-with-an-autoclass]]
 
 트랜스포머 아키텍처가 매우 다양하기 때문에 체크포인트에 맞는 아키텍처를 생성하는 것이 어려울 수 있습니다. 라이브러리를 쉽고 간단하며 유연하게 사용하기 위한 Transformer 핵심 철학의 일환으로, `AutoClass`는 주어진 체크포인트에서 올바른 아키텍처를 자동으로 추론하여 로드합니다. `from_pretrained()` 메서드를 사용하면 모든 아키텍처에 대해 사전 학습된 모델을 빠르게 로드할 수 있으므로 모델을 처음부터 학습하는 데 시간과 리소스를 투입할 필요가 없습니다. 
 체크포인트에 구애받지 않는 코드를 생성한다는 것은 코드가 한 체크포인트에서 작동하면 아키텍처가 다르더라도 다른 체크포인트(유사한 작업에 대해 학습된 경우)에서도 작동한다는 것을 의미합니다.
@@ -29,7 +29,7 @@ specific language governing permissions and limitations under the License.
 * 사전 훈련된 프로세서 로드하기.
 * 사전 학습된 모델 로드하기.
 
-## AutoTokenizer
+## AutoTokenizer[[autotokenizer]]
 
 거의 모든 NLP 작업은 토크나이저로 시작됩니다. 토크나이저는 사용자의 입력을 모델에서 처리할 수 있는 형식으로 변환합니다.
 [`AutoTokenizer.from_pretrained`]로 토크나이저를 로드합니다:
@@ -50,7 +50,7 @@ specific language governing permissions and limitations under the License.
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-## AutoImageProcessor
+## AutoImageProcessor[[autoimageprocessor]]
 
 비전 작업의 경우 이미지 프로세서가 이미지를 올바른 입력 형식으로 처리합니다.
 
@@ -61,7 +61,7 @@ specific language governing permissions and limitations under the License.
 ```
 
 
-## AutoFeatureExtractor
+## AutoFeatureExtractor[[autofeatureextractor]]
 
 오디오 작업의 경우 특징 추출기가 오디오 신호를 올바른 입력 형식으로 처리합니다.
 
@@ -75,7 +75,7 @@ specific language governing permissions and limitations under the License.
 ... )
 ```
 
-## AutoProcessor
+## AutoProcessor[[autoprocessor]]
 
 멀티모달 작업에는 두 가지 유형의 전처리 도구를 결합한 프로세서가 필요합니다. 예를 들어 LayoutLMV2 모델에는 이미지를 처리하는 이미지 프로세서와 텍스트를 처리하는 토크나이저가 필요하며, 프로세서는 이 두 가지를 결합합니다.
 
@@ -87,7 +87,7 @@ specific language governing permissions and limitations under the License.
 >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 ```
 
-## AutoModel
+## AutoModel[[automodel]]
 
 <frameworkcontent>
 <pt>
