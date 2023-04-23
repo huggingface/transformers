@@ -2798,10 +2798,13 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # TODO: remove img_metas
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
         if labels is not None:
-            img_metas = [{'img_shape': (3, *target["size"].tolist()), 'pad_shape': (3, *target["size"].tolist())} for target in labels]
+            img_metas = [
+                {"img_shape": (3, *target["size"].tolist()), "pad_shape": (3, *target["size"].tolist())}
+                for target in labels
+            ]
         else:
             img_metas = [{"img_shape": pixel_values.shape[1:]} for _ in range(pixel_values.shape[0])]
-        
+
         # send pixel_values through backbone
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values,
@@ -2827,7 +2830,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 img_metas,
                 gt_bboxes=[target["boxes"] for target in labels],
                 gt_labels=None,  # one explicitly sets them to None in TwoStageDetector
-                gt_bboxes_ignore=None, # TODO remove this
+                gt_bboxes_ignore=None,  # TODO remove this
                 proposal_cfg=self.config.rpn_proposal,
             )
             loss_dict.update(rpn_outputs.losses)
@@ -2836,7 +2839,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 hidden_states,
                 img_metas,
                 rpn_outputs.proposal_list,
-                gt_bboxes=[target["boxes"] for target in labels], 
+                gt_bboxes=[target["boxes"] for target in labels],
                 gt_labels=[target["class_labels"] for target in labels],
                 gt_bboxes_ignore=None,
                 gt_masks=[target["masks"] for target in labels],

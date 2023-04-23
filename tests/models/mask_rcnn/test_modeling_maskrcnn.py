@@ -19,7 +19,6 @@ import inspect
 import random
 import unittest
 
-import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import MaskRCNNConfig
@@ -82,7 +81,7 @@ class MaskRCNNModelTester:
                 class_labels = torch.tensor([random.randint(0, self.num_labels - 1) for _ in range(number_of_objects)])
                 boxes = torch.randn(number_of_objects, 4)
                 masks = torch.randn(number_of_objects, self.image_size, self.image_size)
-                target = dict()
+                target = {}
                 target["class_labels"] = class_labels
                 target["boxes"] = boxes
                 target["masks"] = masks
