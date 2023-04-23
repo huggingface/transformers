@@ -513,15 +513,13 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
-        in the batch and optionally returns their corresponding pixel mask.
+        in the batch.
 
         Args:
             image (`np.ndarray`):
                 Image to pad.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
-            return_pixel_mask (`bool`, *optional*, defaults to `True`):
-                Whether to return a pixel mask.
             input_channel_dimension (`ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be inferred from the input image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -659,7 +657,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             images = [to_channel_dimension_format(image, data_format) for image in images]
             data = {"pixel_values": images}
 
-        image_shapes = [image.shape for image in images]  
+        image_shapes = [image.shape for image in images]
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         # add metadata
