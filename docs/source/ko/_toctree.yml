@@ -42,7 +42,7 @@
       title: (번역중) Troubleshoot
     title: (번역중) 일반적인 사용방법
   - sections:
-    - local: in_translation
+    - local: fast_tokenizers
       title: (번역중) Use tokenizers from 🤗 Tokenizers
     - local: in_translation
       title: (번역중) Inference for multilingual models
