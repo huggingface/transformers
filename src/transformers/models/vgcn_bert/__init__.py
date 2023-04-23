@@ -52,7 +52,7 @@ if TYPE_CHECKING:
         VGCNBertConfig,
         VGCNBertOnnxConfig,
     )
-    
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

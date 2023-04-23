@@ -24,12 +24,136 @@ e.g. Stopword removal, String cleaning, Stemming, Nomolization, Lemmatization
 
 from collections import Counter
 from math import log
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 import torch
 
 import numpy as np
 import scipy.sparse as sp
 from transformers.tokenization_utils import PreTrainedTokenizerBase
+
+ENGLISH_STOP_WORDS = frozenset(
+    {
+        "herself",
+        "each",
+        "him",
+        "been",
+        "only",
+        "yourselves",
+        "into",
+        "where",
+        "them",
+        "very",
+        "we",
+        "that",
+        "re",
+        "too",
+        "some",
+        "what",
+        "those",
+        "me",
+        "whom",
+        "have",
+        "yours",
+        "an",
+        "during",
+        "any",
+        "nor",
+        "ourselves",
+        "has",
+        "do",
+        "when",
+        "about",
+        "same",
+        "our",
+        "then",
+        "himself",
+        "their",
+        "all",
+        "no",
+        "a",
+        "hers",
+        "off",
+        "why",
+        "how",
+        "more",
+        "between",
+        "until",
+        "not",
+        "over",
+        "your",
+        "by",
+        "here",
+        "most",
+        "above",
+        "up",
+        "of",
+        "is",
+        "after",
+        "from",
+        "being",
+        "i",
+        "as",
+        "other",
+        "so",
+        "her",
+        "ours",
+        "on",
+        "because",
+        "against",
+        "and",
+        "out",
+        "had",
+        "these",
+        "at",
+        "both",
+        "down",
+        "you",
+        "can",
+        "she",
+        "few",
+        "the",
+        "if",
+        "it",
+        "to",
+        "but",
+        "its",
+        "be",
+        "he",
+        "once",
+        "further",
+        "such",
+        "there",
+        "through",
+        "are",
+        "themselves",
+        "which",
+        "in",
+        "now",
+        "his",
+        "yourself",
+        "this",
+        "were",
+        "below",
+        "should",
+        "my",
+        "myself",
+        "am",
+        "or",
+        "while",
+        "itself",
+        "again",
+        "with",
+        "they",
+        "will",
+        "own",
+        "than",
+        "before",
+        "under",
+        "was",
+        "for",
+        "who",
+    }
+)
 
 
 class WordGraph:
@@ -39,39 +163,41 @@ class WordGraph:
     Params:
         `rows`: List[str] of text samples, or pre-defined word-pair relations: List[Tuple[str, str, float]]
         `tokenizer`: The same pretrained tokenizer that is used for the model late.
-        `window_size`:  Available only for rows is text samples.
+        `window_size`:  Available only for statistics generation (rows is text samples).
             Size of the sliding window for collecting the pieces of text
             and further calculate the NPMI value, default is 20.
-        `algorithm`:  Available only for rows is text samples. "npmi" or "pmi", default is "npmi".
+        `algorithm`:  Available only for statistics generation (rows is text samples) -- "npmi" or "pmi", default is "npmi".
+        `edge_threshold`: Available only for statistics generation (rows is text samples). Graph edge value threshold, default is 0. Edge value is between -1 to 1.
+        `remove_stopwords`: Build word graph with the words that are not stopwords, default is True.
+        `min_freq_to_keep`: Available only for statistics generation (rows is text samples). Build word graph with the words that occurred at least n times in the corpus, default is 2.
 
     Properties:
-        `adj_matrix`: scipy.sparse.csr_matrix, the word graph in sparse adjacency matrix form.
-        `vocab`: List of words in the graph.
-        `vocab_indices`: indices of vocabulary words.
+        `adjacency_matrix`: scipy.sparse.csr_matrix, the word graph in sparse adjacency matrix form.
+        `vocab_indices`: indices of word graph vocabulary words.
+        `wgraph_id_to_tokenizer_id_map`: map from word graph vocabulary word id to tokenizer vocabulary word id.
 
     """
 
     def __init__(
-        self, rows: list, tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
+        self,
+        rows: list,
+        tokenizer: PreTrainedTokenizerBase,
+        window_size=20,
+        algorithm="npmi",
+        edge_threshold=0.0,
+        remove_stopwords=True,
+        min_freq_to_keep=2,
     ):
         if type(rows[0]) == tuple:
             (
                 self.adjacency_matrix,
-                self.vocab,
                 self.vocab_indices,
                 self.wgraph_id_to_tokenizer_id_map,
-                # self.tokenizer_id_to_wgraph_id_map,
-                # self.tokenizer_id_to_wgraph_id_array,
-            ) = _build_predefined_graph(rows, tokenizer)
+            ) = _build_predefined_graph(rows, tokenizer, remove_stopwords)
         else:
-            (
-                self.adjacency_matrix,
-                self.vocab,
-                self.vocab_indices,
-                self.wgraph_id_to_tokenizer_id_map,
-                # self.tokenizer_id_to_wgraph_id_map,
-                # self.tokenizer_id_to_wgraph_id_array,
-            ) = _build_pmi_graph(rows, tokenizer, window_size, algorithm, threshold)
+            (self.adjacency_matrix, self.vocab_indices, self.wgraph_id_to_tokenizer_id_map,) = _build_pmi_graph(
+                rows, tokenizer, window_size, algorithm, edge_threshold, remove_stopwords, min_freq_to_keep
+            )
 
     def normalized(self):
         return _normalize_adj(self.adjacency_matrix) if self.adjacency_matrix is not None else None
@@ -85,7 +211,6 @@ class WordGraph:
 
 def _normalize_adj(adj):
     """Symmetrically normalize adjacency matrix."""
-    # adj = sp.coo_matrix(adj)
     rowsum = np.array(adj.sum(1))  # D-degree matrix
     d_inv_sqrt = np.power(rowsum, -0.5).flatten()
     d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.0
@@ -100,45 +225,53 @@ def _scipy_to_torch(sparse):
     return torch.sparse_coo_tensor(i, v, torch.Size(sparse.shape)).coalesce()
 
 
-def _delete_special_terms(words: list, terms: list):
-    return [w for w in words if w not in terms]
+def _delete_special_terms(words: list, terms: set):
+    return set([w for w in words if w not in terms])
 
 
 def _build_pmi_graph(
-    texts: List[str], tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
-):  # -> Tuple[sp.csr_matrix, list, dict]:
+    texts: List[str],
+    tokenizer: PreTrainedTokenizerBase,
+    window_size=20,
+    algorithm="npmi",
+    edge_threshold=0.0,
+    remove_stopwords=True,
+    min_freq_to_keep=2,
+) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
     """
-    Build PMI or NPMI adjacency based on text samples
-
-    Params:
-        `texts`: List of text sample
-        `tokenizer`: The same pretrained tokenizer that is used for the model late.
-        `window_size`: Size of the sliding window for collecting the pieces of text
-            and further calculate the NPMI value, default is 20.
-        `algorithm`: "npmi" or "pmi", default is "npmi".
-
-    Return:
-        `vocab_adj`: scipy.sparse.csr_matrix, the graph in sparse adjacency matrix form.
-        `vocab`: List of words in the graph.
-        `vocab_indices`: indices of vocabulary words.
-
+    Build statistical word graph from text samples using PMI or NPMI algorithm.
     """
 
-    # Tokenize the text samples, the tokenizer should be same as that in the combined Bert-like model.
+    # Tokenize the text samples. The tokenizer should be same as that in the combined Bert-like model.
+    # Remove stopwords and special terms
     # Get vocabulary and the word frequency
-    vocab_counter = Counter({"[PAD]": 0})
-    new_texts = []
+    words_to_remove = (
+        set({"[CLS]", "[SEP]"}).union(ENGLISH_STOP_WORDS) if remove_stopwords else set({"[CLS]", "[SEP]"})
+    )
+    vocab_counter = Counter()
+    texts_words = []
     for t in texts:
         words = tokenizer.tokenize(t)
-        words = _delete_special_terms(words, ["[CLS]", "[SEP]"])
+        words = _delete_special_terms(words, words_to_remove)
         if len(words) > 0:
             vocab_counter.update(Counter(words))
-            new_texts.append(" ".join(words).strip())
+            texts_words.append(words)
 
-    # TODO: question, sort vocab_counter?
-    # TODO: delete stopwords
-    # TODO: remove word with freq<n and re generate texts
-    texts = new_texts
+    # Set [PAD] as the head of vocabulary
+    # Remove word with freq<n and re generate texts
+    new_vocab_counter = Counter({"[PAD]": 0})
+    new_vocab_counter.update(
+        Counter({k: v for k, v in vocab_counter.items() if v >= min_freq_to_keep})
+        if min_freq_to_keep > 1
+        else vocab_counter
+    )
+    vocab_counter = new_vocab_counter
+
+    # Generate new texts by removing words with freq<n
+    if min_freq_to_keep > 1:
+        texts_words = [list(filter(lambda w: vocab_counter[w] >= min_freq_to_keep, words)) for words in texts_words]
+    texts = [" ".join(words).strip() for words in texts_words if len(words) > 0]
+
     vocab_size = len(vocab_counter)
     vocab = list(vocab_counter.keys())
     assert vocab[0] == "[PAD]"
@@ -158,8 +291,8 @@ def _build_pmi_graph(
                 windows.append(word_ids)
 
     # Get the window-count that every word appeared (count 1 for the same window).
-    vocab_window_counter = Counter()
     # Get window-count that every word-pair appeared (count 1 for the same window).
+    vocab_window_counter = Counter()
     word_pair_window_counter = Counter()
     for word_ids in windows:
         word_ids = list(set(word_ids))
@@ -193,7 +326,7 @@ def _build_pmi_graph(
             if algorithm == "npmi"
             else (log((1.0 * pair_count / total_windows) / (1.0 * i_count * j_count / (total_windows**2))))
         )
-        if value > threshold:
+        if value > edge_threshold:
             vocab_adj_row.append(i)
             vocab_adj_col.append(j)
             vocab_adj_weight.append(value)
@@ -205,6 +338,8 @@ def _build_pmi_graph(
         dtype=np.float32,
     )
     vocab_adj.setdiag(1.0)
+
+    # Padding the first row and column, "[PAD]" is the first word in the vocabulary.
     assert vocab_adj[0, :].sum() == 1
     assert vocab_adj[:, 0].sum() == 1
     vocab_adj[:, 0] = 0
@@ -212,34 +347,34 @@ def _build_pmi_graph(
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
     wgraph_id_to_tokenizer_id_map = dict(sorted(wgraph_id_to_tokenizer_id_map.items()))
-    # tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
-    # tokenizer_id_to_wgraph_id_map = dict(sorted(tokenizer_id_to_wgraph_id_map.items()))
-    # assert len(wgraph_id_to_tokenizer_id_map) == len(tokenizer_id_to_wgraph_id_map)
-
-    # tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
-    # for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
-    #     tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
 
     return (
         vocab_adj,
-        vocab,
         vocab_indices,
         wgraph_id_to_tokenizer_id_map,
-        # tokenizer_id_to_wgraph_id_map,
-        # tokenizer_id_to_wgraph_id_array,
     )
 
 
 def _build_predefined_graph(
-    words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase
-):  # -> Tuple[sp.csr_matrix, list, dict]:
+    words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase, remove_stopwords: bool = True
+) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
+    """
+    Build pre-defined wgraph from a list of word pairs and their pre-defined relations (edge value).
+    """
+
+    # Tokenize the text samples. The tokenizer should be same as that in the combined Bert-like model.
+    # Remove stopwords and special terms
+    # Get vocabulary and the word frequency
+    words_to_remove = (
+        set({"[CLS]", "[SEP]"}).union(ENGLISH_STOP_WORDS) if remove_stopwords else set({"[CLS]", "[SEP]"})
+    )
     vocab_counter = Counter({"[PAD]": 0})
     word_pairs = {}
     for w1, w2, v in words_relations:
         w1_subwords = tokenizer.tokenize(w1)
-        w1_subwords = _delete_special_terms(w1_subwords, ["[CLS]", "[SEP]"])
+        w1_subwords = _delete_special_terms(w1_subwords, words_to_remove)
         w2_subwords = tokenizer.tokenize(w2)
-        w2_subwords = _delete_special_terms(w2_subwords, ["[CLS]", "[SEP]"])
+        w2_subwords = _delete_special_terms(w2_subwords, words_to_remove)
         vocab_counter.update(Counter(w1_subwords))
         vocab_counter.update(Counter(w2_subwords))
         for sw1 in w1_subwords:
@@ -272,80 +407,27 @@ def _build_predefined_graph(
         dtype=np.float32,
     )
     vocab_adj.setdiag(1.0)
+
+    # Padding the first row and column, "[PAD]" is the first word in the vocabulary.
     assert vocab_adj[0, :].sum() == 1
     assert vocab_adj[:, 0].sum() == 1
     vocab_adj[:, 0] = 0
     vocab_adj[0, :] = 0
 
     wgraph_id_to_tokenizer_id_map = {v: tokenizer.vocab[k] for k, v in vocab_indices.items()}
-    # tokenizer_id_to_wgraph_id_map = {v: k for k, v in wgraph_id_to_tokenizer_id_map.items()}
-
-    # tokenizer_id_to_wgraph_id_array = np.zeros(max(tokenizer_id_to_wgraph_id_map.keys()) + 1, dtype=np.int64)
-    # for tok_id, graph_id in tokenizer_id_to_wgraph_id_map.items():
-    #     tokenizer_id_to_wgraph_id_array[tok_id] = graph_id
+    wgraph_id_to_tokenizer_id_map = dict(sorted(wgraph_id_to_tokenizer_id_map.items()))
 
     return (
         vocab_adj,
-        vocab,
         vocab_indices,
         wgraph_id_to_tokenizer_id_map,
-        # tokenizer_id_to_wgraph_id_map,
-        # tokenizer_id_to_wgraph_id_array,
     )
 
 
 def _build_knowledge_graph(
     rdf_list: List[str], tokenizer: PreTrainedTokenizerBase
-) -> Tuple[sp.csr_matrix, List, dict]:
+) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
     """
     Build word level adjacency matrix from a knowledge graph
-
-    Params:
-
-    Return:
-
     """
     pass
-
-
-if __name__ == "__main__":
-    import os
-
-    import transformers as tfr
-
-    def print_matrix(m):
-        for r in m:
-            print(" ".join(["%.1f" % v for v in np.ravel(r)]))
-
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    model_path = "/tmp/local-huggingface-models/hf-maintainers_distilbert-base-uncased"
-
-    # DistilBertTokenizerFast
-    tokenizer = tfr.AutoTokenizer.from_pretrained(model_path)
-
-    words_relations = [
-        ("I", "you", 0.3),
-        ("here", "there", 0.7),
-        ("city", "montreal", 0.8),
-        ("comeabc", "gobefbef", 0.2),
-    ]
-    wgraph = WordGraph(words_relations, tokenizer)
-    # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
-    print(len(wgraph.vocab))
-    # print(wgraph.tokenizer_id_to_wgraph_id_array)
-    print_matrix(wgraph.adjacency_matrix.todense())
-
-    # texts = [" I am here", "He is here", "here i am, gobefbef"]
-    texts = [" I am here!", "He is here", "You are also here, gobefbef!", "What is interpribility"]
-    wgraph = WordGraph(texts, tokenizer, window_size=4)
-    # vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
-
-    print(len(wgraph.vocab))
-    # print(wgraph.tokenizer_id_to_wgraph_id_array)
-    print_matrix(wgraph.adjacency_matrix.todense())
-    print()
-    norm_adj = _normalize_adj(wgraph.adjacency_matrix)
-    print_matrix(norm_adj.todense())
-
-    # print(vocab_indices[vocab[3]])
-    print("---end---")
