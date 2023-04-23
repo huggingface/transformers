@@ -589,15 +589,13 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(
-        self, embed_dim: int, num_heads: int, n_levels: int, n_points: int, disable_custom_kernels: bool = False
-    ):
+    def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
         super().__init__()
-        if embed_dim % num_heads != 0:
+        if config.embed_dim % num_heads != 0:
             raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {embed_dim} and {num_heads}"
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.embed_dim} and {num_heads}"
             )
-        dim_per_head = embed_dim // num_heads
+        dim_per_head = config.embed_dim // num_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
@@ -608,17 +606,17 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
         self.im2col_step = 64
 
-        self.d_model = embed_dim
-        self.n_levels = n_levels
+        self.d_model = config.embed_dim
+        self.n_levels = config.num_feature_levels
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        self.sampling_offsets = nn.Linear(config.embed_dim, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.embed_dim, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.embed_dim, config.embed_dim)
+        self.output_proj = nn.Linear(config.embed_dim, config.embed_dim)
 
-        self.disable_custom_kernels = disable_custom_kernels
+        self.disable_custom_kernels = config.disable_custom_kernels
 
         self._reset_parameters()
 
@@ -841,11 +839,7 @@ class DeformableDetrEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DeformableDetrMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            n_levels=config.num_feature_levels,
-            n_points=config.encoder_n_points,
-            disable_custom_kernels=config.disable_custom_kernels,
+            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -943,11 +937,9 @@ class DeformableDetrDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
         self.encoder_attn = DeformableDetrMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
+            config,
             num_heads=config.decoder_attention_heads,
-            n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
-            disable_custom_kernels=config.disable_custom_kernels,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # feedforward neural networks
