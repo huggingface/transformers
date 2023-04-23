@@ -43,9 +43,10 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArtZucker).
 The original code can be found [here](https://github.com/facebookresearch/fairseq).
 
 ## Implementation differences with SwitchTransformers
-The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that blah blah blah blah. 
-In SwitchTransformers, once the masks are computed for each experts, we just index the current hidden_states with the routing mask, and feed the 
-correct tokens to the expert. However here, the implementation varies a lot as the fairseq repository used a different approach.
+The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that for each input, only the top two experts are selected based on the 
+highest predicted probabilities from the gating network, and the remaining experts are ignored. In `SwitchTransformers`, only the top-1 probabilities are computed, 
+which means that tokens have less probability of being forwarded. Moreover, if a token is not routed to any expert, `SwitchTransformers` still adds its unmodified hidden 
+states (kind of like a residual connection) while they are masked in `NLLB`'s top-2 routing mechanism. 
 
 ## Generating with NLLB-MoE
 The avalable checkpoints requires around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.

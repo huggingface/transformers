@@ -42,6 +42,7 @@ from .generic import (
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
+    is_tf_symbolic_tensor,
     is_tf_tensor,
     is_torch_device,
     is_torch_dtype,

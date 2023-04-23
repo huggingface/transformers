@@ -464,8 +464,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-h")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-h")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()
