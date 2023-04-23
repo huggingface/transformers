@@ -40,6 +40,7 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_end_docstrings,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -1871,13 +1872,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_kwargs = init_configuration
 
         if "auto_map" in init_kwargs and not _is_local:
-            new_auto_map = {}
-            for key, value in init_kwargs["auto_map"].items():
-                if isinstance(value, (list, tuple)):
-                    new_auto_map[key] = [f"{pretrained_model_name_or_path}--{v}" for v in value]
-                else:
-                    new_auto_map[key] = f"{pretrained_model_name_or_path}--{value}"
-            init_kwargs["auto_map"] = new_auto_map
+            # For backward compatibility with odl format.
+            if isinstance(init_kwargs["auto_map"], (tuple, list)):
+                init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
+            init_kwargs["auto_map"] = add_model_info_to_auto_map(
+                init_kwargs["auto_map"], pretrained_model_name_or_path
+            )
 
         if config_tokenizer_class is None:
             from .models.auto.configuration_auto import AutoConfig  # tests_ignore
