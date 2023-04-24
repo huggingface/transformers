@@ -18,7 +18,7 @@ import datetime
 import unittest
 
 from transformers import CodeGenConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -515,6 +515,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
         )  # token_type_ids should change output
 
+    @is_flaky(max_attempts=3, description="measure of timing is somehow flaky.")
     @slow
     def test_codegen_sample_max_time(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
