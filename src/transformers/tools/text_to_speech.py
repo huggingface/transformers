@@ -12,8 +12,16 @@ class TextToSpeechTool(PipelineTool):
     post_processor_class = SpeechT5HifiGan
 
     description = """
-    Text to Speech tool, used to read text out loud. It takes text as input, and outputs a voice signal.
+    Text to Speech tool, used to read English text out loud. It takes text as input, and outputs a voice signal.
     """
+
+    def __init__(self, model=None, pre_processor=None, post_processor=None, **kwargs):
+        if model is None and pre_processor is None and post_processor is None:
+            model = 'microsoft/speecht5_tts'
+            pre_processor = 'microsoft/speecht5_tts'
+            post_processor = 'microsoft/speecht5_hifigan'
+
+        super().__init__(model, pre_processor, post_processor, **kwargs)
 
     def encode(self, text, speaker_embeddings=None):
         inputs = self.pre_processor(text=text, return_tensors="pt")
@@ -25,4 +33,9 @@ class TextToSpeechTool(PipelineTool):
         return {"input_ids": inputs["input_ids"], "speaker_embeddings": speaker_embeddings}
 
     def forward(self, inputs):
-        return self.model.generate_speech(**inputs)
+        with torch.no_grad():
+            return self.model.generate_speech(**inputs)
+
+    def decode(self, outputs):
+        with torch.no_grad():
+            return self.post_processor(outputs).cpu().detach()
