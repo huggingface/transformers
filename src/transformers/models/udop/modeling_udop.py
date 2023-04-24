@@ -1533,16 +1533,9 @@ class UdopModel(UdopPreTrainedModel):
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        ids_keep: Optional[Tensor] = None,
-        ids_restore: Optional[Tensor] = None,
-        image_mask_label: Optional[Tensor] = None,
-        mask_ratio: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         visual_bbox: Dict[str, Any] = None,
-        masked_lm_labels: Optional[Tensor] = None,
         head_mask: Optional[Tensor] = None,
-        char_ids: Optional[Tensor] = None,
-        char_bbox: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1594,7 +1587,6 @@ class UdopModel(UdopPreTrainedModel):
                 bbox=bbox,
                 visual_bbox=visual_bbox,
                 pixel_values=pixel_values,
-                ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
@@ -1650,32 +1642,46 @@ class UdopModel(UdopPreTrainedModel):
 class UdopForConditionalGeneration(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"lm_head.weight",
-        "udop.decoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "udop.encoder.embed_tokens.weight",
-        "udop.encoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "udop.encoder.embed_patches.proj.weight",
-        "udop.encoder.embed_patches.proj.bias",
-        "udop.decoder.embed_tokens.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_patches.proj.weight",
+        "encoder.embed_patches.proj.bias",
+        "decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config):
         super(UdopForConditionalGeneration, self).__init__(config)
 
-        self.udop = UdopModel(config)
+        # text and image embeddings
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.patch_embed = UdopPatchEmbeddings(config)
 
-        # The weights of the language modeling head are shared with those of the encoder and decoder of UdopModel
+        encoder_config = deepcopy(config)
+        encoder_config.is_decoder = False
+        encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
+        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+
+        decoder_config = deepcopy(config)
+        decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
+        decoder_config.num_layers = config.num_decoder_layers
+        self.decoder = UdopStack(decoder_config, self.shared)
+
+        # The weights of the language modeling head are shared with those of the encoder and decoder
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.udop.shared
+        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
-        self.udop.shared = new_embeddings
-        self.udop.encoder.set_input_embeddings(new_embeddings)
-        self.udop.decoder.set_input_embeddings(new_embeddings)
+        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
@@ -1684,10 +1690,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         return self.lm_head
 
     def get_encoder(self):
-        return self.udop.encoder
+        return self.encoder
 
     def get_decoder(self):
-        return self.udop.decoder
+        return self.decoder
 
     @add_start_docstrings_to_model_forward(UDOP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1700,17 +1706,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        ids_keep: Optional[Tensor] = None,
-        ids_restore: Optional[Tensor] = None,
-        image_mask_label: Optional[Tensor] = None,
-        mask_ratio: Optional[Tensor] = None,
         bbox: Dict[str, Any] = None,
         visual_bbox: Dict[str, Any] = None,
-        masked_lm_labels: Optional[Tensor] = None,
         labels: Optional[Tensor] = None,
         head_mask: Optional[Tensor] = None,
-        char_ids: Optional[Tensor] = None,
-        char_bbox: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1757,34 +1756,36 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if masked_lm_labels is not None and labels is None:
-            labels = masked_lm_labels
-
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
 
-        model_outputs = self.udop(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                bbox=bbox,
+                visual_bbox=visual_bbox,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        hidden_states = encoder_outputs[0]
+        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
-            pixel_values=pixel_values,
-            ids_keep=ids_keep,
-            ids_restore=ids_restore,
-            image_mask_label=image_mask_label,
-            mask_ratio=mask_ratio,
-            bbox=bbox,
-            visual_bbox=visual_bbox,
-            masked_lm_labels=masked_lm_labels,
-            labels=labels,
-            head_mask=head_mask,
-            char_ids=char_ids,
-            char_bbox=char_bbox,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            decoder_head_mask=decoder_head_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1792,7 +1793,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = model_outputs[0]
+        sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
@@ -1807,19 +1808,19 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
         if not return_dict:
-            output = (lm_logits,) + model_outputs[1:]
+            output = (lm_logits,) + decoder_outputs[2:] + (encoder_outputs[0],) + encoder_outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
-            past_key_values=model_outputs.past_key_values,
-            decoder_hidden_states=model_outputs.decoder_hidden_states,
-            decoder_attentions=model_outputs.decoder_attentions,
-            cross_attentions=model_outputs.cross_attentions,
-            encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
-            encoder_hidden_states=model_outputs.encoder_hidden_states,
-            encoder_attentions=model_outputs.encoder_attentions,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
     def prepare_inputs_for_generation(

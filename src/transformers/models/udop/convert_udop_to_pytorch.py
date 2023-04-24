@@ -91,13 +91,6 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     checkpoint_path = model_name_to_checkpoint_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")
 
-    # rename keys
-    for key, value in state_dict.copy().items():
-        val = state_dict.pop(key)
-        if "lm_head" not in key:
-            key = "udop." + key
-        state_dict[key] = val
-
     # create HF model
     config = UdopConfig(decoder_start_token_id=0)
     model = UdopForConditionalGeneration(config)
@@ -107,8 +100,8 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
-    assert missing_keys == ["udop.encoder.embed_patches.proj.weight", "udop.encoder.embed_patches.proj.bias"]
-    assert unexpected_keys == ["udop.pos_embed"]
+    assert missing_keys == ["encoder.embed_patches.proj.weight", "encoder.embed_patches.proj.bias"]
+    assert unexpected_keys == ["pos_embed"]
 
     # prepare dummy inputs
     tokenizer = UdopTokenizer.from_pretrained("t5-base")
