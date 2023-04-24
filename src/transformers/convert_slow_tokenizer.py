@@ -1164,22 +1164,13 @@ class LlamaConverter(SpmConverter):
         eos = self.original_tokenizer.eos_token
         eos_token_id = self.original_tokenizer.eos_token_id
         return processors.TemplateProcessing(
-            single=f"{bos * self.original_tokenizer.add_bos_token} $A {eos * self.original_tokenizer.add_eos_token}",
-            pair=f"{bos* self.original_tokenizer.add_bos_token} $A {eos * self.original_tokenizer.add_eos_token} {bos * self.original_tokenizer.add_bos_token} $B {eos * self.original_tokenizer.add_eos_token}",
+            single=f"{bos * self.original_tokenizer.add_bos_token}:0 $A:0 {eos * self.original_tokenizer.add_eos_token}",
+            pair=f"{bos* self.original_tokenizer.add_bos_token}:0 $A:0 {eos * self.original_tokenizer.add_eos_token} {bos * self.original_tokenizer.add_bos_token}:1 $B:1 {eos * self.original_tokenizer.add_eos_token}:1",
             special_tokens=[
                 (bos, bos_token_id),
                 (eos, eos_token_id),
             ],
         )
-
-        return processors.TemplateProcessing(
-            single="<s> $A",
-            pair="<s> $A $B",
-            special_tokens=[
-                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
-            ],
-        )
-
 
 class MarkupLMConverter(Converter):
     def converted(self) -> Tokenizer:
