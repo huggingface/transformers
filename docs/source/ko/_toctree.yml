@@ -9,8 +9,6 @@
 - sections:
   - local: pipeline_tutorial
     title: 추론을 위한 Pipeline
-  - local: in_translation
-    title: (번역중) Pipelines for inference
   - local: autoclass_tutorial
     title: 자동 클래스로 사전 학습된 인스턴스 로드하기
   - local: preprocessing
@@ -57,8 +55,8 @@
         title: (번역중) Question answering
       - local: in_translation
         title: (번역중) Causal language modeling
-      - local: in_translation
-        title: (번역중) Masked language modeling
+      - local: tasks/masked_language_modeling
+        title: 마스킹된 언어 모델링(Masked language modeling)
       - local: tasks/translation
         title: 번역
       - local: in_translation
