@@ -1,4 +1,4 @@
-from .agents import Agent, OpenAIAgent, OpenAssistantAgent
+from .agents import Agent, OpenAIAgent, EndpointAgent
 from .base import PipelineTool
 from .generative_question_answering import GenerativeQuestionAnsweringTool
 from .image_captioning import ImageCaptioningTool
