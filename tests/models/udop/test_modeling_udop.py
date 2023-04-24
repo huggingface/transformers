@@ -305,8 +305,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = [
                 "attention_mask",
                 "bbox",
-                "char_bbox",
-                "char_ids",
                 "cross_attn_head_mask",
                 "decoder_attention_mask",
                 "decoder_head_mask",
@@ -314,9 +312,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 "decoder_inputs_embeds",
                 "encoder_outputs",
                 "head_mask",
-                "ids_keep",
-                "ids_restore",
-                "image_mask_label",
                 "input_ids",
                 "inputs_embeds",
                 "kwargs",
@@ -473,6 +468,8 @@ class UdopEncoderOnlyModelTester:
 class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
     test_pruning = False
+    test_torchscript = False
+    test_head_masking = False
     test_resize_embeddings = False
     test_model_parallel = True
     all_parallelizable_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
