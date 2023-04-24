@@ -2956,8 +2956,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for key in missing_keys:
                 if key in list(model_state_dict.keys()):
                     key = key
-                elif f"{prefix}.key" in list(model_state_dict.keys()):
-                    key = f"{prefix}.key"
+                elif f"{prefix}.{key}" in list(model_state_dict.keys()):
+                    key = f"{prefix}.{key}"
                 elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
