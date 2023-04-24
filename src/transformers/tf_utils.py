@@ -70,6 +70,28 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
 
 
+def functional_layernorm(inputs, weight, bias, epsilon=1e-5):
+    # Matt: This is a very simplified functional layernorm, designed to duplicate
+    # the functionality of PyTorch nn.functional.layer_norm when this is needed to port
+    # models in Transformers. It assumes the dimension to be normalized is always the last one.
+    # If you need it to handle multiple dimensions, yell at me and I'll patch it.
+
+    # Calculate the moments on the last axis (layer activations).
+    mean, variance = tf.nn.moments(inputs, -1, keepdims=True)
+
+    # Compute layer normalization using the batch_normalization
+    # function.
+    outputs = tf.nn.batch_normalization(
+        inputs,
+        mean,
+        variance,
+        offset=bias,
+        scale=weight,
+        variance_epsilon=epsilon,
+    )
+    return outputs
+
+
 def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:
     """
     Invert an attention mask (e.g., switches 0. and 1.).

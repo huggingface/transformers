@@ -28,6 +28,7 @@ from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFPreTrainedModel, shape_list
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...tf_utils import functional_layernorm
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -179,7 +180,7 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         if self.data_format == "channels_last":
-            x = tf.keras.layers.LayerNormalization(axis=self.normalized_shape, epsilon=self.eps)(x)
+            x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps)
         elif self.data_format == "channels_first":
             input_dtype = x.dtype
             x = tf.cast(x, tf.float32)
@@ -479,7 +480,7 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         self.upscale_layer_norm = TFSamLayerNorm(
             self.hidden_size // 4, data_format="channels_first", name="upscale_layer_norm"
         )
-        self.activation = tf.keras.layers.GELU()
+        self.activation = tf.nn.gelu
 
         mlps_list = []
         for _ in range(self.num_mask_tokens):
@@ -590,7 +591,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
         coordinates = tf.cast(coordinates, self.positional_embedding.dtype)
-        coordinates = tf.linalg.matmul(coordinates, self.positional_embedding)
+        coordinates = tf.matmul(coordinates, self.positional_embedding)
         coordinates = 2 * np.pi * coordinates
         # outputs d_1 x ... x d_n x channel shape
         return tf.concat([tf.sin(coordinates), tf.cos(coordinates)], axis=-1)
