@@ -28,7 +28,6 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
-from accelerate.utils.modeling import find_tied_parameters
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
@@ -84,6 +83,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
+        find_tied_parameters,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
@@ -94,6 +94,8 @@ if is_accelerate_available():
         from accelerate.utils import get_balanced_memory
     else:
         get_balanced_memory = None
+else:
+    find_tied_parameters = None
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -2939,7 +2941,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        tied_params = find_tied_parameters(model)
+        if find_tied_parameters:
+            tied_params = find_tied_parameters(model)
+        else:
+            tied_params = []
         _missing = []
         for k in missing_keys:
             found = False
