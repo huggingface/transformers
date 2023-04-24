@@ -253,6 +253,8 @@
         title: BORT
       - local: model_doc/byt5
         title: ByT5
+      - local: model_doc/dfft
+        title: DFFT
       - local: model_doc/camembert
         title: CamemBERT
       - local: model_doc/canine
