@@ -40,7 +40,10 @@ from ...nms import batched_nms
 from ...sampling_result import SamplingResult
 from ...utils import (
     ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_maskrcnn import MaskRCNNConfig
 
@@ -49,11 +52,9 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MaskRCNNConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "MaskRCNNImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-maskrcnn"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 
 MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -89,10 +90,20 @@ class MaskRCNNModelOutput(ModelOutput):
     Base class for models that leverage the Mask R-CNN framework.
 
     Args:
-        loss (...)
-            ...
-        loss_dict (...)
-            ...
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+            Total loss as a combination of various losses.
+        loss_dict (`Dict`, *optional*):
+            A dictionary containing the individual losses. Useful for logging.
+        logits (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, num_labels + 1)`):
+            Classification logits (including no-object) for all proposals.
+        pred_boxes (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, num_labels * 4)`):
+            Predicted boxes, for each class and each proposal.
+        rois (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, 5)`):
+            Region of interest proposals. Each contains [batch_index, x1, y1, x2, y2].
+        proposals (`List[torch.FloatTensor]` of shape `(num_proposals_per_image, 5)`):
+            Proposals as predicted by the RPN. Each contains [x1, y1, x2, y2, score].
+        fpn_hidden_states (`tuple(torch.FloatTensor)` with length = number of scale levels):
+            Hidden states of the FPN (Feature Pyramid Network).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
@@ -2507,7 +2518,7 @@ class MaskRCNNRoIHead(nn.Module):
 
         return bbox_results
 
-    def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
+    def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -2552,8 +2563,6 @@ class MaskRCNNRoIHead(nn.Module):
             return [det_bbox] * batch_size, [det_label] * batch_size
 
         bbox_results = self._bbox_forward(feature_maps, rois)
-
-        # split batch bbox prediction back to each image
         logits = bbox_results["cls_score"]
         pred_boxes = bbox_results["bbox_pred"]
 
@@ -2677,7 +2686,7 @@ class MaskRCNNRoIHead(nn.Module):
         losses = {}
         # bbox head forward and loss
         if self.with_bbox:
-            bbox_results = self._bbox_forward_train(feature_maps, sampling_results, gt_bboxes, gt_labels, img_metas)
+            bbox_results = self._bbox_forward_train(feature_maps, sampling_results, gt_bboxes, gt_labels)
 
             losses.update(bbox_results["loss_bbox"])
 
@@ -2754,8 +2763,8 @@ MASK_RCNN_START_DOCSTRING = r"""
 MASK_RCNN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -2765,6 +2774,13 @@ MASK_RCNN_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings(
+    """
+    Mask R-CNN Model (consisting of a backbone, region-proposal network (RPN) and RoI head) for object detection and
+    instance segmentation tasks.
+    """,
+    MASK_RCNN_START_DOCSTRING,
+)
 class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2806,6 +2822,8 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
 
         return loss
 
+    @add_start_docstrings_to_model_forward(MASK_RCNN_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskRCNNModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
@@ -2814,6 +2832,39 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskRCNNModelOutput]:
+        r"""
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the loss. List of dicts, each dictionary containing at least the following 4 keys:
+            'class_labels', 'boxes' (the class labels, bounding boxes and masks of an image in the batch respectively).
+            The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes in the
+            image,)`, the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the
+            `masks` a `torch.FloatTensor` of shape .
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, MaskRCNNForObjectDetection
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("nielsr/maskrcnn-convnext-tiny")
+        >>> model = MaskRCNNForObjectDetection.from_pretrained("nielsr/maskrcnn-convnext-tiny")
+
+        >>> inputs = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> # model predicts bounding boxes, binary masks and corresponding class labels
+        >>> logits = outputs.logits
+        >>> pred_boxes = outputs.pred_boxes
+        ```
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
