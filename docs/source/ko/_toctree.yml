@@ -17,8 +17,8 @@
     title: 전처리
   - local: training
     title: 사전 학습된 모델 미세 조정하기
-  - local: in_translation
-    title: (번역중) Distributed training with 🤗 Accelerate
+  - local: accelerate
+    title: 🤗 Accelerate를 활용한 분산 학습
   - local: in_translation
     title: (번역중) Share a model
   title: (번역중) 튜토리얼
