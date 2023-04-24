@@ -526,7 +526,7 @@ class MaskRCNNAnchorGenerator(nn.Module):
                 Dtype of priors. Default: torch.float32.
             device (str):
                 The device where the anchors will be put on.
-        
+
         Return:
             list[torch.Tensor]: Anchors in multiple feature levels. \
                 The sizes of each tensor should be [N, 4], where \ N = width * height * num_base_anchors, width and
