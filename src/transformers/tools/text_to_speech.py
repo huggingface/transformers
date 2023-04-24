@@ -11,9 +11,10 @@ class TextToSpeechTool(PipelineTool):
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    description = """
-    Text to Speech tool, used to read English text out loud. It takes text as input, and outputs a voice signal.
-    """
+    description = (
+        "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
+        "text to read (in English) and returns a waveform object containing the sound."
+    )
 
     def __init__(self, model=None, pre_processor=None, post_processor=None, **kwargs):
         if model is None and pre_processor is None and post_processor is None:

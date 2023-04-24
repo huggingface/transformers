@@ -7,12 +7,13 @@ class SpeechToTextTool(PipelineTool):
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 
-    description = """
-    speech to text tool, used to convert a sound into text. It takes sound as input, and outputs a text.
-    """
+    description = (
+        "This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the "
+        "transcribed text."
+    )
 
-    def encode(self, inputs):
-        return self.pre_processor(inputs, return_tensors="pt").input_features
+    def encode(self, audio):
+        return self.pre_processor(audio, return_tensors="pt").input_features
 
     def forward(self, inputs):
         return self.model.generate(inputs=inputs)
