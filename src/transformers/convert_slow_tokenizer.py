@@ -1158,6 +1158,21 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
+
+        bos = self.original_tokenizer.bos_token
+        bos_token_id = self.original_tokenizer.bos_token_id
+        
+        eos = self.original_tokenizer.eos_token
+        eos_token_id = self.original_tokenizer.eos_token_id
+        return processors.TemplateProcessing(
+            single=f"{bos * self.original_tokenizer.add_bos_token} $A {eos * self.original_tokenizer.add_eos_token}",
+            pair=f"{bos* self.original_tokenizer.add_bos_token} $A {eos * self.original_tokenizer.add_eos_token} {bos * self.original_tokenizer.add_bos_token} $B {eos * self.original_tokenizer.add_eos_token}",
+            special_tokens=[
+                (bos, bos_token_id),
+                (eos, eos_token_id),
+            ],
+        )
+
         return processors.TemplateProcessing(
             single="<s> $A",
             pair="<s> $A $B",
