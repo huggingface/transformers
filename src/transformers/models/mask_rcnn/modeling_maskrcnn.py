@@ -862,20 +862,27 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
         (1, 0) >>> assert tuple(bbox_overlaps(empty, empty).shape) == (0, 0)
     """
 
-    assert mode in ["iou", "iof", "giou"], f"Unsupported mode {mode}"
+    if mode not in ["iou", "iof", "giou"]:
+        raise ValueError(f"Unsupported mode {mode}")
     # Either the boxes are empty or the length of boxes' last dimension is 4
-    assert bboxes1.size(-1) == 4 or bboxes1.size(0) == 0
-    assert bboxes2.size(-1) == 4 or bboxes2.size(0) == 0
+    if not (bboxes1.size(-1) == 4 or bboxes1.size(0) == 0):
+        raise ValueError(f"bboxes1 shape {bboxes1.shape} should have last dimension 4")
+    if not (bboxes2.size(-1) == 4 or bboxes2.size(0) == 0):
+        raise ValueError(f"bboxes2 shape {bboxes2.shape} should have last dimension 4")
 
     # Batch dim must be the same
     # Batch dim: (B1, B2, ... Bn)
-    assert bboxes1.shape[:-2] == bboxes2.shape[:-2]
+    if bboxes1.shape[:-2] != bboxes2.shape[:-2]:
+        raise ValueError(
+            f"bboxes1 and bboxes2 should have same batch dimensions, got {bboxes1.shape[:-2]} and {bboxes2.shape[:-2]}"
+        )
     batch_shape = bboxes1.shape[:-2]
 
     rows = bboxes1.size(-2)
     cols = bboxes2.size(-2)
     if is_aligned:
-        assert rows == cols
+        if rows != cols:
+            raise ValueError(f"bboxes1 and bboxes2 should be of same size in aligned mode, got {rows} and {cols}")
 
     if rows * cols == 0:
         if is_aligned:
@@ -2554,7 +2561,8 @@ class MaskRCNNRoIHead(nn.Module):
 
     def _mask_forward(self, x, rois=None, pos_inds=None, bbox_feats=None):
         """Mask head forward function used in both training and testing."""
-        assert (rois is not None) ^ (pos_inds is not None and bbox_feats is not None)
+        if not ((rois is not None) ^ (pos_inds is not None and bbox_feats is not None)):
+            raise ValueError("Either rois or (pos_inds and bbox_feats) should be specified")
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
             # if self.with_shared_head:
@@ -2615,18 +2623,26 @@ class MaskRCNNRoIHead(nn.Module):
         return mask_pred
 
     def forward_train(
-        self, x, img_metas, proposal_list, gt_bboxes, gt_labels, gt_bboxes_ignore=None, gt_masks=None, **kwargs
+        self,
+        feature_maps,
+        img_metas,
+        proposal_list,
+        gt_bboxes,
+        gt_labels,
+        gt_bboxes_ignore=None,
+        gt_masks=None,
+        **kwargs,
     ):
         """
         Args:
-            x (list[Tensor]):
-                list of multi-level img features.
+            feature_maps (`List[torch.Tensor]`):
+                List of multi-level image features.
             img_metas (list[dict]):
-                list of image info dict where each dict. Has: 'img_shape', 'scale_factor', 'flip', and may also contain
+                List of image info dict where each dict. Has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'. For details on the values of these keys see
                 `mmdet/datasets/pipelines/formatting.py:Collect`.
             proposals (list[Tensors]):
-                list of region proposals.
+                List of region proposals.
             gt_bboxes (list[Tensor]):
                 Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
             gt_labels (list[Tensor]):
@@ -2654,21 +2670,20 @@ class MaskRCNNRoIHead(nn.Module):
                     proposal_list[i],
                     gt_bboxes[i],
                     gt_labels[i],
-                    feats=[lvl_feat[i][None] for lvl_feat in x],
+                    feats=[lvl_feat[i][None] for lvl_feat in feature_maps],
                 )
                 sampling_results.append(sampling_result)
 
         losses = {}
         # bbox head forward and loss
         if self.with_bbox:
-            bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
+            bbox_results = self._bbox_forward_train(feature_maps, sampling_results, gt_bboxes, gt_labels, img_metas)
 
             losses.update(bbox_results["loss_bbox"])
 
-        # TODO verify mask head loss computation
         if self.with_mask:
             mask_results = self._mask_forward_train(
-                x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+                feature_maps, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
             )
             losses.update(mask_results["loss_mask"])
 
