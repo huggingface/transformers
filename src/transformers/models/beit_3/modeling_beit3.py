@@ -469,7 +469,6 @@ class EncoderLayer(nn.Module):
         residual = x
         x = self.final_layer_norm(x)
         x = self.ffn(x)
-        l_aux = None
 
         if self.drop_path is not None:
             x = self.drop_path(x)
@@ -477,7 +476,7 @@ class EncoderLayer(nn.Module):
         x = self.residual_connection(x, residual)
         if not self.normalize_before:
             x = self.final_layer_norm(x)
-        return x, l_aux
+        return x
 
 def init_bert_params(module):
     def normal_(data):
@@ -612,9 +611,8 @@ class Encoder(nn.Module):
             )
 
         # incremental_state is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
-        l_aux = []
         for idx, layer in enumerate(self.layers):
-            x, l_aux_i = layer(
+            x = layer(
                 x,
                 encoder_padding_mask=encoder_padding_mask if incremental_state is None else None,
                 attn_mask=attn_mask,
@@ -625,7 +623,6 @@ class Encoder(nn.Module):
             if return_all_hiddens:
                 assert encoder_states is not None
                 encoder_states.append(x)
-            l_aux.append(l_aux_i)
 
         if self.layer_norm is not None:
             x = self.layer_norm(x)
@@ -635,7 +632,6 @@ class Encoder(nn.Module):
             "encoder_embedding": encoder_embedding,
             "encoder_padding_mask": encoder_padding_mask,
             "encoder_states": encoder_states,
-            "l_aux": l_aux,
         }
 
 
