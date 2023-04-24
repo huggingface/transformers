@@ -33,9 +33,9 @@ MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MaskRCNNConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MaskRCNNForObjectDetection`]. It is used to instantiate a Mask
-    R-CNN model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mask R-CNN
+    This is the configuration class to store the configuration of a [`MaskRCNNForObjectDetection`]. It is used to
+    instantiate a Mask R-CNN model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the Mask R-CNN
     [microsoft/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

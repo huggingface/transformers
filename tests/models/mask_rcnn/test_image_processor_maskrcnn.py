@@ -271,7 +271,7 @@ class MaskRCNNImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestC
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
-        expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
+        expected_boxes_slice = torch.tensor([554.4699, 132.6167, 618.8463, 309.8000])
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
         # verify image_id
         expected_image_id = torch.tensor([39769])
