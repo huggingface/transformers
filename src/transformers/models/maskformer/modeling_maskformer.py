@@ -1250,7 +1250,7 @@ class MaskFormerPixelDecoder(nn.Module):
             feature_size (`int`, *optional*, defaults to 256):
                 The feature size (channel dimension) of the FPN feature maps.
             mask_feature_size (`int`, *optional*, defaults to 256):
-                The features (channels) of the target masks size \C_{\epsilon}\ in the paper.
+                The features (channels) of the target masks size \\(C_{\epsilon}\\) in the paper.
         """
         super().__init__()
 
