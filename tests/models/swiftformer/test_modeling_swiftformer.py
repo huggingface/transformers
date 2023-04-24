@@ -231,7 +231,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = SwiftFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    ####
     @unittest.skip(reason="SwiftFormer does not output attentions")
     def test_attention_outputs(self):
         pass
