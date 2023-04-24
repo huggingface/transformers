@@ -17,9 +17,9 @@ class TextToSpeechTool(PipelineTool):
 
     def __init__(self, model=None, pre_processor=None, post_processor=None, **kwargs):
         if model is None and pre_processor is None and post_processor is None:
-            model = 'microsoft/speecht5_tts'
-            pre_processor = 'microsoft/speecht5_tts'
-            post_processor = 'microsoft/speecht5_hifigan'
+            model = "microsoft/speecht5_tts"
+            pre_processor = "microsoft/speecht5_tts"
+            post_processor = "microsoft/speecht5_hifigan"
 
         super().__init__(model, pre_processor, post_processor, **kwargs)
 
