@@ -27,10 +27,7 @@ class TextClassificationTool(PipelineTool):
     )
 
     def post_init(self):
-        if self.inference_api_mode:
-            config = AutoConfig.from_pretrained(self.model)
-        else:
-            config = self.model.config
+        config = AutoConfig.from_pretrained(self.model)
         num_labels = config.num_labels
         labels = list(config.label2id.keys())
 
