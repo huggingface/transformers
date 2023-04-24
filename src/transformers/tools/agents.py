@@ -143,8 +143,8 @@ class OpenAIAgent(Agent):
 
     def generate_code(self, task, tools):
         tool_descs = [f"- tool_{i} is a function that {tool.description}" for i, tool in enumerate(tools)]
-        prompt = OPENAI_PROMPT_TEMPLATE.replace("<<prompt>>", task)
-        prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
+        prompt = OPENAI_PROMPT_TEMPLATE.replace("{prompt}", task)
+        prompt = prompt.replace("{tools}", "\n".join(tool_descs))
 
         result = openai.ChatCompletion.create(
             model=self.model,
