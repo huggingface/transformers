@@ -15,7 +15,7 @@
 from transformers import PretrainedConfig
 
 
-class EncoderConfig(PretrainedConfig):
+class Beit3Config(PretrainedConfig):
     def __init__(self, embed_dim=768,
                  attention_heads=12,
                  ffn_embed_dim=3072,
@@ -61,15 +61,7 @@ class EncoderConfig(PretrainedConfig):
         self.img_size = img_size
         self.patch_size = patch_size
         self.in_chans = in_chans
-        # Fairscale
 
-        if self.deepnorm:
-            self.normalize_before = False
-            self.subln = False
         if self.subln:
             self.normalize_before = True
             self.deepnorm = False
-        if self.use_xmoe:
-            self.moe_normalize_gate_prob_before_dropping = True
-            self.moe_second_expert_policy = "random"
-            assert self.moe_freq > 0 and self.moe_expert_count > 0

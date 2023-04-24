@@ -11,15 +11,14 @@ from torch.autograd.grad_mode import F
 from torch.nn import LayerNorm, ModuleList
 
 from transformers.activations import get_activation
+from .configuration_beit_3 import Beit3Config
+from ... import PreTrainedModel
 from ...utils import logging
 
 EVAL_CAPACITY_TOKEN_FRACTION = 0.25
 SAMPLE_FRACTION = 0.2
 logger = logging.get_logger(__name__)
 
-
-def MultiwayWrapper(module, dim=1):
-    return MultiwayNetwork(module, dim=dim)
 
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
@@ -40,6 +39,43 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     output = input.div(keep_prob) * random_tensor
     return output
 
+def set_split_position(position):
+    def apply_fn(module):
+        if hasattr(module, "split_position"):
+            module.split_position = position
+
+    return apply_fn
+
+class BeitPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = Beit3Config
+    base_model_prefix = "beit"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BeitEncoder):
+            module.gradient_checkpointing = value
 
 class Beit3DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -183,33 +219,6 @@ class PositionalEmbedding(nn.Embedding):
         )
 
 
-class set_torch_seed(object):
-    def __init__(self, seed):
-        assert isinstance(seed, int)
-        self.rng_state = self.get_rng_state()
-
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-
-    def get_rng_state(self):
-        state = {"torch_rng_state": torch.get_rng_state()}
-        if torch.cuda.is_available():
-            state["cuda_rng_state"] = torch.cuda.get_rng_state()
-        return state
-
-    def set_rng_state(self, state):
-        torch.set_rng_state(state["torch_rng_state"])
-        if torch.cuda.is_available():
-            torch.cuda.set_rng_state(state["cuda_rng_state"])
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.set_rng_state(self.rng_state)
-
-
 class FeedForwardNetwork(nn.Module):
     def __init__(
         self,
@@ -272,12 +281,12 @@ class MultiheadAttention(nn.Module):
         self.encoder_decoder_attention = encoder_decoder_attention
         assert self.self_attention ^ self.encoder_decoder_attention
 
-        self.k_proj = MultiwayWrapper(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.v_proj = MultiwayWrapper(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.q_proj = MultiwayWrapper(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.out_proj = MultiwayWrapper(nn.Linear(embed_dim, embed_dim, bias=True))
+        self.k_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
+        self.v_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
+        self.q_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
+        self.out_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
         self.inner_attn_ln = (
-            MultiwayWrapper(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
+            MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
             if subln and self.self_attention
             else None
         )
@@ -376,13 +385,6 @@ class MultiheadAttention(nn.Module):
 
         return attn, attn_weights
 
-def set_split_position(position):
-    def apply_fn(module):
-        if hasattr(module, "split_position"):
-            module.split_position = position
-
-    return apply_fn
-
 
 class EncoderLayer(nn.Module):
     def __init__(self, args, depth):
@@ -390,7 +392,7 @@ class EncoderLayer(nn.Module):
         self.args = args
         self.embed_dim = args.encoder_embed_dim
         self.self_attn = self.build_self_attention(self.embed_dim, args)
-        self.self_attn_layer_norm = MultiwayWrapper(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
+        self.self_attn_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
         self.dropout_module = torch.nn.Dropout(args.dropout)
 
         if args.drop_path_rate > 0:
@@ -404,13 +406,13 @@ class EncoderLayer(nn.Module):
         self.normalize_before = args.normalize_before
         self.ffn_dim = args.encoder_ffn_embed_dim
 
-        self.ffn = MultiwayWrapper(
+        self.ffn = MultiwayNetwork(
             self.build_ffn(
                 self.embed_dim,
                 self.args,
             ),
         )
-        self.final_layer_norm = MultiwayWrapper(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
+        self.final_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
         self.alpha = 1.0
 
     def build_ffn(self, embed_dim, args):
@@ -528,12 +530,9 @@ class Encoder(nn.Module):
                 )
             )
         self.num_layers = len(self.layers)
-        self.layer_norm = MultiwayWrapper(LayerNorm(embed_dim, eps=args.layernorm_eps))
+        self.layer_norm = MultiwayNetwork(LayerNorm(embed_dim, eps=args.layernorm_eps))
 
         self.relative_position = None
-
-        if args.bert_init:
-            self.apply(init_bert_params)
 
         if args.subln:
             init_scale = math.sqrt(math.log(args.layers * 2))
