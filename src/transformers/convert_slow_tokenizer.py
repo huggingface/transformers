@@ -1158,10 +1158,9 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-
         bos = self.original_tokenizer.bos_token
         bos_token_id = self.original_tokenizer.bos_token_id
-        
+
         eos = self.original_tokenizer.eos_token
         eos_token_id = self.original_tokenizer.eos_token_id
         return processors.TemplateProcessing(
