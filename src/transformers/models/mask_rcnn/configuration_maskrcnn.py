@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,9 +33,9 @@ MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MaskRCNNConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MaskRCNNModel`]. It is used to instantiate a Mask
-    RCNN model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mask RCNN
+    This is the configuration class to store the configuration of a [`MaskRCNNForObjectDetection`]. It is used to instantiate a Mask
+    R-CNN model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Mask R-CNN
     [microsoft/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -54,12 +54,12 @@ class MaskRCNNConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import MaskRCNNConfig, MaskRCNNModel
+    >>> from transformers import MaskRCNNConfig, MaskRCNNForObjectDetection
 
     >>> # Initializing a default MaskRCNN configuration
     >>> configuration = MaskRCNNConfig()
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = MaskRCNNModel(configuration)
+    >>> model = MaskRCNNForObjectDetection(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
@@ -99,9 +99,16 @@ class MaskRCNNConfig(PretrainedConfig):
         bbox_roi_extractor_roi_layer={"type": "RoIAlign", "output_size": 7, "sampling_ratio": 0},
         bbox_roi_extractor_out_channels=256,
         bbox_roi_extractor_featmap_strides=[4, 8, 16, 32],
+        # Box head
         bbox_head_in_channels=256,
+        bbox_head_roi_feat_size=7,
+        bbox_head_fc_out_channels=1024,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
+        # Mask head
+        mask_head_num_convs=4,
+        mask_head_in_channels=256,
+        mask_head_conv_out_channels=256,
         mask_roi_extractor_roi_layer={"type": "RoIAlign", "output_size": 14, "sampling_ratio": 0},
         mask_roi_extractor_out_channels=256,
         mask_roi_extractor_featmap_strides=[4, 8, 16, 32],
@@ -168,8 +175,13 @@ class MaskRCNNConfig(PretrainedConfig):
         self.bbox_roi_extractor_out_channels = bbox_roi_extractor_out_channels
         self.bbox_roi_extractor_featmap_strides = bbox_roi_extractor_featmap_strides
         self.bbox_head_in_channels = bbox_head_in_channels
+        self.bbox_head_roi_feat_size = bbox_head_roi_feat_size
+        self.bbox_head_fc_out_channels = bbox_head_fc_out_channels
         self.bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means
         self.bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds
+        self.mask_head_num_convs = mask_head_num_convs
+        self.mask_head_in_channels = mask_head_in_channels
+        self.mask_head_conv_out_channels = mask_head_conv_out_channels
         self.mask_roi_extractor_roi_layer = mask_roi_extractor_roi_layer
         self.mask_roi_extractor_out_channels = mask_roi_extractor_out_channels
         self.mask_roi_extractor_featmap_strides = mask_roi_extractor_featmap_strides

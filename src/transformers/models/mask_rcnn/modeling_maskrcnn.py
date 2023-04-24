@@ -396,24 +396,24 @@ class MaskRCNNAnchorGenerator(nn.Module):
     Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/anchor/anchor_generator.py.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, scale_major=True, centers=None, center_offset=0.0):
         super().__init__()
 
         # calculate base sizes of anchors
         self.strides = [_pair(stride) for stride in config.anchor_generator_strides]
         self.base_sizes = [min(stride) for stride in self.strides]
-        assert len(self.base_sizes) == len(
-            self.strides
-        ), f"The number of strides should be the same as base sizes, got {self.strides} and {self.base_sizes}"
+        if len(self.base_sizes) != len(self.strides):
+            raise ValueError(
+                f"The number of strides should be the same as base sizes, got {self.strides} and {self.base_sizes}"
+            )
 
         # calculate scales of anchors
         self.scales = torch.Tensor(config.anchor_generator_scales)
-
+        # calculate ratios of anchors
         self.ratios = torch.Tensor(config.anchor_generator_ratios)
-        # TODO support the following 3 attributes in the config
-        self.scale_major = True
-        self.centers = None
-        self.center_offset = 0.0
+        self.scale_major = scale_major
+        self.centers = centers
+        self.center_offset = center_offset
         self.base_anchors = self.gen_base_anchors()
 
     @property
@@ -663,26 +663,27 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         """Apply transformation `pred_bboxes` to `boxes`.
 
         Args:
-            bboxes (torch.Tensor):
-                Basic boxes. Shape (B, N, 4) or (N, 4)
-            pred_bboxes (Tensor):
-                Encoded offsets with respect to each roi. Has shape (B, N, num_classes * 4) or (B, N, 4) or (N,
-                num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors.Offset encoding
+            bboxes (`torch.Tensor`):
+                Basic boxes. Shape (batch_size, N, 4) or (N, 4)
+            pred_bboxes (`torch.Tensor`):
+                Encoded offsets with respect to each roi. Has shape (batch_size, N, num_classes * 4) or (batch_size, N, 4) or
+                (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors. Offset encoding
                 follows [1]_.
-            max_shape (Sequence[int] or torch.Tensor or Sequence[
-               Sequence[int]],optional): Maximum bounds for boxes, specifies (H, W, C) or (H, W). If bboxes shape is
-               (B, N, 4), then the max_shape should be a Sequence[Sequence[int]] and the length of max_shape should
-               also be B.
-            wh_ratio_clip (float, optional): The allowed ratio between
-                width and height.
+            max_shape (`Sequence[int]` or `torch.Tensor` or `Sequence[Sequence[int]]`, *optional*):
+                Maximum bounds for boxes, specifies (H, W, C) or (H, W). If bboxes shape is (B, N, 4), then the max_shape should
+                be a Sequence[Sequence[int]] and the length of max_shape should also be B.
+            wh_ratio_clip (`float`, *optional*):
+                The allowed ratio between width and height.
 
         Returns:
             torch.Tensor: Decoded boxes.
         """
 
-        assert pred_bboxes.size(0) == bboxes.size(0)
+        if pred_bboxes.size(0) != bboxes.size(0):
+            raise ValueError("pred_bboxes and bboxes should have the same first dimension")
         if pred_bboxes.ndim == 3:
-            assert pred_bboxes.size(1) == bboxes.size(1)
+            if pred_bboxes.size(1) != bboxes.size(1):
+                raise ValueError("pred_bboxes and bboxes should have the same second dimension")
 
         if pred_bboxes.ndim == 2 and not torch.onnx.is_in_onnx_export():
             # single image decode
@@ -750,21 +751,25 @@ class MaskRCNNBboxOverlaps2D:
 
     def __call__(self, bboxes1, bboxes2, mode="iou", is_aligned=False):
         """Calculate IoU between 2D bboxes.
+        
         Args:
-            bboxes1 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
-                format, or shape (m, 5) in <x1, y1, x2, y2, score> format.
-            bboxes2 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
-                format, shape (m, 5) in <x1, y1, x2, y2, score> format, or be empty. If `is_aligned ` is `True`, then m
-                and n must be equal.
-            mode (str): "iou" (intersection over union), "iof" (intersection
-                over foreground), or "giou" (generalized intersection over union).
-            is_aligned (bool, optional): If True, then m and n must be equal.
-                Default False.
+            bboxes1 (`torch.Tensor`):
+                Bboxes having shape (m, 4) in <x1, y1, x2, y2> format, or shape (m, 5) in <x1, y1, x2, y2, score> format.
+            bboxes2 (`torch.Tensor`):
+                Boxes having shape (m, 4) in <x1, y1, x2, y2> format, shape (m, 5) in <x1, y1, x2, y2, score> format, or be empty.
+                If `is_aligned ` is `True`, then m and n must be equal.
+            mode (`str`, *optional*, defaults to "iou"):
+                "iou" (intersection over union), "iof" (intersection over foreground), or "giou" (generalized intersection over union).
+            is_aligned (`bool`, *optional*, defaults to `False`):
+                If True, then m and n must be equal. Default False.
+
         Returns:
             Tensor: shape (m, n) if `is_aligned ` is False else shape (m,)
         """
-        assert bboxes1.size(-1) in [0, 4, 5]
-        assert bboxes2.size(-1) in [0, 4, 5]
+        if bboxes1.size(-1) not in [0, 4, 5]:
+            raise ValueError(f"bboxes1 must have shape (m, 4) or (m, 5), but got {bboxes1.size()}")
+        if bboxes2.size(-1) not in [0, 4, 5]:
+            raise ValueError(f"bboxes2 must have shape (n, 4) or (n, 5), but got {bboxes2.size()}")
         if bboxes2.size(-1) == 5:
             bboxes2 = bboxes2[..., :4]
         if bboxes1.size(-1) == 5:
@@ -911,9 +916,9 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
 
 
 class MaskRCNNMaxIoUAssigner:
-    """Assign a corresponding gt bbox or background to each bbox.
-    Each proposals will be assigned with `-1`, or a semi-positive integer indicating the ground truth index.
-    - -1: negative sample, no assigned gt
+    """Assign a corresponding ground truth bbox or background to each bbox.
+    Each proposal will be assigned with `-1`, or a semi-positive integer indicating the ground truth index.
+    - -1: negative sample, no assigned ground truth (gt)
     - semi-positive integer: positive sample, index (0-based) of assigned gt
 
     Source:
@@ -949,10 +954,7 @@ class MaskRCNNMaxIoUAssigner:
         ignore_wrt_candidates=True,
         match_low_quality=True,
         gpu_assign_thr=-1,
-        iou_calculator={"type": "BboxOverlaps2D"},
     ):
-        # TODO remove `iou_calculator` argument since it defaults to MaskRCNNBboxOverlaps2D
-
         self.pos_iou_thr = pos_iou_thr
         self.neg_iou_thr = neg_iou_thr
         self.min_pos_iou = min_pos_iou
@@ -1118,10 +1120,6 @@ class MaskRCNNRandomSampler:
         self.pos_sampler = self
         self.neg_sampler = self
 
-        # TODO haven't added this, not sure it's necessary
-        # from mmdet.core.bbox import demodata
-        # self.rng = demodata.ensure_rng(kwargs.get('rng', None))
-
     def random_choice(self, gallery, num):
         """Random select some elements from the gallery.
         If `gallery` is a Tensor, the returned indices will be a Tensor; If `gallery` is a ndarray or list, the
@@ -1241,6 +1239,8 @@ class MaskRCNNRPN(nn.Module):
 
     RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal
     Networks](https://arxiv.org/abs/1506.01497).
+
+    Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/models/dense_heads/anchor_head.py
     """
 
     def __init__(self, config, num_classes=1, reg_decoded_bbox=False):
@@ -1258,7 +1258,6 @@ class MaskRCNNRPN(nn.Module):
 
         # layers
         self.use_sigmoid_cls = config.rpn_loss_cls.get("use_sigmoid", False)
-        # TODO: fix num_classes
         self.num_classes = num_classes
         if self.use_sigmoid_cls:
             self.cls_out_channels = num_classes
@@ -1290,7 +1289,7 @@ class MaskRCNNRPN(nn.Module):
             neg_pos_ub=config.rpn_sampler_neg_pos_ub,
             add_gt_as_proposals=config.rpn_sampler_add_gt_as_proposals,
         )
-        # TODO remove these hardcoded variables
+        # TODO support PseudoSampler in the future
         self.sampling = True
         self.reg_decoded_bbox = reg_decoded_bbox
 
@@ -1664,26 +1663,28 @@ class MaskRCNNRPN(nn.Module):
         """Compute losses of the head.
 
         Args:
-            cls_scores (list[Tensor]): Box scores for each scale level
-                Has shape (N, num_anchors * num_classes, H, W)
-            bbox_preds (list[Tensor]): Box energies / deltas for each scale
-                level with shape (N, num_anchors * 4, H, W)
-            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
-                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]): class indices corresponding to each box
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
-                boxes can be ignored when computing the loss. Default: None
+            cls_scores (list[Tensor]):
+                Box scores for each scale level. Has shape (N, num_anchors * num_classes, H, W)
+            bbox_preds (list[Tensor]):
+                Box energies / deltas for each scale level with shape (N, num_anchors * 4, H, W)
+            gt_bboxes (list[Tensor]):
+                Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+            gt_labels (list[Tensor]):
+                Class indices corresponding to each box
+            img_metas (list[dict]):
+                Meta information of each image, e.g., image size, scaling factor, etc.
+            gt_bboxes_ignore (None | list[Tensor]):
+                Specify which bounding boxes can be ignored when computing the loss. Default: None
 
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
-        # TODO RPN head sets gt_labels = None
-        gt_labels = None
-
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
-        assert len(featmap_sizes) == self.prior_generator.num_levels
+        if len(featmap_sizes) != self.prior_generator.num_levels:
+            raise ValueError(
+                f"featmap_sizes should have {self.prior_generator.num_levels} "
+                f"elements, but got {len(featmap_sizes)}"
+            )
 
         device = cls_scores[0].device
 
@@ -1695,7 +1696,7 @@ class MaskRCNNRPN(nn.Module):
             gt_bboxes,
             img_metas,
             gt_bboxes_ignore_list=gt_bboxes_ignore,
-            gt_labels_list=gt_labels,
+            gt_labels_list=None, # RPN head sets gt_labels = None
             label_channels=label_channels,
         )
         if cls_reg_targets is None:
@@ -2026,10 +2027,7 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
 
         cfg = layer_cfg.copy()
         cfg.pop("type")
-        # layer_type = cfg.pop("type")
-        # TODO: use the RoIAlign op of mmcv: https://github.com/open-mmlab/mmcv/blob/master/mmcv/ops/roi_align.py
-        # assert hasattr(ops, layer_type)
-        # layer_cls = getattr(ops, layer_type)
+        # we use the RoIAlign op of torchvision inplace of the one in mmcv: https://github.com/open-mmlab/mmcv/blob/master/mmcv/ops/roi_align.py
         layer_cls = RoIAlign
         roi_layers = nn.ModuleList([layer_cls(spatial_scale=1 / s, **cfg) for s in featmap_strides])
         return roi_layers
@@ -2052,7 +2050,6 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
         return target_lvls
 
     def forward(self, feats, rois, roi_scale_factor=None):
-        """Forward function."""
         out_size = self.roi_layers[0].output_size
         num_levels = len(feats)
         expand_dims = (-1, self.out_channels * out_size[0] * out_size[1])
@@ -2064,9 +2061,6 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
             roi_feats = roi_feats * 0
         else:
             roi_feats = feats[0].new_zeros(rois.size(0), self.out_channels, *out_size)
-        # TODO: remove this when parrots supports
-        if torch.__version__ == "parrots":
-            roi_feats.requires_grad = True
 
         if num_levels == 1:
             if len(rois) == 0:
@@ -2115,13 +2109,22 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
 
     This class is a simplified version of
     https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/bbox_heads/convfc_bbox_head.py#L11.
+    
+    Args:
+        config (`MaskRCNNConfig`): Model configuration.
+        num_branch_fcs (`int`, *optional*, defaults to `2`):
+            Number of fully-connected layers in the branch.
+        reg_class_agnostic (`bool`, *optional*, defaults to `False`):
+            Whether the regression is class agnostic.
+        reg_decoded_bbox (`bool`, *optional*, defaults to `False`):
+            Whether to apply the regression loss (e.g. `IouLoss`, `GIouLoss`, `DIouLoss`)directly on the decoded bounding boxes.
+        custom_activation (`bool`, *optional*, defaults to `False`):
+            Whether to use a custom activation function.
     """
 
     def __init__(
         self,
         config,
-        roi_feat_size=7,
-        fc_out_channels=1024,
         num_branch_fcs=2,
         reg_class_agnostic=False,
         reg_decoded_bbox=False,
@@ -2129,10 +2132,9 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
     ):
         super().__init__()
 
-        # TODO make init attributes configurable
-        self.roi_feat_size = _pair(roi_feat_size)
+        self.roi_feat_size = _pair(config.bbox_head_roi_feat_size)
         self.roi_feat_area = self.roi_feat_size[0] * self.roi_feat_size[1]
-        self.fc_out_channels = fc_out_channels
+        self.fc_out_channels = config.bbox_head_fc_out_channels
 
         last_layer_dim = config.bbox_head_in_channels
         last_layer_dim *= self.roi_feat_area
@@ -2155,7 +2157,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
             target_means=config.bbox_head_bbox_coder_target_means, target_stds=config.bbox_head_bbox_coder_target_stds
         )
 
-        # TODO remove these hardcoded attributes
+        # TODO make these configurable in the future
         self.reg_class_agnostic = reg_class_agnostic
         self.reg_decoded_bbox = reg_decoded_bbox
         self.custom_activation = custom_activation
@@ -2342,19 +2344,17 @@ class MaskRCNNFCNMaskHead(nn.Module):
     Mask head.
     """
 
-    def __init__(
-        self, config, num_convs=4, in_channels=256, conv_out_channels=256, conv_kernel_size=3, scale_factor=2
-    ):
+    def __init__(self, config, conv_kernel_size=3, scale_factor=2):
         super().__init__()
 
-        self.num_classes = config.num_labels
+        self.num_labels = config.num_labels
         self.class_agnostic = False
 
-        # TODO make init attributes configurable
         self.convs = nn.ModuleList()
         self.activations = nn.ModuleList()
-        for i in range(num_convs):
-            in_channels = in_channels if i == 0 else conv_out_channels
+        conv_out_channels = config.mask_head_conv_out_channels
+        for i in range(config.mask_head_num_convs):
+            in_channels = config.mask_head_in_channels if i == 0 else conv_out_channels
             padding = (conv_kernel_size - 1) // 2
             self.convs.append(nn.Conv2d(in_channels, conv_out_channels, conv_kernel_size, padding=padding))
             self.activations.append(nn.ReLU(inplace=True))
@@ -2365,7 +2365,7 @@ class MaskRCNNFCNMaskHead(nn.Module):
             stride=scale_factor,
         )
         self.relu = nn.ReLU(inplace=True)
-        self.conv_logits = nn.Conv2d(conv_out_channels, self.num_classes, 1)
+        self.conv_logits = nn.Conv2d(conv_out_channels, self.num_labels, 1)
 
         self.loss_mask = CrossEntropyLoss(use_mask=True, loss_weight=1.0)
 
@@ -2464,23 +2464,20 @@ class MaskRCNNRoIHead(nn.Module):
         """bool: whether the RoI head contains a `mask_head`"""
         return hasattr(self, "mask_head") and self.mask_head is not None
 
-    def _bbox_forward(self, x, rois):
+    def _bbox_forward(self, feature_maps, rois):
         """Box head forward function used in both training and testing.
 
         Args:
-            x (list of `torch.FloatTensor`):
+            feature_maps (`List[torch.FloatTensor]`):
                 Multi-scale feature maps coming from the FPN.
             rois (`torch.FloatTensor`):
+                RoIs that are used as input to the box head.
         """
-        # print("Shape of rois:", rois.shape)
         # TODO: a more flexible way to decide which feature maps to use
-        bbox_feats = self.bbox_roi_extractor(x[: self.bbox_roi_extractor.num_inputs], rois)
-        # print("Shape of bbox_feats:", bbox_feats.shape)
-        # if self.with_shared_head:
-        #     bbox_feats = self.shared_head(bbox_feats)
-        cls_score, bbox_pred = self.bbox_head(bbox_feats)
+        bbox_features = self.bbox_roi_extractor(feature_maps[: self.bbox_roi_extractor.num_inputs], rois)
+        cls_score, bbox_pred = self.bbox_head(bbox_features)
 
-        bbox_results = {"cls_score": cls_score, "bbox_pred": bbox_pred, "bbox_feats": bbox_feats}
+        bbox_results = {"cls_score": cls_score, "bbox_pred": bbox_pred, "bbox_feats": bbox_features}
 
         return bbox_results
 
@@ -2495,11 +2492,11 @@ class MaskRCNNRoIHead(nn.Module):
         bbox_results.update(loss_bbox=loss_bbox)
         return bbox_results
 
-    def forward_test_bboxes(self, x, proposals, rcnn_test_cfg):
+    def forward_test_bboxes(self, feature_maps, proposals, rcnn_test_cfg):
         """Test only det bboxes without augmentation.
 
         Args:
-            x (tuple[Tensor]):
+            feature_maps (tuple[Tensor]):
                 Feature maps of all scale levels.
             img_metas (list[dict]):
                 Image meta info.
@@ -2528,18 +2525,11 @@ class MaskRCNNRoIHead(nn.Module):
             # There is no proposal in the whole batch
             return [det_bbox] * batch_size, [det_label] * batch_size
 
-        bbox_results = self._bbox_forward(x, rois)
+        bbox_results = self._bbox_forward(feature_maps, rois)
 
         # split batch bbox prediction back to each image
         logits = bbox_results["cls_score"]
         pred_boxes = bbox_results["bbox_pred"]
-
-        # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
-        # print("Shape of cls score:", cls_score.shape)
-        # print("Shape of pred boxes:", bbox_pred.shape)
-        # print("Number of proposals per image:", num_proposals_per_img)
-        # logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
-        # pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
 
         return rois, proposals, logits, pred_boxes
 
