@@ -24,9 +24,9 @@ You should only use the tools necessary to perform the task.
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
 Tools:
-- tool_1 is a function that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
-- tool_2 is a function that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
-- tool_3 is a function that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
+- tool_1: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
+- tool_2: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
+- tool_3: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
 
 Answer:
 ```py
@@ -52,22 +52,23 @@ OPENAI_PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to com
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
 Tools:
-- tool_1 is a function that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
-- tool_2 is a function that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
-- tool_3 is a function that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
+- tool_1: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
+- tool_2: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
+- tool_3: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
 
 Answer:
 ```py
 translated_question = tool_1(text=question)['translation_text']
 answer = tool_3(text=translated_question, image=image)
+print(f"The answer is {result}")
 ```
 
 This is the format. Begin!
 
-Task: {prompt}
+Task: <<prompt>>
 
 Tools:
-{tools}
+<<tools>>
 
 Answer:
 """
@@ -109,7 +110,7 @@ class OpenAssistantAgent(Agent):
 
     def generate_code(self, task, tools):
         headers = {"Authorization": self.token}
-        tool_descs = [f"- tool_{i} is a function that {tool.description}" for i, tool in enumerate(tools)]
+        tool_descs = [f"- tool_{i}: {tool.description}" for i, tool in enumerate(tools)]
         prompt = OPEN_ASSISTANT_PROMPT_TEMPLATE.replace("<<prompt>>", task)
         prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
         inputs = {
@@ -142,9 +143,9 @@ class OpenAIAgent(Agent):
         self.model = model
 
     def generate_code(self, task, tools):
-        tool_descs = [f"- tool_{i} is a function that {tool.description}" for i, tool in enumerate(tools)]
-        prompt = OPENAI_PROMPT_TEMPLATE.replace("{prompt}", task)
-        prompt = prompt.replace("{tools}", "\n".join(tool_descs))
+        tool_descs = [f"- tool_{i}: {tool.description}" for i, tool in enumerate(tools)]
+        prompt = OPENAI_PROMPT_TEMPLATE.replace("<<prompt>>", task)
+        prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
 
         result = openai.ChatCompletion.create(
             model=self.model,
