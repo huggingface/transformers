@@ -105,8 +105,10 @@ class MaskRCNNModelTester:
 
         # inference
         result = model(pixel_values)
-        # expected logits shape: (num_proposals_per_image stacked on top of each other, 4)
+        # expected logits shape: (num_proposals_per_image stacked on top of each other, num_labels + 1)
         self.parent.assertEqual(result.logits.shape, (478, self.num_labels + 1))
+        # expected boxes shape: (num_proposals_per_image stacked on top of each other, num_labels * 4)
+        self.parent.assertEqual(result.pred_boxes.shape, (478, self.num_labels * 4))
 
         # training
         result = model(pixel_values, labels=labels)
