@@ -20,25 +20,6 @@ SAMPLE_FRACTION = 0.2
 logger = logging.get_logger(__name__)
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
 def set_split_position(position):
     def apply_fn(module):
         if hasattr(module, "split_position"):
@@ -46,14 +27,15 @@ def set_split_position(position):
 
     return apply_fn
 
-class BeitPreTrainedModel(PreTrainedModel):
+
+class Beit3PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = Beit3Config
-    base_model_prefix = "beit"
+    base_model_prefix = "beit3"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -73,23 +55,9 @@ class BeitPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BeitEncoder):
-            module.gradient_checkpointing = value
-
-class Beit3DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
+    # def _set_gradient_checkpointing(self, module, value=False):
+    #     if isinstance(module, BeitEncoder):
+    #         module.gradient_checkpointing = value
 
 class MultiwayNetwork(nn.Module):
     def __init__(self, module, dim=1):
@@ -125,21 +93,15 @@ class MutliwayEmbedding(MultiwayNetwork):
         self.split_position = -1
 
 
-class VisionEmbedding(nn.Module):
+class VisionEmbedding(Beit3PreTrainedModel):
     """Image to Patch Embedding"""
 
     def __init__(
-        self,
-        img_size=224,
-        patch_size=16,
-        in_chans=3,
-        embed_dim=768,
-        contain_mask_token=False,
-        prepend_cls_token=False,
+        self,config
     ):
-        super().__init__()
-        img_size = (img_size, img_size)
-        patch_size = (patch_size, patch_size)
+        super().__init__(config)
+        img_size = (config.img_size, config.img_size)
+        patch_size = (config.patch_size, config.patch_size)
         num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
         self.patch_shape = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
         self.img_size = img_size
@@ -147,18 +109,12 @@ class VisionEmbedding(nn.Module):
         self.num_patches = num_patches
 
         self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size
+            config.in_chans, config.embed_dim, kernel_size=patch_size, stride=patch_size
         )
 
-        if contain_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        else:
-            self.mask_token = None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
 
-        if prepend_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        else:
-            self.cls_token = None
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
 
     def num_position_embeddings(self):
         if self.cls_token is None:
@@ -166,7 +122,7 @@ class VisionEmbedding(nn.Module):
         else:
             return self.num_patches + 1
 
-    def forward(self, x, masked_position=None, **kwargs):
+    def forward(self, x, masked_position=None):
         B, C, H, W = x.shape
         assert (
             H == self.img_size[0] and W == self.img_size[1]
@@ -201,7 +157,6 @@ class PositionalEmbedding(nn.Embedding):
         self,
         x,
         positions=None,
-        **kwargs,
     ):
         if positions is None:
             # being consistent with Fairseq, which starts from 2.
@@ -219,25 +174,16 @@ class PositionalEmbedding(nn.Embedding):
         )
 
 
-class FeedForwardNetwork(nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        ffn_dim,
-        activation_fn,
-        dropout,
-        activation_dropout,
-        layernorm_eps,
-        subln=False,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.activation_fn = get_activation(activation_fn)
-        self.activation_dropout_module = torch.nn.Dropout(activation_dropout)
-        self.dropout_module = torch.nn.Dropout(dropout)
-        self.fc1 = nn.Linear(self.embed_dim, ffn_dim)
-        self.fc2 = nn.Linear(ffn_dim, self.embed_dim)
-        self.ffn_layernorm = LayerNorm(ffn_dim, eps=layernorm_eps) if subln else None
+class FeedForwardNetwork(Beit3PreTrainedModel):
+    def __init__(self,config):
+        super().__init__(config)
+        self.embed_dim = config.embed_dim
+        self.activation_fn = get_activation(config.activation_fn)
+        self.activation_dropout_module = torch.nn.Dropout(config.activation_dropout)
+        self.dropout_module = torch.nn.Dropout(config.dropout)
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
+        self.ffn_layernorm = LayerNorm(config.ffn_dim, eps=config.layernorm_eps) if config.subln else None
 
     def reset_parameters(self):
         self.fc1.reset_parameters()
@@ -259,39 +205,34 @@ class FeedForwardNetwork(nn.Module):
         return
 
 
-class MultiheadAttention(nn.Module):
+class MultiheadAttention(Beit3PreTrainedModel):
     def __init__(
         self,
-        args,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
+        config,
         self_attention=False,
         encoder_decoder_attention=False,
         subln=False,
     ):
-        super().__init__()
-        self.args = args
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        super().__init__(config)
+        self.embed_dim = config.embed_dim
+        self.num_heads = config.attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
 
         self.self_attention = self_attention
         self.encoder_decoder_attention = encoder_decoder_attention
         assert self.self_attention ^ self.encoder_decoder_attention
 
-        self.k_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.v_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.q_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
-        self.out_proj = MultiwayNetwork(nn.Linear(embed_dim, embed_dim, bias=True))
+        self.k_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.v_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.q_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.out_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.inner_attn_ln = (
-            MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
+            MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
             if subln and self.self_attention
             else None
         )
-        self.dropout_module = torch.nn.Dropout(dropout)
-        self.xpos = None
+        self.dropout_module = torch.nn.Dropout(config.attention_dropout)
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
@@ -386,63 +327,32 @@ class MultiheadAttention(nn.Module):
         return attn, attn_weights
 
 
-class EncoderLayer(nn.Module):
-    def __init__(self, args, depth):
-        super().__init__()
-        self.args = args
-        self.embed_dim = args.encoder_embed_dim
-        self.self_attn = self.build_self_attention(self.embed_dim, args)
-        self.self_attn_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
-        self.dropout_module = torch.nn.Dropout(args.dropout)
-
-        if args.drop_path_rate > 0:
-            drop_path_prob = np.linspace(0, args.drop_path_rate, args.layers)[
-                depth
-            ]
-            self.drop_path = Beit3DropPath(drop_path_prob)
-        else:
-            self.drop_path = None
-
-        self.normalize_before = args.normalize_before
-        self.ffn_dim = args.encoder_ffn_embed_dim
-
-        self.ffn = MultiwayNetwork(
-            self.build_ffn(
-                self.embed_dim,
-                self.args,
-            ),
-        )
-        self.final_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=args.layernorm_eps))
-        self.alpha = 1.0
-
-    def build_ffn(self, embed_dim, args):
-        return FeedForwardNetwork(
-            embed_dim,
-            self.ffn_dim,
-            args.activation_fn,
-            args.dropout,
-            args.activation_dropout,
-            args.layernorm_eps,
-            args.subln,
-        )
-
-    def build_self_attention(self, embed_dim, args):
-        return MultiheadAttention(
-            args,
-            embed_dim,
-            args.attention_heads,
-            dropout=args.attention_dropout,
+class EncoderLayer(Beit3PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.embed_dim = config.encoder_embed_dim
+        self.self_attn = MultiheadAttention(
+            config,
             self_attention=True,
             encoder_decoder_attention=False,
-            subln=args.subln,
+            subln=config.subln,
         )
+        self.self_attn_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
+        self.dropout_module = torch.nn.Dropout(config.dropout)
+
+        self.normalize_before = config.normalize_before
+        self.ffn_dim = config.encoder_ffn_embed_dim
+
+        self.ffn = MultiwayNetwork(FeedForwardNetwork(config),)
+        self.final_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
+        self.alpha = 1.0
 
     def residual_connection(self, x, residual):
         return residual * self.alpha + x
 
     def forward(self, x, encoder_padding_mask, attn_mask=None, rel_pos=None, multiway_split_position=None, incremental_state=None):
         if multiway_split_position is not None:
-            assert self.args.multiway
+            # assert self.args.multiway
             self.apply(set_split_position(multiway_split_position))
 
         if attn_mask is not None:
@@ -461,17 +371,11 @@ class EncoderLayer(nn.Module):
         )
         x = self.dropout_module(x)
 
-        if self.drop_path is not None:
-            x = self.drop_path(x)
-
         x = self.residual_connection(x, residual)
 
         residual = x
         x = self.final_layer_norm(x)
         x = self.ffn(x)
-
-        if self.drop_path is not None:
-            x = self.drop_path(x)
 
         x = self.residual_connection(x, residual)
         if not self.normalize_before:
@@ -504,37 +408,31 @@ def init_bert_params(module):
             normal_(module.v_proj.weight.data)
 
 
-class Encoder(nn.Module):
+class Encoder(Beit3PreTrainedModel):
     def __init__(
         self,
-        args,
+        config,
         embed_positions=None,
         **kwargs
     ):
-        self.args = args
         super().__init__(**kwargs)
 
-        self.dropout_module = torch.nn.Dropout(args.dropout)
+        self.dropout_module = torch.nn.Dropout(config.dropout)
 
-        embed_dim = args.encoder_embed_dim
+        embed_dim = config.encoder_embed_dim
         self.embed_positions = embed_positions
 
         self.layers = nn.ModuleList([])
 
-        for i in range(args.layers):
-            self.layers.append(
-                self.build_encoder_layer(
-                    args,
-                    depth=i,
-                )
-            )
+        for i in range(config.layers):
+            self.layers.append(EncoderLayer(config))
         self.num_layers = len(self.layers)
-        self.layer_norm = MultiwayNetwork(LayerNorm(embed_dim, eps=args.layernorm_eps))
+        self.layer_norm = MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
 
         self.relative_position = None
 
-        if args.subln:
-            init_scale = math.sqrt(math.log(args.layers * 2))
+        if config.subln:
+            init_scale = math.sqrt(math.log(config.layers * 2))
             for name, p in self.named_parameters():
                 if (
                     "fc1" in name
@@ -543,15 +441,6 @@ class Encoder(nn.Module):
                     or "v_proj" in name
                 ):
                     p.data.mul_(init_scale)
-
-
-    def build_encoder_layer(
-        self, args, depth,):
-        layer = EncoderLayer(
-            args,
-            depth,
-        )
-        return layer
 
     def forward_embedding(
         self,
@@ -578,7 +467,6 @@ class Encoder(nn.Module):
         multiway_split_position=None,
         incremental_state=None,
         positions=None,
-        **kwargs
     ):
         assert src_tokens is not None or token_embeddings is not None
         if encoder_padding_mask is None:
@@ -593,7 +481,6 @@ class Encoder(nn.Module):
                 ).bool()
 
         if multiway_split_position is not None:
-            assert self.args.multiway
             self.apply(set_split_position(multiway_split_position))
 
         x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, positions)
@@ -635,32 +522,25 @@ class Encoder(nn.Module):
         }
 
 
-class BEiT3(nn.Module):
-    def __init__(self, args, **kwargs):
+class BEiT3(Beit3PreTrainedModel):
+    def __init__(self, config):
         super().__init__()
-        self.args = args
+        # self.args = args
         # assert args.multiway
         # assert args.vocab_size > 0
         # assert not args.share_encoder_input_output_embed
-        self.text_embed = TextEmbedding(args.vocab_size, args.encoder_embed_dim)
-        self.vision_embed = VisionEmbedding(
-            args.img_size,
-            args.patch_size,
-            args.in_chans,
-            args.encoder_embed_dim,
-            contain_mask_token=True,
-            prepend_cls_token=True,
-        )
+        self.text_embed = TextEmbedding(config.vocab_size, config.encoder_embed_dim)
+        self.vision_embed = VisionEmbedding(config)
         # being consistent with Fairseq, which starts from 2 for position embedding
         embed_positions = MutliwayEmbedding(
             modules=[
-                PositionalEmbedding(self.vision_embed.num_position_embeddings() + 2, args.encoder_embed_dim),
-                PositionalEmbedding(args.max_source_positions, args.encoder_embed_dim),
+                PositionalEmbedding(self.vision_embed.num_position_embeddings() + 2, config.encoder_embed_dim),
+                PositionalEmbedding(config.max_source_positions, config.encoder_embed_dim),
             ],
             dim=1,
         )
         self.encoder = Encoder(
-            args,
+            config,
             embed_positions=embed_positions,
         )
 
