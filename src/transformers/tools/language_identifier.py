@@ -15,7 +15,8 @@ class LanguageIdentificationTool(TextClassificationTool):
 
     default_checkpoint = "papluca/xlm-roberta-base-language-detection"
     description = (
-        "identifies the language of the text passed as input. Returns the two-letter label of the identified language."
+        "This is a tool that identifies the language of the text passed as input. It takes one input named `text` and "
+        "returns the two-letter label of the identified language."
     )
 
     def decode(self, outputs):

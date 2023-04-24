@@ -7,10 +7,10 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
-    description = """
-    Question answering tool, which can understand a large text and return the answer to a question. It takes the text
-    as a first parameter, followed by the question.
-    """
+    description = (
+        "This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the "
+        "text where to find the answer, and `question`, which is the question, and returns the answer to the question."
+    )
     default_checkpoint = "google/flan-t5-base"
 
     def encode(self, text: str, question: str):
