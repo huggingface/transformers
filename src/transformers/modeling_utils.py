@@ -2941,7 +2941,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        if find_tied_parameters:
+        if find_tied_parameters is not None:
             tied_params = find_tied_parameters(model)
         else:
             tied_params = []
