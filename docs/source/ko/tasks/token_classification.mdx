@@ -16,11 +16,11 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="wVHdVlPScxA"/>
 
-토큰 분류는 문장의 개별 토큰에 레이블을 할당합니다. 가장 일반적인 토큰 분류 작업 중 하나는 명명된 엔터티 인식(Named Entity Recognition, NER)입니다. NER은 문장에서 사람, 위치 또는 조직과 같은 각 엔터티의 레이블을 찾으려고 시도합니다.
+토큰 분류는 문장의 개별 토큰에 레이블을 할당합니다. 가장 일반적인 토큰 분류 작업 중 하나는 개체명 인식(Named Entity Recognition, NER)입니다. 개체명 인식은 문장에서 사람, 위치 또는 조직과 같은 각 개체의 레이블을 찾으려고 시도합니다.
 
 이 가이드에서 학습할 내용은:
 
-1. [WNUT 17](https://huggingface.co/datasets/wnut_17) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert-base-uncased)를 파인 튜닝하여 새로운 엔터티를 탐지합니다.
+1. [WNUT 17](https://huggingface.co/datasets/wnut_17) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert-base-uncased)를 파인 튜닝하여 새로운 개체를 탐지합니다.
 2. 추론을 위해 파인 튜닝 모델을 사용합니다.
 
 <Tip>
@@ -48,9 +48,9 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> notebook_login()
 ```
 
-## WNUT 17 데이터셋 가져오기[[load-wnut-17-dataset]]
+## WNUT 17 데이터 세트 가져오기[[load-wnut-17-dataset]]
 
-먼저 🤗 Datasets 라이브러리에서 WNUT 17 데이터셋을 가져옵니다:
+먼저 🤗 Datasets 라이브러리에서 WNUT 17 데이터 세트를 가져옵니다:
 
 ```py
 >>> from datasets import load_dataset
@@ -68,7 +68,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 }
 ```
 
-`ner_tags`의 각 숫자는 엔터티를 나타냅니다. 숫자를 레이블 이름으로 변환하여 엔터티가 무엇인지 확인합니다:
+`ner_tags`의 각 숫자는 개체를 나타냅니다. 숫자를 레이블 이름으로 변환하여 개체가 무엇인지 확인합니다:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
@@ -90,17 +90,17 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ]
 ```
 
-각 `ner_tag`의 앞에 붙은 문자는 엔터티의 토큰 위치를 나타냅니다:
+각 `ner_tag`의 앞에 붙은 문자는 개체의 토큰 위치를 나타냅니다:
 
-- `B-` 엔터티의 시작을 나타냅니다.
-- `I-` 토큰이 동일한 엔터티 내부에 포함되어 있음을 나타냅니다 (예를 들어 `State` 토큰은 `Empire State Building`와 같은 엔터티의 일부입니다.).
-- `0` 토큰이 어떤 엔터티에도 해당하지 않음을 나타냅니다.
+- `B-`는 개체의 시작을 나타냅니다.
+- `I-`는 토큰이 동일한 개체 내부에 포함되어 있음을 나타냅니다(예를 들어 `State` 토큰은 `Empire State Building`와 같은 개체의 일부입니다).
+- `0`는 토큰이 어떤 개체에도 해당하지 않음을 나타냅니다.
 
 ## 전처리[[preprocess]]
 
 <Youtube id="iY2AZYdZAr0"/>
 
-다음 단계는 `tokens` 필드를 전처리하기 위해 DistilBERT 토크나이저를 가져오는 것입니다:
+다음으로 `tokens` 필드를 전처리하기 위해 DistilBERT 토크나이저를 가져옵니다:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -108,7 +108,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-위의 예제 'tokens' 필드에서 보았듯이 입력은 이미 토큰화된 것처럼 보입니다. 그러나 실제로 입력은 아직 토큰화되지 않았으므로 단어를 하위 단어로 토큰화하려면 `is_split_into_words=True`를 설정해야 합니다. 예를 들어: 
+위의 예제 `tokens` 필드를 보면 입력이 이미 토큰화된 것처럼 보입니다. 그러나 실제로 입력은 아직 토큰화되지 않았으므로 단어를 하위 단어로 토큰화하기 위해 `is_split_into_words=True`를 설정해야 합니다. 예를 들어: 
 
 ```py
 >>> example = wnut["train"][0]
@@ -118,10 +118,10 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
-그러나, 이는 `[CLS]`과 `[SEP]`라는 특수 토큰을 추가하고 하위 단어 토큰화로 인해 입력과 레이블 간에 불일치가 발생합니다. 이제 하나의 레이블에 해당하는 단일 단어가 두 개의 하위 단어로 분할될 수 있습니다. 토큰과 레이블을 다음과 같이 재정렬해야 합니다:
+그러나 이로 인해 `[CLS]`과 `[SEP]`라는 특수 토큰이 추가되고, 하위 단어 토큰화로 인해 입력과 레이블 간에 불일치가 발생합니다. 하나의 레이블에 해당하는 단일 단어는 이제 두 개의 하위 단어로 분할될 수 있습니다. 토큰과 레이블을 다음과 같이 재정렬해야 합니다:
 
 1. [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids) 메소드로 모든 토큰을 해당 단어에 매핑합니다.
-2. 특수 토큰 `[CLS]`와 `[SEP]`에 -100 레이블을 할당하여 PyTorch 손실 함수에 무시되도록 합니다.
+2. 특수 토큰 `[CLS]`와 `[SEP]`에 `-100` 레이블을 할당하여, PyTorch 손실 함수가 해당 토큰을 무시하도록 합니다.
 3. 주어진 단어의 첫 번째 토큰에만 레이블을 지정합니다. 같은 단어의 다른 하위 토큰에 `-100`을 할당합니다.
 
 다음은 토큰과 레이블을 재정렬하고 DistilBERT의 최대 입력 길이보다 길지 않도록 시퀀스를 잘라내는 함수를 만드는 방법입니다:
@@ -149,12 +149,12 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ...     return tokenized_inputs
 ```
 
-전체 데이터셋에 전처리 함수를 적용하려면, 🤗 Datasets [`~datasets.Dataset.map`] 함수를 사용하세요. 데이터셋의 여러 요소를 한 번에 처리하기 위해 `batched=True`로 설정함으로써 데이터셋 `map`를 더 빠르게 처리할 수 있습니다:
+전체 데이터 세트에 전처리 함수를 적용하려면, 🤗 Datasets [`~datasets.Dataset.map`] 함수를 사용하세요. `batched=True`로 설정하여 데이터 세트의 여러 요소를 한 번에 처리하면 `map` 함수의 속도를 높일 수 있습니다:
 ```py
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 ```
 
-이제 [`DataCollatorWithPadding`]를 사용하여 예제 배치를 만들어봅시다. 데이터셋 전체를 최대 길이로 패딩하는 대신, *동적 패딩*을 사용하여 배치에서 가장 긴 길이에 맞게 문장을 패딩하는 것이 효율적입니다.
+이제 [`DataCollatorWithPadding`]를 사용하여 예제 배치를 만들어봅시다. 데이터 세트 전체를 최대 길이로 패딩하는 대신, *동적 패딩*을 사용하여 배치에서 가장 긴 길이에 맞게 문장을 패딩하는 것이 효율적입니다.
 
 <frameworkcontent>
 <pt>
@@ -175,7 +175,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 ## 평가[[evaluation]]
 
-훈련 중 모델의 성능을 평가하기 위해 메트릭을 포함하는 것이 유용합니다. 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하여 빠르게 평가 방법을 로드할 수 있습니다. 이 작업에서는 [seqeval](https://huggingface.co/spaces/evaluate-metric/seqeval) 메트릭을 가져옵니다. (메트릭을 가져오고 계산하는 방법에 대해서는 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요). Seqeval은 실제로 정밀도, 재현률, F1 및 정확도와 같은 여러 점수를 산출합니다.
+훈련 중 모델의 성능을 평가하기 위해 평가 지표를 포함하는 것이 유용합니다. 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하여 빠르게 평가 방법을 가져올 수 있습니다. 이 작업에서는 [seqeval](https://huggingface.co/spaces/evaluate-metric/seqeval) 평가 지표를 가져옵니다. (평가 지표를 가져오고 계산하는 방법에 대해서는 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하세요). Seqeval은 실제로 정밀도, 재현률, F1 및 정확도와 같은 여러 점수를 산출합니다.
 
 ```py
 >>> import evaluate
@@ -256,11 +256,11 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 <pt>
 <Tip>
 
-[`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)의 기본 튜토리얼을 확인하세요!
+[`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
 
 </Tip>
 
-이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForSequenceClassification`]로 DistilBERT를 가쳐오고 예상되는 레이블 수와 레이블 매핑을 지정하세요:
+이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForSequenceClassification`]로 DistilBERT를 가져오고 예상되는 레이블 수와 레이블 매핑을 지정하세요:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
@@ -272,9 +272,9 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 이제 세 단계만 거치면 끝입니다:
 
-1. [`TrainingArguments`]에서 하이퍼파라미터를 정의하세요. `output_dir`는 모델을 저장할 위치를 지정하는 유일한 파라미터입니다. 이 모델을 Hub에 업로드하기 위해 `push_to_hub=True`를 설정합니다. (모델을 업로드하기 위해 Hugging Face에 로그인해야합니다.) 각 에폭이 끝날 때마다, [`Trainer`]는 seqeval 점수를 평가하고 훈련 체크포인트를 저장합니다.
-2. [`Trainer`]에 훈련 인수와 모델, 데이터셋, 토크나이저, 데이터 수집기 및 `compute_metrics` 함수를 전달하세요.
-3. [`~Trainer.train`]를 호출하여 모델은 파인 튜닝하세요.
+1. [`TrainingArguments`]에서 하이퍼파라미터를 정의하세요. `output_dir`는 모델을 저장할 위치를 지정하는 유일한 매개변수입니다. 이 모델을 Hub에 업로드하기 위해 `push_to_hub=True`를 설정합니다(모델을 업로드하기 위해 Hugging Face에 로그인해야합니다.) 각 에폭이 끝날 때마다, [`Trainer`]는 seqeval 점수를 평가하고 훈련 체크포인트를 저장합니다.
+2. [`Trainer`]에 훈련 인수와 모델, 데이터 세트, 토크나이저, 데이터 콜레이터 및 `compute_metrics` 함수를 전달하세요.
+3. [`~Trainer.train`]를 호출하여 모델을 파인 튜닝하세요.
 
 ```py
 >>> training_args = TrainingArguments(
@@ -331,7 +331,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 ... )
 ```
 
-그런 다음 [`TFAutoModelForSequenceClassification`]을 사용하여 DistilBERT를 로드하고, 예상되는 레이블 수와 레이블 매핑을 로드할 수 있습니다:
+그런 다음 [`TFAutoModelForSequenceClassification`]을 사용하여 DistilBERT를 가져오고, 예상되는 레이블 수와 레이블 매핑을 지정합니다:
 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
@@ -394,7 +394,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-드디어, 모델 훈련을 시작할 준비가 되었습니다! [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)에 훈련 데이터셋, 검증 데이터셋, 에폭의 수 및 콜백을 전달하여 파인 튜닝합니다:
+드디어, 모델 훈련을 시작할 준비가 되었습니다! [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)에 훈련 데이터 세트, 검증 데이터 세트, 에폭의 수 및 콜백을 전달하여 파인 튜닝합니다:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
