@@ -215,7 +215,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         pad_token_label=-100,
         only_label_first_subword=True,
         extra_ids=100,
-        loc_extra_ids=201,
+        loc_extra_ids=501,
         other_extra_ids=200,
         additional_special_tokens=None,
         **kwargs,
