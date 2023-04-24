@@ -100,7 +100,7 @@ def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarr
         fft_freqs (`np.ndarray` of shape `(num_frequency_bins,)`):
             Discrete frequencies of the FFT bins in Hz.
         filter_freqs (`np.ndarray` of shape `(num_mel_filters,)`):
-            Center points of the triangular filters to create, in Hz.
+            Center frequencies of the triangular filters to create, in Hz.
 
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_mel_filters)`
@@ -152,7 +152,7 @@ def mel_filter_bank(
             Highest frequency of interest in Hz. This should not exceed `sampling_rate / 2`.
         sampling_rate (`int`):
             Sample rate of the audio waveform.
-        norm (`str`, *optional*, defaults to `None`):
+        norm (`str`, *optional*):
             If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"` or `"slaney"`.
@@ -198,9 +198,8 @@ def apply_mel_filters(
     """
     Applies a mel filter bank to a spectrogram to create a mel spectrogram.
 
-    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. Note: This doesn't convert to
-    true decibels; use `amplitude_to_db()` or `power_to_db()` for that, depending on whether this is an amplitude or
-    power spectrogram.
+    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. To convert to true decibels,
+    use `amplitude_to_db()` or `power_to_db()`, depending on whether this is an amplitude or power spectrogram.
 
     Args:
         spectrogram (`np.ndarray` of shape `(num_freq_bins, length)`):
@@ -284,7 +283,7 @@ def window_function(
     return padded_window
 
 
-# TODO This method does not support batching yet as we are mainly focus on inference.
+# TODO This method does not support batching yet as we are mainly focused on inference.
 def stft(
     waveform: np.ndarray,
     window: np.ndarray,
@@ -517,7 +516,7 @@ def power_to_db(
         min_value (`float`, *optional*, defaults to `1e-10`):
             The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
             `log(0)`. The default of `1e-10` corresponds to a minimum of -100 dB. Must be greater than zero.
-        db_range (`float`, *optional*, defaults to `None`):
+        db_range (`float`, *optional*):
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
 
@@ -566,7 +565,7 @@ def amplitude_to_db(
         min_value (`float`, *optional*, defaults to `1e-5`):
             The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
             `log(0)`. The default of `1e-5` corresponds to a minimum of -100 dB. Must be greater than zero.
-        db_range (`float`, *optional*, defaults to `None`):
+        db_range (`float`, *optional*):
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
 
