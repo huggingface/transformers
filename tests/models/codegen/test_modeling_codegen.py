@@ -494,7 +494,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_codegen_sample(self):
         tokenizer = self.cached_tokenizer
-        model = self.model
+        model = self.cached_model
         model.to(torch_device)
 
         torch.manual_seed(0)
