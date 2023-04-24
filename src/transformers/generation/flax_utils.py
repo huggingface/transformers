@@ -470,7 +470,7 @@ class FlaxGenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,          
+                num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 trace=trace,
                 params=params,
                 model_kwargs=model_kwargs,
@@ -790,7 +790,7 @@ class FlaxGenerationMixin:
         length_penalty: Optional[float] = None,
         early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
-        num_beam_hyps_to_keep: Optional[int] = 1,        
+        num_beam_hyps_to_keep: Optional[int] = 1,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
@@ -838,8 +838,9 @@ class FlaxGenerationMixin:
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        num_return_sequences = num_beam_hyps_to_keep if num_beam_hyps_to_keep is not None else \
-            self.generation_config.num_return_sequences
+        num_return_sequences = (
+            num_beam_hyps_to_keep if num_beam_hyps_to_keep is not None else self.generation_config.num_return_sequences
+        )
 
         batch_size, num_beams, cur_len = input_ids.shape
 
