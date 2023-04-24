@@ -37,7 +37,7 @@ def nms(
 
     The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise
     CPU: NMS will be used. The returned type will always be the same as inputs.
-        
+    
     Args:
         boxes (torch.Tensor or np.ndarray):
             boxes in shape (N, 4).
@@ -51,10 +51,10 @@ def nms(
             score threshold for NMS.
         max_num (int):
             maximum number of boxes after NMS.
-    
+
     Returns:
         tuple: kept dets (boxes and scores) and indice, which always have the same data type as the input.
-    
+
     Example:
         >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9], >>> [49.3, 32.9, 51.0, 35.3], >>> [49.2, 31.8, 51.0, 35.4], >>>
         [35.1, 11.5, 39.1, 15.7], >>> [35.6, 11.8, 39.3, 14.2], >>> [35.3, 11.5, 39.9, 14.5], >>> [35.2, 11.7, 39.7,
