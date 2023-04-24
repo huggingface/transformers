@@ -2142,6 +2142,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
 
         """
+        # Dummy change.
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
