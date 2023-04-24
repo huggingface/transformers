@@ -30,11 +30,13 @@ class Beit3Config(PretrainedConfig):
                  subln=True,
                  bert_init=False,
                  multiway=True,
+                 max_source_positions=1024,
                  layernorm_eps=1e-5,
                  vocab_size=64010,
                  img_size=224,
                  patch_size=16,
                  in_chans=3,
+                 num_labels=2,
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -54,6 +56,7 @@ class Beit3Config(PretrainedConfig):
         self.subln = subln
         self.bert_init = bert_init
         self.multiway = multiway
+        self.max_source_positions = max_source_positions
         self.layernorm_eps = layernorm_eps
         # Text
         self.vocab_size = vocab_size
@@ -62,6 +65,7 @@ class Beit3Config(PretrainedConfig):
         self.patch_size = patch_size
         self.in_chans = in_chans
 
+        self.num_labels = num_labels
         if self.subln:
             self.normalize_before = True
             self.deepnorm = False
