@@ -667,6 +667,9 @@ class GenerationMixin:
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
             decoder_input_ids = decoder_input_ids_start
+        # exception: Donut checkpoints have task-specific decoder starts and don't expect a BOS token
+        elif self.config.model_type == "vision-encoder-decoder" and "donut" in self.name_or_path.lower():
+            pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
         elif (decoder_input_ids[:, 0] != decoder_start_token_id).all().item():
