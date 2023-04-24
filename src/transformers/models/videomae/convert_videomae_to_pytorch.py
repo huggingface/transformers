@@ -33,15 +33,7 @@ from transformers import (
 def get_videomae_config(model_name):
     config = VideoMAEConfig()
 
-    if "large" in model_name:
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-        config.decoder_num_hidden_layers = 12
-        config.decoder_num_attention_heads = 8
-        config.decoder_hidden_size = 512
-        config.decoder_intermediate_size = 2048
+    set_architecture_configs(model_name, config)
 
     if "finetuned" not in model_name:
         config.use_mean_pooling = False
@@ -62,6 +54,38 @@ def get_videomae_config(model_name):
         config.label2id = {v: k for k, v in id2label.items()}
 
     return config
+
+
+def set_architecture_configs(model_name, config):
+    if "small" in model_name:
+        config.hidden_size = 384
+        config.intermediate_size = 1536
+        config.num_hidden_layers = 12
+        config.num_attention_heads = 16
+        config.decoder_num_hidden_layers = 12
+        config.decoder_num_attention_heads = 3
+        config.decoder_hidden_size = 192
+        config.decoder_intermediate_size = 768
+    elif "large" in model_name:
+        config.hidden_size = 1024
+        config.intermediate_size = 4096
+        config.num_hidden_layers = 24
+        config.num_attention_heads = 16
+        config.decoder_num_hidden_layers = 12
+        config.decoder_num_attention_heads = 8
+        config.decoder_hidden_size = 512
+        config.decoder_intermediate_size = 2048
+    elif "huge" in model_name:
+        config.hidden_size = 1280
+        config.intermediate_size = 5120
+        config.num_hidden_layers = 32
+        config.num_attention_heads = 16
+        config.decoder_num_hidden_layers = 12
+        config.decoder_num_attention_heads = 8
+        config.decoder_hidden_size = 640
+        config.decoder_intermediate_size = 2560
+    elif "base" not in model_name:
+        raise ValueError('Model name should include either "small", "base", "large", or "huge"')
 
 
 def rename_key(name):
@@ -186,6 +210,8 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     logits = outputs.logits
 
     model_names = [
+        "videomae-small-finetuned-kinetics",
+        "videomae-small-finetuned-ssv2",
         # Kinetics-400 checkpoints (short = pretrained only for 800 epochs instead of 1600)
         "videomae-base-short",
         "videomae-base-short-finetuned-kinetics",
@@ -193,6 +219,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         "videomae-base-finetuned-kinetics",
         "videomae-large",
         "videomae-large-finetuned-kinetics",
+        "videomae-huge-finetuned-kinetics",
         # Something-Something-v2 checkpoints (short = pretrained only for 800 epochs instead of 2400)
         "videomae-base-short-ssv2",
         "videomae-base-short-finetuned-ssv2",
@@ -201,7 +228,13 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     ]
 
     # NOTE: logits were tested with image_mean and image_std equal to [0.5, 0.5, 0.5] and [0.5, 0.5, 0.5]
-    if model_name == "videomae-base":
+    if model_name == "videomae-small-finetuned-kinetics":
+        expected_shape = torch.Size([1, 400])
+        expected_slice = torch.tensor([-0.9291, -0.4061, -0.9307])
+    elif model_name == "videomae-small-finetuned-ssv2":
+        expected_shape = torch.Size([1, 174])
+        expected_slice = torch.tensor([0.2671, -0.4689, -0.8235])
+    elif model_name == "videomae-base":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
     elif model_name == "videomae-base-short":
@@ -215,6 +248,9 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     elif model_name == "videomae-large-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
+    elif model_name == "videomae-huge-finetuned-kinetics":
+        expected_shape = torch.Size([1, 400])
+        expected_slice = torch.tensor([0.2433, 0.1632, -0.4894])
     elif model_name == "videomae-base-short-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.6588, 0.0990, -0.2493])
