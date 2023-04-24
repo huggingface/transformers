@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import UdopForConditionalGeneration, UdopModel, UdopProcessor
+    from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
     from transformers.models.udop.modeling_udop import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -333,6 +333,165 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_name in UDOP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = UdopForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+class UdopEncoderOnlyModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        batch_size=13,
+        seq_length=7,
+        # For common tests
+        is_training=False,
+        use_attention_mask=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        decoder_layers=2,
+        num_attention_heads=4,
+        d_ff=37,
+        relative_attention_num_buckets=32,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        eos_token_id=1,
+        pad_token_id=0,
+        scope=None,
+        range_bbox=1000,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        # For common tests
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.decoder_layers = decoder_layers
+        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.scope = None
+        self.range_bbox = range_bbox
+
+    def get_config(self):
+        return UdopConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            is_encoder_decoder=False,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        bbox = ids_tensor([self.batch_size, self.seq_length, 4], self.range_bbox).float()
+        # Ensure that bbox is legal
+        for i in range(bbox.shape[0]):
+            for j in range(bbox.shape[1]):
+                if bbox[i, j, 3] < bbox[i, j, 1]:
+                    t = bbox[i, j, 3]
+                    bbox[i, j, 3] = bbox[i, j, 1]
+                    bbox[i, j, 1] = t
+                if bbox[i, j, 2] < bbox[i, j, 0]:
+                    t = bbox[i, j, 2]
+                    bbox[i, j, 2] = bbox[i, j, 0]
+                    bbox[i, j, 0] = t
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            bbox,
+            attention_mask,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            bbox,
+            attention_mask,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "bbox": bbox,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        bbox,
+        attention_mask,
+    ):
+        model = UdopEncoderModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+        )
+        encoder_output = result.last_hidden_state
+
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_model_fp16_forward(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+    ):
+        model = UdopEncoderModel(config=config).to(torch_device).half().eval()
+        output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+
+class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_resize_embeddings = False
+    test_model_parallel = True
+    all_parallelizable_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = UdopEncoderOnlyModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
 
 @require_torch

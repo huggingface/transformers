@@ -1921,7 +1921,12 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     UDOP_START_DOCSTRING,
 )
 class UdopEncoderModel(UdopPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.embed_tokens.weight",
+        r"encoder.embed_patches.proj.weight",
+        r"encoder.embed_patches.proj.bias",
+        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+    ]
 
     def __init__(self, config: UdopConfig):
         super().__init__(config)
