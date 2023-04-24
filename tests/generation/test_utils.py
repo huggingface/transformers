@@ -1457,22 +1457,22 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    def test_assisted_greedy_search_matches_greedy_search(self):
+    def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # It breaks the pattern in the tests above, for multiple reasons:
-        # - assisted_greedy_search, contrarily to the other methods, can't be called on its own (e.g. needs to
+        # - assisted_decoding, contrarily to the other methods, can't be called on its own (e.g. needs to
         # prepare the assistant encoder outputs in the main generate body);
-        # - assisted_greedy_search does not support `use_cache = False`
-        # - assisted_greedy_search does not support `batch_size > 1`
+        # - assisted_decoding does not support `use_cache = False`
+        # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
-            # may fix in the future: the following models fail to pass this test, and need model-specific fixes
+            # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text"]
+                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
             ):
                 return
 
@@ -1516,6 +1516,46 @@ class GenerationTesterMixin:
 
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
+
+    def test_assisted_decoding_sample(self):
+        # Seeded assisted decoding will not match sample for the same seed, as there are >1 sampling steps per output
+        # token. As such, this test only checks that the output format is correct.
+
+        for model_class in self.all_generative_model_classes:
+            # won't fix: FSMT and Reformer have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                return
+            # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
+            ):
+                return
+
+            # enable cache
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
+
+            # NOTE: assisted generation only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                return
+
+            config.use_cache = True
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            output_assisted = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                num_beams=1,
+                do_sample=True,
+                assistant_model=model,  # triggers assisted decoding
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""

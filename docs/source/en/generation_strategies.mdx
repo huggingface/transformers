@@ -333,15 +333,16 @@ This guide illustrates the main parameters that enable various decoding strategi
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
 
-### Assisted Generation
+### Assisted Decoding
 
-Assisted generation is a modification of the decoding strategies above that uses an assistant model with the same
-tokenizer (ideally a much smaller model) to speed up the decoding process. Currently only assisted greedy search is
-supported, and doesn't support batched inputs.
+Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
+tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
+the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
+and sampling are supported with assisted decoding, and doesn't support batched inputs.
 
-<!-- TODO: add link to the blog post about assisted generation when it exists -->
+<!-- TODO: add link to the blog post about assisted decoding when it exists -->
 
-To enable assisted generation, set the `assistant_model` argument with a model.
+To enable assisted decoding, set the `assistant_model` argument with a model.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -358,4 +359,26 @@ To enable assisted generation, set the `assistant_model` argument with a model.
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+```
+
+When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
+just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
+
+<!-- TODO: link the blog post again to explain why the tradeoff exists -->
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
+>>> assistant_checkpoint = "EleutherAI/pythia-160m-deduped"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
+>>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+["Alice and Bob are sitting on the sofa. Alice says, 'I'm going to my room"]
 ```

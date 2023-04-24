@@ -54,8 +54,10 @@ class GenerationConfig(PushToHubMixin):
             `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
+        - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
+            `assistant_model` is passed to `.generate()`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
+    You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
     Arg:
