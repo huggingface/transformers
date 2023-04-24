@@ -75,7 +75,7 @@ Answer:
 
 
 class Agent:
-    def perform(self, task, tools, **kwargs):
+    def run(self, task, tools, **kwargs):
         code = self.generate_code(task, tools)
         # Clean up the code received
         code_lines = code.split("\n")
@@ -124,7 +124,7 @@ class EndpointAgent(Agent):
         return response.json()[0]["generated_text"]
 
 
-class OpenAIAgent(Agent):
+class OpenAiAgent(Agent):
     prompt_template = OPENAI_PROMPT_TEMPLATE
 
     def __init__(self, model="gpt-3.5-turbo", api_key=None):
