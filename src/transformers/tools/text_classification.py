@@ -21,9 +21,9 @@ class TextClassificationTool(PipelineTool):
     model_class = AutoModelForSequenceClassification
 
     description = (
-        "classifies an English text using the following {n_labels} labels: {labels}. It takes a input named `text` "
-        "which should be in English and returns a dictionary with two keys named 'label' (the predicted label ) and "
-        "'score' (the probability associated to it)."
+        "This is a tool that classifies an English text using the following {n_labels} labels: {labels}. It takes a "
+        "input named `text` which should be in English and returns a dictionary with two keys named 'label' (the "
+        "predicted label ) and 'score' (the probability associated to it)."
     )
 
     def post_init(self):

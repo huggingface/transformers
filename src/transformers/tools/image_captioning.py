@@ -13,10 +13,10 @@ class ImageCaptioningTool(PipelineTool):
     pre_processor_class = AutoProcessor
     model_class = BlipForConditionalGeneration
 
-    description = """
-    image captioning tool, which can analyze images and caption them in English according to their content. It takes an
-    image as input, and returns a English text caption as an output.
-    """
+    description = (
+        "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
+        "image to caption, and returns a text that contains the description in English."
+    )
     default_checkpoint = "Salesforce/blip-image-captioning-base"
 
     def __init__(self, *args, **kwargs):

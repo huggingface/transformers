@@ -9,22 +9,10 @@ class Tool:
     Example of a super 'Tool' class that could live in huggingface_hub
     """
 
-    def __init__(self, model) -> None:
-        self.model = model
-
-    def encode(self, raw_inputs):
-        return raw_inputs
-
-    def forward(self, inputs):
-        return self.model(**inputs)
-
-    def decode(self, outputs):
-        return outputs
+    description = "This is a tool that ..."
 
     def __call__(self, *args, **kwargs):
-        encoded_inputs = self.encode(*args, **kwargs)
-        outputs = self.forward(encoded_inputs)
-        return self.decode(outputs)
+        return NotImplemented("Write this method in your subclass of `Tool`.")
 
 
 class PipelineTool(Tool):
@@ -32,7 +20,7 @@ class PipelineTool(Tool):
     model_class = None
     post_processor_class = AutoProcessor
     default_checkpoint = None
-    description = ""
+    description = "This is a tool that ..."
 
     def __init__(
         self,
