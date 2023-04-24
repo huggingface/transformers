@@ -528,7 +528,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    ```py
    >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
    >>> tf_dataset = model.prepare_tf_dataset(
-   ...     dataset, batch_size=16, shuffle=True, tokenizer=tokenizer
+   ...     dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer
    ... )  # doctest: +SKIP
    ```
 
@@ -538,7 +538,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> from tensorflow.keras.optimizers import Adam
 
    >>> model.compile(optimizer=Adam(3e-5))
-   >>> model.fit(dataset)  # doctest: +SKIP
+   >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
 
 ## What's next?
