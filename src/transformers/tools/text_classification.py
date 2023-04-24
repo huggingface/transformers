@@ -1,6 +1,6 @@
 import torch
 
-from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
+from ..models.auto import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 from .base import PipelineTool
 
 
@@ -27,8 +27,12 @@ class TextClassificationTool(PipelineTool):
     )
 
     def post_init(self):
-        num_labels = self.model.config.num_labels
-        labels = list(self.model.config.label2id.keys())
+        if self.inference_api_mode:
+            config = AutoConfig.from_pretrained(self.model)
+        else:
+            config = self.model.config
+        num_labels = config.num_labels
+        labels = list(config.label2id.keys())
 
         if len(labels) > 1:
             labels = [f"'{label}'" for label in labels]
@@ -48,3 +52,15 @@ class TextClassificationTool(PipelineTool):
         label_id = torch.argmax(logits[0]).item()
         label = self.model.config.id2label[label_id]
         return {"label": label, "score": scores[0][label_id].item()}
+
+    def decode_for_hub(self, outputs):
+        label = None
+        max_score = 0
+        for result in outputs:
+            lbl = result["label"]
+            score = float(result["score"])
+            if score > max_score:
+                label = lbl
+                max_score = score
+
+        return {"label": label, "score": max_score}

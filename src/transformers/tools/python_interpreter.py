@@ -1,4 +1,6 @@
 import ast
+import difflib
+from collections.abc import Mapping
 from typing import Any, Callable, Dict
 
 
@@ -95,7 +97,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return "".join([evaluate_ast(v, state, tools) for v in expression.values])
     elif isinstance(expression, ast.Name):
         # Name -> pick up the value in the state
-        return state[expression.id]
+        return evaluate_name(expression, state, tools)
     elif isinstance(expression, ast.Subscript):
         # Subscript -> return the value of the indexing
         return evaluate_subscript(expression, state, tools)
@@ -139,8 +141,23 @@ def evaluate_call(call, state, tools):
 def evaluate_subscript(subscript, state, tools):
     index = evaluate_ast(subscript.slice, state, tools)
     value = evaluate_ast(subscript.value, state, tools)
-    # TODO: add some logic here to fix typos of the LLM.
-    return value[index]
+    if index in value:
+        return value[index]
+    if isinstance(index, str) and isinstance(value, Mapping):
+        close_matches = difflib.get_close_matches(index, list(value.keys()))
+        if len(close_matches) > 0:
+            return value[close_matches[0]]
+
+    raise InterpretorError(f"Could not index {value} with {index}.")
+
+
+def evaluate_name(name, state, tools):
+    if name.id in state:
+        return state[name.id]
+    close_matches = difflib.get_close_matches(name.id, list(state.keys()))
+    if len(close_matches) > 0:
+        return state[close_matches[0]]
+    raise InterpretorError(f"Could not find a variable named {name.id} in the state.")
 
 
 def evaluate_condition(condition, state, tools):
