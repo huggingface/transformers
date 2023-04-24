@@ -22,8 +22,8 @@
   title: (번역중) 튜토리얼
 - sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Create a custom architecture
+    - local: create_a_model
+      title: 맞춤형 아키텍처 만들기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
     - local: run_scripts
