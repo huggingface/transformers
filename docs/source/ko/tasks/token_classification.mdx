@@ -272,7 +272,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 이제 세 단계만 거치면 끝입니다:
 
-1. [`TrainingArguments`]에서 하이퍼파라미터를 정의하세요. `output_dir`는 모델을 저장할 위치를 지정하는 유일한 매개변수입니다. 이 모델을 Hub에 업로드하기 위해 `push_to_hub=True`를 설정합니다(모델을 업로드하기 위해 Hugging Face에 로그인해야합니다.) 각 에폭이 끝날 때마다, [`Trainer`]는 seqeval 점수를 평가하고 훈련 체크포인트를 저장합니다.
+1. [`TrainingArguments`]에서 하이퍼파라미터를 정의하세요. `output_dir`는 모델을 저장할 위치를 지정하는 유일한 매개변수입니다. 이 모델을 허브에 업로드하기 위해 `push_to_hub=True`를 설정합니다(모델을 업로드하기 위해 Hugging Face에 로그인해야합니다.) 각 에폭이 끝날 때마다, [`Trainer`]는 seqeval 점수를 평가하고 훈련 체크포인트를 저장합니다.
 2. [`Trainer`]에 훈련 인수와 모델, 데이터 세트, 토크나이저, 데이터 콜레이터 및 `compute_metrics` 함수를 전달하세요.
 3. [`~Trainer.train`]를 호출하여 모델을 파인 튜닝하세요.
 
@@ -303,7 +303,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> trainer.train()
 ```
 
-훈련이 완료되면, [`~transformers.Trainer.push_to_hub`] 메소드를 사용하여 모델을 Hub에 공유할 수 있습니다.
+훈련이 완료되면, [`~transformers.Trainer.push_to_hub`] 메소드를 사용하여 모델을 허브에 공유할 수 있습니다.
 
 ```py
 >>> trainer.push_to_hub()
@@ -341,7 +341,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 ... )
 ```
 
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터셋을 `tf.data.Dataset` 형식으로 변환합니다:
+[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:
 
 ```py
 >>> tf_train_set = model.prepare_tf_dataset(
@@ -367,7 +367,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 >>> model.compile(optimizer=optimizer)
 ```
 
-훈련을 시작하기 전에 설정해야할 마지막 두 가지는 예측에서 seqeval 점수를 계산하고, 모델을 Hub에 업로드할 방법을 제공하는 것입니다. 모두 [Keras callbacks](../main_classes/keras_callbacks)를 사용하여 수행됩니다.
+훈련을 시작하기 전에 설정해야할 마지막 두 가지는 예측에서 seqeval 점수를 계산하고, 모델을 허브에 업로드할 방법을 제공하는 것입니다. 모두 [Keras callbacks](../main_classes/keras_callbacks)를 사용하여 수행됩니다.
 
 [`~transformers.KerasMetricCallback`]에 `compute_metrics` 함수를 전달하세요:
 
@@ -400,7 +400,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
 ```
 
-훈련이 완료되면, 모델이 자동으로 Hub에 업로드되어 누구나 사용할 수 있습니다!
+훈련이 완료되면, 모델이 자동으로 허브에 업로드되어 누구나 사용할 수 있습니다!
 </tf>
 </frameworkcontent>
 
