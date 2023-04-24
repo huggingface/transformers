@@ -43,31 +43,27 @@ class SwiftFormerConfig(PretrainedConfig):
 
 
     Args:
-        layers (`List(int)`, *optional*, defaults to [3, 3, 6, 4]):
+        layers (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
             Depth of each stage
-        embed_dims (`List(int)`, *optional*, defaults to [48, 56, 112, 220]):
+        embed_dims (`List[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
             The embedding dimension at each stage
-
         mlp_ratios (`int`, *optional*, defaults to 4):
             Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
 
-        downsamples (`List(bool)`, *optional*, defaults to `[True, True, True, True]`)
+        downsamples (`List[bool]`, *optional*, defaults to `[True, True, True, True]`)
             Whether or not to downsample inputs between two stages.
-
         vit_num (`int`, *optional*, defaults to `1`):
             ??
-        act_layer (`str`, *optional*, defaults to `gelu`):
+        act_layer (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string). `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-
         down_patch_size (`int`, *optional*, defaults to 3):
             The size of patches in downsampling layers.
         down_stride (`int`, *optional*, defaults to 2):
             The stride of convolution kernels in downsampling layers.
         down_pad (`int`, *optional*, defaults to 1):
             Padding in downsampling layers.
-        drop_path_rate (`float`, *optional*, defaults to `0.`):
+        drop_path_rate (`float`, *optional*, defaults to 0.):
             Rate at which to increase dropout probability in DropPath.
-
         use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-5):
@@ -92,7 +88,6 @@ class SwiftFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        ######
         layers=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
         mlp_ratios=4,
@@ -105,12 +100,9 @@ class SwiftFormerConfig(PretrainedConfig):
         drop_path_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
-        ######
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        ######
         self.layers = layers
         self.embed_dims = embed_dims
         self.mlp_ratios = mlp_ratios
