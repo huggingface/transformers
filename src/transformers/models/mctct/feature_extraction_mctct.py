@@ -21,7 +21,7 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import mel_filter_bank, spectrogram
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType
@@ -102,7 +102,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
 
-        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
     def _extract_mfsc_features(self, one_waveform: np.array) -> np.ndarray:
