@@ -11,8 +11,18 @@ class Tool:
 
     description = "This is a tool that ..."
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs):  # Might become run?
         return NotImplemented("Write this method in your subclass of `Tool`.")
+
+    def post_init(self):
+        # Do here everything you need to execute after the init (to avoir overriding the init which is complex), such
+        # as formatting the description with the attributes of your tools.
+        pass
+
+    def setup(self):
+        # Do here any operation that is expensive and needs to be executed before you start using your tool. Such as
+        # loading a big model.
+        self.is_initialized = True
 
 
 class PipelineTool(Tool):
@@ -39,36 +49,39 @@ class PipelineTool(Tool):
         if pre_processor is None:
             pre_processor = model
 
-        # Instantiate me maybe
-        if isinstance(pre_processor, str):
-            pre_processor = self.pre_processor_class.from_pretrained(pre_processor, **hub_kwargs)
-        self.pre_processor = pre_processor
-
-        if isinstance(model, str):
-            if model_kwargs is None:
-                model_kwargs = {}
-            if device_map is not None:
-                model_kwargs["device_map"] = device_map
-            model = self.model_class.from_pretrained(model, **model_kwargs, **hub_kwargs)
         self.model = model
-
-        if post_processor is None:
-            post_processor = pre_processor
-        elif isinstance(post_processor, str):
-            post_processor = self.post_processor_class.from_pretrained(post_processor, **hub_kwargs)
+        self.pre_processor = pre_processor
         self.post_processor = post_processor
-
-        if device is None:
-            if device_map is not None:
-                device = list(model.hf_device_map.values())[0]
-            else:
-                device = PartialState().default_device
-
         self.device = device
-        if device_map is None:
-            self.model.to(self.device)
+        self.device_map = device_map
+        self.model_kwargs = {} if model_kwargs is None else model_kwargs
+        if device_map is not None:
+            self.model_kwargs["device_map"] = device_map
+        self.hub_kwargs = hub_kwargs
 
         self.post_init()
+
+    def setup(self):
+        # Instantiate me maybe
+        if isinstance(self.pre_processor, str):
+            self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
+
+        if isinstance(self.model, str):
+            self.model = self.model_class.from_pretrained(self.model, **self.model_kwargs, **self.hub_kwargs)
+
+        if self.post_processor is None:
+            self.post_processor = self.pre_processor
+        elif isinstance(self.post_processor, str):
+            self.post_processor = self.post_processor_class.from_pretrained(self.post_processor, **self.hub_kwargs)
+
+        if self.device is None:
+            if self.device_map is not None:
+                self.device = list(self.model.hf_device_map.values())[0]
+            else:
+                self.device = PartialState().default_device
+
+        if self.device_map is None:
+            self.model.to(self.device)
 
     def post_init(self):
         pass
@@ -83,6 +96,8 @@ class PipelineTool(Tool):
         return self.post_processor(outputs)
 
     def __call__(self, *args, **kwargs):
+        if not self.is_initialized:
+            self.setup()
         encoded_inputs = self.encode(*args, **kwargs)
         encoded_inputs = send_to_device(encoded_inputs, self.device)
         outputs = self.forward(encoded_inputs)
