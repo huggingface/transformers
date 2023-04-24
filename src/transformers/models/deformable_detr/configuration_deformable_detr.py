@@ -125,6 +125,9 @@ class DeformableDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
+        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
 
     Examples:
 
@@ -189,6 +192,7 @@ class DeformableDetrConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
+        disable_custom_kernels=False,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -246,6 +250,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
+        self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

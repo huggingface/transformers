@@ -492,7 +492,6 @@ class DetaMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention.__init__ with DeformableDetr->Deta
     def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
         super().__init__()
         if embed_dim % num_heads != 0:
@@ -721,7 +720,6 @@ class DetaMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->Deta
 class DetaEncoderLayer(nn.Module):
     def __init__(self, config: DetaConfig):
         super().__init__()
@@ -810,7 +808,6 @@ class DetaEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer with DeformableDetr->Deta
 class DetaDecoderLayer(nn.Module):
     def __init__(self, config: DetaConfig):
         super().__init__()
