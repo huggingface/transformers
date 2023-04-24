@@ -985,12 +985,13 @@ if __name__ == "__main__":
             continue
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
+            # Link to the GitHub Action job
+            job_name = key
             if artifact_path["gpu"] is not None:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu)"
-                )
-            else:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
+                job_name = f"{key} ({artifact_path['gpu']}-gpu)"
+            if job_name_prefix:
+                job_name = f"{job_name_prefix} / {job_name}"
+            additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
 
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
