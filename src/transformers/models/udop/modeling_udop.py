@@ -138,6 +138,44 @@ UDOP_INPUTS_DOCSTRING = r"""
 """
 
 
+UDOP_ENCODER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
+
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 @dataclass
 class BaseModelOutputWithAttentionMask(BaseModelOutput):
     """
@@ -1876,3 +1914,93 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
+
+
+@add_start_docstrings(
+    "The bare UDOP Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    UDOP_START_DOCSTRING,
+)
+class UdopEncoderModel(UdopPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+
+    def __init__(self, config: UdopConfig):
+        super().__init__(config)
+
+        # text and image embeddings
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.patch_embed = UdopPatchEmbeddings(config)
+
+        encoder_config = deepcopy(config)
+        encoder_config.is_decoder = False
+        encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
+        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+
+    def get_encoder(self):
+        return self.encoder
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
+
+    @add_start_docstrings_to_model_forward(UDOP_ENCODER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Tensor = None,
+        attention_mask: Tensor = None,
+        pixel_values: Optional[Tensor] = None,
+        bbox: Dict[str, Any] = None,
+        visual_bbox: Dict[str, Any] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, UdopEncoderModel
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/udop-large")
+        >>> model = UdopEncoderModel.from_pretrained("nielsr/udop-large")
+        >>> input_ids = tokenizer(
+        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        ... ).input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            bbox=bbox,
+            visual_bbox=visual_bbox,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return encoder_outputs

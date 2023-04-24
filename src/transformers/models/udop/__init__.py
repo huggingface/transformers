@@ -64,6 +64,7 @@ else:
         "UdopForConditionalGeneration",
         "UdopPreTrainedModel",
         "UdopModel",
+        "UdopEncoderModel",
     ]
 
 if TYPE_CHECKING:
@@ -102,6 +103,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_udop import (
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UdopEncoderModel,
             UdopForConditionalGeneration,
             UdopModel,
             UdopPreTrainedModel,
