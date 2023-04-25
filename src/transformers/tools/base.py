@@ -27,6 +27,37 @@ class Tool:
         self.is_initialized = True
 
 
+class RemoteTool(Tool):
+    default_checkpoint = None
+    description = "This is a tool that ..."
+
+    def __init__(self, repo_id=None):
+        if repo_id is None:
+            repo_id = self.default_checkpoint
+        self.repo_id = repo_id
+        self.client = InferenceApi(repo_id)
+        self.post_init()
+
+    def prepare_inputs(self, *args, **kwargs):
+        if len(args) > 1:
+            raise ValueError("A `RemoteTool` can only accept one positional input.")
+        elif len(args) == 1:
+            return {"data": args[0]}
+
+        return {"inputs": kwargs}
+
+    def extract_outputs(self, outputs):
+        return outputs
+
+    def __call__(self, *args, **kwargs):
+        if not self.is_initialized:
+            self.setup()
+
+        inputs = self.prepare_inputs(*args, **kwargs)
+        outputs = self.client(**inputs)
+        return self.extract_outputs(outputs)
+
+
 class PipelineTool(Tool):
     pre_processor_class = AutoProcessor
     model_class = None
@@ -61,18 +92,10 @@ class PipelineTool(Tool):
             self.model_kwargs["device_map"] = device_map
         self.hub_kwargs = hub_kwargs
 
-        self.inference_api_mode = self.device == "hub"
-        if self.inference_api_mode and not isinstance(self.model, str):
-            raise ValueError("To use this tool in inference API mode, you need to provide a valid repo ID.")
-
         self.is_initialized = False
         self.post_init()
 
     def setup(self):
-        if self.inference_api_mode:
-            self.model = InferenceApi(self.model)
-            return
-
         # Instantiate me maybe
         if isinstance(self.pre_processor, str):
             self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
@@ -100,27 +123,15 @@ class PipelineTool(Tool):
     def encode(self, raw_inputs):
         return self.pre_processor(raw_inputs)
 
-    def encode_for_hub(self, *args, **kwargs):
-        # Deal with images here.
-        return kwargs
-
     def forward(self, inputs):
         return self.model(**inputs)
 
     def decode(self, outputs):
         return self.post_processor(outputs)
 
-    def decode_for_hub(outputs):
-        return outputs
-
     def __call__(self, *args, **kwargs):
         if not self.is_initialized:
             self.setup()
-
-        if self.inference_api_mode:
-            inputs = self.encode_for_hub(*args, **kwargs)
-            outputs = self.model(inputs)
-            return self.decode_for_hub(outputs)
 
         encoded_inputs = self.encode(*args, **kwargs)
         encoded_inputs = send_to_device(encoded_inputs, self.device)

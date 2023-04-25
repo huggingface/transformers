@@ -1,5 +1,5 @@
-from transformers import AutoProcessor, BlipForConditionalGeneration, is_vision_available
-
+from ..models.auto import AutoModelForVision2Seq, AutoProcessor
+from ..utils import is_vision_available
 from .base import PipelineTool
 
 
@@ -11,7 +11,7 @@ except ImportError:
 
 class ImageCaptioningTool(PipelineTool):
     pre_processor_class = AutoProcessor
-    model_class = BlipForConditionalGeneration
+    model_class = AutoModelForVision2Seq
 
     description = (
         "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
