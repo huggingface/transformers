@@ -1869,7 +1869,7 @@ class TFModelTesterMixin:
             generate_xla = tf.function(model.generate, jit_compile=True)
             generated_xla = generate_xla(inputs, **generate_kwargs).numpy()
 
-            # Due to numerical instability, let's fail the test only if there are more than one input sequences give
+            # Due to numerical instability, let's fail the test only if there are more than 10% of input sequences give
             # different outputs between XLA and non-XLA versions. If there are less than 10 examples, let's be strict
             # and not allow any difference.
             diff = [[], []]
@@ -1878,7 +1878,7 @@ class TFModelTesterMixin:
                     diff[0].append(_generated)
                     diff[1].append(_generated_xla)
             ratio = len(diff[0]) / len(generated)
-            if ratio > 0.1 or (len(diff[0]) == 1 and len(generated) <= 10):
+            if ratio > 0.1 or (len(diff[0]) > 0 and len(generated) < 10):
                 self.assertListEqual(diff[0], diff[1])
 
         for model_class in self.all_generative_model_classes:
