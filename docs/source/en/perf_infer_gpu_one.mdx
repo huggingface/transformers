@@ -71,7 +71,7 @@ model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 
-text = "Hello, my llama is cute"
+prompt = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)

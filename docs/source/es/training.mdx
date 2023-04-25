@@ -173,7 +173,7 @@ A continuación, convierte los datasets tokenizados en datasets de TensorFlow co
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
+...     label_cols="labels",
 ...     shuffle=True,
 ...     collate_fn=data_collator,
 ...     batch_size=8,
@@ -181,7 +181,7 @@ A continuación, convierte los datasets tokenizados en datasets de TensorFlow co
 
 >>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
+...     label_cols="labels",
 ...     shuffle=False,
 ...     collate_fn=data_collator,
 ...     batch_size=8,
