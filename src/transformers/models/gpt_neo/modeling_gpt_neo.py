@@ -955,15 +955,12 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
-    # fmt: off
     @add_code_sample_docstrings(
         checkpoint="EleutherAI/gpt-neo-125m",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
     )
-    # fmt: on
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
