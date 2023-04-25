@@ -9,27 +9,25 @@
 - sections:
   - local: pipeline_tutorial
     title: 추론을 위한 Pipeline
-  - local: in_translation
-    title: (번역중) Pipelines for inference
   - local: autoclass_tutorial
     title: 자동 클래스로 사전 학습된 인스턴스 로드하기
   - local: preprocessing
     title: 전처리
   - local: training
     title: 사전 학습된 모델 미세 조정하기
-  - local: in_translation
-    title: (번역중) Distributed training with 🤗 Accelerate
+  - local: accelerate
+    title: 🤗 Accelerate를 활용한 분산 학습
   - local: in_translation
     title: (번역중) Share a model
   title: (번역중) 튜토리얼
 - sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Create a custom architecture
+    - local: create_a_model
+      title: 맞춤형 아키텍처 만들기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
-    - local: in_translation
-      title: (번역중) Train with a script
+    - local: run_scripts
+      title: 스크립트로 학습하기
     - local: sagemaker
       title: Amazon SageMaker에서 학습 실행하기
     - local: in_translation
@@ -57,12 +55,12 @@
         title: (번역중) Question answering
       - local: in_translation
         title: (번역중) Causal language modeling
-      - local: in_translation
-        title: (번역중) Masked language modeling
+      - local: tasks/masked_language_modeling
+        title: 마스킹된 언어 모델링(Masked language modeling)
       - local: tasks/translation
         title: 번역
-      - local: in_translation
-        title: (번역중) Summarization
+      - local: tasks/summarization
+        title: 요약
       - local: in_translation
         title: (번역중) Multiple choice
       title: (번역중) 태스크별 가이드

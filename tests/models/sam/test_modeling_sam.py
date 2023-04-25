@@ -26,6 +26,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -282,18 +283,27 @@ class SamModelTester:
 
 
 @require_torch
-class SamModelTest(ModelTesterMixin, unittest.TestCase):
+class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (SamModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+
+    # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
 
     def setUp(self):
         self.model_tester = SamModelTester(self)
@@ -464,8 +474,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-h")
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-h")
+        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         model.to(torch_device)
         model.eval()

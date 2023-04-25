@@ -423,8 +423,11 @@ class Message:
                 artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
 
-            # The last run doesn't produce `test_failure_tables` (by some issues or have no model failure at all)
-            if len(prev_tables) > 0:
+            # if the last run produces artifact named `test_failure_tables`
+            if (
+                "test_failure_tables" in prev_tables
+                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+            ):
                 # Compute the difference of the previous/current (model failure) table
                 prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
@@ -655,7 +658,7 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f"Number of failures: {sum(job_result['failed'].values())}",
+                        text=f'Number of failures: {job_result["failed"][device]}',
                     )
 
                     print("Sending the following reply")
@@ -958,7 +961,7 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event == "push":
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]

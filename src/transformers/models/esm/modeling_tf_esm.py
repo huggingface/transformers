@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
+import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -36,7 +37,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    get_tf_activation,
     shape_list,
     unpack_inputs,
 )
@@ -475,24 +475,19 @@ class TFEsmAttention(Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Esm
 class TFEsmIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: EsmConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
-        else:
-            self.intermediate_act_fn = config.hidden_act
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-
+        hidden_states = tf.nn.gelu(hidden_states)
         return hidden_states
 
 
@@ -1102,6 +1097,11 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
         self.lm_head = TFEsmLMHead(config, name="lm_head")
+        if config.tie_word_embeddings:
+            # Ensure word embeddings are built so that we actually have something to tie
+            with tf.name_scope(os.path.join(self._name_scope(), "esm", "embeddings", "word_embeddings")):
+                self.esm.embeddings.word_embeddings.build((None, None))
+            self.lm_head.decoder = self.esm.embeddings.word_embeddings.weights[0]
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -1210,13 +1210,15 @@ class TFEsmLMHead(Layer):
         )
 
         self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-
-        self.decoder = Dense(
-            config.vocab_size,
-            use_bias=False,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="decoder",
-        )
+        if config.tie_word_embeddings:
+            self.decoder = None
+        else:
+            self.decoder = Dense(
+                config.vocab_size,
+                kernel_initializer=get_initializer(config.initializer_range),
+                name="decoder",
+                use_bias=False,
+            )
         self.config = config
 
     def build(self, input_shape):
@@ -1234,8 +1236,10 @@ class TFEsmLMHead(Layer):
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        x = self.decoder(x)
-        x = x + self.bias
+        if self.config.tie_word_embeddings:
+            x = tf.matmul(x, self.decoder, transpose_b=True) + self.bias
+        else:
+            x = self.decoder(x) + self.bias
         return x
 
 
