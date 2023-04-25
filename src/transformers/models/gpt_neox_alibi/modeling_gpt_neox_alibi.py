@@ -554,7 +554,7 @@ class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
-    
+
     def get_input_embeddings(self):
         return self.gpt_neox.embed_in
 
