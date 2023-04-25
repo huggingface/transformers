@@ -57,7 +57,7 @@ Answer:
 
 
 class Agent:
-    def run(self, task, tools, **kwargs):
+    def run(self, task, tools, return_code=False, **kwargs):
         code = self.generate_code(task, tools)
         # Clean up the code received
         code_lines = code.split("\n")
@@ -82,7 +82,10 @@ class Agent:
             print(f"==Additional explanation from the agent==\n{explanation}\n\n")
         print("==Result==")
 
-        return evaluate(clean_code, all_tools, kwargs)
+        if not return_code:
+            return evaluate(clean_code, all_tools, kwargs)
+        else:
+            return clean_code
 
 
 class EndpointAgent(Agent):
