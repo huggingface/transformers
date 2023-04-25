@@ -143,15 +143,17 @@ def process_doc_files(*files,  temp_dir = "temp", add_new_line=True):
                 raise
 
 
-def main(*files, temp_dir="temp", add_new_line=True):
+def main(files_to_test_path, temp_dir="temp", add_new_line=True):
     flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
-    
-    for file_name in files:
+    with open(files_to_test_path, "r") as f:
+        content = f.readlines()
+        
+    for file_name in content:
         print(f"Processing file: {file_name}")
         package_name = os.path.dirname(file_name).replace("/", ".")
         doctest.testfile("file_name",package = package_name, optionflags=flags)
         
-    process_doc_files(*files, temp_dir = temp_dir, add_new_line=add_new_line)
+
 
 
 if __name__ == "__main__":
