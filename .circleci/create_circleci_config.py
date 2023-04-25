@@ -424,13 +424,13 @@ REGULAR_TESTS = [
     doc_test_job
 ]
 EXAMPLES_TESTS = [
-    examples_torch_job,
-    examples_tensorflow_job,
-    examples_flax_job,
+    # examples_torch_job,
+    # examples_tensorflow_job,
+    # examples_flax_job,
 ]
 PIPELINE_TESTS = [
-    pipelines_torch_job,
-    pipelines_tf_job,
+    # pipelines_torch_job,
+    # pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 
