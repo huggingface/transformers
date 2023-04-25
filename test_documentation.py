@@ -1,0 +1,113 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" 
+    Utils to run the documentation tests without having to overwrite any files.s
+
+    The doc precossing function can be run on a list of files and/org
+    directories of files. It will recursively check if the files have
+    a python code snippet by looking for a ```python or ```py syntax.
+    The script will add a new line before every python code ending ``` line to make
+    the docstrings ready for pytest doctests.
+    However, we don't want to have empty lines displayed in the
+    official documentation which is why the new code is written to a temporary directory / is tested on the fly depending on the configuration.
+
+    When debugging the doc tests locally, the script should automatically determine which files should
+    be processed based on the modified files. It should also run the tests on the fly and delete the
+    temp file when finished.
+"""
+
+import unittest
+import argparse
+import doctest
+import os
+import re
+from transformers.testing_utils import parse_flag_from_env
+
+
+
+def replace_ignore_result(string):
+    """Replace all instances of '# doctest: +IGNORE_RESULT' with '# doctest: +SKIP'."""
+    return re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
+
+
+         
+class HfDocTestParser(doctest.DocTestParser):
+    # This regular expression is used to find doctest examples in a
+    # string.  It defines three groups: `source` is the source code
+    # (including leading indentation and prompts); `indent` is the
+    # indentation of the first (PS1) line of the source code; and
+    # `want` is the expected output (including leading indentation).
+    _EXAMPLE_RE = re.compile(r'''
+        # Source consists of a PS1 line followed by zero or more PS2 lines.
+        (?P<source>
+            (?:^(?P<indent> [ ]*) >>>    .*)    # PS1 line
+            (?:\n           [ ]*  \.\.\. .*)*)  # PS2 lines
+        \n?
+        # Want consists of any non-blank lines that do not start with PS1.
+        (?P<want> (?:(?![ ]*$)    # Not a blank line
+             (?![ ]*>>>)  # Not a line starting with PS1
+             (?:(?!```).)*  # Match any character except '`' until a '```' is found (this is specific to HF because black removes the last line)
+             (?:\n|$)  # Match a new line or end of string
+          )*)
+        ''', re.MULTILINE | re.VERBOSE)
+    
+    def parse(self, string, name='<string>'):
+        processed_text = replace_ignore_result(string)
+        return super().parse(processed_text)
+    
+    
+
+tests_to_run = os.environ.get("DOCUMENTATION_TEST_FILE",  "utils/documentation_tests.txt")
+
+
+class DocTester(unittest.TestCase):
+    def __init__(self, name = "run_documentation_tests"):
+        super().__init__()
+        print(f"The following file is used: {tests_to_run}")
+        self.test_to_run = get_tests_to_run(tests_to_run)
+
+    def runTest(self):
+        for file_name in self.test_to_run:
+            file_name.runTest()
+
+                    
+
+def get_tests_to_run(files_to_test_path):
+    flags = doctest.REPORT_NDIFF 
+    parser = HfDocTestParser()
+    with open(files_to_test_path, "r") as f:
+        content = f.read().splitlines()
+    test_cases = []    
+    for file_name in content:
+        if os.path.isdir(file_name):
+            continue
+        with open(file_name, "r") as f:
+            text = f.read()
+        test_to_run = parser.get_doctest(text, {}, file_name, None, None)
+        test_cases.append(doctest.DocFileCase(test_to_run, optionflags=flags))
+    return test_cases
+
+    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--files", action = "store", default=None, type = str, help="The file(s) or folder(s) to run the doctests on.")
+    args = parser.parse_args()
+    tests = get_tests_to_run(args.files, temp_dir = "temp")
+    runner = doctest.DocTestRunner()
+    runner.run(tests)
+
+
+

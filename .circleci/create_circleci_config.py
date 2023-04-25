@@ -404,6 +404,10 @@ repo_utils_job = CircleCIJob(
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
+        "pip install --upgrade pip",
+        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
+        "pip install git+https://github.com/huggingface/accelerate",
         "pip install --upgrade pytest",
         "pip install .[quality,testing]",
         {
@@ -412,17 +416,13 @@ doc_test_job = CircleCIJob(
                 "git remote add upstream https://github.com/huggingface/transformers.git  && git fetch upstream \n"
                 "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '^[^/]*(\.py|\.mdx)$' | grep -Ev '/\.' > pr_documentation_tests.txt"
         },
-        {
-            "name": "Run doctests from diffs",
-            "command":"python documentation_tests.py --files pr_documentation_tests.txt "
-        }
 
         # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
         # that are modified by this pr. *py files
     ],
-    # tests_to_run="documentation_tests",
-    # feed the pr_documentation file as an argument
-    
+    tests_to_run="test_documentation"
+    pytest_options={"DOCUMENTATION_TEST_FILE": "pr_documentation_tests.txt"},
+
 )
 
 REGULAR_TESTS = [

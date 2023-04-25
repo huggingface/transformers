@@ -1383,8 +1383,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         Returns:
 
         Example:
-        
-        I want this doc to be tested! 
+
+        I want this doc to be tested!
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
