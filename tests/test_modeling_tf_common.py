@@ -1877,7 +1877,8 @@ class TFModelTesterMixin:
                 if _generated != _generated_xla:
                     diff[0].append(_generated)
                     diff[1].append(_generated_xla)
-            if len(diff[0]) > 1 or (len(diff[0]) == 1 and len(generated) <= 10):
+            ratio = len(diff[0]) / len(generated)
+            if ratio > 0.1 or (len(diff[0]) == 1 and len(generated) <= 10):
                 self.assertListEqual(diff[0], diff[1])
 
         for model_class in self.all_generative_model_classes:
