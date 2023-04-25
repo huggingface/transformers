@@ -627,7 +627,6 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(**inputs)
-        outputs.logits = tf.stop_gradient(outputs.logits)
 
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
         expected_shape = tf.convert_to_tensor([500, 300])
