@@ -15,7 +15,7 @@ if is_openai_available():
     import openai
 
 # docstyle-ignore
-ENDPOINT_PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
+PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 Each instruction in Python should be a simple assignement.
 The final result should be stored in a variable named `result`. You can also print the result if it makes sense to do so.
@@ -24,65 +24,27 @@ You should only use the tools necessary to perform the task.
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
 Tools:
-- tool_1: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
-- tool_2: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
-- tool_3: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
+- tool_0: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
+- tool_1: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
+- tool_2: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
 
 Answer:
 ```py
-translated_question = tool_1(text=question)['translation_text']
-result = tool_3(text=translated_question, image=image)
+translated_question = tool_0(text=question)['translation_text']
+result = tool_2(text=translated_question, image=image)
 print(f"The answer is {result}")
 ```
 
 Task: "Generate an image using the text given in the variable `caption`."
 
 Tools:
-- tool_1: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the text to read (in English) and returns a waveform object containing the sound.
-- tool_2: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
-- tool_3: This is a tool that creates an image according to a text description. It takes an input named `text` which contains the image description and outputs an image.
+- tool_0: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the text to read (in English) and returns a waveform object containing the sound.
+- tool_1: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
+- tool_2: This is a tool that creates an image according to a text description. It takes an input named `text` which contains the image description and outputs an image.
 
 Answer:
 ```py
-result = tool_3(text=caption)
-```
-
-Task: "<<prompt>>"
-
-Tools:
-<<tools>>
-
-Answer:
-"""
-
-
-# docstyle-ignore
-OPENAI_PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task. To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns. Each instruction in Python should be a simple assignement.
-
-Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
-
-Tools:
-- tool_1: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
-- tool_2: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
-- tool_3: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
-
-Answer:
-```py
-translated_question = tool_1(text=question)['translation_text']
-answer = tool_3(text=translated_question, image=image)
-print(f"The answer is {result}")
-```
-
-Task: "Generate an image using the text given in the variable `caption`."
-
-Tools:
-- tool_1: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the text to read (in English) and returns a waveform object containing the sound.
-- tool_2: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
-- tool_3: This is a tool that creates an image according to a text description. It takes an input named `text` which contains the image description and outputs an image.
-
-Answer:
-```py
-result = tool_3(text=caption)
+result = tool_2(text=caption)
 ```
 
 Task: "<<prompt>>"
@@ -131,7 +93,7 @@ class EndpointAgent(Agent):
     def generate_code(self, task, tools):
         headers = {"Authorization": self.token}
         tool_descs = [f"- tool_{i}: {tool.description}" for i, tool in enumerate(tools)]
-        prompt = ENDPOINT_PROMPT_TEMPLATE.replace("<<prompt>>", task)
+        prompt = PROMPT_TEMPLATE.replace("<<prompt>>", task)
         prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
         inputs = {
             "inputs": prompt,
@@ -144,8 +106,6 @@ class EndpointAgent(Agent):
 
 
 class OpenAiAgent(Agent):
-    prompt_template = OPENAI_PROMPT_TEMPLATE
-
     def __init__(self, model="gpt-3.5-turbo", api_key=None):
         if not is_openai_available():
             raise ImportError("Using `OpenAIAgent` requires `openai`: `pip install openai`.")
@@ -164,7 +124,7 @@ class OpenAiAgent(Agent):
 
     def generate_code(self, task, tools):
         tool_descs = [f"- tool_{i}: {tool.description}" for i, tool in enumerate(tools)]
-        prompt = OPENAI_PROMPT_TEMPLATE.replace("<<prompt>>", task)
+        prompt = PROMPT_TEMPLATE.replace("<<prompt>>", task)
         prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
 
         result = openai.ChatCompletion.create(
