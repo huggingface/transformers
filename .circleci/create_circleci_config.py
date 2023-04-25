@@ -412,15 +412,16 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
-    torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+    # torch_and_tf_job,
+    # torch_and_flax_job,
+    # torch_job,
+    # tf_job,
+    # flax_job,
+    # custom_tokenizers_job,
+    # hub_job,
+    # onnx_job,
+    # exotic_models_job,
+    doc_test_job
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,

@@ -19,32 +19,6 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
-  run_pr_doctests:
-    name: "Check PR's added documentation"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: "Fetch new docstring"
-        run: |
-          "git diff"
-      - name: "Run doctest on modified docstring"
-        run: |
-          "python3 -m pytest "--doctest-modules $(modified_files) -sv --doctest-continue-on-failure"
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_new_models/failures_short.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: run_pr_doctests_test_reports
-          path: reports/run_pr_doctests
-
-
-
   run_doctests:
     runs-on: [self-hosted, doc-tests-gpu]
     container:
@@ -63,18 +37,19 @@ jobs:
       - name: Show installed libraries and their versions
         run: pip freeze
 
+      # TODO this is where the call will be different
       - name: Prepare files for doctests
         run: |
           python3 utils/prepare_for_doc_test.py src docs
 
-      - name: Run doctests
+      - name: Run doctests 
         run: |
           python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
 
       - name: Clean files after doctests
         run: |
           python3 utils/prepare_for_doc_test.py src docs --remove_new_line
-
+      # TODO end of what needs to be modified
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true

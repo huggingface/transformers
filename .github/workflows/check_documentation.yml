@@ -1,3 +1,0 @@
-# Fetch the modified files
-# Make sure that the files are added to `documentation_tests.txt`
-# Run the documentation tests on only the modified parts of the file (git diff)
