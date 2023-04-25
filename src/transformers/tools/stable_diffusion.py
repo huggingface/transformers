@@ -6,9 +6,10 @@ from accelerate.state import PartialState
 class StableDiffusionTool(Tool):
 
     default_checkpoint = "runwayml/stable-diffusion-v1-5"
-    description = """This is a tool that creates an image according to a text description. 
-    It takes text as input, and it outputs an image.
-    """
+    description = (
+        "This is a tool that creates an image according to a text description. It takes an input named `text` which "
+        "contains the image description and outputs an image."
+    )
     
     def __init__(self, device=None) -> None:
         super().__init__()
