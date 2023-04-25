@@ -18,10 +18,15 @@ import unittest
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
+    is_torch_available,
     require_optimum,
     require_torch,
     slow,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 @require_torch
@@ -32,6 +37,9 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
     # https://github.com/huggingface/optimum/tree/main/tests/bettertransformer
 
     def test_transform_and_reverse(self):
+        r"""
+        Classic tests to simply check if the conversion has been successfull.
+        """
         model_id = "hf-internal-testing/tiny-random-t5"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
@@ -42,7 +50,7 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
 
         self.assertTrue(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
 
-        model.generate(**inp)
+        output = model.generate(**inp)
 
         model = model.reverse_bettertransformer()
 
@@ -57,4 +65,22 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
                 any("BetterTransformer" in mod.__class__.__name__ for _, mod in model_reloaded.named_modules())
             )
 
-            model_reloaded.generate(**inp)
+            output_from_pretrained = model_reloaded.generate(**inp)
+            self.assertTrue(torch.allclose(output, output_from_pretrained))
+
+    def test_error_save_pretrained(self):
+        r"""
+        The save_pretrained method should raise a ValueError if the model is in BetterTransformer mode.
+        All should be good if the model is reversed.
+        """
+        model_id = "hf-internal-testing/tiny-random-t5"
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+
+        model = model.to_bettertransformer()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with self.assertRaises(ValueError):
+                model.save_pretrained(tmpdirname)
+
+            model = model.reverse_bettertransformer()
+            model.save_pretrained(tmpdirname)
