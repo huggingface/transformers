@@ -23,7 +23,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_maskrcnn": [
-        "MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MASK_RCNN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MaskRCNNConfig",
     ]
 }
@@ -35,7 +35,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_maskrcnn"] = [
-        "MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MaskRCNNForObjectDetection",
         "MaskRCNNPreTrainedModel",
     ]
@@ -50,7 +50,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_maskrcnn import MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskRCNNConfig
+    from .configuration_maskrcnn import MASK_RCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskRCNNConfig
 
     try:
         if not is_torch_available():
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_maskrcnn import (
-            MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskRCNNForObjectDetection,
             MaskRCNNPreTrainedModel,
         )

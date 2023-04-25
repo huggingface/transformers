@@ -24,7 +24,7 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-MASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+MASK_RCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/convnext-tiny-maskrcnn": (
         "https://huggingface.co/facebook/convnext-tiny-maskrcnn/resolve/main/config.json"
     ),
