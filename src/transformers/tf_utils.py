@@ -71,10 +71,10 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
 
 
 def functional_layernorm(inputs, weight, bias, epsilon=1e-5):
-    # Matt: This is a very simplified functional layernorm, designed to duplicate
+    # This is a very simplified functional layernorm, designed to duplicate
     # the functionality of PyTorch nn.functional.layer_norm when this is needed to port
     # models in Transformers. It assumes the dimension to be normalized is always the last one.
-    # If you need it to handle multiple dimensions, yell at me and I'll patch it.
+    # If you need it to handle multiple dimensions, yell at me (Matt) and I'll patch it.
 
     # Calculate the moments on the last axis (layer activations).
     mean, variance = tf.nn.moments(inputs, -1, keepdims=True)
@@ -90,6 +90,24 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5):
         variance_epsilon=epsilon,
     )
     return outputs
+
+
+def flatten(input, start_dim=0, end_dim=-1):
+    # Replicates the behavior of torch.flatten in TF
+
+    # If end_dim or start_dim is negative, count them from the end
+    if end_dim < 0:
+        end_dim += input.shape.rank
+    if start_dim < 0:
+        start_dim += input.shape.rank
+
+    if start_dim == end_dim:
+        return input
+
+    in_shape = tf.shape(input)
+    flattened_dim = tf.math.reduce_prod(in_shape[start_dim : end_dim + 1])
+    out_shape = tf.concat([in_shape[:start_dim], [flattened_dim], in_shape[end_dim + 1 :]], axis=0)
+    return tf.reshape(input, out_shape)
 
 
 def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:

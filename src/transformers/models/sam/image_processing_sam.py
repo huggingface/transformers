@@ -34,7 +34,14 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_torchvision_available, logging, requires_backends, is_tf_available
+from ...utils import (
+    TensorType,
+    is_tf_available,
+    is_torch_available,
+    is_torchvision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_torch_available():
@@ -47,6 +54,7 @@ if is_torchvision_available():
 if is_tf_available():
     import tensorflow as tf
     from tensorflow.experimental import numpy as tnp
+    from ...tf_utils import shape_list, flatten
 
 logger = logging.get_logger(__name__)
 
@@ -422,28 +430,30 @@ class SamImageProcessor(BaseImageProcessor):
 
         return output_masks
 
-    def post_process_masks_tf(self, masks, original_sizes, reshaped_input_sizes, mask_threshold=0.0, binarize=True, pad_size=None):
+    def post_process_masks_tf(
+        self, masks, original_sizes, reshaped_input_sizes, mask_threshold=0.0, binarize=True, pad_size=None
+    ):
         """
-                Remove padding and upscale masks to the original image size.
+        Remove padding and upscale masks to the original image size.
 
-                Args:
-                    masks (`tf.Tensor`):
-                        Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-                    original_sizes (`tf.Tensor`):
-                        The original size of the images before resizing for input to the model, in (height, width) format.
-                    reshaped_input_sizes (`tf.Tensor`):
-                        The size of the image input to the model, in (height, width) format. Used to remove padding.
-                    mask_threshold (`float`, *optional*, defaults to 0.0):
-                        The threshold to use for binarizing the masks.
-                    binarize (`bool`, *optional*, defaults to `True`):
-                        Whether to binarize the masks.
-                    pad_size (`int`, *optional*, defaults to `self.pad_size`):
-                        The target size the images were padded to before being passed to the model. If None, the target size is
-                        assumed to be the processor's `pad_size`.
-                Returns:
-                    (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
-                    is given by original_size.
-                """
+        Args:
+            masks (`tf.Tensor`):
+                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
+            original_sizes (`tf.Tensor`):
+                The original size of the images before resizing for input to the model, in (height, width) format.
+            reshaped_input_sizes (`tf.Tensor`):
+                The size of the image input to the model, in (height, width) format. Used to remove padding.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                The threshold to use for binarizing the masks.
+            binarize (`bool`, *optional*, defaults to `True`):
+                Whether to binarize the masks.
+            pad_size (`int`, *optional*, defaults to `self.pad_size`):
+                The target size the images were padded to before being passed to the model. If None, the target size is
+                assumed to be the processor's `pad_size`.
+        Returns:
+            (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            is given by original_size.
+        """
         requires_backends(self, ["tensorflow"])
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
@@ -726,10 +736,13 @@ def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stabi
     stability_scores = intersections / unions
     return stability_scores
 
+
 def _compute_stability_score_tf(masks: "tf.Tensor", mask_threshold: float, stability_score_offset: int):
     # Torch does Py3-style division but TF does floor division with ints. We cast to float32 in TF to make sure
     # we get the right division results.
-    intersections = tf.count_nonzero(masks > (mask_threshold + stability_score_offset), axis=[-1, -2], dtype=tf.float32)
+    intersections = tf.count_nonzero(
+        masks > (mask_threshold + stability_score_offset), axis=[-1, -2], dtype=tf.float32
+    )
     unions = tf.count_nonzero(masks > (mask_threshold - stability_score_offset), axis=[-1, -2], dtype=tf.float32)
     stability_scores = intersections / unions
     return stability_scores
@@ -830,6 +843,7 @@ def _generate_crop_boxes(
     input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long, device=device)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
+
 
 def _generate_crop_boxes_tf(
     image,
@@ -956,6 +970,7 @@ def _pad_masks(masks, crop_box: List[int], orig_height: int, orig_width: int):
     pad = (left, pad_x - left, top, pad_y - top)
     return torch.nn.functional.pad(masks, pad, value=0)
 
+
 def _pad_masks_tf(masks, crop_box: List[int], orig_height: int, orig_width: int):
     left, top, right, bottom = crop_box
     if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
@@ -964,6 +979,7 @@ def _pad_masks_tf(masks, crop_box: List[int], orig_height: int, orig_width: int)
     pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
     pad = (left, pad_x - left, top, pad_y - top)
     return tf.pad(masks, pad, constant_values=0)
+
 
 def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     """Filter masks at the edge of a crop, but not at the edge of the original image."""
@@ -981,6 +997,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     near_image_edge = torch.isclose(boxes, orig_box_torch[None, :], atol=atol, rtol=0)
     near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
     return torch.any(near_crop_edge, dim=1)
+
 
 def _is_box_near_crop_edge_tf(boxes, crop_box, orig_box, atol=20.0):
     """Filter masks at the edge of a crop, but not at the edge of the original image."""
@@ -1048,7 +1065,7 @@ def _batched_mask_to_box(masks: "torch.Tensor"):
     out = out.reshape(*shape[:-2], 4)
     return out
 
-# TODO CONTINUE FROM HERE
+
 def _batched_mask_to_box_tf(masks: "tf.Tensor"):
     """
     Computes the bounding boxes around the given input masks. The bounding boxes are in the XYXY format which
@@ -1062,15 +1079,14 @@ def _batched_mask_to_box_tf(masks: "tf.Tensor"):
     is channel_1 x channel_2 x ... x 4.
 
     Args:
-        - masks (`torch.Tensor` of shape `(batch, nb_mask, height, width)`)
+        - masks (`tf.Tensor` of shape `(batch, nb_mask, height, width)`)
     """
-    # torch.max below raises an error on empty inputs, just skip in this case
 
     if tf.size(masks) == 0:
         return tf.zeros([*masks.shape[:-2], 4])
 
     # Normalize shape to Cxheightxwidth
-    shape = masks.shape
+    shape = shape_list(masks)
     height, width = shape[-2:]
 
     # Get top and bottom edges
@@ -1081,20 +1097,20 @@ def _batched_mask_to_box_tf(masks: "tf.Tensor"):
     top_edges = tf.reduce_min(in_height_coords, axis=-1)
 
     # Get left and right edges
-    in_width, _ = torch.max(masks, dim=-2)
-    in_width_coords = in_width * torch.arange(width, device=in_width.device)[None, :]
-    right_edges, _ = torch.max(in_width_coords, dim=-1)
+    in_width, _ = tf.reduce_max(masks, axis=-2)
+    in_width_coords = in_width * tf.range(width)[None, :]
+    right_edges, _ = tf.reduce_max(in_width_coords, axis=-1)
     in_width_coords = in_width_coords + width * (~in_width)
-    left_edges, _ = torch.min(in_width_coords, dim=-1)
+    left_edges, _ = tf.reduce_min(in_width_coords, axis=-1)
 
     # If the mask is empty the right edge will be to the left of the left edge.
     # Replace these boxes with [0, 0, 0, 0]
     empty_filter = (right_edges < left_edges) | (bottom_edges < top_edges)
-    out = torch.stack([left_edges, top_edges, right_edges, bottom_edges], dim=-1)
-    out = out * (~empty_filter).unsqueeze(-1)
+    out = tf.stack([left_edges, top_edges, right_edges, bottom_edges], axis=-1)
+    out = out * tf.expand_dims(~empty_filter, -1)
 
     # Return to original shape
-    out = out.reshape(*shape[:-2], 4)
+    out = tf.reshape(out, *shape[:-2], 4)
     return out
 
 
@@ -1109,6 +1125,29 @@ def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
     # Compute change indices
     diff = input_mask[:, 1:] ^ input_mask[:, :-1]
     change_indices = diff.nonzero()
+
+    # Encode run length
+    out = []
+    for i in range(batch_size):
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
+        btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
+        counts = [] if input_mask[i, 0] == 0 else [0]
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
+        out.append({"size": [height, width], "counts": counts})
+    return out
+
+
+def _mask_to_rle_tf(input_mask: "tf.Tensor"):
+    """
+    Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
+    """
+    # Put in fortran order and flatten height and width
+    batch_size, height, width = input_mask.shape
+    input_mask = flatten(tf.transpose(input_mask, perm=(0, 2, 1)), 1)
+
+    # Compute change indices
+    diff = input_mask[:, 1:] ^ input_mask[:, :-1]
+    change_indices = tf.where(diff)
 
     # Encode run length
     out = []
@@ -1137,7 +1176,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
 
 def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """
-    Perform NMS (Non Maxium Suppression) on the outputs.
+    Perform NMS (Non Maximum Suppression) on the outputs.
 
     Args:
             rle_masks (`torch.Tensor`):
@@ -1150,6 +1189,36 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
                 NMS threshold.
     """
     keep_by_nms = batched_nms(
+        boxes=mask_boxes.float(),
+        scores=iou_scores,
+        idxs=torch.zeros(mask_boxes.shape[0]),
+        iou_threshold=amg_crops_nms_thresh,
+    )
+
+    iou_scores = iou_scores[keep_by_nms]
+    rle_masks = [rle_masks[i] for i in keep_by_nms]
+    mask_boxes = mask_boxes[keep_by_nms]
+    masks = [_rle_to_mask(rle) for rle in rle_masks]
+
+    return masks, iou_scores, rle_masks, mask_boxes
+
+def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+    """
+    Perform NMS (Non Maximum Suppression) on the outputs.
+
+    Args:
+            rle_masks (`tf.Tensor`):
+                binary masks in the RLE format
+            iou_scores (`tf.Tensor` of shape (nb_masks, 1)):
+                iou_scores predicted by the model
+            mask_boxes (`tf.Tensor`):
+                The bounding boxes corresponding to segmentation masks
+            amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
+                NMS threshold.
+    """
+    breakpoint()
+    print()  # Need to check the input shapes here so I know where to pad them
+    keep_by_nms = tf.image.combined_non_max_suppression(
         boxes=mask_boxes.float(),
         scores=iou_scores,
         idxs=torch.zeros(mask_boxes.shape[0]),
