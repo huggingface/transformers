@@ -410,7 +410,7 @@ doc_test_job = CircleCIJob(
             "name": "Get files to test",
             "command":
                 "git remote add upstream git://github.com/huggingface/transformers.git\n"
-                "git diff --name-only --relative --diff-filter=AMR upstream/main...$CIRCLE_BRANCH | grep '\.py$'| sed 's|^|$(pwd)/|' > modified_files.txt"
+                "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...$CIRCLE_BRANCH | grep '\.py$'| sed 's|^|$(pwd)/|' > modified_files.txt"
         },
 
         # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
