@@ -57,12 +57,13 @@ agent.run(
 
 In both cases, you should see the agent generate code using your set of tools that is then executed to provide you the answer you were looking for. Neat!
 
-If you don't have the hardware to run the models translating and classifying the text, you can use the inference API by selecting `device="hub"` when creating the tool:
+If you don't have the hardware to run the models translating and classifying the text, you can use the inference API by selecting a remote tool:
 
-<!--TODO Once design is validated, put the hub device on the other tools so that we can use it everywhere here-->
 
 ```py
-tools = [TextClassificationTool(device="hub"), TranslationTool(src_lang="fra_Latn", tgt_lang="eng_Latn")]
+from transformers.tools import RemoteTextClassificationTool, TranslationTool
+
+tools = [RemoteTextClassificationTool(), TranslationTool(src_lang="fra_Latn", tgt_lang="eng_Latn")]
 
 agent.run(
     "Determine if the following `text` (in French) is positive or negative.",
