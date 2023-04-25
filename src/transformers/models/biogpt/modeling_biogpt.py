@@ -962,7 +962,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.biogpt.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.biogpt.embed_tokens = value
