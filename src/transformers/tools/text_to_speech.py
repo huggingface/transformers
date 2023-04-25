@@ -1,8 +1,7 @@
 import torch
 from datasets import load_dataset
 
-from transformers import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
-
+from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
 from .base import PipelineTool
 
 
