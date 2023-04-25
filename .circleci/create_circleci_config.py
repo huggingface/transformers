@@ -402,7 +402,7 @@ repo_utils_job = CircleCIJob(
 )
 
 doc_test_job = CircleCIJob(
-    "doct_test",
+    "pr_documentation_tests",
     install_steps=[
         "pip install --upgrade pytest",
         "pip install .[quality,testing]",
@@ -414,7 +414,7 @@ doc_test_job = CircleCIJob(
         },
         {
             "name": "Run doctests from diffs",
-            "command":"python documentation_tests --files pr_documentation_tests.txt "
+            "command":"python documentation_tests.py --files pr_documentation_tests.txt "
         }
 
         # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
