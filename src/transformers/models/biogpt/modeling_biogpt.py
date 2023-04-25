@@ -860,7 +860,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
 # Adapted from transformers.models.opt.modeling_opt.OPTForSequenceClassification with OPT->BioGpt
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config: BioGptConfig):
         super().__init__(config)
