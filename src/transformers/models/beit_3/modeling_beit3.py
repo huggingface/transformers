@@ -1,17 +1,22 @@
 import copy
 
 import math
+from dataclasses import dataclass
+from typing import Optional, Union, Tuple, Any
 
 import numpy as np
 from torch import nn
 import torch
 from torch.autograd.grad_mode import F
-from torch.nn import LayerNorm
+from torch.nn import LayerNorm, CrossEntropyLoss, BCEWithLogitsLoss, MSELoss
 
 from transformers.activations import get_activation
 from configuration_beit_3 import Beit3Config
 from transformers import  PreTrainedModel
-from transformers.utils import logging
+from transformers.modeling_outputs import ImageClassifierOutput, ImageClassifierOutputWithNoAttention, \
+    SequenceClassifierOutput
+from transformers.utils import logging, ModelOutput
+
 # from ... import PreTrainedModel
 # from ...utils import logging
 
@@ -653,6 +658,7 @@ class BEiT3ForVisualReasoning(PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForVisualReasoning, self).__init__(args=config)
         embed_dim = config.embed_dim
+        self.beit3 = BEiT3Model(config)
         self.head = TwoLayerMLP(
             in_features=embed_dim * 4,
             hidden_features=embed_dim * 2,
@@ -669,11 +675,20 @@ class BEiT3ForVisualReasoning(PreTrainedModel):
             self.head.dense2.weight.data.mul_(init_scale)
             self.head.dense2.bias.data.mul_(init_scale)
 
-    def forward(self, image_a, image_b, text_description, padding_mask, **kwargs):
-        bsz, _ = text_description.size()
+    def forward(
+        self,
+        input_ids,
+        pixel_values1,
+        pixel_values2,
+        padding_mask,
+        output_hidden_states = None,
+        return_dict = None,
+        labels = None,
+        ):
+        bsz, _ = input_ids.size()
 
-        vision_input = torch.cat((image_a, image_b), dim=0)
-        language_input = torch.cat((text_description, text_description), dim=0)
+        vision_input = torch.cat((pixel_values1, pixel_values2), dim=0)
+        language_input = torch.cat((input_ids, input_ids), dim=0)
         padding_mask = torch.cat((padding_mask, padding_mask), dim=0)
 
         outputs = self.beit3(
@@ -689,34 +704,92 @@ class BEiT3ForVisualReasoning(PreTrainedModel):
         cls_rep = torch.cat((vision_cls, language_cls), dim=-1)
         a, b = torch.split(cls_rep, split_size_or_sections=[bsz, bsz], dim=0)
         cls_rep = torch.cat((a, b), dim=-1)
-        return self.head(cls_rep)
+
+        logits = self.head(cls_rep)
+        reshaped_logits = logits.contiguous()
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels.view(-1))
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs["encoder_states"] if output_hidden_states else (reshaped_logits,)
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 class BEiT3ForImageClassification(PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForImageClassification, self).__init__(args=config)
         embed_dim = config.embed_dim
+        self.beit3 = BEiT3Model(config)
         self.fc_norm = nn.LayerNorm(embed_dim)
-        self.head = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        self.fc_norm.apply(self._init_weights)
-        self.head.apply(self._init_weights)
-        init_scale = 0.001
-        if isinstance(self.head, nn.Linear):
-            self.head.weight.data.mul_(init_scale)
-            self.head.bias.data.mul_(init_scale)
+        # self.fc_norm.apply(self._init_weights)
+        # self.classifier.apply(self._init_weights)
+        # init_scale = 0.001
+        # if isinstance(self.head, nn.Linear):
+        #     self.classifier.weight.data.mul_(init_scale)
+        #     self.classifier.bias.data.mul_(init_scale)
 
-    def forward(self, image, **kwargs):
-        x = self.beit3(textual_tokens=None, visual_tokens=image)["encoder_out"]
-        t = x[:, 1:, :]
-        cls_x = self.fc_norm(t.mean(1))
-        return self.head(cls_x)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        ) -> ImageClassifierOutputWithNoAttention:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_outputs = self.beit3(textual_tokens=None, visual_tokens=pixel_values)["encoder_out"]
+        t = encoder_outputs[:, 1:, :]
+        logits = self.classifier(self.fc_norm(t.mean(1)))
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+        if not return_dict:
+            output = (logits,)
+            output = (output + encoder_outputs['encoder_states']) if output_hidden_states else None
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs['encoder_states'],
+        )
 
 
 class BEiT3ForCaptioning(PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForCaptioning, self).__init__(config)
         embed_dim = config.embed_dim
+        self.beit3 = BEiT3Model(config)
         self.mlm_head = nn.Linear(embed_dim, config.vocab_size)
         self.mlm_head.apply(self._init_weights)
 
@@ -787,29 +860,56 @@ class BEiT3ForVisualQuestionAnswering(PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForVisualQuestionAnswering, self).__init__(config)
         embed_dim = config.embed_dim
+        self.num_labels = config.num_labels
+        self.beit3 = BEiT3Model(config)
         self.pooler = Pooler(
             input_features=embed_dim,
             output_features=embed_dim,
             norm_layer=nn.LayerNorm,
         )
         self.pooler.apply(self._init_weights)
-        self.head = nn.Sequential(
+        self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
             nn.LayerNorm(embed_dim * 2),
             nn.GELU(),
             nn.Linear(embed_dim * 2, config.num_labels),
         )
-        self.head.apply(self._init_weights)
+        # self.head.apply(self._init_weights)
 
-    def forward(self, image, question, padding_mask):
-        outputs = self.beit3(
-            textual_tokens=question,
-            visual_tokens=image,
+    def forward(
+            self,
+            input_ids,
+            pixel_values,
+            padding_mask,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[Any], SequenceClassifierOutput]:
+        encoder_outputs = self.beit3(
+            textual_tokens=input_ids,
+            visual_tokens=pixel_values,
             text_padding_position=padding_mask,
         )
-        x = outputs["encoder_out"]
+        x = encoder_outputs["encoder_out"]
         cls_rep = self.pooler(x)
-        return self.head(cls_rep)
+        logits = self.classifier(cls_rep)
+        reshaped_logits = logits.view(-1, self.num_labels)
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.KLDivLoss(reduction="batchmean")
+            log_softmax = nn.LogSoftmax(dim=-1)
+            reshaped_logits = log_softmax(reshaped_logits)
+            loss = loss_fct(reshaped_logits, labels.contiguous())
+        if not return_dict:
+            output = (reshaped_logits,) + encoder_outputs["encoder_states"]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=encoder_outputs.hidden_states,
+        )
 
 
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -822,45 +922,71 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-class BEiT3ForRetrieval(PreTrainedModel):
+@dataclass
+class Biet3ImageTextMatchingModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        similarity (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+    loss: Optional[torch.Tensor] = None
+    text_hidden: Optional[torch.FloatTensor] = None
+    image_hidden: Optional[torch.FloatTensor] = None
+
+
+class BEiT3ForImageTextRetrieval(PreTrainedModel):
     def __init__(self, config):
-        super(BEiT3ForRetrieval, self).__init__(config)
+        super(BEiT3ForImageTextRetrieval, self).__init__(config)
         embed_dim = config.embed_dim
+        self.beit3 = BEiT3Model(config)
         self.language_head = nn.Linear(embed_dim, embed_dim, bias=False)
         self.vision_head = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.language_head.apply(self._init_weights)
-        self.vision_head.apply(self._init_weights)
+        # self.language_head.apply(self._init_weights)
+        # self.vision_head.apply(self._init_weights)
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
-    def forward(self, image=None, text_description=None, padding_mask=None, only_infer=False):
-        if image is not None:
-            outputs = self.beit3(
-                textual_tokens=None,
-                visual_tokens=image,
-                text_padding_position=None,
-            )
-            x = outputs["encoder_out"]
-            vision_cls = self.vision_head(x[:, 0, :])
-            vision_cls = F.normalize(vision_cls, dim=-1)
-        else:
-            vision_cls = None
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        padding_mask=None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        ) -> Union[Tuple[Any], Biet3ImageTextMatchingModelOutput]:
+        outputs = self.beit3(
+            textual_tokens=None,
+            visual_tokens=pixel_values,
+            text_padding_position=None,
+        )
 
-        if text_description is not None:
-            outputs = self.beit3(
-                textual_tokens=text_description,
-                visual_tokens=None,
-                text_padding_position=padding_mask,
-            )
-            x = outputs["encoder_out"]
-            language_cls = self.language_head(x[:, 0, :])
-            language_cls = F.normalize(language_cls, dim=-1)
-        else:
-            language_cls = None
+        vision_out = outputs["encoder_out"]
+        vision_cls = self.vision_head(vision_out[:, 0, :])
+        vision_cls = F.normalize(vision_cls, dim=-1)
 
-        if only_infer:
-            return vision_cls, language_cls
-        else:
-            logit_scale = self.logit_scale.exp()
-            logits_per_text = torch.matmul(vision_cls, language_cls.t()) * logit_scale
-            loss = clip_loss(logits_per_text)
-            return loss, vision_cls, language_cls
+
+        outputs = self.beit3(
+            textual_tokens=input_ids,
+            visual_tokens=None,
+            text_padding_position=padding_mask,
+        )
+        text_out = outputs["encoder_out"]
+        text_cls = self.language_head(text_out[:, 0, :])
+        text_cls = F.normalize(text_cls, dim=-1)
+
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(vision_cls, text_cls.t()) * logit_scale
+        similarity = clip_loss(logits_per_text)
+
+        if not return_dict:
+            outputs = (similarity,)
+            return outputs + (text_out,text_out,) if output_hidden_states else outputs
+
+        return Biet3ImageTextMatchingModelOutput(similarity,text_out,vision_out)
