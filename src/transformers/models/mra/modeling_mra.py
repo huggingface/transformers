@@ -49,12 +49,12 @@ from .configuration_mra import MRAConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "uw-madison/temp"
+_CHECKPOINT_FOR_DOC = "uw-madison/mra-base-512-4"
 _CONFIG_FOR_DOC = "MRAConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uw-madison/temp",
+    "uw-madison/mra-base-512-4",
     # See all MRA models at https://huggingface.co/models?filter=mra
 ]
 
