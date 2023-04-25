@@ -147,36 +147,61 @@ import doctest
 import os
 import re
 
+def replace_ignore_result(string):
+    """Replace all instances of '# doctest: +IGNORE_RESULT' with '# doctest: +SKIP'."""
+    return re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
 
-def preprocess_mdx_string(string):
-    string = re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
-    return string
+def preprocess_docstring(docstring):
+    """
+    Preprocess a docstring to handle doctest flags and add an empty line at the end of each example.
+
+    Args:
+        docstring (str): The docstring to preprocess.
+
+    Returns:
+        str: The preprocessed docstring.
+    """
+    lines = docstring.split('\n')
+    for i, line in enumerate(lines):
+        # Replace '+IGNORE_RESULT' with '+SKIP' in doctest flags
+        if '+IGNORE_RESULT' in line:
+            lines[i] = line.replace('+IGNORE_RESULT', '+SKIP')
+
+
+    # Add an empty line before code block closing triple backticks
+    codeblock = False
+    lines = []
+    for line in docstring.split('\n'):
+        if line.strip().startswith('```py'):
+            codeblock = not codeblock
+        if codeblock and ('```' in line):
+            lines.append("")
+            
+        lines.append(line)
+    return '\n'.join(lines)
+                
 
 def main(files_to_test_path, temp_dir="temp", add_new_line=True):
-    flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
+    flags = doctest.REPORT_NDIFF | doctest.FAIL_FAST
+    parser = doctest.DocTestParser()
+
+
     with open(files_to_test_path, "r") as f:
         content = f.read().splitlines()
 
-    parser = doctest.DocTestParser()
-    runner = doctest.DocTestRunner(optionflags=flags)
-
+    content = ["src/transformers/models/whisper/modeling_whisper.py"]
     for file_name in content:
         print(f"Processing file: '{file_name}'")
-        if file_name.endswith(".mdx"):
-            with open(file_name, "r") as f:
-                mdx_string = f.read()
-            mdx_string = preprocess_mdx_string(mdx_string)
-            test = parser.get_doctest(mdx_string, {}, file_name, None, None)
-            runner.run(test)
-        elif file_name.endswith(".py"):
-            package_name = os.path.dirname(file_name).replace("/", ".")
-            if package_name is None: 
-                package_name = ""
-            doctest.testfile(file_name,package = package_name, optionflags=flags)
-        else:
-            print("skipped")
-    
-    print(runner.summarize())
+        with open(file_name, "r") as f:
+            text = f.read()
+        processed_text = replace_ignore_result(text)
+        processed_text = preprocess_docstring(processed_text)
+
+        test_to_run = parser.get_doctest(processed_text, {}, file_name, None, None)
+        for code in test_to_run.examples:
+            if "```" in code.want: 
+                code.want = "".join(code.want.split("```")[:-1])
+        doctest.DocTestRunner().run(test_to_run)
 
 
 if __name__ == "__main__":
