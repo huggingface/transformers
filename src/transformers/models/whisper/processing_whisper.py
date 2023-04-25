@@ -16,7 +16,10 @@
 Speech processor class for Whisper
 """
 
+from typing import Optional, Union
+
 from ...processing_utils import ProcessorMixin
+from ...utils import TensorType
 
 
 class WhisperProcessor(ProcessorMixin):
@@ -92,8 +95,10 @@ class WhisperProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def get_prompt_ids(self, text: str):
+    def get_prompt_ids(self, text: str, return_tensors: Optional[Union[str, TensorType]] = "pt"):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
-        prompt_token_id = self.tokenizer.convert_tokens_to_ids("<|startofprev|>")
-        tokenized_text = self.tokenizer(" " + text.strip(), add_special_tokens=False)["input_ids"] if len(text) else []
-        return [prompt_token_id, *tokenized_text]
+        batch_encoding = self.tokenizer(
+            "<|startofprev|>", text.strip(), add_prefix_space=True, add_special_tokens=False
+        )
+        batch_encoding.convert_to_tensors(return_tensors)
+        return batch_encoding["input_ids"]

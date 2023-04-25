@@ -1431,49 +1431,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
     @slow
-    def test_generate_with_prompt(self):
+    def test_generate_with_prompt_ids(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        input_speech = load_datasamples(3)
+        input_speech = load_datasamples(4)[-1:]
         input_features = processor(input_speech, return_tensors="pt").input_features
 
-        prompt = "Example prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
-        output = model.generate(
-            input_features, condition_on_previous_text=True, prompt_ids=prompt_ids, max_new_tokens=128
-        )
-        decoded_with_special_tokens = processor.batch_decode(output, skip_special_tokens=False)
-        decoded_without_special_tokens = processor.batch_decode(output, skip_special_tokens=True)
+        output_without_prompt = model.generate(input_features)
+        prompt_ids = processor.get_prompt_ids("Leighton")
+        output_with_prompt = model.generate(input_features, prompt_ids=prompt_ids)
 
-        self.assertTrue(decoded_without_special_tokens[0] in decoded_with_special_tokens[1])
-        self.assertTrue(decoded_without_special_tokens[0] in decoded_with_special_tokens[2])
-        self.assertTrue(decoded_without_special_tokens[1] in decoded_with_special_tokens[2])
-        self.assertTrue(all([prompt in chunk for chunk in decoded_with_special_tokens]))
-
-    @slow
-    def test_generate_with_always_use_initial_prompt(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = load_datasamples(3)
-        input_features = processor(input_speech, return_tensors="pt").input_features
-
-        prompt = "Always just use this prompt."
-        prompt_ids = processor.get_prompt_ids(prompt)
-        output = model.generate(
-            input_features,
-            condition_on_previous_text=True,
-            always_use_initial_prompt=True,
-            prompt_ids=prompt_ids,
-            max_new_tokens=128,
-        )
-        decoded_with_special_tokens = processor.batch_decode(output, skip_special_tokens=False)
-        decoded_without_special_tokens = processor.batch_decode(output, skip_special_tokens=True)
-
-        self.assertTrue(decoded_without_special_tokens[0] not in decoded_with_special_tokens[1])
-        self.assertTrue(decoded_without_special_tokens[1] not in decoded_with_special_tokens[2])
-        self.assertTrue(all([prompt in chunk for chunk in decoded_with_special_tokens]))
+        expected_without_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
+        expected_with_prompt = "<|startofprev|> Leighton<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
+        self.assertEqual(processor.decode(output_without_prompt[0]), expected_without_prompt)
+        self.assertEqual(processor.decode(output_with_prompt[0]), expected_with_prompt)
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):

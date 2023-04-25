@@ -328,7 +328,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         stride = None
         extra = {}
-
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
             # Accepting `"array"` which is the key defined in `datasets` for
@@ -443,25 +442,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # `generate` magic to create the mask automatically won't work, we basically need to help
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
-
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
-
-            condition_on_previous_text = generate_kwargs.get("condition_on_previous_text")
-            if condition_on_previous_text and not generate_kwargs.get("always_use_initial_prompt"):
-                # Update the prompt_ids to add the generated text to the prompt for the next generation
-                prompt_len = len(generate_kwargs["prompt_ids"])
-                tokens_after_prompt = tokens.flatten().tolist()[prompt_len:]
-                generated_text_ids = [tok for tok in tokens_after_prompt if tok not in self.tokenizer.all_special_ids]
-                decoder_start_token_id, *prev_text_prompt_ids = generate_kwargs["prompt_ids"]
-                next_prompt_text_ids = [*prev_text_prompt_ids, *generated_text_ids]
-                max_prompt_len = self.model.config.max_length // 2 - 1
-                prompt_ids = [decoder_start_token_id, *next_prompt_text_ids[-max_prompt_len:]]
-                generate_kwargs["prompt_ids"] = prompt_ids
-
             out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
                 stride = model_inputs.pop("stride", None)

@@ -149,7 +149,7 @@ class WhisperProcessorTest(unittest.TestCase):
 
     def test_get_prompt_ids(self):
         processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        prompt_ids = processor.get_prompt_ids("Mr. Quilter")
+        prompt_ids = processor.get_prompt_ids("Mr. Quilter", return_tensors=None)
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
         self.assertListEqual(prompt_ids, [50360, 1770, 13, 2264, 346, 353])

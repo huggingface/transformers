@@ -592,10 +592,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # If an initial prompt was used, we need to remove it when skipping special tokens
         if has_prompt and skip_special_tokens:
             for i in range(1, len(token_ids)):
-                initial_prompt_end_idx = i
+                prompt_end_idx = i
                 if token_ids[i] in self.all_special_ids:
                     break
-            token_ids = token_ids[initial_prompt_end_idx:]
+            token_ids = token_ids[prompt_end_idx:]
 
         text = super().decode(
             token_ids,
