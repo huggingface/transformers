@@ -1,5 +1,10 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool
+from .base import PipelineTool, RemoteTool
+
+
+QA_PROMPT = """Here is a text containing a lot of information: '''{text}'''.
+
+Can you answer this question about the text: '{question}'"""
 
 
 class GenerativeQuestionAnsweringTool(PipelineTool):
@@ -13,11 +18,7 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "google/flan-t5-base"
 
     def encode(self, text: str, question: str):
-        prompt = f"""
-        Here is a text containing a lot of information: '''{text}'''.
-
-        Can you answer this question about the text: '{question}'
-        """
+        prompt = QA_PROMPT.format(text=text, question=question)
         return self.pre_processor(prompt, return_tensors="pt")
 
     def forward(self, inputs):
@@ -30,3 +31,18 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
 
     def decode(self, outputs):
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+
+class RemoteGenerativeQuestionAnsweringTool(RemoteTool):
+    default_checkpoint = "google/flan-t5-base"
+    description = (
+        "This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the "
+        "text where to find the answer, and `question`, which is the question, and returns the answer to the question."
+    )
+
+    def extract_outputs(self, outputs):
+        return outputs[0]["generated_text"]
+
+    def prepare_inputs(self, text, question):
+        prompt = QA_PROMPT.format(text=text, question=question)
+        return prompt

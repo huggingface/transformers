@@ -54,7 +54,10 @@ class RemoteTool(Tool):
             self.setup()
 
         inputs = self.prepare_inputs(*args, **kwargs)
-        outputs = self.client(**inputs)
+        if isinstance(inputs, dict):
+            outputs = self.client(**inputs)
+        else:
+            outputs = self.client(inputs)
         return self.extract_outputs(outputs)
 
 
