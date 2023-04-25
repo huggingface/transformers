@@ -142,18 +142,41 @@ def process_doc_files(*files,  temp_dir = "temp", add_new_line=True):
                 print(f"There is a problem in {file}.")
                 raise
 
+import argparse
+import doctest
+import os
+import re
+
+
+def preprocess_mdx_string(string):
+    string = re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
+    return string
 
 def main(files_to_test_path, temp_dir="temp", add_new_line=True):
     flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
     with open(files_to_test_path, "r") as f:
-        content = f.readlines()
-        
-    for file_name in content:
-        print(f"Processing file: {file_name}")
-        package_name = os.path.dirname(file_name).replace("/", ".")
-        doctest.testfile("file_name",package = package_name, optionflags=flags)
-        
+        content = f.read().splitlines()
 
+    parser = doctest.DocTestParser()
+    runner = doctest.DocTestRunner(optionflags=flags)
+
+    for file_name in content:
+        print(f"Processing file: '{file_name}'")
+        if file_name.endswith(".mdx"):
+            with open(file_name, "r") as f:
+                mdx_string = f.read()
+            mdx_string = preprocess_mdx_string(mdx_string)
+            test = parser.get_doctest(mdx_string, {}, file_name, None, None)
+            runner.run(test)
+        elif file_name.endswith(".py"):
+            package_name = os.path.dirname(file_name).replace("/", ".")
+            if package_name is None: 
+                package_name = ""
+            doctest.testfile(file_name,package = package_name, optionflags=flags)
+        else:
+            print("skipped")
+    
+    print(runner.summarize())
 
 
 if __name__ == "__main__":
