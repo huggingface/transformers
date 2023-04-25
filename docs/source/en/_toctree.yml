@@ -474,6 +474,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/maskrcnn
+        title: Mask R-CNN
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
