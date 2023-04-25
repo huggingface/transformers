@@ -1829,7 +1829,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
             filename_no_suffix = filename.replace(".bin", "").replace(".safetensors", "")
-            reg = re.compile("(.*?)-\d{5}-of-\d{5}")
+            reg = re.compile(r"(.*?)-\d{5}-of-\d{5}")
 
             if (
                 filename.startswith(weights_no_suffix)

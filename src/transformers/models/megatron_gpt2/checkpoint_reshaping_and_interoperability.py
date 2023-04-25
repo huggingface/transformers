@@ -394,7 +394,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     pp_size = megatron_args.pipeline_model_parallel_size
     dtype = torch.float32
     # The regex to extract layer names.
-    layer_re = re.compile("layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
+    layer_re = re.compile(r"layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
 
     # Convert.
     print("Converting")
@@ -746,7 +746,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         )
     num_layers = config.num_hidden_layers // args.target_pipeline_model_parallel_size
 
-    layer_re = re.compile("transformer.h\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
+    layer_re = re.compile(r"transformer.h\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
     # The number of heads.
     heads = config.n_head
     # The hidden_size per head.

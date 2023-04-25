@@ -35,9 +35,9 @@ _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
 _re_import_struct_add_many = re.compile(r"^\s*_import_structure\[\S*\](?:\.extend\(|\s*=\s+)\[([^\]]*)\]")
 # Catches a line with an object between quotes and a comma:     "MyModel",
-_re_quote_object = re.compile('^\s+"([^"]+)",')
+_re_quote_object = re.compile(r'^\s+"([^"]+)",')
 # Catches a line with objects between brackets only:    ["foo", "bar"],
-_re_between_brackets = re.compile("^\s+\[([^\]]+)\]")
+_re_between_brackets = re.compile(r"^\s+\[([^\]]+)\]")
 # Catches a line with from foo import bar, bla, boo
 _re_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 # Catches a line with try:
@@ -78,7 +78,7 @@ def parse_init(init_file):
         # If we have everything on a single line, let's deal with it.
         if _re_one_line_import_struct.search(line):
             content = _re_one_line_import_struct.search(line).groups()[0]
-            imports = re.findall("\[([^\]]+)\]", content)
+            imports = re.findall(r"\[([^\]]+)\]", content)
             for imp in imports:
                 objects.extend([obj[1:-1] for obj in imp.split(", ")])
             line_index += 1

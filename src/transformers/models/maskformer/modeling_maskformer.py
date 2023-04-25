@@ -1241,7 +1241,7 @@ class MaskFormerFPNModel(nn.Module):
 
 class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
-        """
+        r"""
         Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
         Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's features into a Feature Pyramid
         Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
@@ -1250,7 +1250,7 @@ class MaskFormerPixelDecoder(nn.Module):
             feature_size (`int`, *optional*, defaults to 256):
                 The feature size (channel dimension) of the FPN feature maps.
             mask_feature_size (`int`, *optional*, defaults to 256):
-                The features (channels) of the target masks size \\C_{\epsilon}\\ in the paper.
+                The features (channels) of the target masks size \\(C_{\epsilon}\\) in the paper.
         """
         super().__init__()
 

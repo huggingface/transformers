@@ -50,12 +50,12 @@ def rename_key(old_name, num_meta4D_last_stage):
         else:
             new_name = old_name.replace("4", "batchnorm_after")
 
-    if "network" in old_name and re.search("\d\.\d", old_name):
+    if "network" in old_name and re.search(r"\d\.\d", old_name):
         two_digit_num = r"\b\d{2}\b"
         if bool(re.search(two_digit_num, old_name)):
-            match = re.search("\d\.\d\d.", old_name).group()
+            match = re.search(r"\d\.\d\d.", old_name).group()
         else:
-            match = re.search("\d\.\d.", old_name).group()
+            match = re.search(r"\d\.\d.", old_name).group()
         if int(match[0]) < 6:
             trimmed_name = old_name.replace(match, "")
             trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2:-1])
@@ -78,7 +78,7 @@ def rename_key(old_name, num_meta4D_last_stage):
 
             new_name = "last_stage." + trimmed_name
 
-    elif "network" in old_name and re.search(".\d.", old_name):
+    elif "network" in old_name and re.search(r".\d.", old_name):
         new_name = old_name.replace("network", "intermediate_stages")
 
     if "fc" in new_name:
