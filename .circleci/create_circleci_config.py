@@ -406,8 +406,18 @@ doc_test_job = CircleCIJob(
     install_steps=[
         "pip install --upgrade pytest",
         "pip install .[quality,testing]",
+        {
+            "name": "Get files to test",
+            "command":
+                "git remote add upstream git://github.com/huggingface/transformers.git\n"
+                "git diff --name-only --relative --diff-filter=AMR upstream/main...$CIRCLE_BRANCH | grep '\.py$'| sed 's|^|$(pwd)/|' > modified_files.txt"
+        },
+
+        # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
+        # that are modified by this pr. *py files
     ],
-    tests_to_run="documentation_tests"
+    tests_to_run="documentation_tests",
+    # feed the pr_documentation file as an argument
     
 )
 

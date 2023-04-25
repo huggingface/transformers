@@ -142,21 +142,21 @@ def process_doc_files(*files,  temp_dir = "temp", add_new_line=True):
                 print(f"There is a problem in {file}.")
                 raise
 
-def run_doctests(*files, temp_dir="temp"):
-    """
-    Either we run the tests with all the code in the RAM or we run them on the newly written files.
-    Could be good to evaluate performances between the two.
-    """
-    flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
-    doctest.testfile("roberta_prelayernorm/modeling_roberta_prelayernorm.py",package = "transformers.models",optionflags=flags)
 
 def main(*files, temp_dir="temp", add_new_line=True):
+    flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
+    
+    for file_name in files:
+        print(f"Processing file: {file_name}")
+        package_name = os.path.dirname(file_name).replace("/", ".")
+        doctest.testfile("file_name",package = package_name, optionflags=flags)
+        
     process_doc_files(*files, temp_dir = temp_dir, add_new_line=add_new_line)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("files", nargs="+", default="transformers/utils/documentation_tests.txt", help="The file(s) or folder(s) to run the doctests on.")
+    parser.add_argument("--files", default="transformers/utils/documentation_tests.txt", type = str,help="The file(s) or folder(s) to run the doctests on.")
     args = parser.parse_args()
 
-    main(*args.files, temp_dir = "temp")
+    main(args.files, temp_dir = "temp")

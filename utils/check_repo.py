@@ -568,7 +568,9 @@ def check_models_are_tested(module, test_file):
 
 
 def check_models_are_doc_tested(module, test_file):
-    """Check models defined in module have their documentation tested in documentation_text.txt."""
+    """Check models defined in module have their documentation tested in documentation_text.txt for nighly CI. Otherwise the documentation for each model
+    should be tested when each PR is pushed.
+    """
     # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
     tested_models = find_doc_tested_models(test_file)
