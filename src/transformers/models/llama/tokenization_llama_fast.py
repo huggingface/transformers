@@ -24,22 +24,22 @@ from ...utils.versions import require_version
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
-    from .tokenization_llama import LlamaTokenizer
+    from .tokenization_llama import LLaMATokenizer
 else:
-    LlamaTokenizer = None
+    LLaMATokenizer = None
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 
-class LlamaTokenizerFast(PreTrainedTokenizerFast):
+class LLaMATokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no normalization.
 
     ```
-    from transformers import LlamaTokenizerFast
+    from transformers import LLaMATokenizerFast
 
     tokenizer = LlaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
     tokenizer.encode("Hello this is a test")
@@ -73,7 +73,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = LlamaTokenizer
+    slow_tokenizer_class = LLaMATokenizer
     padding_side = "left"
 
     def __init__(

@@ -23,8 +23,8 @@ from datasets import load_dataset
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
-    LlamaTokenizer,
-    LlamaTokenizerFast,
+    LLaMATokenizer,
+    LLaMATokenizerFast,
     is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
@@ -50,7 +50,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = LlamaTokenizer
+    tokenizer_class = LLaMATokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -59,12 +59,12 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = LLaMATokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = LLaMATokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -293,8 +293,8 @@ class LlamaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "hf-internal-testing/llama-tokenizer"
-        cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(checkpoint_name)
-        cls.rust_tokenizer = LlamaTokenizerFast.from_pretrained(checkpoint_name)
+        cls.tokenizer: LLaMATokenizer = LLaMATokenizer.from_pretrained(checkpoint_name)
+        cls.rust_tokenizer = LLaMATokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch

@@ -33,9 +33,9 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 - After conversion, the model and tokenizer can be loaded via:
 
 ```python
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import LlamaForCausalLM, LLaMATokenizer
 
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
+tokenizer = LLaMATokenizer.from_pretrained("/output/path")
 model = LlamaForCausalLM.from_pretrained("/output/path")
 ```
 
@@ -51,17 +51,17 @@ This model was contributed by [zphang](https://huggingface.co/zphang) with contr
 [[autodoc]] LlamaConfig
 
 
-## LlamaTokenizer
+## LLaMATokenizer
 
-[[autodoc]] LlamaTokenizer
+[[autodoc]] LLaMATokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## LlamaTokenizerFast
+## LLaMATokenizerFast
 
-[[autodoc]] LlamaTokenizerFast
+[[autodoc]] LLaMATokenizerFast
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences

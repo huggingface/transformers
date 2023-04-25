@@ -177,8 +177,8 @@ else:
             (
                 "llama",
                 (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                    "LLaMATokenizer" if is_sentencepiece_available() else None,
+                    "LLaMATokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),

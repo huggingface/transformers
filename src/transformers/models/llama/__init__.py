@@ -32,7 +32,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_llama"] = ["LlamaTokenizer"]
+    _import_structure["tokenization_llama"] = ["LLaMATokenizer"]
 
 try:
     if not is_tokenizers_available():
@@ -40,7 +40,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_llama_fast"] = ["LlamaTokenizerFast"]
+    _import_structure["tokenization_llama_fast"] = ["LLaMATokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_llama import LlamaTokenizer
+        from .tokenization_llama import LLaMATokenizer
 
     try:
         if not is_tokenizers_available():
@@ -73,7 +73,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_llama_fast import LlamaTokenizerFast
+        from .tokenization_llama_fast import LLaMATokenizerFast
 
     try:
         if not is_torch_available():

@@ -46,7 +46,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class LlamaTokenizer(PreTrainedTokenizer):
+class LLaMATokenizer(PreTrainedTokenizer):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
 
