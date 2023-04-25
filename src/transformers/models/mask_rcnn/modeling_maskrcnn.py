@@ -33,7 +33,6 @@ from ... import AutoBackbone
 # TODO decide whether to define these utilities
 from ...assign_result import AssignResult
 from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
-from ...mask_target import mask_target
 from ...modeling_utils import PreTrainedModel
 from ...sampling_result import SamplingResult
 from ...utils import (
@@ -50,6 +49,7 @@ from .configuration_maskrcnn import MaskRCNNConfig
 if is_torchvision_available():
     import torchvision
 
+    from ...mask_target import mask_target
     from ...nms import batched_nms
 
 
