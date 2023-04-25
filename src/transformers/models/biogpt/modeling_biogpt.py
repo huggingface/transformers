@@ -857,9 +857,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
     """,
     BIOGPT_START_DOCSTRING,
 )
-
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
-
     def __init__(self, config: BioGptConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
