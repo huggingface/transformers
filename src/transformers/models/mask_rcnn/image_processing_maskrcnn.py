@@ -34,12 +34,13 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import ExplicitEnum, TensorType, is_torch_available, is_torchvision_available, logging
-from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 
 if is_torch_available():
     import torch
     from torch import nn
+
+    from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 if is_torchvision_available():
     from ...nms import multiclass_nms

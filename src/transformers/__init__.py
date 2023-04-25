@@ -1944,7 +1944,7 @@ else:
     )
     _import_structure["models.mask_rcnn"].extend(
         [
-            "MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MaskRCNNForObjectDetection",
             "MaskRCNNPreTrainedModel",
         ]
@@ -5448,7 +5448,7 @@ if TYPE_CHECKING:
             Mask2FormerPreTrainedModel,
         )
         from .models.mask_rcnn import (
-            MASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskRCNNForObjectDetection,
             MaskRCNNPreTrainedModel,
         )
