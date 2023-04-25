@@ -25,13 +25,12 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-import torchvision
 from torch import nn
 from torch.nn.modules.utils import _pair
 
 from ... import AutoBackbone
 
-# TODO maybe include these dependencies somewhere else
+# TODO decide whether to define these utilities
 from ...assign_result import AssignResult
 from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
 from ...mask_target import mask_target
@@ -42,10 +41,15 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchvision_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_maskrcnn import MaskRCNNConfig
+
+
+if is_torchvision_available():
+    import torchvision
 
 
 logger = logging.get_logger(__name__)

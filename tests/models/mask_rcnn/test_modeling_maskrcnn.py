@@ -22,7 +22,7 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import MaskRCNNConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -36,7 +36,6 @@ if is_torch_available():
     from transformers.models.mask_rcnn.modeling_maskrcnn import (
         MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-
 
 if is_vision_available():
     from PIL import Image
@@ -121,7 +120,7 @@ class MaskRCNNModelTester:
         return config, inputs_dict
 
 
-@require_torch
+@require_torchvision
 class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Mask-RCNN does not use input_ids, inputs_embeds,
@@ -253,10 +252,10 @@ def prepare_img():
     return image
 
 
-@require_torch
 @require_vision
+@require_torchvision
+@slow
 class MaskRCNNModelIntegrationTest(unittest.TestCase):
-    @slow
     def test_inference_object_detection_head(self):
         # TODO update to appropriate organization + use from_pretrained for image processor
         processor = MaskRCNNImageProcessor()
@@ -328,7 +327,6 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         self.assertEquals(len(mask_results[0]), 80)
         self.assertEquals(mask_results[0][15][0].sum(), 52418)
 
-    @slow
     def test_training_object_detection_head(self):
         # make random mask reproducible
         # note that the same seed on CPU and on GPU doesn’t mean they spew the same random number sequences,

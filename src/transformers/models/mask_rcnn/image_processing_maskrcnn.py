@@ -33,14 +33,17 @@ from ...image_utils import (
     valid_coco_detection_annotations,
     valid_images,
 )
-from ...nms import multiclass_nms
-from ...utils import ExplicitEnum, TensorType, is_torch_available, logging
+from ...utils import ExplicitEnum, TensorType, is_torch_available, is_torchvision_available, logging
 from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 
 if is_torch_available():
     import torch
     from torch import nn
+
+if is_torchvision_available():
+    from ...nms import multiclass_nms
+
 
 logger = logging.get_logger(__name__)
 
