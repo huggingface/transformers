@@ -17,7 +17,6 @@
 """ PyTorch Mask R-CNN model."""
 
 import copy
-import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -69,7 +68,7 @@ MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class RPNOutput(ModelOutput):
+class MaskRCNNRPNOutput(ModelOutput):
     """
     Region Proposal Network (RPN) outputs.
 
@@ -183,24 +182,28 @@ def images_to_levels(target, num_levels):
 
 def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
     """Check whether the anchors are inside the border.
+
     Args:
-        flat_anchors (torch.Tensor): Flattened anchors, shape (n, 4).
-        valid_flags (torch.Tensor): An existing valid flags of anchors.
-        img_shape (tuple(int)): Shape of current image.
-        allowed_border (int, optional): The border to allow the valid anchor.
-            Defaults to 0.
+        flat_anchors (`torch.Tensor`):
+            Flattened anchors, shape (n, 4).
+        valid_flags (`torch.Tensor`):
+            An existing valid flags of anchors.
+        img_shape (`Tuple[int]`):
+            Shape of current image.
+        allowed_border (`int`, *optional*, defaults to 0):
+            The border to allow the valid anchor. Defaults to 0.
+
     Returns:
-        torch.Tensor: Flags indicating whether the anchors are inside a \
-            valid range.
+        `torch.Tensor`: Flags indicating whether the anchors are inside a valid range.
     """
-    img_h, img_w = img_shape[-2:]
+    img_height, img_width = img_shape[-2:]
     if allowed_border >= 0:
         inside_flags = (
             valid_flags
             & (flat_anchors[:, 0] >= -allowed_border)
             & (flat_anchors[:, 1] >= -allowed_border)
-            & (flat_anchors[:, 2] < img_w + allowed_border)
-            & (flat_anchors[:, 3] < img_h + allowed_border)
+            & (flat_anchors[:, 2] < img_width + allowed_border)
+            & (flat_anchors[:, 3] < img_height + allowed_border)
         )
     else:
         inside_flags = valid_flags
@@ -214,18 +217,17 @@ def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1
     is the inverse function of [`delta2bbox`].
 
     Args:
-        proposals (Tensor):
+        proposals (`torch.Tensor`):
             Boxes to be transformed, shape (N, ..., 4)
-        ground_truth (Tensor):
+        ground_truth (`torch.Tensor`):
             Gt bboxes to be used as base, shape (N, ..., 4)
-        means (Sequence[float]):
+        means (`Sequence[float]`, *optional*, defaults to `(0.0, 0.0, 0.0, 0.0)`):
             Denormalizing means for delta coordinates
-        stds (Sequence[float]):
+        stds (`Sequence[float]`, *optional*, defaults to `(1.0, 1.0, 1.0, 1.0)`):
             Denormalizing standard deviation for delta coordinates
 
     Returns:
-        Tensor: deltas with shape (N, 4), where columns represent dx, dy,
-            dw, dh.
+       `torch.Tensor`: deltas with shape (N, 4), where columns represent dx, dy, dw, dh.
     """
     if proposals.size() != ground_truth.size():
         raise ValueError("Should have as many proposals as there are ground truths")
@@ -267,39 +269,36 @@ def delta2bbox(
     ctr_clamp=32,
 ):
     """Apply deltas to shift/scale base boxes.
-    Args:
+
     Typically the rois are anchor or proposed bounding boxes and the deltas are network outputs used to shift/scale
     those boxes. This is the inverse function of [`bbox2delta`].
-        rois (Tensor): Boxes to be transformed. Has shape (N, 4). deltas (Tensor): Encoded offsets relative to each
-        roi.
-            Has shape (N, num_classes * 4) or (N, 4). Note N = num_base_anchors * W * H, when rois is a grid of
-            anchors. Offset encoding follows [1]_.
-        means (Sequence[float]): Denormalizing means for delta coordinates.
-            Default (0., 0., 0., 0.).
-        stds (Sequence[float]): Denormalizing standard deviation for delta
-            coordinates. Default (1., 1., 1., 1.).
-        max_shape (tuple[int, int]): Maximum bounds for boxes, specifies
-           (H, W). Default None.
-        wh_ratio_clip (float): Maximum aspect ratio for boxes. Default
-            16 / 1000.
-        clip_border (bool, optional): Whether clip the objects outside the
-            border of the image. Default True.
-        add_ctr_clamp (bool): Whether to add center clamp. When set to True,
-            the center of the prediction bounding box will be clamped to avoid being too far away from the center of
-            the anchor. Only used by YOLOF. Default False.
-        ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
-            Default 32.
+
+    Args:
+        rois (`torch.Tensor`):
+            Boxes to be transformed. Has shape (N, 4) with N = num_base_anchors * W * H, when rois is a grid of
+            anchors.
+        deltas (`torch.Tensor`):
+            Encoded offsets relative to each roi. Has shape (N, num_classes * 4) or (N, 4). Offset encoding follows
+            https://arxiv.org/abs/1311.2524.
+        means (`Sequence[float]`, *optional*, defaults to `(0., 0., 0., 0.)`):
+            Denormalizing means for delta coordinates.
+        stds (`Sequence[float]`, *optional*, defaults to `(1., 1., 1., 1.)`):
+            Denormalizing standard deviation for delta coordinates.
+        max_shape (`Tuple[int, int]`, *optional*):
+            Maximum bounds for boxes, specifies (H, W). Default None.
+        wh_ratio_clip (`float`, *optional*, defaults to 16 / 1000):
+            Maximum aspect ratio for boxes.
+        clip_border (`bool`, *optional*, defaults to `True`):
+            Whether to clip the objects outside the border of the image.
+        add_ctr_clamp (`bool`, *optional*, defaults to `False`):
+            Whether to add center clamp. When set to True, the center of the prediction bounding box will be clamped to
+            avoid being too far away from the center of the anchor. Only used by YOLOF.
+        ctr_clamp (`int`, *optional*, defaults to 32):
+            The maximum pixel shift to clamp. Only used by YOLOF.
+
     Returns:
-        Tensor: Boxes with shape (N, num_classes * 4) or (N, 4), where 4
-           represent tl_x, tl_y, br_x, br_y.
-    References:
-        .. [1] https://arxiv.org/abs/1311.2524
-    Example:
-        >>> rois = torch.Tensor([[ 0., 0., 1., 1.], >>> [ 0., 0., 1., 1.], >>> [ 0., 0., 1., 1.], >>> [ 5., 5., 5.,
-        5.]]) >>> deltas = torch.Tensor([[ 0., 0., 0., 0.], >>> [ 1., 1., 1., 1.], >>> [ 0., 0., 2., -1.], >>> [ 0.7,
-        -1.9, -0.5, 0.3]]) >>> delta2bbox(rois, deltas, max_shape=(32, 32, 3)) tensor([[0.0000, 0.0000, 1.0000,
-        1.0000],
-                [0.1409, 0.1409, 2.8591, 2.8591], [0.0000, 0.3161, 4.1945, 0.6839], [5.0000, 5.0000, 5.0000, 5.0000]])
+        `torch.Tensor`: Boxes with shape (N, num_classes * 4) or (N, 4), where 4 represent top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y.
     """
     num_bboxes, num_classes = deltas.size(0), deltas.size(1) // 4
     if num_bboxes == 0:
@@ -345,11 +344,11 @@ def bbox2roi(bbox_list):
     """Convert a list of bboxes to roi format.
 
     Args:
-        bbox_list (list[Tensor]):
+        bbox_list (`List[Tensor]`):
             A list of bboxes corresponding to a batch of images.
 
     Returns:
-        Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+        `torch.Tensor`: shape (n, 5), [batch_ind, x1, y1, x2, y2]
     """
     rois_list = []
     for img_id, bboxes in enumerate(bbox_list):
@@ -442,21 +441,24 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     @property
     def num_base_priors(self):
-        """list[int]: The number of priors (anchors) at a point
-        on the feature grid"""
+        """
+        Returns;:
+            `List[int]`: The number of priors (anchors) at a point on the feature grid
+        """
         return [base_anchors.size(0) for base_anchors in self.base_anchors]
 
     @property
     def num_levels(self):
-        """int: number of feature levels that the generator will be applied"""
+        """
+        Returns:
+            `int`: number of feature levels that the generator will be applied"""
         return len(self.strides)
 
     def gen_base_anchors(self):
         """Generate base anchors.
 
         Returns:
-            list(torch.Tensor): Base anchors of a feature grid in multiple \
-                feature levels.
+            `List[torch.Tensor]`: Base anchors of a feature grid in multiple feature levels.
         """
         multi_level_base_anchors = []
         for i, base_size in enumerate(self.base_sizes):
@@ -470,49 +472,62 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     def gen_single_level_base_anchors(self, base_size, scales, ratios, center=None):
         """Generate base anchors of a single level.
+
         Args:
-            base_size (int | float): Basic size of an anchor.
-            scales (torch.Tensor): Scales of the anchor.
-            ratios (torch.Tensor): The ratio between between the height
-                and width of anchors in a single level.
-            center (tuple[float], optional): The center of the base anchor
-                related to a single feature grid. Defaults to None.
+            base_size (`int` or `float`):
+                Basic size of an anchor.
+            scales (`torch.Tensor`):
+                Scales of the anchor.
+            ratios (`torch.Tensor`):
+                The ratio between between the height and width of anchors in a single level.
+            center (`Tuple[float]`, *optional*):
+                The center of the base anchor related to a single feature grid.
+
         Returns:
-            torch.Tensor: Anchors in a single-level feature maps.
+            `torch.Tensor`: Anchors in a single-level feature maps.
         """
-        w = base_size
-        h = base_size
+        width = base_size
+        height = base_size
         if center is None:
-            x_center = self.center_offset * w
-            y_center = self.center_offset * h
+            x_center = self.center_offset * width
+            y_center = self.center_offset * height
         else:
             x_center, y_center = center
 
-        h_ratios = torch.sqrt(ratios)
-        w_ratios = 1 / h_ratios
+        height_ratios = torch.sqrt(ratios)
+        width_ratios = 1 / height_ratios
         if self.scale_major:
-            ws = (w * w_ratios[:, None] * scales[None, :]).view(-1)
-            hs = (h * h_ratios[:, None] * scales[None, :]).view(-1)
+            width_scaled = (width * width_ratios[:, None] * scales[None, :]).view(-1)
+            height_scaled = (height * height_ratios[:, None] * scales[None, :]).view(-1)
         else:
-            ws = (w * scales[:, None] * w_ratios[None, :]).view(-1)
-            hs = (h * scales[:, None] * h_ratios[None, :]).view(-1)
+            width_scaled = (width * scales[:, None] * width_ratios[None, :]).view(-1)
+            height_scaled = (height * scales[:, None] * height_ratios[None, :]).view(-1)
 
         # use float anchor and the anchor's center is aligned with the
         # pixel center
-        base_anchors = [x_center - 0.5 * ws, y_center - 0.5 * hs, x_center + 0.5 * ws, y_center + 0.5 * hs]
+        base_anchors = [
+            x_center - 0.5 * width_scaled,
+            y_center - 0.5 * height_scaled,
+            x_center + 0.5 * width_scaled,
+            y_center + 0.5 * height_scaled,
+        ]
         base_anchors = torch.stack(base_anchors, dim=-1)
 
         return base_anchors
 
     def _meshgrid(self, x, y, row_major=True):
         """Generate mesh grid of x and y.
+
         Args:
-            x (torch.Tensor): Grids of x dimension.
-            y (torch.Tensor): Grids of y dimension.
-            row_major (bool, optional): Whether to return y grids first.
-                Defaults to True.
+            x (`torch.Tensor`):
+                Grids of x dimension.
+            y (`torch.Tensor`):
+                Grids of y dimension.
+            row_major (`bool`, *optional*, defaults to `True`):
+                Whether to return y grids first.
+
         Returns:
-            tuple[torch.Tensor]: The mesh grids of x and y.
+            `Tuple[torch.Tensor]`: The mesh grids of x and y.
         """
         # use shape instead of len to keep tracing while exporting to onnx
         xx = x.repeat(y.shape[0])
@@ -524,16 +539,17 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     def grid_priors(self, featmap_sizes, dtype=torch.float32, device="cuda"):
         """Generate grid anchors in multiple feature levels.
+
         Args:
-            featmap_sizes (list[tuple]):
+            featmap_sizes (`List[Tuple]`):
                 List of feature map sizes in multiple feature levels.
             dtype (`torch.dtype`):
                 Dtype of priors. Default: torch.float32.
-            device (str):
+            device (`str`, *optional*, defaults to `"cuda"`):
                 The device where the anchors will be put on.
 
-        Return:
-            list[torch.Tensor]: Anchors in multiple feature levels. \
+        Returns:
+            `List[torch.Tensor]`: Anchors in multiple feature levels. \
                 The sizes of each tensor should be [N, 4], where \ N = width * height * num_base_anchors, width and
                 height \ are the sizes of the corresponding feature level, \ num_base_anchors is the number of anchors
                 for that level.
@@ -550,15 +566,19 @@ class MaskRCNNAnchorGenerator(nn.Module):
         """Generate grid anchors of a single level.
         Note:
             This function is usually called by method `self.grid_priors`.
+
         Args:
-            featmap_size (tuple[int]): Size of the feature maps.
-            level_idx (int): The index of corresponding feature map level.
-            dtype (obj:*torch.dtype*): Date type of points.Defaults to
-                `torch.float32`.
-            device (str, optional): The device the tensor will be put on.
-                Defaults to 'cuda'.
+            featmap_size (`Tuple[int]`):
+                Size of the feature maps.
+            level_idx (`int`):
+                The index of corresponding feature map level.
+            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+                Date type of points.
+            device (`str`, *optional*, defaults to `"cuda"`):
+                The device the tensor will be put on.
+
         Returns:
-            torch.Tensor: Anchors in the overall feature maps.
+            `torch.Tensor`: Anchors in the overall feature maps.
         """
 
         base_anchors = self.base_anchors[level_idx].to(device).to(dtype)
@@ -583,13 +603,17 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     def valid_flags(self, featmap_sizes, pad_shape, device="cuda"):
         """Generate valid flags of anchors in multiple feature levels.
+
         Args:
-            featmap_sizes (list(tuple)): List of feature map sizes in
-                multiple feature levels.
-            pad_shape (tuple): The padded shape of the image.
-            device (str): Device where the anchors will be put on.
-        Return:
-            list(torch.Tensor): Valid flags of anchors in multiple levels.
+            featmap_sizes (`List[Tuple]`):
+                List of feature map sizes in multiple feature levels.
+            pad_shape (`Tuple`):
+                The padded shape of the image.
+            device (`str`, *optional*, defaults to `"cuda"`):
+                Device where the anchors will be put on.
+
+        Returns:
+            `List[torch.Tensor]`: Valid flags of anchors in multiple levels.
         """
         if self.num_levels != len(featmap_sizes):
             raise ValueError(f"Expected {self.num_levels} feature levels, got {len(featmap_sizes)}")
@@ -608,24 +632,31 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     def single_level_valid_flags(self, featmap_size, valid_size, num_base_anchors, device="cuda"):
         """Generate the valid flags of anchor in a single feature map.
+
         Args:
-            featmap_size (tuple[int]): The size of feature maps, arrange
-                as (h, w).
-            valid_size (tuple[int]): The valid size of the feature maps.
-            num_base_anchors (int): The number of base anchors.
-            device (str, optional): Device where the flags will be put on.
-                Defaults to 'cuda'.
+            featmap_size (`Tuple[int]`):
+                The size of feature maps, arrange as (height, width).
+            valid_size (`Tuple[int]`):
+                The valid size of the feature maps.
+            num_base_anchors (`int`):
+                The number of base anchors.
+            device (`str`, *optional*, defaults to `"cuda"`):
+                Device where the flags will be put on.
+
         Returns:
-            torch.Tensor: The valid flags of each anchor in a single level \
-                feature map.
+            `torch.Tensor`: The valid flags of each anchor in a single level feature map.
         """
-        feat_h, feat_w = featmap_size
-        valid_h, valid_w = valid_size
-        assert valid_h <= feat_h and valid_w <= feat_w
-        valid_x = torch.zeros(feat_w, dtype=torch.bool, device=device)
-        valid_y = torch.zeros(feat_h, dtype=torch.bool, device=device)
-        valid_x[:valid_w] = 1
-        valid_y[:valid_h] = 1
+        feat_height, feat_width = featmap_size
+        valid_height, valid_width = valid_size
+        if not (valid_height <= feat_height and valid_width <= feat_width):
+            raise ValueError(
+                f"valid_size: {valid_size} should be less than "
+                f"featmap_size: {featmap_size} in single_level_valid_flags."
+            )
+        valid_x = torch.zeros(feat_width, dtype=torch.bool, device=device)
+        valid_y = torch.zeros(feat_height, dtype=torch.bool, device=device)
+        valid_x[:valid_width] = 1
+        valid_y[:valid_height] = 1
         valid_xx, valid_yy = self._meshgrid(valid_x, valid_y)
         valid = valid_xx & valid_yy
         valid = valid[:, None].expand(valid.size(0), num_base_anchors).contiguous().view(-1)
@@ -638,17 +669,17 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
     delta (dx, dy, dw, dh) and decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
 
     Args:
-        target_means (Sequence[float]): Denormalizing means of target for
-            delta coordinates
-        target_stds (Sequence[float]): Denormalizing standard deviation of
-            target for delta coordinates
-        clip_border (bool, optional): Whether clip the objects outside the
-            border of the image. Defaults to True.
-        add_ctr_clamp (bool): Whether to add center clamp, when added, the
-            predicted box is clamped is its center is too far away from the original anchor's center. Only used by
-            YOLOF. Default False.
-        ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
-            Default 32.
+        target_means (`Sequence[float]`):
+            Denormalizing means of target for delta coordinates.
+        target_stds (`Sequence[float]`):
+            Denormalizing standard deviation of target for delta coordinates.
+        clip_border (`bool`, *optional*, defaults to `True`):
+            Whether clip the objects outside the border of the image.
+        add_ctr_clamp (`bool`, *optional*, defaults to `False`):
+            Whether to add center clamp, when added, the predicted box is clamped is its center is too far away from
+            the original anchor's center. Only used by YOLOF.
+        ctr_clamp (`int`, *optional*, defaults to 32):
+            The maximum pixel shift to clamp. Only used by YOLOF.
     """
 
     def __init__(
@@ -676,7 +707,7 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
                 Target of the transformation, e.g., ground-truth boxes.
 
         Returns:
-            torch.Tensor: Box transformation deltas
+            `torch.Tensor`: Box transformation deltas
         """
 
         if bboxes.size(0) != gt_bboxes.size(0):
@@ -697,13 +728,13 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
                 4) or (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors.
                 Offset encoding follows [1]_.
             max_shape (`Sequence[int]` or `torch.Tensor` or `Sequence[Sequence[int]]`, *optional*):
-                Maximum bounds for boxes, specifies (H, W, C) or (H, W). If bboxes shape is (B, N, 4), then the
-                max_shape should be a Sequence[Sequence[int]] and the length of max_shape should also be B.
-            wh_ratio_clip (`float`, *optional*):
+                Maximum bounds for boxes, specifies (H, W, C) or (H, W). If `bboxes` shape is (B, N, 4), then the
+                `max_shape` should be a Sequence[Sequence[int]] and the length of `max_shape` should also be B.
+            wh_ratio_clip (`float`, *optional*, defaults to 16 / 1000):
                 The allowed ratio between width and height.
 
         Returns:
-            torch.Tensor: Decoded boxes.
+            `torch.Tensor`: Decoded boxes.
         """
 
         if pred_bboxes.size(0) != bboxes.size(0):
@@ -712,7 +743,7 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
             if pred_bboxes.size(1) != bboxes.size(1):
                 raise ValueError("pred_bboxes and bboxes should have the same second dimension")
 
-        if pred_bboxes.ndim == 2 and not torch.onnx.is_in_onnx_export():
+        if pred_bboxes.ndim == 2:
             # single image decode
             decoded_bboxes = delta2bbox(
                 bboxes,
@@ -726,27 +757,7 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
                 self.ctr_clamp,
             )
         else:
-            if pred_bboxes.ndim == 3 and not torch.onnx.is_in_onnx_export():
-                # TODO: remove this deprecation
-                warnings.warn(
-                    "DeprecationWarning: onnx_delta2bbox is deprecated "
-                    "in the case of batch decoding and non-ONNX, "
-                    "please use “delta2bbox” instead. In order to improve "
-                    "the decoding speed, the batch function will no "
-                    "longer be supported. "
-                )
-            raise NotImplementedError("ONNX is not yet supported")
-            # decoded_bboxes = onnx_delta2bbox(
-            #     bboxes,
-            #     pred_bboxes,
-            #     self.means,
-            #     self.stds,
-            #     max_shape,
-            #     wh_ratio_clip,
-            #     self.clip_border,
-            #     self.add_ctr_clamp,
-            #     self.ctr_clamp,
-            # )
+            raise ValueError("Predicted boxes should have 2 dimensions")
 
         return decoded_bboxes
 
@@ -786,14 +797,14 @@ class MaskRCNNBboxOverlaps2D:
             bboxes2 (`torch.Tensor`):
                 Boxes having shape (m, 4) in <x1, y1, x2, y2> format, shape (m, 5) in <x1, y1, x2, y2, score> format,
                 or be empty. If `is_aligned ` is `True`, then m and n must be equal.
-            mode (`str`, *optional*, defaults to "iou"):
+            mode (`str`, *optional*, defaults to `"iou"`):
                 "iou" (intersection over union), "iof" (intersection over foreground), or "giou" (generalized
                 intersection over union).
             is_aligned (`bool`, *optional*, defaults to `False`):
                 If True, then m and n must be equal. Default False.
 
         Returns:
-            Tensor: shape (m, n) if `is_aligned ` is False else shape (m,)
+            `torch.Tensor : shape (m, n) if `is_aligned ` is False else shape (m,)
         """
         if bboxes1.size(-1) not in [0, 4, 5]:
             raise ValueError(f"bboxes1 must have shape (m, 4) or (m, 5), but got {bboxes1.size()}")
@@ -823,59 +834,29 @@ class MaskRCNNBboxOverlaps2D:
 
 
 def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
-    """Calculate overlap between two set of bboxes.
-    FP16 Contributed by https://github.com/open-mmlab/mmdetection/pull/4889 Note:
-        Assume bboxes1 is M x 4, bboxes2 is N x 4, when mode is 'iou', there are some new generated variable when
-        calculating IOU using bbox_overlaps function: 1) is_aligned is False
-            area1: M x 1 area2: N x 1 lt: M x N x 2 rb: M x N x 2 wh: M x N x 2 overlap: M x N x 1 union: M x N x 1
-            ious: M x N x 1 Total memory:
-                S = (9 x N x M + N + M) * 4 Byte,
-            When using FP16, we can reduce:
-                R = (9 x N x M + N + M) * 4 / 2 Byte R large than (N + M) * 4 * 2 is always true when N and M >= 1.
-                Obviously, N + M <= N * M < 3 * N * M, when N >=2 and M >=2,
-                           N + 1 < 3 * N, when N or M is 1.
-            Given M = 40 (ground truth), N = 400000 (three anchor boxes in per grid, FPN, R-CNNs),
-                R = 275 MB (one times)
-            A special case (dense detection), M = 512 (ground truth),
-                R = 3516 MB = 3.43 GB
-            When the batch size is B, reduce:
-                B x R
-            Therefore, CUDA memory runs out frequently. Experiments on GeForce RTX 2080Ti (11019 MiB): | dtype | M | N
-            | Use | Real | Ideal | |:----:|:----:|:----:|:----:|:----:|:----:| | FP32 | 512 | 400000 | 8020 MiB | -- |
-            -- | | FP16 | 512 | 400000 | 4504 MiB | 3516 MiB | 3516 MiB | | FP32 | 40 | 400000 | 1540 MiB | -- | -- | |
-            FP16 | 40 | 400000 | 1264 MiB | 276MiB | 275 MiB |
-        2) is_aligned is True
-            area1: N x 1 area2: N x 1 lt: N x 2 rb: N x 2 wh: N x 2 overlap: N x 1 union: N x 1 ious: N x 1 Total
-            memory:
-                S = 11 x N * 4 Byte
-            When using FP16, we can reduce:
-                R = 11 x N * 4 / 2 Byte
-        So do the 'giou' (large than 'iou'). Time-wise, FP16 is generally faster than FP32. When gpu_assign_thr is not
-        -1, it takes more time on cpu but not reduce memory. There, we can reduce half the memory and keep the speed.
-    Args:
-    If `is_aligned` is `False`, then calculate the overlaps between each bbox of bboxes1 and bboxes2, otherwise the:
+    """Calculates the overlap between two set of bboxes.
+
+    If `is_aligned` is `False`, then it calculates the overlaps between each bbox of bboxes1 and bboxes2, otherwise the
     overlaps between each aligned pair of bboxes1 and bboxes2.
-        bboxes1 (Tensor): shape (B, m, 4) in <x1, y1, x2, y2> format or empty. bboxes2 (Tensor): shape (B, n, 4) in
-        <x1, y1, x2, y2> format or empty.
-            B indicates the batch dim, in shape (B1, B2, ..., Bn). If `is_aligned` is `True`, then m and n must be
-            equal.
-        mode (str): "iou" (intersection over union), "iof" (intersection over
-            foreground) or "giou" (generalized intersection over union). Default "iou".
-        is_aligned (bool, optional): If True, then m and n must be equal.
-            Default False.
-        eps (float, optional): A value added to the denominator for numerical
-            stability. Default 1e-6.
+
+    For an extensive explanation, we refer to
+    https://github.com/open-mmlab/mmdetection/blob/ecac3a77becc63f23d9f6980b2a36f86acd00a8a/mmdet/structures/bbox/bbox_overlaps.py#L13.
+
+    Args:
+        bboxes1 (`torch.Tensor`):
+            Shape (B, m, 4) in <x1, y1, x2, y2> format or empty. B indicates the batch dim, in shape (B1, B2, ..., Bn).
+        bboxes2 (`torch.Tensor`):
+            Shape (B, n, 4) in <x1, y1, x2, y2> format or empty.
+        mode (`str`, **optional*, defaults to `"iou"`):
+            "iou" (intersection over union), "iof" (intersection over foreground) or "giou" (generalized intersection
+            over union).
+        is_aligned (`bool`, *optional*, defaults to `False`):
+            If `True`, then m and n must be equal.
+        eps (`float`, *optional*, defaults to 1e-6):
+            A value added to the denominator for numerical stability.
+
     Returns:
-        Tensor: shape (m, n) if `is_aligned` is False else shape (m,)
-    Example:
-        >>> bboxes1 = torch.FloatTensor([ >>> [0, 0, 10, 10], >>> [10, 10, 20, 20], >>> [32, 32, 38, 42], >>> ]) >>>
-        bboxes2 = torch.FloatTensor([ >>> [0, 0, 10, 20], >>> [0, 10, 10, 19], >>> [10, 10, 20, 20], >>> ]) >>>
-        overlaps = bbox_overlaps(bboxes1, bboxes2) >>> assert overlaps.shape == (3, 3) >>> overlaps =
-        bbox_overlaps(bboxes1, bboxes2, is_aligned=True) >>> assert overlaps.shape == (3, )
-    Example:
-        >>> empty = torch.empty(0, 4) >>> nonempty = torch.FloatTensor([[0, 0, 10, 9]]) >>> assert
-        tuple(bbox_overlaps(empty, nonempty).shape) == (0, 1) >>> assert tuple(bbox_overlaps(nonempty, empty).shape) ==
-        (1, 0) >>> assert tuple(bbox_overlaps(empty, empty).shape) == (0, 0)
+        `torch.Tensor`: shape (m, n) if `is_aligned` is `False` else shape (m,)
     """
 
     if mode not in ["iou", "iof", "giou"]:
@@ -961,23 +942,26 @@ class MaskRCNNMaxIoUAssigner:
     https://github.com/open-mmlab/mmdetection/blob/78e3ec8e6adc63763cab4060009e37a5d63c5c7a/mmdet/core/bbox/assigners/max_iou_assigner.py
 
     Args:
-        pos_iou_thr (float): IoU threshold for positive bboxes.
-        neg_iou_thr (float or tuple): IoU threshold for negative bboxes.
-        min_pos_iou (float): Minimum iou for a bbox to be considered as a
-            positive bbox. Positive samples can have smaller IoU than pos_iou_thr due to the 4th step (assign max IoU
-            sample to each gt).
-        gt_max_assign_all (bool): Whether to assign all bboxes with the same
-            highest overlap with some gt to that gt.
-        ignore_iof_thr (float): IoF threshold for ignoring bboxes (if
-            `gt_bboxes_ignore` is specified). Negative values mean not ignoring any bboxes.
-        ignore_wrt_candidates (bool): Whether to compute the iof between
-            `bboxes` and `gt_bboxes_ignore`, or the contrary.
-        match_low_quality (bool): Whether to allow low quality matches. This is
-            usually allowed for RPN and single stage detectors, but not allowed in the second stage. Details are
-            demonstrated in Step 4.
-        gpu_assign_thr (int): The upper bound of the number of GT for GPU
-            assign. When the number of gt is above this threshold, will assign on CPU device. Negative values mean not
-            assign on CPU.
+        pos_iou_thr (`float`):
+            IoU threshold for positive bboxes.
+        neg_iou_thr (`float` or `Tuple`):
+            IoU threshold for negative bboxes.
+        min_pos_iou (`float`, *optional*, defaults to 0.0):
+            Minimum iou for a bbox to be considered as a positive bbox. Positive samples can have smaller IoU than
+            pos_iou_thr due to the 4th step (assign max IoU sample to each gt).
+        gt_max_assign_all (`bool`, *optional*, defaults to `False`):
+            Whether to assign all bboxes with the same highest overlap with some gt to that gt.
+        ignore_iof_thr (`float`, *optional*, defaults to -1):
+            IoF threshold for ignoring bboxes (if `gt_bboxes_ignore` is specified). Negative values mean not ignoring
+            any bboxes.
+        ignore_wrt_candidates (`bool`, *optional*, defaults to `True`):
+            Whether to compute the iof between `bboxes` and `gt_bboxes_ignore`, or the contrary.
+        match_low_quality (`bool`, *optional*, defaults to `True`):
+            Whether to allow low quality matches. This is usually allowed for RPN and single stage detectors, but not
+            allowed in the second stage. Details are demonstrated in Step 4.
+        gpu_assign_thr (`int`, *optional*, defaults to -1):
+            The upper bound of the number of GT for GPU assign. When the number of gt is above this threshold, will
+            assign on CPU device. Negative values mean not assign on CPU.
     """
 
     def __init__(
@@ -1010,18 +994,19 @@ class MaskRCNNMaxIoUAssigner:
         2. assign proposals whose iou with all gts < neg_iou_thr to 0
         3. for each bbox, if the iou with its nearest gt >= pos_iou_thr, assign it to that bbox
         4. for each gt bbox, assign its nearest proposals (may be more than one) to itself
+
         Args:
-            bboxes (Tensor): Bounding boxes to be assigned, shape(n, 4).
-            gt_bboxes (Tensor): Groundtruth boxes, shape (k, 4).
-            gt_bboxes_ignore (Tensor, optional): Ground truth bboxes that are
-                labelled as *ignored*, e.g., crowd boxes in COCO.
-            gt_labels (Tensor, optional): Label of gt_bboxes, shape (k, ).
+            bboxes (`torch.Tensor`):
+                Bounding boxes to be assigned, shape(n, 4).
+            gt_bboxes (`torch.Tensor`):
+                Ground truth boxes, shape (k, 4).
+            gt_bboxes_ignore (`torch.Tensor`, *optional*):
+                Ground truth bboxes that are labelled as *ignored*, e.g., crowd boxes in COCO.
+            gt_labels (`torch.Tensor`, *optional*):
+                Label of gt_bboxes, shape (k, ).
+
         Returns:
             `AssignResult`: The assign result.
-        Example:
-            >>> self = MaxIoUAssigner(0.5, 0.5) >>> bboxes = torch.Tensor([[0, 0, 10, 10], [10, 10, 20, 20]]) >>>
-            gt_bboxes = torch.Tensor([[0, 0, 10, 9]]) >>> assign_result = self.assign(bboxes, gt_bboxes) >>>
-            expected_gt_inds = torch.LongTensor([1, 0]) >>> assert torch.all(assign_result.gt_inds == expected_gt_inds)
         """
         assign_on_cpu = True if (self.gpu_assign_thr > 0) and (gt_bboxes.shape[0] > self.gpu_assign_thr) else False
         # compute overlap and assign gt on CPU when number of GT is large
@@ -1060,11 +1045,13 @@ class MaskRCNNMaxIoUAssigner:
 
     def assign_wrt_overlaps(self, overlaps, gt_labels=None):
         """Assign w.r.t. the overlaps of bboxes with gts.
+
         Args:
             overlaps (`torch.Tensor`):
                 Overlaps between k gt_bboxes and n bboxes, shape(k, n).
             gt_labels (`torch.Tensor`, *optional*):
                 Labels of k gt_bboxes, shape (k, ).
+
         Returns:
             `AssignResult`: The assign result.
         """
@@ -1097,7 +1084,8 @@ class MaskRCNNMaxIoUAssigner:
         if isinstance(self.neg_iou_thr, float):
             assigned_gt_inds[(max_overlaps >= 0) & (max_overlaps < self.neg_iou_thr)] = 0
         elif isinstance(self.neg_iou_thr, tuple):
-            assert len(self.neg_iou_thr) == 2
+            if len(self.neg_iou_thr) != 2:
+                raise ValueError("`neg_iou_thr` should be a float or tuple of length 2")
             assigned_gt_inds[(max_overlaps >= self.neg_iou_thr[0]) & (max_overlaps < self.neg_iou_thr[1])] = 0
 
         # 3. assign positive: above positive IoU threshold
@@ -1148,7 +1136,7 @@ class MaskRCNNRandomSampler:
             Whether to add ground truth boxes as proposals.
     """
 
-    def __init__(self, num, pos_fraction, neg_pos_ub=-1, add_gt_as_proposals=True, **kwargs):
+    def __init__(self, num, pos_fraction, neg_pos_ub=-1, add_gt_as_proposals=True):
         self.num = num
         self.pos_fraction = pos_fraction
         self.neg_pos_ub = neg_pos_ub
@@ -1226,14 +1214,6 @@ class MaskRCNNRandomSampler:
 
         Returns:
             `SamplingResult`: Sampling result.
-
-        Example:
-            >>> from mmdet.core.bbox import RandomSampler >>> from mmdet.core.bbox import AssignResult >>> from
-            mmdet.core.bbox.demodata import ensure_rng, random_boxes >>> rng = ensure_rng(None) >>> assign_result =
-            AssignResult.random(rng=rng) >>> bboxes = random_boxes(assign_result.num_preds, rng=rng) >>> gt_bboxes =
-            random_boxes(assign_result.num_gts, rng=rng) >>> gt_labels = None >>> self = RandomSampler(num=32,
-            pos_fraction=0.5, neg_pos_ub=-1, >>> add_gt_as_proposals=False) >>> self = self.sample(assign_result,
-            bboxes, gt_bboxes, gt_labels)
         """
         if len(bboxes.shape) < 2:
             bboxes = bboxes[None, :]
@@ -1403,23 +1383,24 @@ class MaskRCNNRPN(nn.Module):
             )
             return ((losses,) + output) if losses is not None else output
 
-        return RPNOutput(losses=losses, proposal_list=proposal_list, outs=outs)
+        return MaskRCNNRPNOutput(losses=losses, proposal_list=proposal_list, outs=outs)
 
     def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
         """Get anchors according to feature map sizes.
 
         Args:
-            featmap_sizes (list[tuple]):
+            featmap_sizes (`List[Tuple]`):
                 Multi-level feature map sizes.
-            img_metas (list[dict]):
+            img_metas (`List[Dict]`):
                 Image meta info.
-            device (torch.device | str):
-                Device for returned tensors
+            device (`torch.device` or `"str"`, *optional*, defaults to `"cuda"`):
+                Device for returned tensors.
 
         Returns:
-            tuple:
-                anchor_list (list[Tensor]): Anchors of each image. valid_flag_list (list[Tensor]): Valid flags of each
-                image.
+            anchor_list (`List[torch.Tensor]`):
+                Anchors of each image.
+            valid_flag_list (`List[torch.Tensor]`):
+                Valid flags of each image.
         """
         num_imgs = len(img_metas)
 
@@ -1916,7 +1897,11 @@ class MaskRCNNRPN(nn.Module):
         for level_idx in range(len(cls_score_list)):
             rpn_cls_score = cls_score_list[level_idx]
             rpn_bbox_pred = bbox_pred_list[level_idx]
-            assert rpn_cls_score.size()[-2:] == rpn_bbox_pred.size()[-2:]
+            if rpn_cls_score.size()[-2:] != rpn_bbox_pred.size()[-2:]:
+                raise ValueError(
+                    f"Last 2 dimensions of cls ({rpn_cls_score.shape}) and bbox ({rpn_bbox_pred.shape}) "
+                    "predictions should match!"
+                )
             rpn_cls_score = rpn_cls_score.permute(1, 2, 0)
             if self.use_sigmoid_cls:
                 rpn_cls_score = rpn_cls_score.reshape(-1)
@@ -2281,15 +2266,18 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         `_get_target_single` function.
 
         Args:
-            sampling_results (List[obj:SamplingResults]): Assign results of
-                all images in a batch after sampling.
-            gt_bboxes (list[Tensor]): Gt_bboxes of all images in a batch,
-                each tensor has shape (num_gt, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
-            gt_labels (list[Tensor]): Gt_labels of all images in a batch,
-                each tensor has shape (num_gt,).
-            rcnn_train_cfg (obj:ConfigDict): `train_cfg` of RCNN. concat (bool): Whether to concatenate the results of
-            all
-                the images in a single batch.
+            sampling_results (`List[SamplingResults]`):
+                Assign results of all images in a batch after sampling.
+            gt_bboxes (`List[torch.Tensor]`):
+                Ground truth boxes of all images in a batch, each tensor has shape (num_gt, 4), the last dimension 4
+                represents [tl_x, tl_y, br_x, br_y].
+            gt_labels (`List[torch.Tensor]`):
+                Ground truth labels of all images in a batch, each tensor has shape (num_gt,).
+            rcnn_train_cfg (`ConfigDict`):
+                Training configuration of R-CNN.
+            concat (`bool`, **optional*, defaults to `True`):
+                Whether to concatenate the results of all the images in a single batch.
+
         Returns:
             Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following list of Tensors:
                 - labels (list[Tensor],Tensor): Gt_labels for all proposals in a batch, each tensor in list has shape
@@ -2428,16 +2416,6 @@ class MaskRCNNFCNMaskHead(nn.Module):
         return mask_targets
 
     def loss(self, mask_pred, mask_targets, labels):
-        """
-        Example:
-            >>> from mmdet.models.roi_heads.mask_heads.fcn_mask_head import * # NOQA >>> N = 7 # N = number of
-            extracted ROIs >>> C, H, W = 11, 32, 32 >>> # Create example instance of FCN Mask Head. >>> # There are
-            lots of variations depending on the configuration >>> self = FCNMaskHead(num_classes=C, num_convs=1) >>>
-            inputs = torch.rand(N, self.in_channels, H, W) >>> mask_pred = self.forward(inputs) >>> sf =
-            self.scale_factor >>> labels = torch.randint(0, C, size=(N,)) >>> # With the default properties the mask
-            targets should indicate >>> # a (potentially soft) single-class label >>> mask_targets = torch.rand(N, H *
-            sf, W * sf) >>> loss = self.loss(mask_pred, mask_targets, labels) >>> print('loss = {!r}'.format(loss))
-        """
         loss = {}
         if mask_pred.size(0) == 0:
             loss_mask = mask_pred.sum()
@@ -2498,12 +2476,10 @@ class MaskRCNNRoIHead(nn.Module):
 
     @property
     def with_bbox(self):
-        """bool: whether the RoI head contains a `bbox_head`"""
         return hasattr(self, "bbox_head") and self.bbox_head is not None
 
     @property
     def with_mask(self):
-        """bool: whether the RoI head contains a `mask_head`"""
         return hasattr(self, "mask_head") and self.mask_head is not None
 
     def _bbox_forward(self, feature_maps, rois):
@@ -2535,19 +2511,17 @@ class MaskRCNNRoIHead(nn.Module):
         return bbox_results
 
     def forward_test_bboxes(self, feature_maps, proposals, rcnn_test_cfg):
-        """Test only det bboxes without augmentation.
+        """Test only detected bboxes without augmentation.
 
         Args:
-            feature_maps (tuple[Tensor]):
+            feature_maps (`Tuple[torch.Tensor]`):
                 Feature maps of all scale levels.
-            img_metas (list[dict]):
+            img_metas (`List[Dict]`):
                 Image meta info.
-            proposals (List[Tensor]):
+            proposals (`List[torch.Tensor]`):
                 Region proposals.
-            rcnn_test_cfg (obj:`ConfigDict`):
-                `test_cfg` of R-CNN.
-            rescale (bool):
-                If True, return boxes in original image space. Default: False.
+            rcnn_test_cfg (`ConfigDict`):
+                Test configuration of R-CNN.
 
         Returns:
             tuple[list[Tensor], list[Tensor]]: The first list contains
@@ -2651,19 +2625,19 @@ class MaskRCNNRoIHead(nn.Module):
         Args:
             feature_maps (`List[torch.Tensor]`):
                 List of multi-level image features.
-            img_metas (list[dict]):
+            img_metas (`List[Dict]`):
                 List of image info dict where each dict. Has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'. For details on the values of these keys see
                 `mmdet/datasets/pipelines/formatting.py:Collect`.
-            proposals (list[Tensors]):
+            proposals (`List[torch.Tensor]`):
                 List of region proposals.
-            gt_bboxes (list[Tensor]):
+            gt_bboxes (`List[torch.Tensor]`):
                 Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]):
+            gt_labels (`List[Tensor]`):
                 Class indices corresponding to each box.
-            gt_bboxes_ignore (None | list[Tensor]):
+            gt_bboxes_ignore (`List[torch.Tensor]`, *optional*):
                 Specify which bounding boxes can be ignored when computing the loss.
-            gt_masks (None | Tensor) :
+            gt_masks (`List[torch.Tensor]`, *optional*) :
                 True segmentation masks for each box used if the architecture supports a segmentation task.
 
         Returns:
@@ -2710,10 +2684,10 @@ class MaskRCNNRoIHead(nn.Module):
         https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/standard_roi_head.py#L223.
 
         Args:
-            hidden_states (tuple[Tensor]):
+            hidden_states (`Tuple[torch.Tensor]`):
                 Features from upstream network. Each has shape (batch_size, c, h, w).
-            proposal_list (list(Tensor)):
-                Proposals from rpn head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2,
+            proposal_list (`List[torch.Tensor`]):
+                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2,
                 score).
 
         Returns:
@@ -2807,8 +2781,9 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         https://github.com/open-mmlab/mmdetection/blob/ff9bc39913cb3ff5dde79d3933add7dc2561bab7/mmdet/models/detectors/base.py#L176
 
         Args:
-            losses (dict): Raw output of the network, which usually contain
-                losses and other necessary information.
+            losses (dict):
+                Raw output of the network, which usually contain losses and other necessary information.
+
         Returns:
             tuple[Tensor, dict]: (loss, log_vars), loss is the loss tensor \
                 which may be a weighted sum of all losses, log_vars contains \ all the variables to be sent to the
