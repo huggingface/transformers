@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "summarization"
+version = "0.1.0"
+description = ""
+authors = ["rohit.sood <rohit.sood@servicenow.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+evaluate = "^0.4.0"
+accelerate = "^0.12.0"
+datasets = "^2.0.0"
+torch = "^1.3"
+protobuf = "^4.22.3"
+rouge-score = "^0.1.2"
+nltk = "^3.8.1"
+py7zr = "^0.20.4"
+sentencepiece = "^0.1.98"
+transformers = "^4.28.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
