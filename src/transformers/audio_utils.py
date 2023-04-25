@@ -218,7 +218,13 @@ def apply_mel_filters(
 
 def optimal_fft_length(window_length: int) -> int:
     """
-    Finds the best FFT input size for a given `window_length`, which will be a power of two.
+    Finds the best FFT input size for a given `window_length`. This function takes a given window length and, if not
+    already a power of two, rounds it up to the next power or two.
+
+    The FFT algorithm works fastest when the length of the input is a power of two, which may be larger than the size
+    of the window or analysis frame. For example, if the window is 400 samples, using an FFT input size of 512 samples
+    is more optimal than an FFT size of 400 samples. Using a larger FFT size does not affect the detected frequencies,
+    it simply gives a higher frequency resolution (i.e. the frequency bins are smaller).
     """
     return 2 ** int(np.ceil(np.log2(window_length)))
 
@@ -339,11 +345,11 @@ def stft(
             If 1.0, returns the amplitude spectrogram. If 2.0, returns the power spectrogram. If `None`, returns
             complex numbers.
         center (`bool`, *optional*, defaults to `True`):
-            Whether to pad the waveform so that so that frame `t` is centered around time `t * hop_length`. If `False`,
-            frame `t` will start at time `t * hop_length`.
+            Whether to pad the waveform so that frame `t` is centered around time `t * hop_length`. If `False`, frame
+            `t` will start at time `t * hop_length`.
         pad_mode (`str`, *optional*, defaults to `"reflect"`):
-            Padding mode used when `center` is `True`. Possible values are: `"constant"` (pad with zeros), `"edge"`,
-            `"reflect"`.
+            Padding mode used when `center` is `True`. Possible values are: `"constant"` (pad with zeros), `"edge"`
+            (pad with edge values), `"reflect"` (pads with mirrored values).
         onesided (`bool`, *optional*, defaults to `True`):
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
