@@ -7,3 +7,4 @@ from .speech_to_text import SpeechToTextTool
 from .text_classification import TextClassificationTool
 from .text_to_speech import TextToSpeechTool
 from .translation import TranslationTool
+from .stable_diffusion import StableDiffusionTool
