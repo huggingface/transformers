@@ -35,7 +35,6 @@ from ...assign_result import AssignResult
 from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
 from ...mask_target import mask_target
 from ...modeling_utils import PreTrainedModel
-from ...nms import batched_nms
 from ...sampling_result import SamplingResult
 from ...utils import (
     ModelOutput,
@@ -50,6 +49,8 @@ from .configuration_maskrcnn import MaskRCNNConfig
 
 if is_torchvision_available():
     import torchvision
+
+    from ...nms import batched_nms
 
 
 logger = logging.get_logger(__name__)

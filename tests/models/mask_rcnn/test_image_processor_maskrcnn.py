@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import require_torchvision, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
@@ -111,7 +111,7 @@ class MaskRCNNImageProcessingTester(unittest.TestCase):
         return expected_height, expected_width
 
 
-@require_torch
+@require_torchvision
 @require_vision
 class MaskRCNNImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     image_processing_class = MaskRCNNImageProcessor if is_vision_available() else None

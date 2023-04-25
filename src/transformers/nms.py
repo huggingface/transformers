@@ -37,7 +37,7 @@ def nms(
 
     The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise
     CPU: NMS will be used. The returned type will always be the same as inputs.
-    
+
     Args:
         boxes (torch.Tensor or np.ndarray):
             boxes in shape (N, 4).
