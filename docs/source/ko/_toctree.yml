@@ -32,8 +32,8 @@
       title: Amazon SageMaker에서 학습 실행하기
     - local: in_translation
       title: (번역중) Converting from TensorFlow checkpoints
-    - local: in_translation
-      title: (번역중) Export to ONNX
+    - local: serialization
+      title: ONNX로 내보내기
     - local: in_translation
       title: (번역중) Export to TorchScript
     - local: in_translation
