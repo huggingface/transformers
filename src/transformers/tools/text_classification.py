@@ -21,13 +21,17 @@ class TextClassificationTool(PipelineTool):
     model_class = AutoModelForSequenceClassification
 
     description = (
-        "This is a tool that classifies an English text using the following {n_labels} labels: {labels}. It takes a "
-        "input named `text` which should be in English and returns a dictionary with two keys named 'label' (the "
-        "predicted label ) and 'score' (the probability associated to it)."
+        "classifies an English text using the following {n_labels} labels: {labels}. It takes a input named `text` "
+        "which should be in English and returns a dictionary with two keys named 'label' (the predicted label ) and "
+        "'score' (the probability associated to it)."
     )
 
     def post_init(self):
-        config = AutoConfig.from_pretrained(self.model)
+        if isinstance(self.model, str):
+            config = AutoConfig.from_pretrained(self.model)
+        else:
+            config = self.model.config
+
         num_labels = config.num_labels
         labels = list(config.label2id.keys())
 
@@ -49,15 +53,3 @@ class TextClassificationTool(PipelineTool):
         label_id = torch.argmax(logits[0]).item()
         label = self.model.config.id2label[label_id]
         return {"label": label, "score": scores[0][label_id].item()}
-
-    def decode_for_hub(self, outputs):
-        label = None
-        max_score = 0
-        for result in outputs:
-            lbl = result["label"]
-            score = float(result["score"])
-            if score > max_score:
-                label = lbl
-                max_score = score
-
-        return {"label": label, "score": max_score}
