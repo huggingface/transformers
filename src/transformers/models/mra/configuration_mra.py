@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/temp": "https://huggingface.co/uw-madison/temp/resolve/main/config.json",
+    "uw-madison/mra-base-512-4": "https://huggingface.co/uw-madison/mra-base-512-4/resolve/main/config.json",
 }
 
 
@@ -30,7 +30,7 @@ class MRAConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MRAModel`]. It is used to instantiate an MRA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the MRA
-    [uw-madison/temp](https://huggingface.co/uw-madison/temp) architecture.
+    [uw-madison/mra-base-512-4](https://huggingface.co/uw-madison/mra-base-512-4) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -81,10 +81,10 @@ class MRAConfig(PretrainedConfig):
     ```python
     >>> from transformers import MRAConfig, MRAModel
 
-    >>> # Initializing a MRA uw-madison/temp style configuration
+    >>> # Initializing a MRA uw-madison/mra-base-512-4 style configuration
     >>> configuration = MRAConfig()
 
-    >>> # Initializing a model (with random weights) from the uw-madison/temp style configuration
+    >>> # Initializing a model (with random weights) from the uw-madison/mra-base-512-4 style configuration
     >>> model = MRAModel(configuration)
 
     >>> # Accessing the model configuration

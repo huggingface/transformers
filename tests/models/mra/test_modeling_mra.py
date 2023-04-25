@@ -350,7 +350,7 @@ class MRAModelTest(ModelTesterMixin, unittest.TestCase):
 class MRAModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MRAModel.from_pretrained("uw-madison/temp")
+        model = MRAModel.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
 
         with torch.no_grad():
@@ -367,7 +367,7 @@ class MRAModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        model = MRAForMaskedLM.from_pretrained("uw-madison/temp")
+        model = MRAForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
 
         with torch.no_grad():
@@ -386,7 +386,7 @@ class MRAModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm_long_input(self):
-        model = MRAForMaskedLM.from_pretrained("uw-madison/temp")
+        model = MRAForMaskedLM.from_pretrained("uw-madison/mra-base-512-4")
         input_ids = torch.arange(4096).unsqueeze(0)
 
         with torch.no_grad():
