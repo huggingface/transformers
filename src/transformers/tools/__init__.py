@@ -1,7 +1,7 @@
 from .agents import Agent, EndpointAgent, OpenAiAgent
-from .base import PipelineTool
-from .generative_question_answering import GenerativeQuestionAnsweringTool
-from .image_captioning import ImageCaptioningTool
+from .base import PipelineTool, RemoteTool
+from .generative_question_answering import GenerativeQuestionAnsweringTool, RemoteGenerativeQuestionAnsweringTool
+from .image_captioning import ImageCaptioningTool, RemoteImageCaptioningTool
 from .language_identifier import LanguageIdentificationTool
 from .speech_to_text import RemoteSpeechToTextTool, SpeechToTextTool
 from .stable_diffusion import StableDiffusionTool
