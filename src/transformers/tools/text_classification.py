@@ -53,3 +53,15 @@ class TextClassificationTool(PipelineTool):
         label_id = torch.argmax(logits[0]).item()
         label = self.model.config.id2label[label_id]
         return {"label": label, "score": scores[0][label_id].item()}
+
+    def decode_for_hub(self, outputs):
+        label = None
+        max_score = 0
+        for result in outputs:
+            lbl = result["label"]
+            score = float(result["score"])
+            if score > max_score:
+                label = lbl
+                max_score = score
+
+        return {"label": label, "score": max_score}
