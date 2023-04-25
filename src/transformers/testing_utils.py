@@ -42,7 +42,6 @@ from .deepspeed import is_deepspeed_available
 from .integrations import (
     is_clearml_available,
     is_fairscale_available,
-    is_optimum_available,
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
@@ -66,6 +65,7 @@ from .utils import (
     is_librosa_available,
     is_natten_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
     is_phonemizer_available,
     is_pyctcdecode_available,

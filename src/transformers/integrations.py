@@ -98,10 +98,6 @@ def is_tensorboard_available():
     return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
 
 
-def is_optimum_available():
-    return importlib.util.find_spec("optimum") is not None
-
-
 def is_optuna_available():
     return importlib.util.find_spec("optuna") is not None
 
