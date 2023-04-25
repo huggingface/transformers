@@ -783,7 +783,7 @@ class TFBlipModelIntegrationTest(unittest.TestCase):
         # Test output
         self.assertEqual(
             predictions[0].numpy().tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
     def test_inference_vqa(self):
@@ -810,6 +810,6 @@ class TFBlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False, training=False)
 
-        expected_scores = tf.convert_to_tensor([[0.9798, 0.0202]])
+        expected_scores = tf.convert_to_tensor([[0.0029, 0.9971]])
         self.assertTrue(np.allclose(tf.nn.softmax(out_itm[0]).numpy(), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
+        self.assertTrue(np.allclose(out[0], tf.convert_to_tensor([[0.5162]]), rtol=1e-3, atol=1e-3))

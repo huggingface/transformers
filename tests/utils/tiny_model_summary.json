@@ -2294,6 +2294,50 @@
         ],
         "sha": "d6694b0d8fe17978761c9305dc151780506b192e"
     },
+    "GPTBigCodeForCausalLM": {
+        "tokenizer_classes": [
+            "GPT2Tokenizer",
+            "GPT2TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "GPTBigCodeForCausalLM"
+        ],
+        "sha": "99f7aaadf9c29669c63ef6c16f6bc5c07dbb9126"
+    },
+    "GPTBigCodeForSequenceClassification": {
+        "tokenizer_classes": [
+            "GPT2Tokenizer",
+            "GPT2TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "GPTBigCodeForSequenceClassification"
+        ],
+        "sha": "64a7398d5763161037b818314c60dd83d93d03e9"
+    },
+    "GPTBigCodeForTokenClassification": {
+        "tokenizer_classes": [
+            "GPT2Tokenizer",
+            "GPT2TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "GPTBigCodeForTokenClassification"
+        ],
+        "sha": "310537ecd22d45f71bf594b17922cf2abc338eaf"
+    },
+    "GPTBigCodeModel": {
+        "tokenizer_classes": [
+            "GPT2Tokenizer",
+            "GPT2TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "GPTBigCodeModel"
+        ],
+        "sha": "3069419084a9dc36802d47de9df3d314ccfc2f28"
+    },
     "GPTJForCausalLM": {
         "tokenizer_classes": [
             "GPT2Tokenizer",
@@ -2384,6 +2428,16 @@
             "GPTNeoXForCausalLM"
         ],
         "sha": "0229cfaaa843c6b492ac2abffabb00f1ff1936f8"
+    },
+    "GPTNeoXForSequenceClassification": {
+        "tokenizer_classes": [
+            "GPTNeoXTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "GPTNeoXForSequenceClassification"
+        ],
+        "sha": "17c4b845ee2e0bb780ca2dea2d59a3d9d5d3c651"
     },
     "GPTNeoXJapaneseForCausalLM": {
         "tokenizer_classes": [
@@ -4939,6 +4993,16 @@
             "SEWModel"
         ],
         "sha": "0a0fbb844eeefa0dce62bd05db30a2bb91e5dc88"
+    },
+    "SamModel": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "SamImageProcessor"
+        ],
+        "model_classes": [
+            "SamModel"
+        ],
+        "sha": "eca8651bc84e5ac3b1b62e784b744a6bd1b82575"
     },
     "SegformerForImageClassification": {
         "tokenizer_classes": [],
