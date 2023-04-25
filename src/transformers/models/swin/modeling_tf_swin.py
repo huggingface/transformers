@@ -17,6 +17,7 @@
 
 import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
@@ -143,7 +144,7 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
     Args:
         loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
             Masked image modeling (MLM) loss.
-        logits (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+        reconstruction (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Reconstructed pixel values.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each stage) of shape
@@ -165,10 +166,19 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: Optional[tf.Tensor] = None
-    logits: tf.Tensor = None
+    reconstruction: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
     reshaped_hidden_states: Optional[Tuple[tf.Tensor]] = None
+
+    @property
+    def logits(self):
+        warnings.warn(
+            "logits attribute is deprecated and will be removed in version 5 of Transformers."
+            " Please use the reconstruction attribute to retrieve the final output instead.",
+            FutureWarning,
+        )
+        return self.reconstruction
 
 
 @dataclass
@@ -1340,7 +1350,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> bool_masked_pos = tf.random.uniform((1, num_patches)) >= 0.5
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 224, 224]
         ```"""
@@ -1392,7 +1402,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
 
         return TFSwinMaskedImageModelingOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
@@ -1401,7 +1411,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
     def serving_output(self, output: TFSwinMaskedImageModelingOutput) -> TFSwinMaskedImageModelingOutput:
         # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFSwinMaskedImageModelingOutput(
-            logits=output.logits,
+            reconstruction=output.reconstruction,
             hidden_states=output.hidden_states,
             attentions=output.attentions,
             reshaped_hidden_states=output.reshaped_hidden_states,

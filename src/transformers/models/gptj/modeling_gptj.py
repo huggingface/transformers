@@ -876,6 +876,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1012,6 +1014,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(pooled_logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
