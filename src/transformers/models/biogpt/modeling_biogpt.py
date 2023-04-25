@@ -858,13 +858,12 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
     BIOGPT_START_DOCSTRING,
 )
 
-# Adapted from transformers.models.opt.modeling_opt.OPTForSequenceClassification with OPT->BioGpt
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
 
     def __init__(self, config: BioGptConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = BioGptModel(config)
+        self.biogpt = BioGptModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
