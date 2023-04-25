@@ -727,7 +727,7 @@ def retrieve_available_artifacts():
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
         elif artifact_name.startswith("multi-gpu"):
-            artifact_name = directory[len("multi-gpu") + 1 :]
+            artifact_name = artifact_name[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
