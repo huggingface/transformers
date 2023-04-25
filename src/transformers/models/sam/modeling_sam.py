@@ -1271,8 +1271,6 @@ class SamModel(SamPreTrainedModel):
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
-        Returns:
-
         Example:
 
         ```python
@@ -1290,7 +1288,6 @@ class SamModel(SamPreTrainedModel):
 
         >>> # Get segmentation mask
         >>> outputs = model(**inputs)
-        >>> iou_scores = outputs["iou_scores"]
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
