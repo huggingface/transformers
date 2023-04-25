@@ -15,7 +15,7 @@
 """ PyTorch ConvNextV2 model."""
 
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -319,6 +319,17 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ConvNextV2Encoder):
             module.gradient_checkpointing = value
+
+    @property
+    def dummy_inputs(self) -> Dict[str, torch.Tensor]:
+        """
+        Dummy inputs to build the network. Returns: `Dict[str, torch.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = torch.rand(
+            size=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=torch.float32,
+        )
+        return {"pixel_values": VISION_DUMMY_INPUTS}
 
 
 CONVNEXTV2_START_DOCSTRING = r"""

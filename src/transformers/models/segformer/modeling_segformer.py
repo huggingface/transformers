@@ -16,7 +16,7 @@
 
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -472,6 +472,17 @@ class SegformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    @property
+    def dummy_inputs(self) -> Dict[str, torch.Tensor]:
+        """
+        Dummy inputs to build the network. Returns: `Dict[str, torch.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = torch.rand(
+            size=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=torch.float32,
+        )
+        return {"pixel_values": VISION_DUMMY_INPUTS}
 
 
 SEGFORMER_START_DOCSTRING = r"""

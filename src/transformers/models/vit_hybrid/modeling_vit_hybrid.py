@@ -490,6 +490,17 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
         if isinstance(module, ViTHybridEncoder):
             module.gradient_checkpointing = value
 
+    @property
+    def dummy_inputs(self) -> Dict[str, torch.Tensor]:
+        """
+        Dummy inputs to build the network. Returns: `Dict[str, torch.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = torch.rand(
+            size=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=torch.float32,
+        )
+        return {"pixel_values": VISION_DUMMY_INPUTS}
+
 
 VIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
