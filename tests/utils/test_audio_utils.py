@@ -219,7 +219,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (9, 11))
+        self.assertEqual(spectrogram.shape, (9, 11))
 
         expected = np.array([[0.0, 0.0669873, 0.9330127, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
         self.assertTrue(np.allclose(spectrogram, expected))
@@ -237,7 +237,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.shape, (257, 732))
 
         # fmt: off
         expected = np.array([
@@ -269,7 +269,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.shape, (257, 732))
         self.assertTrue(np.allclose(spectrogram[:64, 400], expected))
 
     def test_stft_center_padding(self):
@@ -283,7 +283,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             center=True,
             pad_mode="reflect",
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.shape, (257, 732))
 
         # fmt: off
         expected = np.array([
@@ -312,7 +312,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             center=True,
             pad_mode="constant",
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.shape, (257, 732))
 
         # fmt: off
         expected = np.array([
@@ -340,7 +340,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             hop_length=128,
             center=False,
         )
-        self.assertEquals(spectrogram.shape, (257, 728))
+        self.assertEqual(spectrogram.shape, (257, 728))
 
         # fmt: off
         expected = np.array([
@@ -374,7 +374,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (201, 732))
+        self.assertEqual(spectrogram.shape, (201, 732))
 
         spectrogram = stft(
             waveform,
@@ -386,7 +386,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (201, 729))
+        self.assertEqual(spectrogram.shape, (201, 729))
 
         spectrogram = stft(
             waveform,
@@ -399,7 +399,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=True,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.shape, (257, 732))
 
         spectrogram = stft(
             waveform,
@@ -411,7 +411,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=False,
         )
-        self.assertEquals(spectrogram.shape, (512, 1464))
+        self.assertEqual(spectrogram.shape, (512, 1464))
 
         spectrogram = stft(
             waveform,
@@ -423,7 +423,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=False,
         )
-        self.assertEquals(spectrogram.shape, (512, 1464))
+        self.assertEqual(spectrogram.shape, (512, 1464))
 
         spectrogram = stft(
             waveform,
@@ -435,7 +435,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             pad_mode="reflect",
             onesided=False,
         )
-        self.assertEquals(spectrogram.shape, (512, 183))
+        self.assertEqual(spectrogram.shape, (512, 183))
 
     def test_stft_power(self):
         waveform = self._load_datasamples(1)[0]
@@ -447,8 +447,8 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             hop_length=128,
             power=None,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
-        self.assertEquals(spectrogram.dtype, np.complex64)
+        self.assertEqual(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.dtype, np.complex64)
 
         # fmt: off
         expected = np.array([
@@ -479,8 +479,8 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             hop_length=128,
             power=1.0,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
-        self.assertEquals(spectrogram.dtype, np.float64)
+        self.assertEqual(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.dtype, np.float64)
 
         # fmt: off
         expected = np.array([
@@ -508,8 +508,8 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             hop_length=128,
             power=2.0,
         )
-        self.assertEquals(spectrogram.shape, (257, 732))
-        self.assertEquals(spectrogram.dtype, np.float64)
+        self.assertEqual(spectrogram.shape, (257, 732))
+        self.assertEqual(spectrogram.dtype, np.float64)
 
         # fmt: off
         expected = np.array([
@@ -554,10 +554,10 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             hop_length=128,
             power=2.0,
         )
-        self.assertEquals(spectrogram.shape, (513, 732))
+        self.assertEqual(spectrogram.shape, (513, 732))
 
         mel_spectrogram = apply_mel_filters(spectrogram, mel_filters)
-        self.assertEquals(mel_spectrogram.shape, (13, 732))
+        self.assertEqual(mel_spectrogram.shape, (13, 732))
 
     def test_power_to_db(self):
         spectrogram = np.zeros((2, 3))
