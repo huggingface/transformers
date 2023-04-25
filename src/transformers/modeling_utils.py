@@ -83,6 +83,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
+        find_tied_parameters,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
@@ -93,6 +94,8 @@ if is_accelerate_available():
         from accelerate.utils import get_balanced_memory
     else:
         get_balanced_memory = None
+else:
+    find_tied_parameters = None
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -697,7 +700,15 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
+            if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
+                fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
+            else:
+                fp16_statistics = None
+
+            if "SCB" not in param_name:
+                set_module_8bit_tensor_to_device(
+                    model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
+                )
 
     return error_msgs, offload_index, state_dict_index
 
@@ -1185,7 +1196,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation.__func__):
             return False
         return True
 
@@ -1700,10 +1711,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. ",
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
                 UserWarning,
             )
 
@@ -1768,7 +1779,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ptrs[tensor.data_ptr()].append(name)
+                ident = (tensor.data_ptr(), tensor.device, tensor.shape, tensor.stride())
+                ptrs[ident].append(name)
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
@@ -1777,10 +1789,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
                 if self._keys_to_ignore_on_load_missing is not None:
-                    for name in names:
+                    found = 0
+                    for name in sorted(names):
                         matches_pattern = any(re.search(pat, name) for pat in self._keys_to_ignore_on_load_missing)
                         if matches_pattern and name in state_dict:
-                            del state_dict[name]
+                            found += 1
+                            if found < len(names):
+                                del state_dict[name]
 
                 # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
                 # If the link between tensors was done at runtime then `from_pretrained` will not get
@@ -1814,7 +1829,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
             filename_no_suffix = filename.replace(".bin", "").replace(".safetensors", "")
-            reg = re.compile("(.*?)-\d{5}-of-\d{5}")
+            reg = re.compile(r"(.*?)-\d{5}-of-\d{5}")
 
             if (
                 filename.startswith(weights_no_suffix)
@@ -2165,6 +2180,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
+        if is_bitsandbytes_available():
+            is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        else:
+            is_8bit_serializable = False
+
         if trust_remote_code is True:
             logger.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
@@ -2206,6 +2226,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
+
+            # in the case a user loads an 8bit model from the Hub and assigns a new quantization_config
+            if device_map is None:
+                device_map = "auto"
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
 
         if load_in_8bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
@@ -2264,6 +2290,43 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         else:
             model_kwargs = kwargs
+
+        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
+            if hasattr(config, "quantization_config"):
+                logger.warning(
+                    "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
+                    " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
+                    " one you passed to `from_pretrained`."
+                )
+            config.quantization_config = quantization_config
+        elif is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            quantization_config = config.quantization_config
+            if isinstance(quantization_config, dict):
+                quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
+            elif isinstance(quantization_config, BitsAndBytesConfig):
+                pass
+            else:
+                raise ValueError(
+                    f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
+                    " `BitsAndBytesConfig` instance."
+                )
+
+            load_in_8bit = quantization_config.load_in_8bit
+
+            if load_in_8bit:
+                torch_dtype = torch.float16
+
+                if device_map is None:
+                    device_map = "auto"
+
+                if low_cpu_mem_usage is None:
+                    low_cpu_mem_usage = True
+        elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+            logger.warning(
+                "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
+                " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
+                " `pip install --upgrade bitsandbytes`."
+            )
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
@@ -2621,6 +2684,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
+            model.config.quantization_config = quantization_config
+            model.is_8bit_serializable = is_8bit_serializable
+
         if isinstance(device_map, str):
             special_dtypes = {}
             if load_in_8bit:
@@ -2875,11 +2941,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
-        # Some tensors maybe have been already filled by another key (tied weights).
-        existing_ptrs = {model_state_dict[k].data_ptr() for k in loaded_keys if k in model_state_dict}
-        missing_keys = [
-            k for k in missing_keys if k in model_state_dict and model_state_dict[k].data_ptr() not in existing_ptrs
-        ]
+        if find_tied_parameters is not None:
+            tied_params = find_tied_parameters(model)
+        else:
+            tied_params = []
+        _missing = []
+        for k in missing_keys:
+            found = False
+            for group in tied_params:
+                if k in group:
+                    found = True
+                    if len(group) > 2:
+                        group.remove(k)
+                    else:
+                        _missing.append(k)
+            if not found:
+                _missing.append(k)
+        missing_keys = _missing
+
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:
@@ -2896,8 +2975,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for key in missing_keys:
                 if key in list(model_state_dict.keys()):
                     key = key
-                elif f"{prefix}.key" in list(model_state_dict.keys()):
-                    key = f"{prefix}.key"
+                elif f"{prefix}.{key}" in list(model_state_dict.keys()):
+                    key = f"{prefix}.{key}"
                 elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
@@ -3112,6 +3191,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        if load_in_8bit:
+            unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
+            missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
             logger.warning(

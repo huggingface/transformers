@@ -34,6 +34,7 @@ from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+import requests
 
 from transformers import logging as transformers_logging
 
@@ -58,6 +59,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_keras_nlp_available,
     is_librosa_available,
@@ -275,6 +277,13 @@ def require_rjieba(test_case):
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
     """
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
+
+
+def require_jieba(test_case):
+    """
+    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
+    """
+    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
 
 
 def require_tf2onnx(test_case):
@@ -1680,12 +1689,16 @@ class RequestCounter:
         self.head_request_count = 0
         self.get_request_count = 0
         self.other_request_count = 0
-        self.old_request = huggingface_hub.file_download.requests.request
-        huggingface_hub.file_download.requests.request = self.new_request
+
+        # Mock `get_session` to count HTTP calls.
+        self.old_get_session = huggingface_hub.utils._http.get_session
+        self.session = requests.Session()
+        self.session.request = self.new_request
+        huggingface_hub.utils._http.get_session = lambda: self.session
         return self
 
     def __exit__(self, *args, **kwargs):
-        huggingface_hub.file_download.requests.request = self.old_request
+        huggingface_hub.utils._http.get_session = self.old_get_session
 
     def new_request(self, method, **kwargs):
         if method == "GET":
@@ -1695,7 +1708,7 @@ class RequestCounter:
         else:
             self.other_request_count += 1
 
-        return self.old_request(method=method, **kwargs)
+        return requests.request(method=method, **kwargs)
 
 
 def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
