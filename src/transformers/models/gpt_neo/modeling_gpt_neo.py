@@ -951,10 +951,6 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
 
