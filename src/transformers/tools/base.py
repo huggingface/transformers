@@ -11,6 +11,7 @@ class Tool:
     """
 
     description = "This is a tool that ..."
+    is_initialized = False
 
     def __call__(self, *args, **kwargs):  # Might become run?
         return NotImplemented("Write this method in your subclass of `Tool`.")
