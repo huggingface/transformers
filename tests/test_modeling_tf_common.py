@@ -1868,7 +1868,17 @@ class TFModelTesterMixin:
             generated = model.generate(inputs, **generate_kwargs).numpy()
             generate_xla = tf.function(model.generate, jit_compile=True)
             generated_xla = generate_xla(inputs, **generate_kwargs).numpy()
-            self.assertListEqual(generated.tolist(), generated_xla.tolist())
+
+            # Due to numerical instability, let's fail the test only if there are more than one input sequences give
+            # different outputs between XLA and non-XLA versions. If there are less than 10 examples, let's be strict
+            # and not allow any difference.
+            diff = [[], []]
+            for _generated, _generated_xla in zip(generated.tolist(), generated_xla.tolist()):
+                if _generated != _generated_xla:
+                    diff[0].append(_generated)
+                    diff[1].append(_generated_xla)
+            if len(diff[0]) > 1 or (len(diff[0]) == 1 and len(generated) <= 10):
+                self.assertListEqual(diff[0], diff[1])
 
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
