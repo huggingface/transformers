@@ -70,7 +70,7 @@ class MaskGenerationPipeline(ChunkPipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> generator = pipeline(model="facebook/sam-vit-h", task="mask-generation")
+    >>> generator = pipeline(model="facebook/sam-vit-base", task="mask-generation")
     >>> outputs = generator(
     ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
     ... )
