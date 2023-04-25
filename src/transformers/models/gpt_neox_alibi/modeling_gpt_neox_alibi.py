@@ -227,7 +227,7 @@ class GPTNeoXALiBiAttention(nn.Module):
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype).to(attn_scores.device)
-        attn_scores = torch.where(causal_mask, attn_scores, mask_value)
+        attn_scores = torch.where(causal_mask.to(attn_scores.device), attn_scores, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -554,6 +554,12 @@ class GPTNeoXALiBiForCausalLM(GPTNeoXALiBiPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
+    
+    def get_input_embeddings(self):
+        return self.gpt_neox.embed_in
+
+    def set_input_embeddings(self, value):
+        self.gpt_neox.embed_in = value
 
     @add_start_docstrings_to_model_forward(GPT_NEOX_ALIBI_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
