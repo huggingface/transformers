@@ -127,7 +127,7 @@ def find_indent(line: str) -> int:
     """
     Returns the number of spaces that start a line indent.
     """
-    search = re.search("^(\s*)(?:\S|$)", line)
+    search = re.search(r"^(\s*)(?:\S|$)", line)
     if search is None:
         return 0
     return len(search.groups()[0])
@@ -519,7 +519,7 @@ def duplicate_module(
     with open(module_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub("# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
+    content = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
     objects = parse_module_content(content)
 
     # Loop and treat all objects
@@ -568,7 +568,7 @@ def duplicate_module(
         # Regular classes functions
         old_obj = obj
         obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
-        has_copied_from = re.search("^#\s+Copied from", obj, flags=re.MULTILINE) is not None
+        has_copied_from = re.search(r"^#\s+Copied from", obj, flags=re.MULTILINE) is not None
         if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
@@ -667,7 +667,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
 
 
-_re_checkpoint_for_doc = re.compile("^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
+_re_checkpoint_for_doc = re.compile(r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
 
 
 def find_base_model_checkpoint(
@@ -913,8 +913,8 @@ def clean_frameworks_in_init(
             idx += 1
         # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
         elif keep_processing or (
-            re.search('^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
-            and re.search("^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
+            re.search(r'^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
+            and re.search(r"^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
             is None
         ):
             new_lines.append(lines[idx])
@@ -1192,7 +1192,7 @@ def duplicate_doc_file(
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub("<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
+    content = re.sub(r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
@@ -1218,7 +1218,7 @@ def duplicate_doc_file(
         if not block.startswith("#"):
             new_blocks.append(block)
         # Main title
-        elif re.search("^#\s+\S+", block) is not None:
+        elif re.search(r"^#\s+\S+", block) is not None:
             new_blocks.append(f"# {new_model_patterns.model_name}\n")
         # The config starts the part of the doc with the classes.
         elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
@@ -1230,7 +1230,7 @@ def duplicate_doc_file(
         elif in_classes:
             in_classes = True
             block_title = block.split("\n")[0]
-            block_class = re.search("^#+\s+(\S.*)$", block_title).groups()[0]
+            block_class = re.search(r"^#+\s+(\S.*)$", block_title).groups()[0]
             new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
 
             if "Tokenizer" in block_class:
