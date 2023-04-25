@@ -4,6 +4,7 @@ from .base import PipelineTool
 
 
 class SpeechToTextTool(PipelineTool):
+    default_checkpoint = "openai/whisper-base"
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 

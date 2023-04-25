@@ -7,6 +7,7 @@ from .base import PipelineTool
 
 
 class TextToSpeechTool(PipelineTool):
+    default_checkpoint = "microsoft/speecht5_tts"
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
@@ -16,13 +17,9 @@ class TextToSpeechTool(PipelineTool):
         "text to read (in English) and returns a waveform object containing the sound."
     )
 
-    def __init__(self, model=None, pre_processor=None, post_processor=None, **kwargs):
-        if model is None and pre_processor is None and post_processor is None:
-            model = "microsoft/speecht5_tts"
-            pre_processor = "microsoft/speecht5_tts"
-            post_processor = "microsoft/speecht5_hifigan"
-
-        super().__init__(model, pre_processor, post_processor, **kwargs)
+    def post_init(self):
+        if self.post_processor is None:
+            self.post_processor = "microsoft/speecht5_hifigan"
 
     def encode(self, text, speaker_embeddings=None):
         inputs = self.pre_processor(text=text, return_tensors="pt")
