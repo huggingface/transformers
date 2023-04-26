@@ -451,8 +451,15 @@ class BigBirdBlockSparseAttention(nn.Module):
         ]
 
     def generate_one_table(self, o_table, start_i, end_i, num_rand_blocks):
-        """Generate a list of permutations. Each element in this list is a num_rand_blocks length permutation of
-o_table[start_i:end_i]."""
+        """
+        Generate a list of permutations. Each element in this list is a num_rand_blocks length permutation of
+o_table[start_i:end_i].
+        Args:
+            start_i(`int`): The start index of the original table.
+            end_i(`int`):  The end index of the original table. 
+            o_table(`list`): The original table.
+            num_rand_blocks(`int`): The number of elements in each permutation.
+        """
         return list(permutations(o_table[start_i:end_i], num_rand_blocks))
 
     def generate_rand_attn_tables(
@@ -1121,10 +1128,13 @@ o_table[start_i:end_i]."""
         self.generate_rand_attn_tables and stored in self.rand_attn_tables. This function choose one of the adjacency
         list from the pre-computed list.
 
+        For the implementation tricks, please refer to the discussion in https://github.com/huggingface/transformers/pull/21499#discussion_r1154818120
+
         Args:
-            from_seq_length: int. length of from sequence.
-            from_block_size: int. size of block in from sequence.
-            num_rand_blocks: int. Number of random chunks per row.
+            from_seq_length(`int`): The length of from sequence.
+            from_block_size(`int`): The size of block in from sequence.
+            num_rand_blocks(`int`): The number of random chunks per row.
+            n_heads(`int`): The number of attention heads.
 
         Returns:
             adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
