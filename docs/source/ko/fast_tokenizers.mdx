@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# 🤗 [[Tokenizers]] 라이브러리의 토크나이저 사용하기
+# 🤗 Tokenizers 라이브러리의 토크나이저 사용하기[[use-tokenizers-from-tokenizers]]
 
 [`PreTrainedTokenizerFast`]는 [🤗 Tokenizers](https://huggingface.co/docs/tokenizers) 라이브러리에 기반합니다. 🤗 Tokenizers 라이브러리의 토크나이저는
 🤗 Transformers로 매우 간단하게 불러올 수 있습니다.
@@ -33,7 +33,7 @@ specific language governing permissions and limitations under the License.
 
 우리가 정의한 파일을 통해 이제 학습된 토크나이저를 갖게 되었습니다. 이 런타임에서 계속 사용하거나 JSON 파일로 저장하여 나중에 사용할 수 있습니다.
 
-## 토크나이저 객체로부터 직접 불러오기
+## 토크나이저 객체로부터 직접 불러오기[[loading-directly-from-the-tokenizer-object]]
 
 🤗 Transformers 라이브러리에서 이 토크나이저 객체를 활용하는 방법을 살펴보겠습니다.
 [`PreTrainedTokenizerFast`] 클래스는 인스턴스화된 *토크나이저* 객체를 인수로 받아 쉽게 인스턴스화할 수 있습니다:
@@ -46,7 +46,7 @@ specific language governing permissions and limitations under the License.
 
 이제 `fast_tokenizer` 객체는 🤗 Transformers 토크나이저에서 공유하는 모든 메소드와 함께 사용할 수 있습니다! 자세한 내용은 [토크나이저 페이지](main_classes/tokenizer)를 참조하세요.
 
-## JSON 파일에서 불러오기
+## JSON 파일에서 불러오기[[loading-from-a-JSON-file]]
 
 <!--In order to load a tokenizer from a JSON file, let's first start by saving our tokenizer:-->
 
