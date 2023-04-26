@@ -27,10 +27,11 @@ class ControlNetTool(Tool):
     default_stable_diffusion_checkpoint = "runwayml/stable-diffusion-v1-5"
     default_controlnet_checkpoint = "lllyasviel/sd-controlnet-canny"
 
-    description = """
-    This is a tool that transforms an image according to a prompt. It takes two inputs: first, the image that will be
-    transformers, and second: the prompt (or text description) that will be used. It returns a modified image.
-    """
+    description = (
+        "This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which should be "
+        "the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the "
+        "modified image."
+    )
 
     def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
         if not is_accelerate_available():
