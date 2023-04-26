@@ -427,6 +427,7 @@ doc_test_job = CircleCIJob(
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
     pytest_options={"doctest-module":None, "doctest-glob":"*.mdx"},
+    pytest_num_workers=1,
 
 )
 
