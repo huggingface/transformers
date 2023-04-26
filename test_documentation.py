@@ -63,9 +63,7 @@ def skip_cuda_tests(string, run_cuda_test = False):
     codeblocks = "".join(codeblocks)
     return codeblocks
 
-
-
-         
+    
 class HfDocTestParser(doctest.DocTestParser):
     # This regular expression is used to find doctest examples in a
     # string.  It defines three groups: `source` is the source code
@@ -91,9 +89,6 @@ class HfDocTestParser(doctest.DocTestParser):
         return super().parse(processed_text)
 
 
-
-   
-# DoctestModule
 class HfDoctestModule(Module):
     def collect(self) -> Iterable[DoctestItem]:
         class MockAwareDocTestFinder(doctest.DocTestFinder):
