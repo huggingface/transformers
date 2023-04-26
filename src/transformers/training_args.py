@@ -723,6 +723,9 @@ class TrainingArguments:
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
+    reduce_lr_on_plateau_args: Optional[str] = field(
+        default=None, metadata={"help": "Optional arguments to supply to ReduceLROnPlateau."}
+    )
     save_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
@@ -1194,7 +1197,9 @@ class TrainingArguments:
                 f"https://github.com/huggingface/safetensors!"
             )
 
-        if self.load_best_model_at_end and self.metric_for_best_model is None:
+        if (
+            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+        ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
@@ -1233,6 +1238,19 @@ class TrainingArguments:
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
+
+        if self.reduce_lr_on_plateau_args:
+            if self.lr_scheduler_type != SchedulerType.REDUCE_ON_PLATEAU:
+                raise ValueError(
+                    "reduce_lr_on_plateau_args requires the ReduceLROnPlateau scheduler, but found "
+                    f"{self.lr_scheduler_type}"
+                )
+
+        if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
+            if self.evaluation_strategy == IntervalStrategy.NO:
+                raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
+            if not is_torch_available():
+                raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
 
         self.optim = OptimizerNames(self.optim)
         if self.adafactor:

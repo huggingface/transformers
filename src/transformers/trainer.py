@@ -117,6 +117,7 @@ from .trainer_utils import (
     IntervalStrategy,
     PredictionOutput,
     RemoveColumnsCollator,
+    SchedulerType,
     ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
@@ -1204,6 +1205,36 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
+    @staticmethod
+    def get_reduce_on_plateau_scheduler(
+        args: TrainingArguments, optimizer: torch.optim.Optimizer = None
+    ) -> torch.optim.lr_scheduler.ReduceLROnPlateau:
+        """
+        Returns the ReduceLROnPlateau scheduler based on the training arguments.
+
+        Args:
+            args (`transformers.training_args.TrainingArguments`):
+                The training arguments for the training session.
+        """
+        # parse args.reduce_lr_on_plateau_args
+        scheduler_args = {}
+        if args.reduce_lr_on_plateau_args:
+            for mapping in args.reduce_lr_on_plateau_args.replace(" ", "").split(","):
+                key, value = mapping.split("=")
+                if key in ("factor", "threshold", "eps"):
+                    scheduler_args[key] = float(value)
+                elif key in ("patience", "cooldown"):
+                    scheduler_args[key] = int(value)
+                elif key == "min_lr":  # can be stored as a float or list of floats
+                    try:
+                        scheduler_args[key] = float(value)
+                    except ValueError:
+                        scheduler_args[key] = [float(x) for x in value[1:-1].split(",")]
+                else:
+                    scheduler_args[key] = value
+
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_args)
+
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
@@ -1213,12 +1244,15 @@ class Trainer:
             num_training_steps (int): The number of training steps to do.
         """
         if self.lr_scheduler is None:
-            self.lr_scheduler = get_scheduler(
-                self.args.lr_scheduler_type,
-                optimizer=self.optimizer if optimizer is None else optimizer,
-                num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
-                num_training_steps=num_training_steps,
-            )
+            if self.args.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
+                self.lr_scheduler = Trainer.get_reduce_on_plateau_scheduler(self.args, optimizer)
+            else:
+                self.lr_scheduler = get_scheduler(
+                    self.args.lr_scheduler_type,
+                    optimizer=self.optimizer if optimizer is None else optimizer,
+                    num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
+                    num_training_steps=num_training_steps,
+                )
         return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
@@ -1997,7 +2031,9 @@ class Trainer:
                         self.optimizer.step()
 
                     if optimizer_was_run and not self.deepspeed:
-                        self.lr_scheduler.step()
+                        # Delay optimizer scheduling until metrics are generated
+                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                            self.lr_scheduler.step()
 
                     model.zero_grad()
                     self.state.global_step += 1
@@ -2287,6 +2323,10 @@ class Trainer:
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
+
+            # Run delayed LR scheduler now that metrics are populated
+            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.lr_scheduler.step(metrics[self.args.metric_for_best_model])
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
