@@ -706,7 +706,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
-        if tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
+        if tokenizer_json["pre_tokenizer"] is not None and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
             kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
