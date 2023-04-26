@@ -53,11 +53,12 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available, is_peft_available
+from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_peft_available, is_torch_fx_available
 from ..utils.versions import importlib_metadata
 
+
 if is_peft_available():
-    from peft import PeftModel, PeftModelForCausalLM
+    from peft import PeftModel
 
 
 logger = logging.get_logger(__name__)
@@ -168,6 +169,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "Speech2Text2Decoder",
     "TrOCRDecoder",
     "PeftModelForCausalLM",
+    "PeftModelForSeq2SeqLM"
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -639,6 +641,11 @@ class HFProxy(Proxy):
             return key in self._metadata
         return super().__contains__(key)
 
+    def __iter__(self):
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return iter(self._metadata)
+        return super().__iter__()
+
 
 class HFAttribute(HFProxy):
     def __init__(self, root, attr: str):
@@ -800,6 +807,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
                 "PeftModelForCausalLM",
+                "PeftModelForSeq2SeqLM",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
@@ -1050,7 +1058,9 @@ class HFTracer(Tracer):
                 continue
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
+                "_deserialize_graph_module"
+            ):
                 inputs.update(self._generate_dummy_input(root, input_name, shape))
             else:
                 raise RuntimeError(
