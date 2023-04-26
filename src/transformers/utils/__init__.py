@@ -33,6 +33,7 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    add_model_info_to_auto_map,
     cached_property,
     can_return_loss,
     expand_dims,
@@ -41,6 +42,7 @@ from .generic import (
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
+    is_tf_symbolic_tensor,
     is_tf_tensor,
     is_torch_device,
     is_torch_dtype,
@@ -83,6 +85,7 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
+    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,

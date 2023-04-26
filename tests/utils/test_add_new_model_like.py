@@ -157,14 +157,14 @@ class SomeClass:
         self.assertEqual(
             add_content_to_text(test_text, line, add_before='    "bert": "BertConfig",', exact_match=True), expected
         )
-        self.assertEqual(add_content_to_text(test_text, line, add_before=re.compile('^\s*"bert":')), expected)
+        self.assertEqual(add_content_to_text(test_text, line, add_before=re.compile(r'^\s*"bert":')), expected)
 
         self.assertEqual(add_content_to_text(test_text, line, add_after="gpt"), expected)
         self.assertEqual(add_content_to_text(test_text, line, add_after="gpt", exact_match=True), test_text)
         self.assertEqual(
             add_content_to_text(test_text, line, add_after='    "gpt": "GPTConfig",', exact_match=True), expected
         )
-        self.assertEqual(add_content_to_text(test_text, line, add_after=re.compile('^\s*"gpt":')), expected)
+        self.assertEqual(add_content_to_text(test_text, line, add_after=re.compile(r'^\s*"gpt":')), expected)
 
     def test_add_content_to_file(self):
         test_text = """all_configs = {
@@ -197,7 +197,7 @@ class SomeClass:
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
-            add_content_to_file(file_name, line, add_before=re.compile('^\s*"bert":'))
+            add_content_to_file(file_name, line, add_before=re.compile(r'^\s*"bert":'))
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
@@ -213,7 +213,7 @@ class SomeClass:
             self.check_result(file_name, expected)
 
             self.init_file(file_name, test_text)
-            add_content_to_file(file_name, line, add_after=re.compile('^\s*"gpt":'))
+            add_content_to_file(file_name, line, add_after=re.compile(r'^\s*"gpt":'))
             self.check_result(file_name, expected)
 
     def test_simplify_replacements(self):
