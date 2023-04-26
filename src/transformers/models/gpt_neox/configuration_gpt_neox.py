@@ -120,7 +120,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
-        self.classifier_dropout = (classifier_dropout,)
+        self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
