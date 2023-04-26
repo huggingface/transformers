@@ -1529,8 +1529,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             prompt_ids (`Optional[Union[List[int], torch.Tensor, np.ndarray]]`, *optional*):
-                List or rank-1 of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
-                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
+                List or rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that
+                is provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
             kwargs:
@@ -1630,22 +1630,28 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 )
             prompt_ids = to_py_obj(prompt_ids)
             decoder_start_token_id, *text_prompt_ids = prompt_ids
-            kwargs.update({"decoder_start_token_id": decoder_start_token_id})  # Set to <|startofprev|>
+            # Set the decoder_start_token_id to <|startofprev|>
+            kwargs.update({"decoder_start_token_id": decoder_start_token_id})
+
+            # Update the max generation length to include the prompt
+            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
+            default_max_length = generation_config.max_new_tokens or generation_config.max_length
+            non_prompt_max_length = specified_max_length or default_max_length
+            generation_config.max_new_tokens = non_prompt_max_length + len(text_prompt_ids)
 
             # Reformat the forced_decoder_ids to incorporate the prompt
-            non_prompt_forced_decoder_ids = kwargs.get("forced_decoder_ids") or generation_config.forced_decoder_ids
+            non_prompt_forced_decoder_ids = (
+                kwargs.pop("forced_decoder_ids", None) or generation_config.forced_decoder_ids
+            )
             forced_decoder_ids = [
                 *text_prompt_ids[-self.config.max_length // 2 - 1 :],
                 generation_config.decoder_start_token_id,
                 *[token for _rank, token in non_prompt_forced_decoder_ids],
             ]
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
-            kwargs.update({"forced_decoder_ids": forced_decoder_ids})
+            generation_config.forced_decoder_ids = forced_decoder_ids
 
         if generation_config.return_timestamps:
-            forced_decoder_ids = kwargs.get("forced_decoder_ids")
-            if forced_decoder_ids is not None:
-                generation_config.forced_decoder_ids = forced_decoder_ids
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
         return super().generate(
