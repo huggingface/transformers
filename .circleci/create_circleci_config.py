@@ -420,7 +420,7 @@ doc_test_job = CircleCIJob(
         # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
         # that are modified by this pr. *py files
     ],
-    tests_to_run="$(cat utils/documentation_tests.txt)"
+    tests_to_run="$(cat utils/documentation_tests.txt)",
     pytest_options={"--doctest-module":None},
 
 )
