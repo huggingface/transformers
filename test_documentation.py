@@ -47,11 +47,9 @@ import re
 
 def remove_cuda_tests(string):
     # 1. Split in codeblocks
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
-    
-    codeblock_pattern = r"(```python\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
-    
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"    
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
+    # TODO import logging and ingore all logs
     for i,c in enumerate(codeblocks):
         if "cuda" in c and ">>>" in c:
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in c:
