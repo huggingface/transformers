@@ -58,7 +58,7 @@ class ICTImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
+        do_normalize (`bool`, *optional*, defaults to `True`)::
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -67,6 +67,12 @@ class ICTImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+            Whether to color quantize the image. Can be overridden by the `do_color_quantize` parameter in the `preprocess`
+            method.
+        clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
+            Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_color_quantize`
+            is set to `True`.
     """
 
     model_input_names = ["pixel_values"]
@@ -81,7 +87,7 @@ class ICTImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_discretize: bool = True,
+        do_color_quantize: bool = True,
         clusters: Optional[np.ndarray] = None,
         **kwargs,
     ) -> None:
@@ -96,7 +102,7 @@ class ICTImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_discretize = do_discretize
+        self.do_color_quantize = do_color_quantize
         self.clusters = np.array(clusters) if clusters is not None else self.get_image_net_clusters()
 
     def get_image_net_clusters(self):
@@ -188,9 +194,9 @@ class ICTImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-    def discretize(self, image: np.ndarray):
+    def color_quantize(self, image: np.ndarray, clusters: Optional[np.ndarray] = None):
         """
-        Reduce the dimension by using an extra visual vocabulary with spatial size 512 × 3, which was generated using
+        Reduce the dimension by using an extra visual vocabulary with spatial size num_clusters × 3, which was generated using
         k-means clustered centers of the ImageNet RGB pixel spaces.
 
         Args:
@@ -198,14 +204,14 @@ class ICTImageProcessor(BaseImageProcessor):
                 Image to reduce dimensions.
 
         Returns:
-            `np.ndarray`: The image with reduced dimension with shape of [`size['height']` * `size['width']`] where
-            each value corresponds to the index of self.clusters.
+            `np.ndarray`: The image with reduced dimension of shape `[input_height * input_width]` where
+            each value corresponds to the index of clusters.
         """
 
         image = np.array(image).reshape((-1, 3))
         image = image.astype(np.float32)
         # Copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L98
-        image = ((image[:, None, :] - self.clusters[None, :, :]) ** 2).sum(-1).argmin(1)
+        image = ((image[:, None, :] - clusters[None, :, :]) ** 2).sum(-1).argmin(1)
         return image
 
     def preprocess(
@@ -219,7 +225,7 @@ class ICTImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_discretize: bool = True,
+        do_color_quantize: bool = True,
         clusters: Optional[np.ndarray] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
@@ -249,10 +255,10 @@ class ICTImageProcessor(BaseImageProcessor):
                 Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
-            do_discretize (`bool`, *optional*, defaults to `self.do_color_quantize`):
-                Whether to discretize the image.
+            do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+                Whether to color quantize the image.
             clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
-                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_discretize`
+                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_color_quantize`
                 is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
@@ -274,7 +280,7 @@ class ICTImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_discretize = do_discretize if do_discretize is not None else self.do_discretize
+        do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
 
         size = size if size is not None else self.size
@@ -294,8 +300,8 @@ class ICTImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        if do_discretize and clusters is None:
-            raise ValueError("Clusters must be specified if do_discretize is True.")
+        if do_color_quantize and clusters is None:
+            raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -310,10 +316,10 @@ class ICTImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
         # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
-        if do_discretize:
+        if do_color_quantize:
             images = [to_channel_dimension_format(image, data_format) for image in images]
             # reshape each image to image_size
-            images = [self.discretize(image=image) for image in images]
+            images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]
 

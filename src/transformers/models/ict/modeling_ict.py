@@ -29,7 +29,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mas
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -179,9 +178,9 @@ class ICTLayer(nn.Module):
         intermediate_size = config.intermediate_size
         self.intermediate_act_fn = ACT2FN[config.activation_function]
 
-        self.ln_1 = nn.LayerNorm(num_embed)
+        self.ln_1 = nn.LayerNorm(num_embed, eps=config.layer_norm_eps)
         self.attention = ICTSelfAttention(config)
-        self.ln_2 = nn.LayerNorm(num_embed)
+        self.ln_2 = nn.LayerNorm(num_embed, eps=config.layer_norm_eps)
         self.mlp = nn.Sequential(
             nn.Linear(num_embed, intermediate_size),
             self.intermediate_act_fn,
@@ -282,46 +281,6 @@ class ICTPretrainedModel(PreTrainedModel):
         if isinstance(module, (ICTTransformerModel, ICTGuidedUpsampler)):
             module.gradient_checkpointing = value
 
-
-ICT_TRANSFORMER_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ICTTransformerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-ICT_TRANSFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, height * width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
-            for details.
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
-            masks if not provided.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The transformer for outputting raw hidden-states without any specific head on top.",
-    ICT_TRANSFORMER_START_DOCSTRING,
-)
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class ICTTransformerModel(ICTPretrainedModel):
     config_class = ICTTransformerConfig
@@ -351,14 +310,6 @@ class ICTTransformerModel(ICTPretrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layers[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ICT_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -403,31 +354,31 @@ class ICTTransformerModel(ICTPretrainedModel):
         )
 
 
-class ResnetBlock(nn.Module):
-    def __init__(self, dim):
+class ICTResnetBlock(nn.Module):
+    """
+    ResNet block without the final ReLU (https://torch.ch/blog/2016/02/04/resnets.html).
+    """
+    def __init__(self):
         super().__init__()
         self.conv_block = nn.Sequential(
             nn.ReflectionPad2d(2),
             nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=2, bias=False)
+                nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=2, bias=False)
             ),
             nn.ReLU(True),
             nn.ReflectionPad2d(1),
             nn.utils.spectral_norm(
-                nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, padding=0, dilation=1, bias=False)
+                nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=0, dilation=1, bias=False)
             ),
         )
 
     def forward(self, x):
         out = x + self.conv_block(x)
-        # Remove ReLU at the end of the residual block
-        # http://torch.ch/blog/2016/02/04/resnets.html
-
         return out
 
 
-class InpaintGenerator(nn.Module):
-    def __init__(self, residual_blocks=8):
+class ICTInpaintGenerator(nn.Module):
+    def __init__(self, config):
         super().__init__()
 
         self.encoder = nn.Sequential(
@@ -440,7 +391,7 @@ class InpaintGenerator(nn.Module):
             nn.ReLU(True),
         )
 
-        blocks = [ResnetBlock(256) for _ in range(residual_blocks)]
+        blocks = [ICTResnetBlock(256) for _ in range(config.num_residual_blocks)]
 
         self.middle = nn.Sequential(*blocks)
 
@@ -462,7 +413,7 @@ class InpaintGenerator(nn.Module):
         return x
 
 
-class AdversarialLoss(nn.Module):
+class ICTAdversarialLoss(nn.Module):
     r"""
     Adversarial loss https://arxiv.org/abs/1711.10337
     """
@@ -501,7 +452,7 @@ class AdversarialLoss(nn.Module):
             return loss
 
 
-class StyleLoss(nn.Module):
+class ICTStyleLoss(nn.Module):
     r"""
     Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
@@ -514,10 +465,10 @@ class StyleLoss(nn.Module):
 
     def compute_gram_matrix(self, x):
         batch_size, channels, height, width = x.size()
-        f = x.view(batch_size, channels, width * height)
-        G = f.bmm(f.transpose(1, 2)) / (height * width * channels)
+        features = x.view(batch_size, channels, width * height)
+        gram = features.bmm(features.transpose(1, 2)) / (height * width * channels)
 
-        return G
+        return gram
 
     def __call__(self, x, y):
         # Compute features
@@ -541,17 +492,17 @@ class StyleLoss(nn.Module):
         return style_loss
 
 
-class PerceptualLoss(nn.Module):
+class ICTPerceptualLoss(nn.Module):
     r"""
     Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
     """
 
-    def __init__(self, weights=[1.0, 1.0, 1.0, 1.0, 1.0]):
+    def __init__(self, weights=None):
         super().__init__()
         self.add_module("vgg", VGG19())
         self.criterion = torch.nn.L1Loss()
-        self.weights = weights
+        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
 
     def __call__(self, x, y):
         # Compute features
@@ -687,38 +638,11 @@ class VGG19(torch.nn.Module):
         return out
 
 
-ICT_GUIDED_UP_SAMPLER_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ICTGuidedUpsamplerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-ICT_GUIDED_UP_SAMPLER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
-            for details.
-"""
-
-
-@add_start_docstrings(
-    "The guided sampler for outputting the completed images.",
-    ICT_GUIDED_UP_SAMPLER_START_DOCSTRING,
-)
 class ICTGuidedUpsampler(ICTPretrainedModel):
     def __init__(self, config: ICTGuidedUpsamplerConfig):
         super().__init__(config)
 
-        self.generator = InpaintGenerator(config.residual_blocks)
+        self.generator = ICTInpaintGenerator(config)
 
         self.post_init()
 

@@ -41,8 +41,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
 
 
     Args:
-        batch_size (`int`, *optional*, defaults to 64):
-            The batch size for training.
         input_size (`int`, *optional*, defaults to 256):
             The input image size for training. (0 for the original size.)
         max_iteration (`float`, *optional*, defaults to 5e7):
@@ -79,7 +77,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        batch_size=64,
         input_size=256,
         max_iteration=5e7,
         num_residual_blocks=8,
@@ -92,7 +89,6 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.batch_size = batch_size
         self.input_size = input_size
         self.max_iteration = max_iteration
         self.num_residual_blocks = num_residual_blocks
@@ -139,9 +135,9 @@ class ICTTransformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `1024`):
+        image_size (`int`, *optional*, defaults to 1024):
             The size (resolution) of each image.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
@@ -200,13 +196,14 @@ class ICTTransformerConfig(PretrainedConfig):
 
 class ICTConfig(PretrainedConfig):
     r"""
-    Args:
-    [`ICTConfig`] is the configuration class to store the configuration of a [`ICTMdel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`ICTModel`]. It is used to instantiate an
     ICT model according to the specified arguments, defining the transformer model and guided upsampler configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ICT
     [sheonhan/ict-imagenet-256](https://huggingface.co/sheonhan/ict-imagenet-256) architecture. Configuration objects
     inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
     [`PretrainedConfig`] for more information.
+    
+    Args:
         transformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ICTTransformerConfig`].
         guided_upsampler_config (`dict`, *optional*):
@@ -219,14 +216,17 @@ class ICTConfig(PretrainedConfig):
 
     >>> # Initializing a ICTConfig with sheonhan/ict-imagenet-256 style configuration
     >>> configuration = ICTConfig()
+    
     >>> # Initializing a ICTModel (with random weights) from the sheonhan/ict-imagenet-256 style configuration
     >>> model = ICTModel(configuration)
+    
     >>> # Accessing the model configuration
     >>> configuration = model.config
+    
     >>> # We can also initialize a ICTConfig from a ICTTransformerConfig and a ICTGuidedUpsamplerConfig
     >>> from transformers import ICTTransformerConfig, ICTGuidedUpsamplerConfig
 
-    >>> # Initializing ALIGN Text and Vision configurations
+    >>> # Initializing ICT Transformer and GuidedUpsampler configurations
     >>> config_transformer = ICTTransformerConfig()
     >>> config_guided_upsampler = ICTGuidedUpsamplerConfig()
     >>> config = ICTConfig.from_text_guided_upsampler_configs(config_transformer, config_guided_upsampler)
