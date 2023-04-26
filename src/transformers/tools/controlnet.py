@@ -28,21 +28,19 @@ class ControlNetTool(Tool):
     default_controlnet_checkpoint = "lllyasviel/sd-controlnet-canny"
 
     description = """
-    This is a tool that transforms an image according to a prompt. It takes two inputs:
-    first, the image that will be transformers, and second: the prompt (or text description) that will be used.
-    It returns a modified image.
+    This is a tool that transforms an image according to a prompt. It takes two inputs: first, the image that will be
+    transformers, and second: the prompt (or text description) that will be used. It returns a modified image.
     """
 
     def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
-
         if not is_accelerate_available():
-            raise ImportError('Accelerate should be installed in order to use tools.')
+            raise ImportError("Accelerate should be installed in order to use tools.")
         if not is_diffusers_available():
-            raise ImportError('Diffusers should be installed in order to use the StableDiffusionTool.')
+            raise ImportError("Diffusers should be installed in order to use the StableDiffusionTool.")
         if not is_vision_available():
-            raise ImportError('Pillow should be installed in order to use the StableDiffusionTool.')
+            raise ImportError("Pillow should be installed in order to use the StableDiffusionTool.")
         if not is_opencv_available():
-            raise ImportError('opencv should be installed in order to use the StableDiffusionTool.')
+            raise ImportError("opencv should be installed in order to use the StableDiffusionTool.")
 
         super().__init__()
 
@@ -55,7 +53,6 @@ class ControlNetTool(Tool):
         self.stable_diffusion_checkpoint = stable_diffusion
 
         self.device = device
-
 
     def setup(self):
         if self.device is None:
@@ -74,7 +71,7 @@ class ControlNetTool(Tool):
         if not self.is_initialized:
             self.setup()
 
-        initial_prompt = 'super-hero character, best quality, extremely detailed'
+        initial_prompt = "super-hero character, best quality, extremely detailed"
         prompt = initial_prompt + prompt
 
         low_threshold = 100
