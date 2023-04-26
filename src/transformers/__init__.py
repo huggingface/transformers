@@ -609,6 +609,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
+    "tools": [],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",

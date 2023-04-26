@@ -4,6 +4,8 @@ import torch
 from accelerate.utils import send_to_device
 from huggingface_hub import InferenceApi
 
+import transformers
+
 from ..models.auto import AutoProcessor
 
 
@@ -37,11 +39,11 @@ class RemoteTool(Tool):
     default_checkpoint = None
     description = "This is a tool that ..."
 
-    def __init__(self, repo_id=None):
+    def __init__(self, repo_id=None, token=None):
         if repo_id is None:
             repo_id = self.default_checkpoint
         self.repo_id = repo_id
-        self.client = InferenceApi(repo_id)
+        self.client = InferenceApi(repo_id, token=token)
         self.post_init()
 
     def prepare_inputs(self, *args, **kwargs):
@@ -64,6 +66,8 @@ class RemoteTool(Tool):
             outputs = self.client(**inputs)
         else:
             outputs = self.client(inputs)
+        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
+            outputs = outputs[0]
         return self.extract_outputs(outputs)
 
 
@@ -177,3 +181,39 @@ def get_default_device():
         return torch.device("cuda")
     else:
         return torch.device("cpu")
+
+
+TASK_MAPPING = {
+    "generative_qa": "GenerativeQuestionAnsweringTool",
+    "image_alteration": "ControlNetTool",
+    "image_captioning": "ImageCaptioningTool",
+    "image_generation": "StableDiffusionTool",
+    "image_segmentation": "ImageSegmentationTool",
+    "language_identification": "LanguageIdenticationTool",
+    "speech_to_text": "SpeechToTextTool",
+    "text_classification": "TextClassificationTool",
+    "text_to_speech": "TextToSpeechTool",
+    "translation": "TranslationTool",
+}
+
+
+def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs):
+    task_or_repo_id = task_or_repo_id.replace("-", "_")
+    if task_or_repo_id in TASK_MAPPING:
+        tool_class_name = TASK_MAPPING[task_or_repo_id]
+        if remote:
+            tool_class_name = f"Remote{tool_class_name}"
+        try:
+            tool_class = getattr(transformers.tools, tool_class_name)
+        except ImportError:
+            if remote:
+                raise NotImplementedError(
+                    f"{task_or_repo_id} does not support the inference API or inference endpoints yet."
+                )
+            raise
+    else:
+        repo_id = task_or_repo_id
+        # TODO: code on the hub for the tool
+        raise NotImplementedError("Support for code on the Hub is coming soon!")
+
+    return tool_class(repo_id, token=token, **tool_kwargs)
