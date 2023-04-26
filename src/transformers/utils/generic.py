@@ -560,8 +560,8 @@ def add_model_info_to_auto_map(auto_map, repo_id):
     """
     for key, value in auto_map.items():
         if isinstance(value, (tuple, list)):
-            auto_map[key] = [f"{repo_id}--{v}" if "--" not in v else v for v in value]
-        else:
-            auto_map[key] = f"{repo_id}--{value}" if "--" not in value else value
+            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+        elif value is not None and "--" not in value:
+            auto_map[key] = f"{repo_id}--{value}"
 
     return auto_map
