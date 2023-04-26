@@ -1,8 +1,13 @@
 import torch
-from datasets import load_dataset
+
+from transformers.utils import is_datasets_available
 
 from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
 from .base import PipelineTool
+
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 class TextToSpeechTool(PipelineTool):
@@ -24,6 +29,9 @@ class TextToSpeechTool(PipelineTool):
         inputs = self.pre_processor(text=text, return_tensors="pt")
 
         if speaker_embeddings is None:
+            if not is_datasets_available():
+                raise ImportError("Datasets needs to be installed if not passing speaker embeddings.")
+
             embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
             speaker_embeddings = torch.tensor(embeddings_dataset[7305]["xvector"]).unsqueeze(0)
 

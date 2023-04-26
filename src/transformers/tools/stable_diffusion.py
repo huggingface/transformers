@@ -1,13 +1,13 @@
-from accelerate.state import PartialState
-
 from transformers.tools.base import Tool
+from transformers.utils import is_accelerate_available, is_diffusers_available
 
 
-try:
+if is_accelerate_available():
+    from accelerate.state import PartialState
+
+if is_diffusers_available():
     from diffusers import DiffusionPipeline
-    diffusers_available = True
-except ImportError:
-    diffusers_available = False
+
 
 class StableDiffusionTool(Tool):
     default_checkpoint = "runwayml/stable-diffusion-v1-5"
@@ -17,7 +17,9 @@ class StableDiffusionTool(Tool):
     )
 
     def __init__(self, device=None) -> None:
-        if not diffusers_available:
+        if not is_accelerate_available():
+            raise ImportError('Accelerate should be installed in order to use tools.')
+        if not is_diffusers_available():
             raise ImportError('Diffusers should be installed in order to use the StableDiffusionTool.')
 
         super().__init__()

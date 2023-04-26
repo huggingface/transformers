@@ -125,6 +125,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_diffusers_available = importlib.util.find_spec("diffusers") is not None
+try:
+    _diffusers_version = importlib_metadata.version("diffusers")
+    logger.debug(f"Successfully imported diffusers version {_diffusers_version}")
+except importlib_metadata.PackageNotFoundError:
+    _diffusers_available = False
+
+
 _detectron2_available = importlib.util.find_spec("detectron2") is not None
 try:
     _detectron2_version = importlib_metadata.version("detectron2")
@@ -183,6 +191,14 @@ try:
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
+
+
+_opencv_available = importlib.util.find_spec("cv2") is not None
+try:
+    _opencv_version = importlib_metadata.version("cv2")
+    logger.debug(f"Successfully imported opencv version {_opencv_version}")
+except importlib_metadata.PackageNotFoundError:
+    _opencv_available = False
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
@@ -426,6 +442,9 @@ def is_tf2onnx_available():
 def is_onnx_available():
     return _onnx_available
 
+def is_opencv_available():
+    return _opencv_available
+
 
 def is_flax_available():
     return _flax_available
@@ -491,6 +510,10 @@ def is_torch_tensorrt_fx_available():
 
 def is_datasets_available():
     return _datasets_available
+
+
+def is_diffusers_available():
+    return _diffusers_available
 
 
 def is_detectron2_available():
