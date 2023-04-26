@@ -351,6 +351,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetForQuestionAnsweringSimple"),
     ]
 )
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("wav2vec2", "TFWav2Vec2ForSequenceClassification")])
 
 TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
@@ -471,6 +472,9 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
 )
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
+)
 
 
 class TFAutoModel(_BaseAutoModelClass):
@@ -478,6 +482,15 @@ class TFAutoModel(_BaseAutoModelClass):
 
 
 TFAutoModel = auto_class_update(TFAutoModel)
+
+
+class TFAutoModelForAudioClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForAudioClassification = auto_class_update(
+    TFAutoModelForAudioClassification, head_doc="audio classification"
+)
 
 
 class TFAutoModelForPreTraining(_BaseAutoModelClass):

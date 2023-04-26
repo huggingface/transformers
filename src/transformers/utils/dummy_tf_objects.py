@@ -2590,6 +2590,13 @@ class TFWav2Vec2ForCTC(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFWav2Vec2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFWav2Vec2Model(metaclass=DummyObject):
     _backends = ["tf"]
 

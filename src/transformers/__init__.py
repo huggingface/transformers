@@ -3457,6 +3457,7 @@ else:
         [
             "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFWav2Vec2ForCTC",
+            "TFWav2Vec2ForSequenceClassification",
             "TFWav2Vec2Model",
             "TFWav2Vec2PreTrainedModel",
         ]
@@ -6652,6 +6653,7 @@ if TYPE_CHECKING:
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
+            TFWav2Vec2ForSequenceClassification,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
         )
