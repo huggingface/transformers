@@ -28,6 +28,7 @@ import torch
 from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx._compatibility import compatibility
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -641,11 +642,6 @@ class HFProxy(Proxy):
             return key in self._metadata
         return super().__contains__(key)
 
-    def __iter__(self):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            return iter(self._metadata)
-        return super().__iter__()
-
 
 class HFAttribute(HFProxy):
     def __init__(self, root, attr: str):
@@ -1172,6 +1168,17 @@ class HFTracer(Tracer):
         return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
             m, module_qualified_name
         )
+
+    @compatibility(is_backward_compatible=True)
+    def keys(self, obj: "Proxy") -> Any:
+        """Called when a proxy object is has the keys() method called.
+        This is what happens when ** is called on a proxy. This should return an iterator if ** is supposed to work in
+        your custom tracer.
+        """
+        attribute = HFAttribute(obj, "keys")()
+        if obj.node.target == "**kwargs":
+            return attribute()._metadata
+        return attribute
 
 
 def get_concrete_args(model: nn.Module, input_names: List[str]):
