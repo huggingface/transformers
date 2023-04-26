@@ -1,17 +1,26 @@
-import cv2
 import numpy as np
 import torch
-from accelerate.state import PartialState
-from PIL import Image
 
 from transformers.tools.base import Tool
+from transformers.utils import (
+    is_accelerate_available,
+    is_diffusers_available,
+    is_opencv_available,
+    is_vision_available,
+)
 
 
-try:
+if is_vision_available():
+    from PIL import Image
+
+if is_accelerate_available():
+    from accelerate.state import PartialState
+
+if is_diffusers_available():
     from diffusers import ControlNetModel, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
-    diffusers_available = True
-except ImportError:
-    diffusers_available = False
+
+if is_opencv_available():
+    import cv2
 
 
 class ControlNetTool(Tool):
@@ -23,8 +32,15 @@ class ControlNetTool(Tool):
     """
 
     def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
-        if not diffusers_available:
-            raise ImportError('Diffusers should be installed in order to use the ControlNetTool.')
+
+        if not is_accelerate_available():
+            raise ImportError('Accelerate should be installed in order to use tools.')
+        if not is_diffusers_available():
+            raise ImportError('Diffusers should be installed in order to use the StableDiffusionTool.')
+        if not is_vision_available():
+            raise ImportError('Pillow should be installed in order to use the StableDiffusionTool.')
+        if not is_opencv_available():
+            raise ImportError('CV2 should be installed in order to use the StableDiffusionTool.')
 
         super().__init__()
 
