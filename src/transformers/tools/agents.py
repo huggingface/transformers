@@ -91,7 +91,8 @@ class Agent:
 class EndpointAgent(Agent):
     def __init__(self, url_endpoint, token):
         self.url_endpoint = url_endpoint
-        self.token = token
+        # TODO: remove the Basic support later on and then also use the HF token stored by default.
+        self.token = f"Basic {token}" if "Basic" not in token else token
 
     def generate_code(self, task, tools):
         headers = {"Authorization": self.token}
