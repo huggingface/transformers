@@ -100,7 +100,7 @@ class EndpointAgent(Agent):
         prompt = prompt.replace("<<tools>>", "\n".join(tool_descs))
         inputs = {
             "inputs": prompt,
-            "parameters": {"max_new_tokens": 200, "do_sample": False, "temperature": 0.5, "return_full_text": False},
+            "parameters": {"max_new_tokens": 200, "return_full_text": False},
         }
         response = requests.post(self.url_endpoint, json=inputs, headers=headers)
         if response.status_code != 200:
@@ -133,5 +133,6 @@ class OpenAiAgent(Agent):
         result = openai.ChatCompletion.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
+            temperature=0,
         )
         return result["choices"][0]["message"]["content"]
