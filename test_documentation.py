@@ -27,6 +27,17 @@
     be processed based on the modified files. It should also run the tests on the fly and delete the
     temp file when finished.
 """
+from typing import Iterable
+from pytest import DoctestItem
+from _pytest.doctest import DoctestModule, Module, _is_mocked, _patch_unwrap_mock_aware, get_optionflags, _get_runner, _get_continue_on_failure, _get_checker, import_path, _is_main_py, _is_setup_py, _is_doctest
+import inspect
+from _pytest.outcomes import skip
+
+from pathlib import Path
+from typing import Optional, Union
+
+from _pytest.doctest import Collector, DoctestModule, DoctestTextfile
+
 
 import unittest
 import argparse
@@ -66,25 +77,112 @@ class HfDocTestParser(doctest.DocTestParser):
     def parse(self, string, name='<string>'):
         processed_text = replace_ignore_result(string)
         return super().parse(processed_text)
-    
-    
-
-tests_to_run = os.environ.get("DOCUMENTATION_TEST_FILE",  "utils/documentation_tests.txt")
 
 
-class DocTester(unittest.TestCase):
-    def __init__(self, name = "run_documentation_tests"):
-        super().__init__()
-        print(f"The following file is used: {tests_to_run}")
-        self.test_to_run = get_tests_to_run(tests_to_run)
 
-    def runTest(self):
-        for file_name in self.test_to_run:
-            file_name.runTest()
+   
+# DoctestModule
+class HfDoctestModule(Module):
+    def collect(self) -> Iterable[DoctestItem]:
+        
+        
+        class MockAwareDocTestFinder(doctest.DocTestFinder):
+            """A hackish doctest finder that overrides stdlib internals to fix a stdlib bug.
 
+            https://github.com/pytest-dev/pytest/issues/3456
+            https://bugs.python.org/issue25532
+            """
+
+            def _find_lineno(self, obj, source_lines):
+                """Doctest code does not take into account `@property`, this
+                is a hackish way to fix it. https://bugs.python.org/issue17446
+
+                Wrapped Doctests will need to be unwrapped so the correct
+                line number is returned. This will be reported upstream. #8796
+                """
+                if isinstance(obj, property):
+                    obj = getattr(obj, "fget", obj)
+
+                if hasattr(obj, "__wrapped__"):
+                    # Get the main obj in case of it being wrapped
+                    obj = inspect.unwrap(obj)
+
+                # Type ignored because this is a private function.
+                return super()._find_lineno(  # type:ignore[misc]
+                    obj,
+                    source_lines,
+                )
+
+            def _find(
+                self, tests, obj, name, module, source_lines, globs, seen
+            ) -> None:
+                if _is_mocked(obj):
+                    return
+                with _patch_unwrap_mock_aware():
+                    # Type ignored because this is a private function.
+                    super()._find(  # type:ignore[misc]
+                        tests, obj, name, module, source_lines, globs, seen
+                    )
                     
+        if self.path.name == "conftest.py":
+            module = self.config.pluginmanager._importconftest(
+                self.path,
+                self.config.getoption("importmode"),
+                rootpath=self.config.rootpath,
+            )
+        else:
+            try:
+                module = import_path(
+                    self.path,
+                    root=self.config.rootpath,
+                    mode=self.config.getoption("importmode"),
+                )
+            except ImportError:
+                if self.config.getvalue("doctest_ignore_import_errors"):
+                    skip("unable to import module %r" % self.path)
+                else:
+                    raise
+        # Uses internal doctest module parsing mechanism.
+        finder = MockAwareDocTestFinder(parser = HfDocTestParser())
+        optionflags = get_optionflags(self)
+        runner = _get_runner(
+            verbose=False,
+            optionflags=optionflags,
+            checker=_get_checker(),
+            continue_on_failure=_get_continue_on_failure(self.config),
+        )
+
+        for test in finder.find(module, module.__name__):
+            if test.examples:  # skip empty doctests
+                yield DoctestItem.from_parent(
+                    self, name=test.name, runner=runner, dtest=test
+                )
+
+    
+def pytest_collect_file(
+    file_path: Path,
+    parent: Collector,
+) -> Optional[Union["DoctestModule", "DoctestTextfile"]]:
+    config = parent.config
+    if file_path.suffix == ".py":
+        if config.option.doctestmodules and not any(
+            (_is_setup_py(file_path), _is_main_py(file_path))
+        ):
+            mod: DoctestModule = DoctestModule.from_parent(parent, path=file_path)
+            return mod
+    elif _is_doctest(config, file_path, parent):
+        txt: DoctestTextfile = DoctestTextfile.from_parent(parent, path=file_path)
+        return txt
+    return None
+
+
+
+
 
 def get_tests_to_run(files_to_test_path):
+    """
+    Util to run test if the file is called
+    """
     flags = doctest.REPORT_NDIFF 
     parser = HfDocTestParser()
     with open(files_to_test_path, "r") as f:
@@ -99,7 +197,7 @@ def get_tests_to_run(files_to_test_path):
         test_cases.append(doctest.DocFileCase(test_to_run, optionflags=flags))
     return test_cases
 
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

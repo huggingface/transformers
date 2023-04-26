@@ -43,11 +43,11 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
-
-
+    config.option.doctest_glob = ["*.mdx"]
+    
 def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared
-
+    
     pytest_addoption_shared(parser)
 
 
@@ -79,3 +79,11 @@ class CustomOutputChecker(OutputChecker):
 
 
 doctest.OutputChecker = CustomOutputChecker
+
+
+from test_documentation import HfDoctestModule, pytest_collect_file, HfDocTestParser
+import _pytest
+
+_pytest.doctest.DoctestModule = HfDoctestModule
+_pytest.doctest.pytest_collect_file = pytest_collect_file
+doctest.DocTestParser = HfDocTestParser
