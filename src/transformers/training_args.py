@@ -1544,6 +1544,7 @@ class TrainingArguments:
             self._n_gpu = 1
             torch.cuda.set_device(device)
         elif self.deepspeed:
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             self._n_gpu = 1
         else:
