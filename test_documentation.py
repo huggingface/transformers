@@ -61,18 +61,21 @@ def replace_ignore_result(string):
     
 def skip_cuda_tests(string, run_cuda_test = False):
     # 1. Split in codeblocks
-    codeblock_pattern = r"(```python\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
     
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
     for i,c in enumerate(codeblocks):
         if "cuda" in c and ">>>" in c:
+            if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in c:
+                continue
             finale_block = ""
             lines = c.split("\n")
             for example in lines:
                 if len(example)>0 and "```" not in example:
                     finale_block += example + ' # doctest: +SKIP\n'
             codeblocks[i] = finale_block[:-1]
-    return "".join(codeblocks)
+    codeblocks = "".join(codeblocks)
+    return codeblocks
 
 
 
