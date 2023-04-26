@@ -1,5 +1,6 @@
 from .agents import Agent, EndpointAgent, OpenAiAgent
 from .base import PipelineTool, RemoteTool
+from .controlnet import ControlNetTool
 from .generative_question_answering import GenerativeQuestionAnsweringTool, RemoteGenerativeQuestionAnsweringTool
 from .image_captioning import ImageCaptioningTool, RemoteImageCaptioningTool
 from .image_segmentation import ImageSegmentationTool
