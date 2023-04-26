@@ -52,11 +52,29 @@ def replace_ignore_result(string):
     """Replace all instances of '# doctest: +IGNORE_RESULT' with '# doctest: +SKIP'."""
     return re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
 
-def skip_cuda_tests(string):
+
+# (```python\s*\n\s*>>> )((?:.*?\n)*?.*?(?:(?<!```)(cuda|```)))((?:.*?\n)*?.*?```)
+
+# replace = r'\1import pytest; pytest.skip("Test used `cuda`, skipping", allow_module_level=True);\2'
+# new_string = re.sub(codeblock_pattern, replace, string, flags=re.MULTILINE | re.DOTALL)
+# 3. Return the output string
+    
+def skip_cuda_tests(string, run_cuda_test = False):
     # 1. Split in codeblocks
-    # 2. if "cuda" in a codeblock, mark each examples as skip, or the whole test as skipped
-    # 3. Return the output string
-    return string
+    codeblock_pattern = r"(```python\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
+    
+    codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
+    for i,c in enumerate(codeblocks):
+        if "cuda" in c and ">>>" in c:
+            finale_block = ""
+            lines = c.split("\n")
+            for example in lines:
+                if len(example)>0 and "```" not in example:
+                    finale_block += example + ' # doctest: +SKIP\n'
+            codeblocks[i] = finale_block[:-1]
+    return "".join(codeblocks)
+
+
 
          
 class HfDocTestParser(doctest.DocTestParser):
