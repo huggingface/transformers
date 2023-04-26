@@ -1554,10 +1554,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if labels is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(logits.device)
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean", label_smoothing=0.1)
-            masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
 
-            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), masked_labels.contiguous().view(-1))
+            loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), labels.contiguous().view(-1))
 
         if not return_dict:
             return tuple(

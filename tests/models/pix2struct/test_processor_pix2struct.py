@@ -108,7 +108,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         encoded_processor = processor(text=input_str)
 
-        encoded_tok = tokenizer(input_str, return_token_type_ids=False, add_special_tokens=False)
+        encoded_tok = tokenizer(input_str, return_token_type_ids=False, add_special_tokens=True)
 
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
