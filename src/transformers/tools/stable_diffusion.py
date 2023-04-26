@@ -1,8 +1,13 @@
 from accelerate.state import PartialState
-from diffusers import DiffusionPipeline
 
 from transformers.tools.base import Tool
 
+
+try:
+    from diffusers import DiffusionPipeline
+    diffusers_available = True
+except ImportError:
+    diffusers_available = False
 
 class StableDiffusionTool(Tool):
     default_checkpoint = "runwayml/stable-diffusion-v1-5"
@@ -12,6 +17,9 @@ class StableDiffusionTool(Tool):
     )
 
     def __init__(self, device=None) -> None:
+        if not diffusers_available:
+            raise ImportError('Diffusers should be installed in order to use the StableDiffusionTool.')
+
         super().__init__()
 
         self.device = device

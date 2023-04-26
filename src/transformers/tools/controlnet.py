@@ -1,12 +1,17 @@
-from accelerate.state import PartialState
-
-from transformers.tools.base import Tool
+import cv2
 import numpy as np
 import torch
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
-from diffusers import UniPCMultistepScheduler
-import cv2
+from accelerate.state import PartialState
 from PIL import Image
+
+from transformers.tools.base import Tool
+
+
+try:
+    from diffusers import ControlNetModel, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
+    diffusers_available = True
+except ImportError:
+    diffusers_available = False
 
 
 class ControlNetTool(Tool):
@@ -18,6 +23,9 @@ class ControlNetTool(Tool):
     """
 
     def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
+        if not diffusers_available:
+            raise ImportError('Diffusers should be installed in order to use the ControlNetTool.')
+
         super().__init__()
 
         if controlnet is None:
