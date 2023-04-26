@@ -167,6 +167,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
+    "PeftModelForCausalLM",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
