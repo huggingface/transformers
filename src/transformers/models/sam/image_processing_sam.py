@@ -54,7 +54,8 @@ if is_torchvision_available():
 if is_tf_available():
     import tensorflow as tf
     from tensorflow.experimental import numpy as tnp
-    from ...tf_utils import shape_list, flatten
+
+    from ...tf_utils import flatten, shape_list
 
 logger = logging.get_logger(__name__)
 
@@ -451,8 +452,8 @@ class SamImageProcessor(BaseImageProcessor):
                 The target size the images were padded to before being passed to the model. If None, the target size is
                 assumed to be the processor's `pad_size`.
         Returns:
-            (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
-            is given by original_size.
+            (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width) is
+            given by original_size.
         """
         requires_backends(self, ["tf"])
         pad_size = self.pad_size if pad_size is None else pad_size
@@ -1204,6 +1205,7 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
     masks = [_rle_to_mask(rle) for rle in rle_masks]
 
     return masks, iou_scores, rle_masks, mask_boxes
+
 
 def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """

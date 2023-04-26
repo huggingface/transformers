@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_torchvision, require_vision, require_tf
-from transformers.utils import is_torch_available, is_vision_available, is_tf_available
+from transformers.testing_utils import require_tf, require_vision
+from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 
 if is_vision_available():
@@ -27,7 +27,7 @@ if is_vision_available():
     from transformers import AutoProcessor, SamImageProcessor, SamProcessor
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_tf_available():
     import tensorflow as tf
@@ -100,16 +100,23 @@ class TFSamProcessorTest(unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         masks = processor.post_process_masks(
-            dummy_masks, tf.convert_to_tensor(original_sizes), tf.convert_to_tensor(reshaped_input_size), return_tensors="tf"
+            dummy_masks,
+            tf.convert_to_tensor(original_sizes),
+            tf.convert_to_tensor(reshaped_input_size),
+            return_tensors="tf",
         )
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         # should also work with np
         dummy_masks = [np.ones((1, 3, 5, 5))]
-        masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf")
+        masks = processor.post_process_masks(
+            dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
+        )
 
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(tf.errors.InvalidArgumentError):
-            masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf")
+            masks = processor.post_process_masks(
+                dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
+            )

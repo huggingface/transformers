@@ -18,23 +18,24 @@
 import inspect
 import unittest
 
+import numpy as np
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_tf, slow
+from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_tf_common import floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+if is_tf_available():
+    import tensorflow as tf
 
-    from transformers import SamModel, SamProcessor
-    from transformers.models.sam.modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import SamProcessor, TFSamModel
+    from transformers.models.sam.modeling_tf_sam import TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -124,7 +125,7 @@ class SamMaskDecoderTester:
         return config, dummy_inputs
 
 
-class SamModelTester:
+class TFSamModelTester:
     def __init__(
         self,
         parent,
@@ -231,44 +232,34 @@ class SamModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = SamModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
+        model = TFSamModel(config=config)
+        result = model(pixel_values)
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
         self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
 
     def create_and_check_get_image_features(self, config, pixel_values):
-        model = SamModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model.get_image_embeddings(pixel_values)
+        model = TFSamModel(config=config)
+        result = model.get_image_embeddings(pixel_values)
         self.parent.assertEqual(result[0].shape, (self.output_channels, 12, 12))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
-        model = SamModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model.vision_encoder(
-                pixel_values,
-                output_hidden_states=True,
-                return_dict=True,
-            )
+        model = TFSamModel(config=config)
+        result = model.vision_encoder(
+            pixel_values,
+            output_hidden_states=True,
+            return_dict=True,
+        )
 
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
         self.parent.assertEqual(len(result[1]), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[1][0].shape, expected_hidden_states_shape)
 
-        with torch.no_grad():
-            result = model.vision_encoder(
-                pixel_values,
-                output_hidden_states=True,
-                return_dict=False,
-            )
+        result = model.vision_encoder(
+            pixel_values,
+            output_hidden_states=True,
+            return_dict=False,
+        )
 
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
@@ -282,22 +273,20 @@ class SamModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+@require_tf
+class TFSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SamModel,) if is_torch_available() else ()
+    all_model_classes = (TFSamModel,) if is_tf_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
+        {"feature-extraction": TFSamModel, "mask-generation": TFSamModel} if is_tf_available() else {}
     )
-    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_torchscript = False
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
     def is_pipeline_test_to_skip(
@@ -306,7 +295,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return True
 
     def setUp(self):
-        self.model_tester = SamModelTester(self)
+        self.model_tester = TFSamModelTester(self)
         self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
         self.prompt_encoder_config_tester = ConfigTester(
             self,
@@ -333,16 +322,16 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -377,10 +366,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             vision_attentions = outputs.vision_attentions
             self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
@@ -392,10 +378,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             vision_attentions = outputs.vision_attentions
             self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
 
@@ -438,8 +421,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SamModel.from_pretrained(model_name)
+        for model_name in TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFSamModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -458,48 +441,35 @@ def prepare_dog_img():
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
-        inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=raw_image, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs.iou_scores)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.5798), atol=1e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
         input_boxes = [[650, 900, 1000, 1250]]
         input_points = [[[820, 1080]]]
 
-        inputs = processor(
-            images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
-        ).to(torch_device)
+        inputs = processor(images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1], np.array(0.9935), atol=1e-4))
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
         input_points = [
@@ -507,15 +477,12 @@ class SamModelIntegrationTest(unittest.TestCase):
             [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
         ]
 
-        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
 
-        EXPECTED_SCORES = torch.tensor(
+        EXPECTED_SCORES = np.array(
             [
                 [
                     [0.9673, 0.9441, 0.9084],
@@ -531,14 +498,11 @@ class SamModelIntegrationTest(unittest.TestCase):
                 ],
             ]
         )
-        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
+        self.assertTrue(np.allclose(scores.numpy(), EXPECTED_SCORES, atol=1e-3))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
         input_boxes = [[620, 900, 1000, 1255]]
@@ -550,85 +514,66 @@ class SamModelIntegrationTest(unittest.TestCase):
             input_boxes=input_boxes,
             input_points=input_points,
             input_labels=labels,
-            return_tensors="pt",
-        ).to(torch_device)
+            return_tensors="tf",
+        )
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs.iou_scores)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9689), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9689), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
 
         input_points = [[[400, 650]]]
         input_labels = [[1]]
 
-        inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(torch_device)
+        inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs.iou_scores)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1], np.array(0.9712), atol=1e-4))
 
         # With no label
         input_points = [[[400, 650]]]
 
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9712), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9712), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
-
         raw_image = prepare_image()
 
         input_points = [[[400, 650], [800, 650]]]
         input_labels = [[1, 1]]
 
-        inputs = processor(
-            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(torch_device)
+        inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs.iou_scores)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9936), atol=1e-4))
 
         # no labels
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs.iou_scores)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9936), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9936), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
 
@@ -636,110 +581,93 @@ class SamModelIntegrationTest(unittest.TestCase):
         input_labels = [[1, 1], [1]]
 
         inputs = processor(
-            images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(torch_device)
+            images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="tf"
+        )
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.9936), atol=1e-4))
-        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9716), atol=1e-4))
+        self.assertTrue(np.allclose(scores[0][-1].numpy(), np.array(0.9936), atol=1e-4))
+        self.assertTrue(np.allclose(scores[1][-1], np.array(0.9716), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
 
         input_boxes = [[[75, 275, 1725, 850]]]
 
-        inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+        inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores = tf.squeeze(outputs)
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8686), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.8686), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
         raw_dog_image = prepare_dog_img()
 
         input_points = [[[820, 1080]], [[220, 470]]]
 
-        inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores_batched = outputs.iou_scores.squeeze()
+        outputs = model(**inputs)
+        scores_batched = tf.squeeze(outputs.iou_scores)
 
         input_points = [[[220, 470]]]
 
-        inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
-        scores_single = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
+        outputs = model(**inputs)
+        scores_single = tf.squeeze(outputs.iou_scores)
+        self.assertTrue(np.allclose(scores_batched[1, :].numpy(), scores_single.numpy(), atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
 
         # fmt: off
-        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()
+        input_points = tf.conver_to_tensor([[[400, 650]], [[220, 470]]])
         # fmt: on
 
-        input_points = input_points.unsqueeze(0)
+        input_points = tf.expand_dims(input_points, 0)
 
-        inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+        inputs = processor(raw_image, input_points=input_points, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
-        iou_scores = outputs.iou_scores.cpu()
+        iou_scores = outputs.iou_scores
         self.assertTrue(iou_scores.shape == (1, 2, 3))
-        torch.testing.assert_allclose(
-            iou_scores, torch.tensor([[[0.9848, 0.9788, 0.9713], [0.9211, 0.9128, 0.7427]]]), atol=1e-4, rtol=1e-4
+        self.assertTrue(
+            np.allclose(iou_scores.numpy()),
+            np.array([[[0.9848, 0.9788, 0.9713], [0.9211, 0.9128, 0.7427]]]),
+            atol=1e-4,
+            rtol=1e-4,
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
-        model = SamModel.from_pretrained("facebook/sam-vit-huge")
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-
-        model.to(torch_device)
-        model.eval()
 
         raw_image = prepare_image()
 
         # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[[1.0071, 1.0032, 0.9946], [0.4962, 0.8770, 0.8686], [0.4962, 0.8770, 0.8686]]])
+        input_boxes = tf.convert_to_tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]])
+        EXPECTED_IOU = np.array([[[1.0071, 1.0032, 0.9946], [0.4962, 0.8770, 0.8686], [0.4962, 0.8770, 0.8686]]])
         # fmt: on
-        input_boxes = input_boxes.unsqueeze(0)
+        input_boxes = tf.expand_dims(input_boxes, 0)
 
-        inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
+        inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="tf")
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
-        iou_scores = outputs.iou_scores.cpu()
+        iou_scores = outputs.iou_scores
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        self.assertTrue(np.allclose(iou_scores.numpy()), EXPECTED_IOU, atol=1e-4, rtol=1e-4)

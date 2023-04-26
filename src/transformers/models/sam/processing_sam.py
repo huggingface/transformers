@@ -22,7 +22,7 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType, is_torch_available, is_tf_available
+from ...utils import TensorType, is_tf_available, is_torch_available
 
 
 if is_torch_available():
