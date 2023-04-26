@@ -1529,9 +1529,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             prompt_ids (`Optional[Union[List[int], torch.Tensor, np.ndarray]]`, *optional*):
-                List or rank-1 of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is 
-                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for 
-                transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words 
+                List or rank-1 of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
+                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
+                transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
