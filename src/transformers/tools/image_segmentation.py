@@ -1,4 +1,5 @@
 from typing import List
+
 from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_available
 
 from .base import PipelineTool
@@ -40,4 +41,3 @@ class ImageSegmentationTool(PipelineTool):
             segmentation_maps.append(array)
 
         return segmentation_maps
-
