@@ -133,7 +133,7 @@ def evaluate_call(call, state, tools):
 
     func = tools[func_name]
     # Todo deal with args
-    args = {evaluate_ast(arg, state, tools) for arg in call.args}
+    args = [evaluate_ast(arg, state, tools) for arg in call.args]
     kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
     return func(*args, **kwargs)
 
