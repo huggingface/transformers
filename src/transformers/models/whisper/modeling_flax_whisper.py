@@ -390,7 +390,6 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayerCollection with MBart->Whisper
 class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -542,7 +541,6 @@ class FlaxWhisperDecoderLayer(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayerCollection with MBart->Whisper
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -853,16 +851,14 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         gradient_checkpointing: bool = False,
         **kwargs,
     ):
-        self.gradient_checkpointing = gradient_checkpointing
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def enable_gradient_checkpointing(self):
-        self.gradient_checkpointing = True
         self._module = self.module_class(
             config=self.config,
             dtype=self.dtype,
-            gradient_checkpointing=self.gradient_checkpointing,
+            gradient_checkpointing=True,
         )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
