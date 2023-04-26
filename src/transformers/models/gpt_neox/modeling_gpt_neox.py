@@ -885,7 +885,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = GPTNeoXModel(config)
+        self.gpt_neox = GPTNeoXModel(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
@@ -928,11 +928,10 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.transformer(
+        outputs = self.gpt_neox(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -942,7 +941,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = transformer_outputs[0]
+        hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
         logits = self.classifier(hidden_states)
 
@@ -953,12 +952,12 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + transformer_outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

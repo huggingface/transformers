@@ -164,7 +164,7 @@ class GPTNeoXModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
         config.is_decoder = True
