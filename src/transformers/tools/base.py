@@ -1,6 +1,6 @@
 from typing import List
 
-from accelerate.state import PartialState
+import torch
 from accelerate.utils import send_to_device
 from huggingface_hub import InferenceApi
 
@@ -121,7 +121,7 @@ class PipelineTool(Tool):
             if self.device_map is not None:
                 self.device = list(self.model.hf_device_map.values())[0]
             else:
-                self.device = PartialState().default_device
+                self.device = get_default_device()
 
         if self.device_map is None:
             self.model.to(self.device)
@@ -167,3 +167,13 @@ def launch_gradio_demo(tool_class: Tool):
         title=tool_class.__name__,
         article=tool.description,
     ).launch()
+
+
+# TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
+def get_default_device():
+    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
