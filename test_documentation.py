@@ -56,7 +56,12 @@ def remove_cuda_tests(string):
                 continue
             finale_block = ""
             lines = c.split("\n")
+            logger_disable = False
             for example in lines:
+                if ">>> " in example and not logger_disable:
+                    logger_disable = True
+                    finale_block += example.replace(">>> ",">>> import transformers;transformers.logging.set_verbosity_error()")
+                    finale_block += example.replace(">>> ",">>> import datasets;datasets.logging.set_verbosity_error()")
                 if len(example)>0 and "```" not in example:
                     finale_block += example + ' # doctest: +SKIP\n'
             codeblocks[i] = finale_block[:-1]
@@ -85,7 +90,7 @@ class HfDocTestParser(doctest.DocTestParser):
           )*)
         ''', re.MULTILINE | re.VERBOSE)
     
-    def parse(self, string, name='<string>', skip_cuda_tests = False):
+    def parse(self, string, name='<string>', skip_cuda_tests = True):
         if skip_cuda_tests:
             string = remove_cuda_tests(string)
         return super().parse(string)
