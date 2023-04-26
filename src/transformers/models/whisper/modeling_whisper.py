@@ -1470,9 +1470,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        prompt_ids: Optional[List[int]] = None,
-        always_use_initial_prompt=False,
-        condition_on_previous_text=None,
+        prompt_ids: Optional[Union[List[int], torch.Tensor, np.ndarray]] = None,
         **kwargs,
     ):
         """
@@ -1530,11 +1528,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
-            prompt_ids (`List[int]`, *optional*):
-                List of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is provided as a
-                prompt to each chunk. This can be used to provide or "prompt-engineer" a context for transcription,
-                e.g. custom vocabularies or proper nouns to make it more likely to predict those words correctly. It
-                cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+            prompt_ids (`Optional[Union[List[int], torch.Tensor, np.ndarray]]`, *optional*):
+                List or rank-1 of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is 
+                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for 
+                transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words 
+                correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1672,6 +1670,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
