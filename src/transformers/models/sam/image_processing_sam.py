@@ -454,18 +454,21 @@ class SamImageProcessor(BaseImageProcessor):
             (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.
         """
-        requires_backends(self, ["tensorflow"])
+        requires_backends(self, ["tf"])
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
 
         output_masks = []
         for i, original_size in enumerate(original_sizes):
-            interpolated_mask = tf.image.resize(masks[i], target_image_size, method="bilinear")
+            # tf.image expects NHWC, we transpose the NCHW inputs for it
+            mask = tf.transpose(masks[i], perm=[0, 2, 3, 1])
+            interpolated_mask = tf.image.resize(mask, target_image_size, method="bilinear")
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = tf.image.resize(interpolated_mask, original_size, method="bilinear")
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
-            output_masks.append(interpolated_mask)
+            # And then we transpose them back at the end
+            output_masks.append(tf.transpose(interpolated_mask, perm=[0, 3, 1, 2]))
 
         return output_masks
 
@@ -684,7 +687,7 @@ class SamImageProcessor(BaseImageProcessor):
                 The offset for the stability score used in the `_compute_stability_score` method.
 
         """
-        requires_backends(self, ["tensorflow"])
+        requires_backends(self, ["tf"])
         original_height, original_width = original_size
         iou_scores = tf.reshape(iou_scores, [iou_scores.shape[0] * iou_scores.shape[1], iou_scores.shape[2:]])
         masks = tf.reshape(masks, [masks.shape[0] * masks.shape[1], masks.shape[2:]])
