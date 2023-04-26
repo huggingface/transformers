@@ -474,6 +474,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             n_heads,
             head_size,
             indices_prng_key=indices_prng_key,
+            deterministic=deterministic,
             plan_from_length=None,
             plan_num_rand_blocks=None,
             output_attentions=output_attentions,
@@ -533,6 +534,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         n_heads,
         head_size,
         indices_prng_key: Optional[jax.random.PRNGKey] = None,
+        deterministic: Optional[bool] = True,
         plan_from_length=None,
         plan_num_rand_blocks=None,
         output_attentions=None,
@@ -586,6 +588,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                     to_block_size,
                     n_rand_blocks,
                     indices_prng_key=indices_prng_key,
+                    deterministic=deterministic,
                     last_idx=1024,
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
@@ -595,7 +598,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
                     from_seq_len, from_block_size, n_rand_blocks
                 )
-
             rand_attn = self._bigbird_block_rand_mask_with_head(
                 from_seq_length=from_seq_len,
                 to_seq_length=to_seq_len,
@@ -959,6 +961,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_block_size,
         num_rand_blocks,
         indices_prng_key: Optional[jax.random.PRNGKey] = None,
+        deterministic: Optional[bool] = True,
         last_idx: Optional[int] = -1,
     ):
         """
@@ -971,6 +974,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
             indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
+            deterministic: bool. When False random attention will be used.
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
             if positive then num_rand_blocks blocks chosen only up to last_idx.
 
@@ -983,7 +987,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             raise ValueError("Error the number of blocks needs to be same!")
         rand_attn = jnp.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=jnp.int32)
         # deterministic nor randomness
-        if indices_prng_key is None:
+        if deterministic:
             return rand_attn
 
         middle_seq = jnp.arange(1, to_seq_length // to_block_size - 1, dtype=jnp.int32)
@@ -1033,6 +1037,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         plan_from_length,
         plan_num_rand_blocks,
         indices_prng_key: Optional[jax.random.PRNGKey] = None,
+        deterministic: Optional[bool] = True,
         window_block_left=1,
         window_block_right=1,
         global_block_top=1,
@@ -1052,6 +1057,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             plan_from_length: list. plan from length where num_random_blocks are choosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
+            deterministic: bool. When False random attention will be used.
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
             global_block_top: int. number of blocks at the top.
@@ -1085,7 +1091,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         ]
 
         # deterministic
-        if indices_prng_key is None:
+        if deterministic:
             for nh in range(num_heads):
                 rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
             return rand_attn
