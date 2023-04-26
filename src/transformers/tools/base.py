@@ -160,4 +160,10 @@ def launch_gradio_demo(tool_class: Tool):
     def fn(*args, **kwargs):
         return tool(*args, **kwargs)
 
-    gr.Interface(fn=fn, inputs=tool_class.inputs, outputs=tool_class.outputs).launch()
+    gr.Interface(
+        fn=fn,
+        inputs=tool_class.inputs,
+        outputs=tool_class.outputs,
+        title=tool_class.__name__,
+        article=tool.description
+    ).launch()
