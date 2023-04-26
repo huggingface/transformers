@@ -21,7 +21,7 @@ class ImageSegmentationTool(PipelineTool):
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
-            raise ImportError('Pillow should be installed in order to use the StableDiffusionTool.')
+            raise ImportError("Pillow should be installed in order to use the StableDiffusionTool.")
 
         super().__init__(*args, **kwargs)
 

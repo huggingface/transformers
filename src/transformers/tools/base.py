@@ -16,7 +16,7 @@ class Tool:
     is_initialized = False
 
     inputs: List[str]
-    outputs : List[str]
+    outputs: List[str]
     name: str
 
     def __call__(self, *args, **kwargs):  # Might become run?
@@ -153,7 +153,7 @@ def launch_gradio_demo(tool_class: Tool):
     try:
         import gradio as gr
     except ImportError:
-        raise ImportError('Gradio should be installed in order to launch a gradio demo.')
+        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     tool = tool_class()
 
@@ -165,5 +165,5 @@ def launch_gradio_demo(tool_class: Tool):
         inputs=tool_class.inputs,
         outputs=tool_class.outputs,
         title=tool_class.__name__,
-        article=tool.description
+        article=tool.description,
     ).launch()

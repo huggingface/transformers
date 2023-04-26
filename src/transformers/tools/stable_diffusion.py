@@ -18,9 +18,9 @@ class StableDiffusionTool(Tool):
 
     def __init__(self, device=None) -> None:
         if not is_accelerate_available():
-            raise ImportError('Accelerate should be installed in order to use tools.')
+            raise ImportError("Accelerate should be installed in order to use tools.")
         if not is_diffusers_available():
-            raise ImportError('Diffusers should be installed in order to use the StableDiffusionTool.')
+            raise ImportError("Diffusers should be installed in order to use the StableDiffusionTool.")
 
         super().__init__()
 
