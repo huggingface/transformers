@@ -1600,7 +1600,6 @@ class TrainingArguments:
                 # trigger an error that a device index is missing. Index 0 takes into account the
                 # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
                 # will use the first GPU in that env, i.e. GPU#1
-                # device = self.distributed_state.device
                 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
