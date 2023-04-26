@@ -19,7 +19,8 @@ import doctest
 import sys
 import warnings
 from os.path import abspath, dirname, join
-
+from test_documentation import HfDoctestModule, HfDocTestParser
+import _pytest
 
 # allow having multiple repository checkouts and not needing to remember to rerun
 # 'pip install -e .[dev]' when switching between checkouts and running tests.
@@ -79,11 +80,5 @@ class CustomOutputChecker(OutputChecker):
 
 
 doctest.OutputChecker = CustomOutputChecker
-
-
-from test_documentation import HfDoctestModule, pytest_collect_file, HfDocTestParser
-import _pytest
-
 _pytest.doctest.DoctestModule = HfDoctestModule
-_pytest.doctest.pytest_collect_file = pytest_collect_file
 doctest.DocTestParser = HfDocTestParser

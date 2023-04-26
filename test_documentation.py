@@ -158,26 +158,6 @@ class HfDoctestModule(Module):
                     self, name=test.name, runner=runner, dtest=test
                 )
 
-    
-def pytest_collect_file(
-    file_path: Path,
-    parent: Collector,
-) -> Optional[Union["DoctestModule", "DoctestTextfile"]]:
-    config = parent.config
-    if file_path.suffix == ".py":
-        if config.option.doctestmodules and not any(
-            (_is_setup_py(file_path), _is_main_py(file_path))
-        ):
-            mod: DoctestModule = DoctestModule.from_parent(parent, path=file_path)
-            return mod
-    elif _is_doctest(config, file_path, parent):
-        txt: DoctestTextfile = DoctestTextfile.from_parent(parent, path=file_path)
-        return txt
-    return None
-
-
-
-
 
 def get_tests_to_run(files_to_test_path):
     """
