@@ -421,7 +421,7 @@ doc_test_job = CircleCIJob(
         # that are modified by this pr. *py files
     ],
     tests_to_run="$(cat utils/documentation_tests.txt)",
-    pytest_options={"--doctest-module":None},
+    pytest_options={"--doctest-module":None, "--doctest-glob":"*.mdx"},
 
 )
 
