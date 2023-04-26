@@ -441,6 +441,7 @@ def is_tf2onnx_available():
 def is_onnx_available():
     return _onnx_available
 
+
 def is_opencv_available():
     return _opencv_available
 
