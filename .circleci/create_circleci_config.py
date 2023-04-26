@@ -414,7 +414,12 @@ doc_test_job = CircleCIJob(
             "name": "Get files to test",
             "command":
                 "git remote add upstream https://github.com/huggingface/transformers.git  && git fetch upstream \n"
-                "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '^[^/]*(\.py|\.mdx)$' | grep -Ev '/\.' > pr_documentation_tests.txt"
+                "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '\.(py|mdx)$' | grep -Ev '^\..*|/\.' > pr_documentation_tests.txt"
+        },
+        {
+            "name": "Debug only : print content of the `pr_documentation_tests.txt`",
+            "command":
+                "cat pr_documentation_tests.txt"
         },
 
         # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
