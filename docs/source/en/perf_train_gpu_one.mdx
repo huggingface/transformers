@@ -722,7 +722,7 @@ Another use case for training on many GPUs is if the model does not fit on a sin
 
 PyTorch 2.0 released the native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), that allows to use fused GPU kernels as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
 
-After installing the `optimum` package, the relevant internal modules can be replaced to use PyTorch's native attention with:
+After installing the [`optimum`](https://github.com/huggingface/optimum) package, the relevant internal modules can be replaced to use PyTorch's native attention with:
 
 ```python
 model = model.to_bettertransformer()
