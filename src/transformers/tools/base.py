@@ -1,3 +1,5 @@
+from typing import List
+
 from accelerate.state import PartialState
 from accelerate.utils import send_to_device
 from huggingface_hub import InferenceApi
@@ -12,6 +14,10 @@ class Tool:
 
     description = "This is a tool that ..."
     is_initialized = False
+
+    inputs: List[str]
+    outputs : List[str]
+    name: str
 
     def __call__(self, *args, **kwargs):  # Might become run?
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -141,3 +147,17 @@ class PipelineTool(Tool):
         outputs = self.forward(encoded_inputs)
         outputs = send_to_device(outputs, "cpu")
         return self.decode(outputs)
+
+
+def launch_gradio_demo(tool_class: Tool):
+    try:
+        import gradio as gr
+    except ImportError:
+        raise ImportError('Gradio should be installed in order to launch a gradio demo.')
+
+    tool = tool_class()
+
+    def fn(*args, **kwargs):
+        return tool(*args, **kwargs)
+
+    gr.Interface(fn=fn, inputs=tool_class.inputs, outputs=tool_class.outputs).launch()
