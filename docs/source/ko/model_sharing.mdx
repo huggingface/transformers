@@ -12,12 +12,12 @@ specific language governing permissions and limitations under the License.
 
 # 모델 공유하기[[share-a-model]]
 
-The last two tutorials showed how you can fine-tune a model with PyTorch, Keras, and 🤗 Accelerate for distributed setups. The next step is to share your model with the community! At Hugging Face, we believe in openly sharing knowledge and resources to democratize artificial intelligence for everyone. We encourage you to consider sharing your model with the community to help others save time and resources.
+지난 두 튜토리얼에서 분산 설정을 위해 PyTorch, Keras 및 🤗 Accelerate를 사용하여 모델을 파인 튜닝하는 방법을 보았습니다. 다음 단계는 모델을 커뮤니티와 공유하는 것입니다! Hugging Face는 인공지능의 민주화를 위해 모두에게 지식과 자원을 공개적으로 공유해야 한다고 믿습니다. 다른 사람들이 시간과 자원을 절약할 수 있도록 커뮤니티와 함께 모델을 공유하는 것을 고려해 보세요.
 
-In this tutorial, you will learn two methods for sharing a trained or fine-tuned model on the [Model Hub](https://huggingface.co/models):
+이 튜토리얼에서 [모델 허브](https://huggingface.co/models)에서 훈련되거나 파인 튜닝된 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
 
-- Programmatically push your files to the Hub.
-- Drag-and-drop your files to the Hub with the web interface.
+- 파일을 프로그래밍 방식으로 허브에 푸시합니다.
+- 웹 인터페이스를 사용하여 파일을 허브로 드래그 앤 드롭합니다.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="YouTube video player"
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
@@ -25,17 +25,17 @@ picture-in-picture" allowfullscreen></iframe>
 
 <Tip>
 
-To share a model with the community, you need an account on [huggingface.co](https://huggingface.co/join). You can also join an existing organization or create a new one.
+커뮤니티와 함께 모델을 공유하려면, [huggingface.co](https://huggingface.co/join)에 계정이 필요합니다. 기존 조직에 가입하거나 새로 만들 수도 있습니다.
 
 </Tip>
 
 ## 저장소 특징[[repository-features]]
 
-Each repository on the Model Hub behaves like a typical GitHub repository. Our repositories offer versioning, commit history, and the ability to visualize differences.
+모델 허브의 각 저장소는 일반적인 GitHub 저장소처럼 작동합니다. 저장소는 버전 관리, 커밋 기록, 차이점 시각화 기능을 제공합니다.
 
-The Model Hub's built-in versioning is based on git and [git-lfs](https://git-lfs.github.com/). In other words, you can treat one model as one repository, enabling greater access control and scalability. Version control allows *revisions*, a method for pinning a specific version of a model with a commit hash, tag or branch.
+모델 허브에 내장된 버전 관리는 git 및 [git-lfs](https://git-lfs.github.com/)를 기반으로 합니다. 즉, 하나의 모델을 하나의 저장소로 취급하여 접근 제어 및 확장성이 향상됩니다. 버전 제어는 커밋 해시, 태그 또는 브랜치로 모델의 특정 버전을 고정하는 방법인 *revision*을 허용합니다.
 
-As a result, you can load a specific model version with the `revision` parameter:
+따라서 `revision` 매개변수를 사용하여 특정 모델 버전을 가져올 수 있습니다:
 
 ```py
 >>> model = AutoModel.from_pretrained(
@@ -43,25 +43,25 @@ As a result, you can load a specific model version with the `revision` parameter
 ... )
 ```
 
-Files are also easily edited in a repository, and you can view the commit history as well as the difference:
+또한 저장소에서 파일을 쉽게 편집할 수 있으며, 커밋 기록과 차이를 볼 수 있습니다:
 
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 
 ## 설정[[setup]]
 
-Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (`~/.cache/` by default):
+모델을 허브에 공유하기 전에 Hugging Face 자격 증명이 필요합니다. 터미널에 액세스할 수 있는 경우, 🤗 Transformers가 설치된 가상 환경에서 다음 명령을 실행합니다. 그러면 Hugging Face 캐시 폴더(기본적으로 `~/.cache/`)에 액세스 토큰을 저장합니다:
 
 ```bash
 huggingface-cli login
 ```
 
-If you are using a notebook like Jupyter or Colaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
+Jupyter 또는 Colaboratory와 같은 노트북을 사용 중인 경우, [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) 라이브러리가 설치되었는지 확인하세요. 이 라이브러리를 사용하면 프로그래밍 방식으로 허브와 상호 작용할 수 있습니다.
 
 ```bash
 pip install huggingface_hub
 ```
 
-Then use `notebook_login` to sign-in to the Hub, and follow the link [here](https://huggingface.co/settings/token) to generate a token to login with:
+그런 다음 `notebook_login`로 허브에 로그인하고, [여기](https://huggingface.co/settings/token) 링크에서 로그인할 토큰을 생성합니다:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -69,15 +69,15 @@ Then use `notebook_login` to sign-in to the Hub, and follow the link [here](http
 >>> notebook_login()
 ```
 
-## Convert a model for all frameworks
+## 모든 프레임워크에 대한 모델 변환하기[[convert-a-model-for-all-frameworks]]
 
-To ensure your model can be used by someone working with a different framework, we recommend you convert and upload your model with both PyTorch and TensorFlow checkpoints. While users are still able to load your model from a different framework if you skip this step, it will be slower because 🤗 Transformers will need to convert the checkpoint on-the-fly.
+다른 프레임워크를 작업하는 사용자가 모델을 사용할 수 있도록 하려면, PyTorch 및 TensorFlow 체크포인트를 모두 사용하여 모델을 변환하고 업로드하는 것이 좋습니다. 이 단계를 건너뛰어도 사용자는 다른 프레임워크에서 모델을 로드할 수 있지만, 🤗 Transformers가 체크포인트를 즉석에서 변환해야 하므로 속도가 느려질 수 있습니다.
 
-Converting a checkpoint for another framework is easy. Make sure you have PyTorch and TensorFlow installed (see [here](installation) for installation instructions), and then find the specific model for your task in the other framework. 
+체크포인트를 다른 프레임워크로 변환하는 것은 쉽습니다. PyTorch 및 TensorFlow가 설치되어 있는지 확인한 다음(설치 지침은 [여기](installation) 참조) 다른 프레임워크에서 작업에 대한 특정 모델을 찾습니다.
 
 <frameworkcontent>
 <pt>
-Specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
+체크포인트를 TensorFlow에서 PyTorch로 변환하려면 `from_tf=True`를 지정하세요:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
@@ -85,20 +85,20 @@ Specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
 ```
 </pt>
 <tf>
-Specify `from_pt=True` to convert a checkpoint from PyTorch to TensorFlow:
+체크포인트를 PyTorch에서 TensorFlow로 변환하려면 `from_pt=True`를 지정하세요:
 
 ```py
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
 ```
 
-Then you can save your new TensorFlow model with it's new checkpoint:
+그런 다음 새로운 체크포인트와 함께 새로운 TensorFlow 모델을 저장할 수 있습니다:
 
 ```py
 >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </tf>
 <jax>
-If a model is available in Flax, you can also convert a checkpoint from PyTorch to Flax:
+Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트를 변환할 수도 있습니다:
 
 ```py
 >>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
@@ -108,19 +108,19 @@ If a model is available in Flax, you can also convert a checkpoint from PyTorch 
 </jax>
 </frameworkcontent>
 
-## Push a model during training
+## 훈련 중 모델 푸시하기[[push-a-model-during-training]]
 
 <frameworkcontent>
 <pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
-Sharing a model to the Hub is as simple as adding an extra parameter or callback. Remember from the [fine-tuning tutorial](training), the [`TrainingArguments`] class is where you specify hyperparameters and additional training options. One of these training options includes the ability to push a model directly to the Hub. Set `push_to_hub=True` in your [`TrainingArguments`]:
+모델을 허브에 공유하는 것은 추가 매개변수나 콜백을 추가하는 것만큼 간단합니다. [파인 튜닝 튜토리얼](training)에서 [`TrainingArguments`] 클래스는 하이퍼파라미터와 추가 훈련 옵션을 지정하는 곳이라는 것을 기억하세요. 이러한 훈련 옵션 중 하나는 모델을 허브로 직접 푸시하는 기능을 포함합니다. [`TrainingArguments`]에서 `push_to_hub=True`를 설정하세요:
 
 ```py
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
 ```
 
-Pass your training arguments as usual to [`Trainer`]:
+평소와 같이 훈련 인수를 [`Trainer`]에 전달합니다:
 
 ```py
 >>> trainer = Trainer(
@@ -132,18 +132,18 @@ Pass your training arguments as usual to [`Trainer`]:
 ... )
 ```
 
-After you fine-tune your model, call [`~transformers.Trainer.push_to_hub`] on [`Trainer`] to push the trained model to the Hub. 🤗 Transformers will even automatically add training hyperparameters, training results and framework versions to your model card!
+모델을 파인 튜닝한 후, [`Trainer`]에서 [`~transformers.Trainer.push_to_hub`]를 호출하여 훈련된 모델을 허브로 푸시하세요. 🤗 Transformers는 훈련 하이퍼파라미터, 훈련 결과 및 프레임워크 버전을 모델 카드에 자동으로 추가합니다!
 
 ```py
 >>> trainer.push_to_hub()
 ```
 </pt>
 <tf>
-Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`] function, add:
+['PushToHubCallback']을(를) 사용하여 모델을 허브에 공유합니다. ['PushToHubCallback'] 기능에서 다음을 추가하세요:
 
-- An output directory for your model.
-- A tokenizer.
-- The `hub_model_id`, which is your Hub username and model name.
+- 모델의 출력 작업 경로.
+- 토크나이저.
+- 허브 사용자 이름 및 모델 이름인 `hub_model_id`.
 
 ```py
 >>> from transformers import PushToHubCallback
@@ -153,7 +153,7 @@ Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`
 ... )
 ```
 
-Add the callback to [`fit`](https://keras.io/api/models/model_training_apis/), and 🤗 Transformers will push the trained model to the Hub:
+[`fit`](https://keras.io/api/models/model_training_apis/)에 콜백을 추가하고, 🤗 Transformers가 훈련된 모델을 허브로 푸시하세요:
 
 ```py
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
@@ -161,17 +161,17 @@ Add the callback to [`fit`](https://keras.io/api/models/model_training_apis/), a
 </tf>
 </frameworkcontent>
 
-## Use the `push_to_hub` function
+## `push_to_hub` 함수 사용하기[[use-the-pushtohub-function]]
 
-You can also call `push_to_hub` directly on your model to upload it to the Hub.
+모델에서 직접 `push_to_hub`를 호출하여 허브에 업로드할 수도 있습니다.
 
-Specify your model name in `push_to_hub`:
+`push_to_hub`에 모델 이름을 지정하세요:
 
 ```py
 >>> pt_model.push_to_hub("my-awesome-model")
 ```
 
-This creates a repository under your username with the model name `my-awesome-model`. Users can now load your model with the `from_pretrained` function:
+이렇게 하면 사용자 이름 아래에 모델 이름 `my-awesome-model`로 저장소가 생성됩니다. 이제 사용자는 `from_pretrained` 함수를 사용하여 모델을 가져올 수 있습니다:
 
 ```py
 >>> from transformers import AutoModel
@@ -179,50 +179,50 @@ This creates a repository under your username with the model name `my-awesome-mo
 >>> model = AutoModel.from_pretrained("your_username/my-awesome-model")
 ```
 
-If you belong to an organization and want to push your model under the organization name instead, just add it to the `repo_id`:
+조직에 속하고 모델을 조직 이름으로 대신 밀어넣으려면 `repo_id`에 추가하세요:
 
 ```py
 >>> pt_model.push_to_hub("my-awesome-org/my-awesome-model")
 ```
 
-The `push_to_hub` function can also be used to add other files to a model repository. For example, add a tokenizer to a model repository:
+`push_to_hub` 함수는 모델 저장소에 다른 파일을 추가하는 데에도 사용할 수 있습니다. 예를 들어 모델 저장소에 토크나이저를 추가할 수 있습니다:
 
 ```py
 >>> tokenizer.push_to_hub("my-awesome-model")
 ```
 
-Or perhaps you'd like to add the TensorFlow version of your fine-tuned PyTorch model:
+또는 파인 튜닝된 PyTorch 모델의 TensorFlow 버전을 추가할 수도 있습니다:
 
 ```py
 >>> tf_model.push_to_hub("my-awesome-model")
 ```
 
-Now when you navigate to the your Hugging Face profile, you should see your newly created model repository. Clicking on the **Files** tab will display all the files you've uploaded to the repository.
+이제 허깅 페이스 프로필로 이동하면, 새로 생성한 모델 저장소가 표시됩니다. **Files** 탭을 클릭하면 저장소에 업로드한 모든 파일이 표시됩니다.
 
-For more details on how to create and upload files to a repository, refer to the Hub documentation [here](https://huggingface.co/docs/hub/how-to-upstream).
+저장소에 파일을 만들고 업로드하는 방법에 대한 자세한 내용은 허브 설명서 [여기](https://huggingface.co/docs/hub/how-to-upstream)를 참조하세요.
 
-## Upload with the web interface
+## 웹 인터페이스로 업로드하기[[upload-with-the-web-interface]]
 
-Users who prefer a no-code approach are able to upload a model through the Hub's web interface. Visit [huggingface.co/new](https://huggingface.co/new) to create a new repository:
+코드 없는 접근 방식을 선호하는 사용자는 허브의 웹 인터페이스를 통해 모델을 업로드할 수 있습니다. [huggingface.co/new](https://huggingface.co/new)를 방문하여 새로운 저장소를 생성하세요:
 
 ![new_model_repo](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/new_model_repo.png)
 
-From here, add some information about your model:
+여기서 모델에 대한 몇 가지 정보를 추가하세요:
 
-- Select the **owner** of the repository. This can be yourself or any of the organizations you belong to.
-- Pick a name for your model, which will also be the repository name.
-- Choose whether your model is public or private.
-- Specify the license usage for your model.
+- 저장소의 **소유자**를 선택합니다. 이는 사용자 또는 사용자가 속한 조직일 수 있습니다.
+- 저장소 이름이 될 모델의 이름을 선택합니다.
+- 모델이 공개인지 비공개인지 선택합니다.
+- 모델의 라이센스 사용을 지정합니다.
 
-Now click on the **Files** tab and click on the **Add file** button to upload a new file to your repository. Then drag-and-drop a file to upload and add a commit message.
+이제 **Files** 탭을 클릭하고 **Add file** 버튼을 클릭하여 새로운 파일을 저장소에 업로드합니다. 그런 다음 업로드할 파일을 드래그 앤 드롭하고 커밋 메시지를 추가하세요.
 
 ![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
 
-## Add a model card
+## 모델 카드 추가하기[[add-a-model-card]]
 
-To make sure users understand your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. The model card is defined in the `README.md` file. You can add a model card by:
+사용자가 모델의 기능, 제한, 잠재적 편향 및 윤리적 고려 사항을 이해할 수 있도록 저장소에 모델 카드를 추가하세요. 모델 카드는 `README.md` 파일에 정의되어 있습니다. 다음 방법으로 모델 카드를 추가할 수 있습니다:
 
-* Manually creating and uploading a `README.md` file.
-* Clicking on the **Edit model card** button in your model repository.
+* `README.md` 파일을 수동으로 생성하여 업로드합니다.
+* 모델 저장소에서 **Edit model card** 버튼을 클릭합니다.
 
-Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/models-cards).
+모델 카드에 포함할 정보 유형에 대한 좋은 예는 DistilBert [모델 카드](https://huggingface.co/distilbert-base-uncased)를 참조하세요. 모델의 탄소 발자국이나 위젯 예시 등 `README.md` 파일에서 제어할 수 있는 다른 옵션에 대한 자세한 내용은 [여기](https://huggingface.co/docs/hub/models-cards) 문서를 참조하세요.
