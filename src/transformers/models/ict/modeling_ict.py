@@ -281,6 +281,7 @@ class ICTPretrainedModel(PreTrainedModel):
         if isinstance(module, (ICTTransformerModel, ICTGuidedUpsampler)):
             module.gradient_checkpointing = value
 
+
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class ICTTransformerModel(ICTPretrainedModel):
     config_class = ICTTransformerConfig
@@ -358,6 +359,7 @@ class ICTResnetBlock(nn.Module):
     """
     ResNet block without the final ReLU (https://torch.ch/blog/2016/02/04/resnets.html).
     """
+
     def __init__(self):
         super().__init__()
         self.conv_block = nn.Sequential(

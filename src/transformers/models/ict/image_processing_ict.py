@@ -68,8 +68,8 @@ class ICTImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
-            Whether to color quantize the image. Can be overridden by the `do_color_quantize` parameter in the `preprocess`
-            method.
+            Whether to color quantize the image. Can be overridden by the `do_color_quantize` parameter in the
+            `preprocess` method.
         clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
             Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_color_quantize`
             is set to `True`.
@@ -196,16 +196,16 @@ class ICTImageProcessor(BaseImageProcessor):
 
     def color_quantize(self, image: np.ndarray, clusters: Optional[np.ndarray] = None):
         """
-        Reduce the dimension by using an extra visual vocabulary with spatial size num_clusters × 3, which was generated using
-        k-means clustered centers of the ImageNet RGB pixel spaces.
+        Reduce the dimension by using an extra visual vocabulary with spatial size num_clusters × 3, which was
+        generated using k-means clustered centers of the ImageNet RGB pixel spaces.
 
         Args:
             image (`np.ndarray`):
                 Image to reduce dimensions.
 
         Returns:
-            `np.ndarray`: The image with reduced dimension of shape `[input_height * input_width]` where
-            each value corresponds to the index of clusters.
+            `np.ndarray`: The image with reduced dimension of shape `[input_height * input_width]` where each value
+            corresponds to the index of clusters.
         """
 
         image = np.array(image).reshape((-1, 3))
@@ -258,8 +258,8 @@ class ICTImageProcessor(BaseImageProcessor):
             do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
                 Whether to color quantize the image.
             clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
-                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if `do_color_quantize`
-                is set to `True`.
+                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
+                `do_color_quantize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
