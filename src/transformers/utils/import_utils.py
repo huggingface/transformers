@@ -402,15 +402,13 @@ if _torch_available:
         TORCH_FX_REQUIRED_VERSION.minor,
     )
 
-_peft_available = importlib.util.find_spec("peft") is not None
-
 
 def is_torch_fx_available():
     return _torch_fx_available
 
 
 def is_peft_available():
-    return _peft_available
+    return importlib.util.find_spec("peft") is not None
 
 
 def is_bs4_available():
