@@ -68,6 +68,7 @@ class GPTNeoConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`].
+
             The dropout ratio for the hidden layer.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
