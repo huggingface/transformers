@@ -696,7 +696,6 @@ else:
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.nllb"].append("NllbTokenizer")
-    _import_structure["models.open_llama"].append("OpenLlamaTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
@@ -763,7 +762,6 @@ else:
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
-    _import_structure["models.open_llama"].append("OpenLlamaTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -4397,7 +4395,6 @@ if TYPE_CHECKING:
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.nllb import NllbTokenizer
-        from .models.open_llama import OpenLlamaTokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
@@ -4457,7 +4454,6 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
-        from .models.open_llama import OpenLlamaTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast

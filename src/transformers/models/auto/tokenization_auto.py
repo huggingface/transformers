@@ -244,13 +244,6 @@ else:
                 ),
             ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
-            (
-                "open-llama",
-                (
-                    "OpenLlamaTokenizer" if is_sentencepiece_available() else None,
-                    "OpenLlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("opt", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),

@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch Open-Llama model."""
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -37,7 +38,9 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    print("xformers is not installed correctly.")
+    warnings.warn(
+        "Xformers is not installed correctly. If you want to use memorry_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -165,7 +168,8 @@ class OpenLlamaMLP(nn.Module):
         self.dropout = nn.Dropout(dropout_prob)
 
     def forward(self, x):
-        return self.dropout(self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
+        out = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return self.dropout(out)
 
 
 class OpenLlamaAttention(nn.Module):
@@ -283,6 +287,7 @@ class OpenLlamaDecoderLayer(nn.Module):
         self.input_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -484,6 +489,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

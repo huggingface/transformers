@@ -21,17 +21,17 @@ import warnings
 
 import torch
 
-from transformers import OpenLlamaConfig, OpenLlamaForCausalLM, OpenLlamaTokenizer
+from transformers import LlamaTokenizer, OpenLlamaConfig, OpenLlamaForCausalLM
 
 
 try:
-    from transformers import OpenLlamaTokenizerFast
+    from transformers import LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    OpenLlamaTokenizerFast = None
+    LlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -44,10 +44,10 @@ python src/transformers/models/open_llama/convert_open_llama_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import OpenLlamaForCausalLM, OpenLlamaTokenizer
+from transformers import OpenLlamaForCausalLM, LlamaTokenizer
 
 model = OpenLlamaForCausalLM.from_pretrained("/output/path")
-tokenizer = OpenLlamaTokenizer.from_pretrained("/output/path")
+tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -243,7 +243,7 @@ def write_model(model_path, input_base_path, model_size):
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = OpenLlamaTokenizer if OpenLlamaTokenizerFast is None else OpenLlamaTokenizerFast
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)
