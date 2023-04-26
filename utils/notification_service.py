@@ -423,8 +423,11 @@ class Message:
                 artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
 
-            # The last run doesn't produce `test_failure_tables` (by some issues or have no model failure at all)
-            if len(prev_tables) > 0:
+            # if the last run produces artifact named `test_failure_tables`
+            if (
+                "test_failure_tables" in prev_tables
+                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+            ):
                 # Compute the difference of the previous/current (model failure) table
                 prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
@@ -724,7 +727,7 @@ def retrieve_available_artifacts():
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
         elif artifact_name.startswith("multi-gpu"):
-            artifact_name = directory[len("multi-gpu") + 1 :]
+            artifact_name = artifact_name[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
@@ -982,12 +985,13 @@ if __name__ == "__main__":
             continue
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
+            # Link to the GitHub Action job
+            job_name = key
             if artifact_path["gpu"] is not None:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu)"
-                )
-            else:
-                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
+                job_name = f"{key} ({artifact_path['gpu']}-gpu)"
+            if job_name_prefix:
+                job_name = f"{job_name_prefix} / {job_name}"
+            additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
 
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
