@@ -21,6 +21,9 @@ class ImageCaptioningTool(PipelineTool):
     )
     default_checkpoint = "Salesforce/blip-image-captioning-base"
 
+    inputs = ['image']
+    outputs = ['text']
+
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
             raise ValueError("Pillow must be installed to use the ImageCaptioningTool.")
