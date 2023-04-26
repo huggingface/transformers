@@ -44,11 +44,11 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
-    config.option.doctest_glob = ["*.mdx"]
-    
+
+
 def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared
-    
+
     pytest_addoption_shared(parser)
 
 

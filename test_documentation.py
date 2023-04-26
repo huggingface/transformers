@@ -45,9 +45,11 @@ import doctest
 import os
 import re
 
-def skip_cuda_tests(string, run_cuda_test = False):
+def remove_cuda_tests(string):
     # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
+    
+    codeblock_pattern = r"(```python\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
     
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
     for i,c in enumerate(codeblocks):
@@ -61,6 +63,7 @@ def skip_cuda_tests(string, run_cuda_test = False):
                     finale_block += example + ' # doctest: +SKIP\n'
             codeblocks[i] = finale_block[:-1]
     codeblocks = "".join(codeblocks)
+    print(codeblocks)
     return codeblocks
 
     
@@ -84,9 +87,10 @@ class HfDocTestParser(doctest.DocTestParser):
           )*)
         ''', re.MULTILINE | re.VERBOSE)
     
-    def parse(self, string, name='<string>'):
-        processed_text = skip_cuda_tests(string)
-        return super().parse(processed_text)
+    def parse(self, string, name='<string>', skip_cuda_tests = False):
+        if skip_cuda_tests:
+            string = remove_cuda_tests(string)
+        return super().parse(string)
 
 
 class HfDoctestModule(Module):
@@ -163,3 +167,30 @@ class HfDoctestModule(Module):
                     self, name=test.name, runner=runner, dtest=test
                 )
 
+def get_tests_to_run(files_to_test_path):
+    """
+    Util to run test if the file is called
+    """
+    flags = doctest.REPORT_NDIFF 
+    parser = HfDocTestParser()
+    with open(files_to_test_path, "r") as f:
+        content = f.read().splitlines()
+    test_cases = []    
+    for file_name in content:
+        if os.path.isdir(file_name):
+            continue
+        with open(file_name, "r") as f:
+            text = f.read()
+        test_to_run = parser.get_doctest(text, {}, file_name, None, None)
+        test_cases.append(doctest.DocFileCase(test_to_run, optionflags=flags))
+    return test_cases
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--files", action = "store", default=None, type = str, help="The file(s) or folder(s) to run the doctests on.")
+    args = parser.parse_args()
+    tests = get_tests_to_run(args.files, temp_dir = "temp")
+    runner = doctest.DocTestRunner()
+    runner.run(tests)
