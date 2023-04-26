@@ -122,6 +122,7 @@ from .import_utils import (
     is_ninja_available,
     is_onnx_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_protobuf_available,
     is_psutil_available,

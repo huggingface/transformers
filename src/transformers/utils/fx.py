@@ -28,6 +28,7 @@ import torch
 from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx._compatibility import compatibility
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -53,8 +54,12 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_peft_available, is_torch_fx_available
 from ..utils.versions import importlib_metadata
+
+
+if is_peft_available():
+    from peft import PeftModel
 
 
 logger = logging.get_logger(__name__)
@@ -164,6 +169,8 @@ _SPECIAL_SUPPORTED_MODELS = [
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
+    "PeftModelForCausalLM",
+    "PeftModelForSeq2SeqLM"
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -724,6 +731,7 @@ class HFTracer(Tracer):
         "clamp",
         "finfo",
     ]
+    supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
@@ -794,6 +802,8 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
+                "PeftModelForCausalLM",
+                "PeftModelForSeq2SeqLM",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
@@ -1044,7 +1054,9 @@ class HFTracer(Tracer):
                 continue
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
+                "_deserialize_graph_module"
+            ):
                 inputs.update(self._generate_dummy_input(root, input_name, shape))
             else:
                 raise RuntimeError(
@@ -1156,6 +1168,17 @@ class HFTracer(Tracer):
         return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
             m, module_qualified_name
         )
+
+    @compatibility(is_backward_compatible=True)
+    def keys(self, obj: "Proxy") -> Any:
+        """Called when a proxy object is has the keys() method called.
+        This is what happens when ** is called on a proxy. This should return an iterator if ** is supposed to work in
+        your custom tracer.
+        """
+        attribute = HFAttribute(obj, "keys")()
+        if obj.node.target == "**kwargs":
+            return attribute._metadata
+        return attribute
 
 
 def get_concrete_args(model: nn.Module, input_names: List[str]):
