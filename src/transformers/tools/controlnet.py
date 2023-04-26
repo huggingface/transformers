@@ -42,7 +42,7 @@ class ControlNetTool(Tool):
         if not is_vision_available():
             raise ImportError('Pillow should be installed in order to use the StableDiffusionTool.')
         if not is_opencv_available():
-            raise ImportError('CV2 should be installed in order to use the StableDiffusionTool.')
+            raise ImportError('opencv should be installed in order to use the StableDiffusionTool.')
 
         super().__init__()
 

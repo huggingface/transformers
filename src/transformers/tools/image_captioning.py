@@ -5,10 +5,8 @@ from ..utils import is_vision_available
 from .base import PipelineTool, RemoteTool
 
 
-try:
-    from PIL.Image import Image
-except ImportError:
-    pass
+if is_vision_available():
+    from PIL import Image
 
 
 class ImageCaptioningTool(PipelineTool):

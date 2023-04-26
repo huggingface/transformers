@@ -194,11 +194,6 @@ except importlib_metadata.PackageNotFoundError:
 
 
 _opencv_available = importlib.util.find_spec("cv2") is not None
-try:
-    _opencv_version = importlib_metadata.version("cv2")
-    logger.debug(f"Successfully imported opencv version {_opencv_version}")
-except importlib_metadata.PackageNotFoundError:
-    _opencv_available = False
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
