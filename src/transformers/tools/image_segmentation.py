@@ -5,10 +5,8 @@ from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_a
 from .base import PipelineTool
 
 
-try:
-    from PIL.Image import Image
-except ImportError:
-    pass
+if is_vision_available():
+    from PIL import Image
 
 
 class ImageSegmentationTool(PipelineTool):
@@ -23,7 +21,7 @@ class ImageSegmentationTool(PipelineTool):
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
-            raise ValueError("Pillow must be installed to use the ImageCaptioningTool.")
+            raise ImportError('Pillow should be installed in order to use the StableDiffusionTool.')
 
         super().__init__(*args, **kwargs)
 
