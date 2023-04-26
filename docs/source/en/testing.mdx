@@ -187,6 +187,8 @@ RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 
 ### Run documentation tests 
 
+This is way simpler now! 
+
 In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
 As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
 
@@ -212,19 +214,9 @@ Example:
     ```"""
 
 ```
-3 steps are required to debug the docstring examples: 
-1. In order to properly run the test, **an extra line has to be added** at the end of the docstring. This can be automatically done on any file using: 
-```bash 
-python utils/prepare_for_doc_test.py <path_to_file_or_dir>
-```
-
-2. Then, you can use the following line to automatically test every docstring example in the desired file: 
+Just run the following line to automatically test every docstring example in the desired file: 
 ```bash 
 pytest --doctest-modules <path_to_file_or_dir>
-```
-3. Once you are done debugging, you need to remove the extra line added in step **1.** by running the following: 
-```bash 
-python utils/prepare_for_doc_test.py <path_to_file_or_dir> --remove_new_line
 ```
 
 ### Run only modified tests
