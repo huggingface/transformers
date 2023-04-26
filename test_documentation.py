@@ -52,6 +52,11 @@ def replace_ignore_result(string):
     """Replace all instances of '# doctest: +IGNORE_RESULT' with '# doctest: +SKIP'."""
     return re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
 
+def skip_cuda_tests(string):
+    # 1. Split in codeblocks
+    # 2. if "cuda" in a codeblock, mark each examples as skip, or the whole test as skipped
+    # 3. Return the output string
+    return string
 
          
 class HfDocTestParser(doctest.DocTestParser):
@@ -76,6 +81,7 @@ class HfDocTestParser(doctest.DocTestParser):
     
     def parse(self, string, name='<string>'):
         processed_text = replace_ignore_result(string)
+        processed_text = skip_cuda_tests(string)
         return super().parse(processed_text)
 
 
@@ -151,12 +157,12 @@ class HfDoctestModule(Module):
         )
 
         for test in finder.find(module, module.__name__):
-            if test.examples:  # skip empty doctests
+            if test.examples:  # skip empty doctests and cuda 
                 yield DoctestItem.from_parent(
                     self, name=test.name, runner=runner, dtest=test
                 )
 
-
+    
 def get_tests_to_run(files_to_test_path):
     """
     Util to run test if the file is called
