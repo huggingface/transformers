@@ -1565,12 +1565,13 @@ class Trainer:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
             if is_torch_neuroncore_available():
                 return model
-            model = nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
-                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
-                **kwargs,
-            )
+            if any(p.requires_grad for p in model.parameters()):
+                model = nn.parallel.DistributedDataParallel(
+                    model,
+                    device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                    output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
+                    **kwargs,
+                )
 
         # torch.compile() needs to be called after wrapping the model with FSDP or DDP
         # to ensure that it accounts for the graph breaks required by those wrappers
@@ -1920,6 +1921,7 @@ class Trainer:
                     (total_batched_samples % args.gradient_accumulation_steps != 0)
                     and args.parallel_mode == ParallelMode.DISTRIBUTED
                     and args._no_sync_in_gradient_accumulation
+                    and hasattr(model, "no_sync")
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
@@ -3182,8 +3184,6 @@ class Trainer:
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
@@ -3194,10 +3194,13 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
+                logits = self._nested_gather(logits)
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+            if labels is not None:
+                labels = self._nested_gather(labels)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
