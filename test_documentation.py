@@ -44,21 +44,7 @@ import argparse
 import doctest
 import os
 import re
-from transformers.testing_utils import parse_flag_from_env
 
-
-
-def replace_ignore_result(string):
-    """Replace all instances of '# doctest: +IGNORE_RESULT' with '# doctest: +SKIP'."""
-    return re.sub(r'#\s*doctest:\s*\+IGNORE_RESULT', '# doctest: +SKIP', string)
-
-
-# (```python\s*\n\s*>>> )((?:.*?\n)*?.*?(?:(?<!```)(cuda|```)))((?:.*?\n)*?.*?```)
-
-# replace = r'\1import pytest; pytest.skip("Test used `cuda`, skipping", allow_module_level=True);\2'
-# new_string = re.sub(codeblock_pattern, replace, string, flags=re.MULTILINE | re.DOTALL)
-# 3. Return the output string
-    
 def skip_cuda_tests(string, run_cuda_test = False):
     # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
@@ -101,7 +87,6 @@ class HfDocTestParser(doctest.DocTestParser):
         ''', re.MULTILINE | re.VERBOSE)
     
     def parse(self, string, name='<string>'):
-        processed_text = replace_ignore_result(string)
         processed_text = skip_cuda_tests(string)
         return super().parse(processed_text)
 
