@@ -1697,6 +1697,7 @@ else:
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoXForCausalLM",
             "GPTNeoXForSequenceClassification",
+            "GPTNeoXForTokenClassification",
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
