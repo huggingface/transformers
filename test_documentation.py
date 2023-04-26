@@ -168,34 +168,3 @@ class HfDoctestModule(Module):
                     self, name=test.name, runner=runner, dtest=test
                 )
 
-    
-def get_tests_to_run(files_to_test_path):
-    """
-    Util to run test if the file is called
-    """
-    flags = doctest.REPORT_NDIFF 
-    parser = HfDocTestParser()
-    with open(files_to_test_path, "r") as f:
-        content = f.read().splitlines()
-    test_cases = []    
-    for file_name in content:
-        if os.path.isdir(file_name):
-            continue
-        with open(file_name, "r") as f:
-            text = f.read()
-        test_to_run = parser.get_doctest(text, {}, file_name, None, None)
-        test_cases.append(doctest.DocFileCase(test_to_run, optionflags=flags))
-    return test_cases
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--files", action = "store", default=None, type = str, help="The file(s) or folder(s) to run the doctests on.")
-    args = parser.parse_args()
-    tests = get_tests_to_run(args.files, temp_dir = "temp")
-    runner = doctest.DocTestRunner()
-    runner.run(tests)
-
-
-
