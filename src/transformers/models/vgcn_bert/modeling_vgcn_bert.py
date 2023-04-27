@@ -114,7 +114,7 @@ class VocabGraphConvolution(nn.Module):
         super().__init__()
         self._check_wgraphs(wgraphs)
         self.wgraphs = nn.ParameterList(wgraphs)
-        self.gvocab_order_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
+        self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
             wgraph_id_to_tokenizer_id_maps
         )
 
@@ -122,14 +122,15 @@ class VocabGraphConvolution(nn.Module):
         self.out_dim = out_dim
 
         self.W_vh_list = nn.ParameterList()
+        self.W_vh_list._is_vgcn_weights = True
         for g in self.wgraphs:
             self.W_vh_list.append(nn.Parameter(torch.randn(g.shape[0], hid_dim)))
+            # self.W_vh_list.append(nn.Parameter(torch.ones(g.shape[0], hid_dim)))
 
         self.fc_hg = nn.Linear(hid_dim, out_dim)
+        self.fc_hg._is_vgcn_linear = True
         self.activation = get_activation(activation) if activation else None
         self.dropout = nn.Dropout(dropout_rate) if dropout_rate > 0 else None
-
-        self.reset_parameters()
 
     def set_transparent_parameters(self):
         for n, p in self.named_parameters():
@@ -140,24 +141,13 @@ class VocabGraphConvolution(nn.Module):
         # nn.init.constant_(self.fc_hg.bias, 0.0)
         self.fc_hg.bias.data.zero_()
 
-    def reset_parameters(self):
-        # TODO: move to _init_weights func
-        # for w in self.W_vh_list:
-        #     w.data.normal_(mean=0.0, std=0.02)  # config.initializer_range
-        for n, p in self.named_parameters():
-            if n.startswith("W"):
-                p.data.normal_(mean=0.0, std=0.02)
-                # nn.init.kaiming_uniform_(p, a=math.sqrt(5))
-                # stdv = 1. / math.sqrt(p.size(1))
-                # init.uniform_(p, -stdv, stdv)
-
     def _prepare_inverted_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
         assert all([list(m.keys())[-1] == len(m) - 1 for m in wgraph_id_to_tokenizer_id_maps])
         # self.tokenizer_id_to_wgraph_id_maps = [dict(sorted(m.items())) for m in tokenizer_id_to_wgraph_id_maps]
         # self.tokenizer_id_to_wgraph_id_arrays: List[torch.LongTensor] = tokenizer_id_to_wgraph_id_arrays
         # self.max_tokenizer_id_for_wgraph_list = [len(m) for m in self.tokenizer_id_to_wgraph_id_arrays]
-        gvocab_order_tokenizer_id_arrays = nn.ParameterList(
+        gvoc_ordered_tokenizer_id_arrays = nn.ParameterList(
             [
                 nn.Parameter(torch.LongTensor(list(m.values())), requires_grad=False)
                 for m in wgraph_id_to_tokenizer_id_maps
@@ -174,7 +164,7 @@ class VocabGraphConvolution(nn.Module):
             for graph_id, tok_id in m.items():
                 t[tok_id] = graph_id
 
-        return gvocab_order_tokenizer_id_arrays, tokenizer_id_to_wgraph_id_arrays
+        return gvoc_ordered_tokenizer_id_arrays, tokenizer_id_to_wgraph_id_arrays
 
     def _check_wgraphs(self, wgraphs: list) -> bool:
         for g in wgraphs:
@@ -245,7 +235,7 @@ class VocabGraphConvolution(nn.Module):
         # G_embedding=(act(V1*A1_sub*W1_vh)+act(V2*A2_sub*W2_vh)）*W_hg
         fused_H = torch.zeros((batch_size, word_emb_dim, self.hid_dim), device=device)
         for gv_ids, g, gx_ids, W_vh in zip(  # , position_in_gvocab_ev
-            self.gvocab_order_tokenizer_id_arrays,
+            self.gvoc_ordered_tokenizer_id_arrays,
             self.wgraphs,
             gx_ids_list,
             self.W_vh_list,
@@ -623,9 +613,15 @@ class VGCNBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
+            if getattr(module, "_is_vgcn_linear", False):
+                # module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                module.weight.data.fill_(1.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            else:
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                if module.bias is not None:
+                    module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
@@ -633,6 +629,12 @@ class VGCNBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.ParameterList):
+            if getattr(module, "_is_vgcn_weights", False):
+                for p in module:
+                    # p.data.normal_(mean=0.0, std=self.config.initializer_range)
+                    # nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+                    nn.init.constant_(p, 1.0)
 
 
 VGCNBERT_START_DOCSTRING = r"""
