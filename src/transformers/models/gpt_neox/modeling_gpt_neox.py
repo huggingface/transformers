@@ -886,13 +886,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.gpt_neox = GPTNeoXModel(config)
-        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
-            classifier_dropout = config.classifier_dropout
-        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
-            classifier_dropout = config.hidden_dropout
-        else:
-            classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
+        self.dropout = nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
