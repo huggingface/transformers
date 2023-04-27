@@ -59,14 +59,9 @@ def preprocess_string(string, skip_cuda_tests):
             codeblocks[i] = finale_block
             
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
-            finale_block = ""
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
                 continue
-            lines = codeblock.split("\n")
-            for example in lines:
-                if len(example)>0 and "```" not in example:
-                    finale_block += example + ' # doctest: +SKIP\n'
-            codeblocks[i] = finale_block[:-1]
+            codeblocks[i-1] += 'from pytest import skip;skip("Codeblock line xxx in xxxx has cuda involved. Skipping");'
     codeblocks = "".join(codeblocks)
     return codeblocks
 
