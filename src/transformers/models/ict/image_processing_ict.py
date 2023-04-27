@@ -18,7 +18,6 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
@@ -103,11 +102,7 @@ class IctImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_color_quantize = do_color_quantize
-        self.clusters = np.array(clusters) if clusters is not None else self.get_image_net_clusters()
-
-    def get_image_net_clusters(self):
-        kmeans_centers = np.load(hf_hub_download(repo_id="sheonhan/ict-imagenet-256", filename="kmeans_centers.npy"))
-        return np.rint(127.5 * (kmeans_centers + 1.0))
+        self.clusters = clusters
 
     def resize(
         self,
@@ -317,8 +312,9 @@ class IctImageProcessor(BaseImageProcessor):
 
         # Copied from transformers.models.imagegpt.image_processing_imagegpt.preprocess
         if do_color_quantize:
-            images = [to_channel_dimension_format(image, data_format) for image in images]
-            # reshape each image to image_size
+            images = [to_channel_dimension_format(image, ChannelDimension.FIRST) for image in images]
+            # flatten images to (batch_size, height * width)
+            clusters = np.array(clusters)
             images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]

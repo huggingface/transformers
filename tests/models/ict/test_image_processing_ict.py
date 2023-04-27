@@ -13,14 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import json
 import os
 import tempfile
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
+
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
@@ -65,6 +67,8 @@ class IctImageProcessingTester(unittest.TestCase):
 
     def prepare_image_processor_dict(self):
         return {
+            # here we create 2 clusters for the sake of simplicity
+            "clusters": np.asarray([[241., 212., 177.], [ 50., 125., 197.]]),
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_normalize": self.do_normalize,
@@ -87,6 +91,7 @@ class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "clusters"))
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -115,6 +120,15 @@ class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
             else:
                 self.assertEqual(image_processor_first[key], value)
 
+    def test_image_processor_to_json_string(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        obj = json.loads(image_processor.to_json_string())
+        for key, value in self.image_processor_dict.items():
+            if key == "clusters":
+                self.assertTrue(np.array_equal(value, obj[key]))
+            else:
+                self.assertEqual(obj[key], value)
+                
     def test_image_processor_from_and_save_pretrained(self):
         image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
@@ -215,3 +229,40 @@ class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
                 self.image_processor_tester.size["height"] * self.image_processor_tester.size["width"],
             ),
         )
+
+def prepare_images():
+    dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test")
+
+    image1 = Image.open(dataset[4]["file"])
+    image2 = Image.open(dataset[5]["file"])
+
+    images = [image1, image2]
+
+    return images
+
+@require_vision
+@require_torch
+class IctImageProcessorIntegrationTest(unittest.TestCase):
+    @slow
+    def test_image(self):
+        image_processing = IctImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+
+        images = prepare_images()
+
+        # test non-batched
+        encoding = image_processing(images[0], return_tensors="pt")
+
+        self.assertIsInstance(encoding.pixel_values, torch.LongTensor)
+        self.assertEqual(encoding.pixel_values.shape, (1, 1024))
+
+        expected_slice = [291, 145, 48]
+        self.assertEqual(encoding.pixel_values[0, :3].tolist(), expected_slice)
+
+        # test batched
+        encoding = image_processing(images, return_tensors="pt")
+
+        self.assertIsInstance(encoding.pixel_values, torch.LongTensor)
+        self.assertEqual(encoding.pixel_values.shape, (2, 1024))
+
+        expected_slice = [228, 315, 375]
+        self.assertEqual(encoding.pixel_values[1, -3:].tolist(), expected_slice)
