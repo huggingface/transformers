@@ -51,10 +51,11 @@ def preprocess_string(string, skip_cuda_tests):
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
     for i,codeblock in enumerate(codeblocks):
         if ">>>" in codeblock and "```py" in codeblock:
-            # let's add everything we need here
+            # let's add everything we need here, but the DATASET_VERBOSITY should work.
             finale_block = codeblock
             finale_block += "import transformers;transformers.logging.set_verbosity_error();"
-            finale_block += "import datasets;datasets.logging.set_verbosity_error();datasets.logging.disable_default_handler();"
+            finale_block += "import datasets;datasets.logging.set_verbosity_error();"
+            finale_block += "import huggingface_hub;huggingface_hub.logging.set_verbosity_error();"
             codeblocks[i] = finale_block
             
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:

@@ -407,6 +407,7 @@ repo_utils_job = CircleCIJob(
 
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
+    additional_env={"TRANSFORMERS_VERBOSITY":"error", "DATASETS_VERBOSITY":"error"},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade pip",
