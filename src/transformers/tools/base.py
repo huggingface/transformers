@@ -1,12 +1,17 @@
+import importlib
+import json
 from typing import List
 
 import torch
 from accelerate.utils import send_to_device
 from huggingface_hub import InferenceApi
 
-import transformers
-
+from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
+from ..utils import CONFIG_NAME, cached_file
+
+
+TOOL_CONFIG_FILE = "tool_config.json"
 
 
 class Tool:
@@ -86,6 +91,7 @@ class PipelineTool(Tool):
         device=None,
         device_map=None,
         model_kwargs=None,
+        token=None,
         **hub_kwargs,
     ):
         if model is None:
@@ -104,6 +110,7 @@ class PipelineTool(Tool):
         if device_map is not None:
             self.model_kwargs["device_map"] = device_map
         self.hub_kwargs = hub_kwargs
+        self.hub_kwargs["use_auth_token"] = token
 
         self.is_initialized = False
         self.post_init()
@@ -184,27 +191,32 @@ def get_default_device():
 
 
 TASK_MAPPING = {
-    "generative_qa": "GenerativeQuestionAnsweringTool",
-    "image_alteration": "ControlNetTool",
-    "image_captioning": "ImageCaptioningTool",
-    "image_generation": "StableDiffusionTool",
-    "image_segmentation": "ImageSegmentationTool",
-    "language_identification": "LanguageIdenticationTool",
-    "speech_to_text": "SpeechToTextTool",
-    "text_classification": "TextClassificationTool",
-    "text_to_speech": "TextToSpeechTool",
+    "generative-qa": "GenerativeQuestionAnsweringTool",
+    "image-alteration": "ControlNetTool",
+    "image-captioning": "ImageCaptioningTool",
+    "image-generation": "StableDiffusionTool",
+    "image-segmentation": "ImageSegmentationTool",
+    "language-identification": "LanguageIdenticationTool",
+    "speech-to-text": "SpeechToTextTool",
+    "text-classification": "TextClassificationTool",
+    "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
 }
 
 
 def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs):
-    task_or_repo_id = task_or_repo_id.replace("-", "_")
+    # Make sure to keep this list updated with the doc of tool_kwargs (when it exists lol)
+    hub_kwargs_names = ["cache_dir", "force_download", "resume_download", "proxies", "revision", "local_files_only"]
+    hub_kwargs = {k: v for k, v in tool_kwargs if k in hub_kwargs_names}
+
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         if remote:
             tool_class_name = f"Remote{tool_class_name}"
         try:
-            tool_class = getattr(transformers.tools, tool_class_name)
+            main_module = importlib.import_module("transformers")
+            tools_module = main_module.tools
+            tool_class = getattr(tools_module, tool_class_name)
         except ImportError:
             if remote:
                 raise NotImplementedError(
@@ -212,8 +224,51 @@ def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs)
                 )
             raise
     else:
-        repo_id = task_or_repo_id
-        # TODO: code on the hub for the tool
-        raise NotImplementedError("Support for code on the Hub is coming soon!")
+        if repo_id is None:
+            repo_id = task_or_repo_id
+            task = None
+        else:
+            task = task_or_repo_id
+
+        # Try to get the tool config first.
+        resolved_config_file = cached_file(
+            repo_id,
+            TOOL_CONFIG_FILE,
+            use_auth_token=token,
+            **hub_kwargs,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
+        if resolved_config_file is None:
+            resolved_config_file = cached_file(
+                repo_id,
+                CONFIG_NAME,
+                use_auth_token=token,
+                **hub_kwargs,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        if resolved_config_file is None:
+            raise EnvironmentError(
+                f"{repo_id} does not appear to provide a valid configuration in `tool_config.json` or `config.json`."
+            )
+
+        with open(resolved_config_file, encoding="utf-8") as reader:
+            config = json.load(reader)
+
+        if "custom_tools" not in config:
+            raise EnvironmentError(
+                f"{repo_id} does not provide a mapping to custom tools in its configuration (either in "
+                "`tool_config.json` or `config.json`."
+            )
+        custom_tools = config["custom_tools"]
+        if task is None:
+            if len(custom_tools) == 1:
+                task = list(custom_tools.keys())[0]
+            else:
+                tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
+                raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
+
+        tool_class = get_class_from_dynamic_module(custom_tools[task], repo_id, use_auth_token=token, **hub_kwargs)
 
     return tool_class(repo_id, token=token, **tool_kwargs)
