@@ -42,8 +42,8 @@
   - sections:
     - local: in_translation
       title: (번역중) Use tokenizers from 🤗 Tokenizers
-    - local: in_translation
-      title: (번역중) Inference for multilingual models
+    - local: multilingual
+      title: 다국어 모델 추론하기
     - local: in_translation
       title: (번역중) Text generation strategies
     - sections:
