@@ -51,6 +51,7 @@ class CircleCIJob:
     resource_class: Optional[str] = "xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
+    timeout:int = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
@@ -161,7 +162,10 @@ class CircleCIJob:
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
             steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
 
-            test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command = ""
+            if self.timeout:
+                test_command = f"timeout {self.timeout} "
+            test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
@@ -428,7 +432,8 @@ doc_test_job = CircleCIJob(
         # that are modified by this pr. *py files
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","rAs":None, "durations": 1200, "dist":"loadfile"}, # max duration of 20min
+    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","rAs":None, "dist":"loadfile"}, # max duration of 20min
+    timout=1200,
     pytest_num_workers=1,
 
 )
