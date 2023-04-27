@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -68,7 +67,7 @@ class IctImageProcessingTester(unittest.TestCase):
     def prepare_image_processor_dict(self):
         return {
             # here we create 2 clusters for the sake of simplicity
-            "clusters": np.asarray([[241., 212., 177.], [ 50., 125., 197.]]),
+            "clusters": np.asarray([[241.0, 212.0, 177.0], [50.0, 125.0, 197.0]]),
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_normalize": self.do_normalize,
@@ -128,7 +127,7 @@ class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
                 self.assertTrue(np.array_equal(value, obj[key]))
             else:
                 self.assertEqual(obj[key], value)
-                
+
     def test_image_processor_from_and_save_pretrained(self):
         image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
@@ -230,6 +229,7 @@ class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
             ),
         )
 
+
 def prepare_images():
     dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test")
 
@@ -239,6 +239,7 @@ def prepare_images():
     images = [image1, image2]
 
     return images
+
 
 @require_vision
 @require_torch

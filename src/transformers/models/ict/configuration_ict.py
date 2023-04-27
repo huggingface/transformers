@@ -16,7 +16,6 @@
 """ ICT model configuration"""
 
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,11 +27,12 @@ ICT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "sheonhan/ict-imagenet-256": "https://huggingface.co/sheonhan/ict-imagenet-256/resolve/main/config.json",
 }
 
+
 class IctConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`IctModel`]. It is used to instantiate an
-    ICT model according to the specified arguments, defining the model architecture. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the [ICT model trained with the ImageNet
+    This is the configuration class to store the configuration of a [`IctModel`]. It is used to instantiate an ICT
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the [ICT model trained with the ImageNet
     dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
