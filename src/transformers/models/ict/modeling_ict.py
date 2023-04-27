@@ -34,7 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_ict import IctConfig, IctGuidedUpsamplerConfig, IctTransformerConfig
+from .configuration_ict import IctConfig
 
 
 logger = logging.get_logger(__name__)
@@ -94,7 +94,7 @@ class IctEmbeddings(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
 class IctSelfAttention(nn.Module):
-    def __init__(self, config: IctTransformerConfig) -> None:
+    def __init__(self, config: IctConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -284,10 +284,10 @@ class IctPretrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
 class IctTransformerModel(IctPretrainedModel):
-    config_class = IctTransformerConfig
+    config_class = IctConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: IctTransformerConfig, use_mask_token: bool = False):
+    def __init__(self, config: IctConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
@@ -641,7 +641,7 @@ class VGG19(torch.nn.Module):
 
 
 class IctGuidedUpsampler(IctPretrainedModel):
-    def __init__(self, config: IctGuidedUpsamplerConfig):
+    def __init__(self, config: IctConfig):
         super().__init__(config)
 
         self.generator = IctInpaintGenerator(config)
@@ -696,21 +696,9 @@ class IctModel(IctPretrainedModel):
     def __init__(self, config: IctConfig, use_mask_token: bool = True):
         super().__init__(config)
 
-        if not isinstance(config.transformer_config, IctTransformerConfig):
-            raise ValueError(
-                "config.transformer_config is expected to be of type IctTransformerConfig but is of type"
-                f" {type(config.transformer_config)}."
-            )
-
-        if not isinstance(config.guided_upsampler_config, IctGuidedUpsamplerConfig):
-            raise ValueError(
-                "config.guided_upsampler_config is expected to be of type IctGuidedUpsamplerConfig but is of type"
-                f" {type(config.guided_upsampler_config)}."
-            )
-
         self.config = config
-        self.transformer = IctTransformerModel(config.transformer_config, use_mask_token=use_mask_token)
-        self.guided_upsampler = IctGuidedUpsampler(config.guided_upsampler_config)
+        self.transformer = IctTransformerModel(config, use_mask_token=use_mask_token)
+        self.guided_upsampler = IctGuidedUpsampler(config)
 
         # Initialize weights and apply final processing
         self.post_init()
