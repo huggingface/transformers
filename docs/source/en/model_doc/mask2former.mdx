@@ -30,7 +30,7 @@ The abstract from the video instance segmentation paper is the following:
 Tips:
 - Mask2Former uses the same preprocessing and postprocessing steps as [MaskFormer](maskformer). Use [`Mask2FormerImageProcessor`] or [`AutoImageProcessor`] to prepare images and optional targets for the model.
 - To get the final segmentation, depending on the task, you can call [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`]. All three tasks can be solved using [`Mask2FormerForUniversalSegmentation`] output, panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of the target object/s (e.g. sky) together.
-- To get the final segmentation result for video instance segmentation task, you can call [`~Mask2FormerImageProcessor.post_process_video_instance_segmentation`].
+- To get the final segmentation result for video instance segmentation task, you can call [`~Mask2FormerImageProcessor.post_process_instance_segmentation`].
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mask2former_architecture.jpg" alt="drawing" width="600"/>
 

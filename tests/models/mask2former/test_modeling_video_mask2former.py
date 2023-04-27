@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,14 +41,11 @@ if is_torch_available():
 
     from transformers import VideoMask2FormerForVideoSegmentation, VideoMask2FormerModel
 
-    if is_vision_available():
-        from transformers import VideoMask2FormerImageProcessor
-
 if is_torchvision_available():
     import torchvision
 
-if is_vision_available():
-    pass
+if is_vision_available() and is_torch_available():
+    from transformers import VideoMask2FormerImageProcessor
 
 
 class VideoVideoMask2FormerModelTester:
@@ -78,27 +75,20 @@ class VideoVideoMask2FormerModelTester:
         self.mask_feature_size = hidden_dim
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
-            torch_device
-        )
-
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+        pixel_values = pixel_values.to(torch_device)
+        
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
-
-        mask_labels = [
-            (
-                torch.zeros([self.num_labels, self.batch_size, self.min_size, self.max_size], device=torch_device)
-                > 0.5
-            ).float()
-        ]
+        
+        mask_label = torch.zeros([self.num_labels, self.batch_size, self.min_size, self.max_size]) > 0.5
+        mask_labels = [mask_label.to(torch_device, torch.float32)
         class_labels = [(torch.zeros((self.num_labels), device=torch_device)).long()]
 
         config = self.get_config()
         return config, pixel_values, pixel_mask, mask_labels, class_labels
 
     def get_config(self):
-        config = Mask2FormerConfig(
-            hidden_size=self.hidden_dim,
-        )
+        config = Mask2FormerConfig(hidden_size=self.hidden_dim)
         config.num_queries = self.num_queries
         config.num_labels = self.num_labels
 

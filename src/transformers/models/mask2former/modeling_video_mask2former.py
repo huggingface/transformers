@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ class VideoMask2FormerPixelDecoderOutput(ModelOutput):
     Args:
         multi_scale_features (`tuple(torch.FloatTensor)`):
             Tuple of multi-scale features of scales [1/8, 1/16, 1/32] and shape `(batch_size, num_channels, height,
-            width)`from the Multi-Scale Deformable Attenntion based Pixel Decoder.
+            width)` from the Multi-Scale Deformable Attention based Pixel Decoder.
         mask_features (`torch.FloatTensor`):
             Tensor of shape `(batch_size, num_channels, height, width)`, 1/4 scale features from the last Pixel Decoder
             Layer.
@@ -530,9 +530,8 @@ class VideoMask2FormerLoss(nn.Module):
         self.weight_dict = weight_dict
 
         # Weight to apply to the null class
-        self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
-        empty_weight[-1] = self.eos_coef
+        empty_weight[-1] = config.no_object_weight
         self.register_buffer("empty_weight", empty_weight)
 
         # pointwise mask loss parameters
@@ -579,7 +578,7 @@ class VideoMask2FormerLoss(nn.Module):
 
         Args:
             class_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, num_labels`
+                A tensor of shape `(batch_size, num_queries, num_labels)`
             class_labels (`List[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             indices (`Tuple[np.array])`:
@@ -966,10 +965,10 @@ class VideoMask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module
         dim_per_head = embed_dim // num_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
-            warnings.warn(
-                "You'd better set embed_dim (d_model) in DeformableDetrMultiscaleDeformableAttention to make the"
-                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
-                " implementation."
+            logger.warning_once(
+                "It's recommended to set embed_dim (d_model) in "
+                "VideoMask2FormerPixelDecoderEncoderMultiscaleDeformableAttention to make the dimension of each "
+                "attention head a power of 2. This is more efficient in the authors' CUDA implementation."
             )
 
         self.im2col_step = 128
@@ -1068,10 +1067,10 @@ class VideoMask2FormerPixelDecoderEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        reference_points=None,
-        spatial_shapes=None,
-        level_start_index=None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points: Optional[torch.Tensor]=None,
+        spatial_shapes: Optional[torch.Tensor]=None,
+        level_start_index: Optional[torch.Tensor]=None,
         output_attentions: bool = False,
     ):
         """

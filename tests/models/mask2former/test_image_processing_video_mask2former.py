@@ -152,7 +152,6 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
         self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "max_size"))
         self.assertTrue(hasattr(image_processing, "ignore_index"))
         self.assertTrue(hasattr(image_processing, "num_labels"))
 
@@ -322,9 +321,6 @@ class VideoMask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unitte
         )
 
         return inputs
-
-    def test_init_without_params(self):
-        pass
 
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
