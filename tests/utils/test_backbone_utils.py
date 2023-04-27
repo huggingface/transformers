@@ -16,32 +16,32 @@ import unittest
 
 from transformers.utils.backbone_utils import (
     BackboneMixin,
-    get_output_features_output_indices,
+    get_aligned_output_features_output_indices,
     verify_out_features_out_indices,
 )
 
 
 class BackboneUtilsTester(unittest.TestCase):
-    def test_get_output_features_output_indices(self):
+    def test_get_aligned_output_features_output_indices(self):
         stage_names = ["a", "b", "c"]
 
         # Defaults to last layer if both are None
-        out_features, out_indices = get_output_features_output_indices(None, None, stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(None, None, stage_names)
         self.assertEqual(out_features, ["c"])
         self.assertEqual(out_indices, [2])
 
         # Out indices set to match out features
-        out_features, out_indices = get_output_features_output_indices(["a", "c"], None, stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(["a", "c"], None, stage_names)
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [0, 2])
 
         # Out features set to match out indices
-        out_features, out_indices = get_output_features_output_indices(None, [0, 2], stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(None, [0, 2], stage_names)
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [0, 2])
 
         # Out features selected from negative indices
-        out_features, out_indices = get_output_features_output_indices(None, [-3, -1], stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(None, [-3, -1], stage_names)
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [-3, -1])
 
