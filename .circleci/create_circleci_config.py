@@ -109,9 +109,9 @@ class CircleCIJob:
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
-        # pytest_flags.append(
-        #     f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        # )
+        pytest_flags.append(
+            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+        )
         test_command = ""
         if self.timeout:
             test_command = f"timeout {self.timeout} "
@@ -173,7 +173,7 @@ class CircleCIJob:
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
-        test_command += " | tee tests_output.txt"
+        # test_command += " | tee tests_output.txt"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
