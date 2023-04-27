@@ -61,7 +61,7 @@ __global__ void kernel_forward_with_state_bf16(
     float *__restrict__ const s = _s + _offset_s;
 
     // aa and bb are running sums divided by exp(pp) (to avoid overflow)
-    float aa = 0, bb = 0, pp = MIN_VALUE;
+    float aa = s[0], bb = s[1], pp = s[2];
     for (int i = 0; i < T; i++) {
         const int ii = i * C;
         const float kk = float(k[ii]);

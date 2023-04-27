@@ -121,7 +121,7 @@ class RwkvLinearAttention(torch.autograd.Function):
         output = torch.empty_like(key, memory_format=torch.contiguous_format)
         if return_state or state is not None:
             if state is None:
-                state = torch.empty(
+                state = torch.zeros(
                     batch_size,
                     hidden_size,
                     3,
@@ -129,6 +129,7 @@ class RwkvLinearAttention(torch.autograd.Function):
                     device=key.device,
                     memory_format=torch.contiguous_format,
                 )
+                state[:, :, 2] -= 1e38
             else:
                 state = torch.cat([s.unsqueeze(2) for s in state], dim=2).contiguous()
             if key.dtype == torch.bfloat16:
@@ -281,7 +282,12 @@ class RwkvSelfAttention(nn.Module):
     # TODO: maybe jit, otherwise move inside forward
     def extract_key_value(self, hidden, state=None):
         # Mix hidden with the previous timestep to produce key, value, receptance
-        shifted = self.time_shift(hidden) if state is None or hidden.size(1) != 1 else state[1][:, :, self.layer_id]
+        if hidden.size(1) == 1 and state is not None:
+            shifted = state[1][:, :, self.layer_id]
+        else:
+            shifted = self.time_shift(hidden)
+            if state is not None:
+                shifted[:, 0] = state[1][:, :, self.layer_id]
         key = hidden * self.time_mix_key + shifted * (1 - self.time_mix_key)
         value = hidden * self.time_mix_value + shifted * (1 - self.time_mix_value)
         receptance = hidden * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance)
@@ -324,15 +330,20 @@ class RwkvFeedForward(nn.Module):
         )
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.time_mix_key = nn.Parameter(torch.empty(hidden_size))
-        self.time_mix_receptance = nn.Parameter(torch.empty(hidden_size))
+        self.time_mix_key = nn.Parameter(torch.empty(1, 1, hidden_size))
+        self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, hidden_size))
 
         self.key = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.receptance = nn.Linear(hidden_size, hidden_size, bias=False)
         self.value = nn.Linear(intermediate_size, hidden_size, bias=False)
 
     def forward(self, hidden, state=None):
-        shifted = self.time_shift(hidden) if state is None or hidden.size(1) != 1 else state[0][:, :, self.layer_id]
+        if hidden.size(1) == 1 and state is not None:
+            shifted = state[0][:, :, self.layer_id]
+        else:
+            shifted = self.time_shift(hidden)
+            if state is not None:
+                shifted[:, 0] = state[0][:, :, self.layer_id]
         key = hidden * self.time_mix_key + shifted * (1 - self.time_mix_key)
         receptance = hidden * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance)
 
