@@ -434,7 +434,7 @@ doc_test_job = CircleCIJob(
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None, "-capture=tee-sys":None},
+    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None},
     timeout=1200, # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 
