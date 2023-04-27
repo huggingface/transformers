@@ -15,11 +15,11 @@
 """ Testing suite for the PyTorch SwiftFormer model. """
 
 
+import copy
 import inspect
 import unittest
-import copy
 
-from transformers import SwiftFormerConfig, PretrainedConfig
+from transformers import PretrainedConfig, SwiftFormerConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -57,12 +57,10 @@ class SwiftFormerModelTester:
         use_labels=True,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-
-        image_size = 224,
+        image_size=224,
         num_labels=1000,
-        layer_depths = [3, 3, 6, 4],
-        embed_dims = [48, 56, 112, 220]
-
+        layer_depths=[3, 3, 6, 4],
+        embed_dims=[48, 56, 112, 220],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -128,7 +126,7 @@ class SwiftFormerModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
-        (config,pixel_values,labels) = self.prepare_config_and_inputs()
+        (config, pixel_values, labels) = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -222,16 +220,23 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             hidden_states = outputs.hidden_states
 
             expected_num_stages = 8
-            self.assertEqual(len(hidden_states), expected_num_stages) #TODO
+            self.assertEqual(len(hidden_states), expected_num_stages)  # TODO
 
             # SwiftFormer's feature maps are of shape (batch_size, embed_dims, height, width)
             # with the width and height being successively divided by 2, after every 2 blocks
             for i in range(len(hidden_states)):
-                self.assertEqual(hidden_states[i].shape, 
-                                 torch.Size([self.model_tester.batch_size, self.model_tester.embed_dims[ i//2], 
-                                             (self.model_tester.image_size//4) // 2**(i//2),   
-                                             (self.model_tester.image_size//4) // 2**(i//2) ]))
-    
+                self.assertEqual(
+                    hidden_states[i].shape,
+                    torch.Size(
+                        [
+                            self.model_tester.batch_size,
+                            self.model_tester.embed_dims[i // 2],
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
+                        ]
+                    ),
+                )
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -243,7 +248,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-   
+
     def test_initialization(self):
         def _config_zero_init(config):
             configs_no_init = copy.deepcopy(config)
@@ -254,7 +259,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                     no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
                     setattr(configs_no_init, key, no_init_subconfig)
             return configs_no_init
-        
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
@@ -263,7 +268,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
-                        ((param.data.mean() * 1e9)/ 1e9).round().item(),
+                        ((param.data.mean() * 1e9) / 1e9).round().item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
@@ -298,5 +303,5 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e+00,  2.1107e+00, -2.0811e+00]])
+        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]])
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

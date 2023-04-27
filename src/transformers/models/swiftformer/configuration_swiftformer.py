@@ -96,7 +96,7 @@ class SwiftFormerConfig(PretrainedConfig):
         drop_path_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
-        batch_norm_eps =  0.00001,
+        batch_norm_eps=0.00001,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -112,6 +112,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
         self.batch_norm_eps = batch_norm_eps
+
 
 class SwiftFormerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
