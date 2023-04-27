@@ -45,28 +45,29 @@ import doctest
 import os
 import re
 
-def remove_cuda_tests(string):
+def preprocess_string(string, skip_cuda_tests):
     # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"    
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
     # TODO import logging and ingore all logs
     for i,c in enumerate(codeblocks):
-        if "cuda" in c and ">>>" in c:
+        if ">>>" in c and "```py" in c:
+            # let's add everything we need here
+            finale_block = c
+            finale_block += "import transformers;transformers.logging.set_verbosity_error();"
+            finale_block += "import datasets;datasets.logging.set_verbosity_error();"
+            codeblocks[i] = finale_block
+            
+        if "cuda" in c and ">>>" in c and skip_cuda_tests:
+            finale_block = ""
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in c:
                 continue
-            finale_block = ""
             lines = c.split("\n")
-            logger_disable = False
             for example in lines:
-                if ">>> " in example and not logger_disable:
-                    logger_disable = True
-                    finale_block += example.replace(">>> ",">>> import transformers;transformers.logging.set_verbosity_error()")
-                    finale_block += example.replace(">>> ",">>> import datasets;datasets.logging.set_verbosity_error()")
                 if len(example)>0 and "```" not in example:
                     finale_block += example + ' # doctest: +SKIP\n'
             codeblocks[i] = finale_block[:-1]
     codeblocks = "".join(codeblocks)
-    print(codeblocks)
     return codeblocks
 
     
@@ -91,9 +92,8 @@ class HfDocTestParser(doctest.DocTestParser):
         ''', re.MULTILINE | re.VERBOSE)
     
     def parse(self, string, name='<string>', skip_cuda_tests = True):
-        if skip_cuda_tests:
-            string = remove_cuda_tests(string)
-        return super().parse(string)
+        string = preprocess_string(string, skip_cuda_tests)
+        return super().parse(string, name)
 
 
 class HfDoctestModule(Module):
@@ -163,7 +163,6 @@ class HfDoctestModule(Module):
             checker=_get_checker(),
             continue_on_failure=_get_continue_on_failure(self.config),
         )
-
         for test in finder.find(module, module.__name__):
             if test.examples:  # skip empty doctests and cuda 
                 yield DoctestItem.from_parent(
