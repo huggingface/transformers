@@ -1589,6 +1589,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
     The GPT-2 Model transformer with a span classification head on top for extractive question-answering tasks like
