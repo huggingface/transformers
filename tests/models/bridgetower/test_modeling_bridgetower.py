@@ -414,7 +414,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 expected_num_layers,
             )
 
-            seq_length = self.text_model_tester.seq_length
+            seq_length = self.model_tester.text_model_tester.seq_length
             num_image_features = self.model_tester.vision_model_tester.num_image_features
 
             self.assertListEqual(
