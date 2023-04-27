@@ -330,7 +330,7 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
-    "models.ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ICTConfig"],
+    "models.ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IctConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -910,7 +910,7 @@ else:
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
-    _import_structure["models.ict"].extend(["ICTImageProcessor"])
+    _import_structure["models.ict"].extend(["IctImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1837,8 +1837,8 @@ else:
     _import_structure["models.ict"].extend(
         [
             "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ICTModel",
-            "ICTPreTrainedModel",
+            "IctModel",
+            "IctPreTrainedModel",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4210,7 +4210,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
-    from .models.ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig
+    from .models.ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, IctConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4729,7 +4729,7 @@ if TYPE_CHECKING:
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
-        from .models.ict import ICTImageProcessor
+        from .models.ict import IctImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
@@ -5499,8 +5499,8 @@ if TYPE_CHECKING:
         )
         from .models.ict import (
             ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ICTModel,
-            ICTPreTrainedModel,
+            IctModel,
+            IctPreTrainedModel,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,

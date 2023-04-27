@@ -105,7 +105,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
-        ("ict", "ICTConfig"),
+        ("ict", "IctConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),

@@ -103,7 +103,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
-        ("ict", "ICTModel"),
+        ("ict", "IctModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("jukebox", "JukeboxModel"),

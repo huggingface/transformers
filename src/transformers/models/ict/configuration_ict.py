@@ -29,12 +29,12 @@ ICT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ICTGuidedUpsamplerConfig(PretrainedConfig):
+class IctGuidedUpsamplerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ICTGuidedUpsampler`]. It is used to instantiate
-    an [`ICTGuidedUpsampler`] model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`IctGuidedUpsampler`]. It is used to instantiate
+    an [`IctGuidedUpsampler`] model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [ICTGuidedUpsampler model trained with the ImageNet dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
+    [IctGuidedUpsampler model trained with the ImageNet dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -62,13 +62,13 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ICTGuidedUpsamplerConfig, ICTGuidedUpsampler
+    >>> from transformers import IctGuidedUpsamplerConfig, IctGuidedUpsampler
 
     >>> # Initializing a ICT ict-imagenet-256 style configuration
-    >>> configuration = ICTGuidedUpsamplerConfig()
+    >>> configuration = IctGuidedUpsamplerConfig()
 
     >>> # Initializing a model (with random weights) from the ict-imagenet-256 style configuration
-    >>> upsampler = ICTGuidedUpsampler(configuration)
+    >>> upsampler = IctGuidedUpsampler(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = upsampler.config
@@ -99,9 +99,9 @@ class ICTGuidedUpsamplerConfig(PretrainedConfig):
         self.gan_loss = gan_loss
 
 
-class ICTTransformerConfig(PretrainedConfig):
+class IctTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ICTTransformer`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`IctTransformer`]. It is used to instantiate an
     ICT model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the [ICT model trained with the ImageNet
     dataset](https://huggingface.co/sheonhan/ict-imagenet-256).
@@ -113,7 +113,7 @@ class ICTTransformerConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 512):
             Vocabulary size of the ICT model. Defines the number of different tokens that can be represented by the
-            `pixel_values` passed when calling [`ICTTransformer`].
+            `pixel_values` passed when calling [`IctTransformer`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the embeddings and hidden states.
         num_hidden_layers (`int`, *optional*, defaults to 35):
@@ -145,13 +145,13 @@ class ICTTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ICTTransformerConfig, ICTTransformer
+    >>> from transformers import IctTransformerConfig, IctTransformer
 
     >>> # Initializing a ICT ict-imagenet-256 style configuration
-    >>> configuration = ICTTransformerConfig()
+    >>> configuration = IctTransformerConfig()
 
     >>> # Initializing a model (with random weights) from the ict-imagenet-256 style configuration
-    >>> model = ICTTransformer(configuration)
+    >>> model = IctTransformer(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -194,9 +194,9 @@ class ICTTransformerConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
 
-class ICTConfig(PretrainedConfig):
+class IctConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ICTModel`]. It is used to instantiate an ICT
+    This is the configuration class to store the configuration of a [`IctModel`]. It is used to instantiate an ICT
     model according to the specified arguments, defining the transformer model and guided upsampler configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ICT
     [sheonhan/ict-imagenet-256](https://huggingface.co/sheonhan/ict-imagenet-256) architecture. Configuration objects
@@ -205,31 +205,31 @@ class ICTConfig(PretrainedConfig):
 
     Args:
         transformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ICTTransformerConfig`].
+            Dictionary of configuration options used to initialize [`IctTransformerConfig`].
         guided_upsampler_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ICTGuidedUpsamplerConfig`].
+            Dictionary of configuration options used to initialize [`IctGuidedUpsamplerConfig`].
         kwargs (*optional*):
             Dictionary of keyword arguments.
     Example:
     ```python
-    >>> from transformers import ICTConfig, ICTModel
+    >>> from transformers import IctConfig, IctModel
 
-    >>> # Initializing a ICTConfig with sheonhan/ict-imagenet-256 style configuration
-    >>> configuration = ICTConfig()
+    >>> # Initializing a IctConfig with sheonhan/ict-imagenet-256 style configuration
+    >>> configuration = IctConfig()
 
-    >>> # Initializing a ICTModel (with random weights) from the sheonhan/ict-imagenet-256 style configuration
-    >>> model = ICTModel(configuration)
+    >>> # Initializing a IctModel (with random weights) from the sheonhan/ict-imagenet-256 style configuration
+    >>> model = IctModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a ICTConfig from a ICTTransformerConfig and a ICTGuidedUpsamplerConfig
-    >>> from transformers import ICTTransformerConfig, ICTGuidedUpsamplerConfig
+    >>> # We can also initialize a IctConfig from a IctTransformerConfig and a IctGuidedUpsamplerConfig
+    >>> from transformers import IctTransformerConfig, IctGuidedUpsamplerConfig
 
     >>> # Initializing ICT Transformer and GuidedUpsampler configurations
-    >>> config_transformer = ICTTransformerConfig()
-    >>> config_guided_upsampler = ICTGuidedUpsamplerConfig()
-    >>> config = ICTConfig.from_text_guided_upsampler_configs(config_transformer, config_guided_upsampler)
+    >>> config_transformer = IctTransformerConfig()
+    >>> config_guided_upsampler = IctGuidedUpsamplerConfig()
+    >>> config = IctConfig.from_text_guided_upsampler_configs(config_transformer, config_guided_upsampler)
     ```"""
 
     model_type = "ict"
@@ -244,25 +244,25 @@ class ICTConfig(PretrainedConfig):
 
         if transformer_config is None:
             transformer_config = {}
-            logger.info("transformer_config is None. Initializing the ICTTransformerConfig with default values.")
+            logger.info("transformer_config is None. Initializing the IctTransformerConfig with default values.")
 
         if guided_upsampler_config is None:
             guided_upsampler_config = {}
             logger.info(
-                "guided_upsampler_config is None. Initializing the ICTGuidedUpsamplerConfig with default values."
+                "guided_upsampler_config is None. Initializing the IctGuidedUpsamplerConfig with default values."
             )
 
-        self.transformer_config = ICTTransformerConfig(**transformer_config)
-        self.guided_upsampler_config = ICTGuidedUpsamplerConfig(**guided_upsampler_config)
+        self.transformer_config = IctTransformerConfig(**transformer_config)
+        self.guided_upsampler_config = IctGuidedUpsamplerConfig(**guided_upsampler_config)
 
     @classmethod
     def from_transformer_and_guided_upsampler_configs(
-        cls, transformer_config: ICTTransformerConfig, guided_upsampler_config: ICTGuidedUpsamplerConfig, **kwargs
+        cls, transformer_config: IctTransformerConfig, guided_upsampler_config: IctGuidedUpsamplerConfig, **kwargs
     ):
         r"""
-        Instantiate a [`ICTConfig`] (or a derived class) from align text model configuration and align vision model
+        Instantiate a [`IctConfig`] (or a derived class) from align text model configuration and align vision model
         configuration. Returns:
-            [`ICTConfig`]: An instance of a configuration object
+            [`IctConfig`]: An instance of a configuration object
         """
 
         return cls(

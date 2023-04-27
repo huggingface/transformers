@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import ICTConfig
+from transformers import IctConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ICTModel
+    from transformers import IctModel
     from transformers.models.ict.modeling_ict import ICT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -48,7 +48,7 @@ if is_vision_available():
     from transformers import ViTFeatureExtractor
 
 
-class ICTModelTester:
+class IctModelTester:
     def __init__(
         self,
         parent,
@@ -105,7 +105,7 @@ class ICTModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ICTConfig(
+        return IctConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -122,7 +122,7 @@ class ICTModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ICTModel(config=config)
+        model = IctModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -140,14 +140,14 @@ class ICTModelTester:
 
 
 @require_torch
-class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class IctModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ICT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ICTModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": ICTModel} if is_torch_available() else {}
+    all_model_classes = (IctModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": IctModel} if is_torch_available() else {}
     fx_compatible = False
 
     test_pruning = False
@@ -155,8 +155,8 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ICTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ICTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = IctModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=IctConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -197,7 +197,7 @@ class ICTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ICT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ICTModel.from_pretrained(model_name)
+            model = IctModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -209,7 +209,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ICTModelIntegrationTest(unittest.TestCase):
+class IctModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return ViTFeatureExtractor.from_pretrained("sheonhan/ict-imagenet-256") if is_vision_available() else None
@@ -221,7 +221,7 @@ class ICTModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = ICTModel.from_pretrained("facebook/dino-icts8", torch_dtype=torch.float16, device_map="auto")
+        model = IctModel.from_pretrained("facebook/dino-icts8", torch_dtype=torch.float16, device_map="auto")
         feature_extractor = self.default_feature_extractor
 
         image = prepare_img()

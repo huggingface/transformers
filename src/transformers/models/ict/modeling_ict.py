@@ -34,13 +34,13 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_ict import ICTConfig, ICTGuidedUpsamplerConfig, ICTTransformerConfig
+from .configuration_ict import IctConfig, IctGuidedUpsamplerConfig, IctTransformerConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ICTConfig"
+_CONFIG_FOR_DOC = "IctConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sheonhan/ict-imagenet-256"
@@ -55,7 +55,7 @@ ICT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ICTEmbeddings(nn.Module):
+class IctEmbeddings(nn.Module):
     """
     Construct the embeddings. Optionally, also the mask token.
     """
@@ -93,8 +93,8 @@ class ICTEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ICT
-class ICTSelfAttention(nn.Module):
-    def __init__(self, config: ICTTransformerConfig) -> None:
+class IctSelfAttention(nn.Module):
+    def __init__(self, config: IctTransformerConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -171,7 +171,7 @@ class ICTSelfAttention(nn.Module):
         return (outputs, attention_probs) if output_attentions else (outputs,)
 
 
-class ICTLayer(nn.Module):
+class IctLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         num_embed = config.hidden_size
@@ -179,7 +179,7 @@ class ICTLayer(nn.Module):
         self.intermediate_act_fn = ACT2FN[config.activation_function]
 
         self.ln_1 = nn.LayerNorm(num_embed, eps=config.layer_norm_eps)
-        self.attention = ICTSelfAttention(config)
+        self.attention = IctSelfAttention(config)
         self.ln_2 = nn.LayerNorm(num_embed, eps=config.layer_norm_eps)
         self.mlp = nn.Sequential(
             nn.Linear(num_embed, intermediate_size),
@@ -201,11 +201,11 @@ class ICTLayer(nn.Module):
         return outputs
 
 
-class ICTEncoder(nn.Module):
-    def __init__(self, config: ICTConfig) -> None:
+class IctEncoder(nn.Module):
+    def __init__(self, config: IctConfig) -> None:
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([ICTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([IctLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -253,13 +253,13 @@ class ICTEncoder(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ICT,vit->ict
-class ICTPretrainedModel(PreTrainedModel):
+class IctPretrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ICTConfig
+    config_class = IctConfig
     base_model_prefix = "ict"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -278,21 +278,21 @@ class ICTPretrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value: bool = False) -> None:
-        if isinstance(module, (ICTTransformerModel, ICTGuidedUpsampler)):
+        if isinstance(module, (IctTransformerModel, IctGuidedUpsampler)):
             module.gradient_checkpointing = value
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->ICT,ViT->ICT
-class ICTTransformerModel(ICTPretrainedModel):
-    config_class = ICTTransformerConfig
+class IctTransformerModel(IctPretrainedModel):
+    config_class = IctTransformerConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: ICTTransformerConfig, use_mask_token: bool = False):
+    def __init__(self, config: IctTransformerConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ICTEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ICTEncoder(config)
+        self.embeddings = IctEmbeddings(config, use_mask_token=use_mask_token)
+        self.encoder = IctEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -355,7 +355,7 @@ class ICTTransformerModel(ICTPretrainedModel):
         )
 
 
-class ICTResnetBlock(nn.Module):
+class IctResnetBlock(nn.Module):
     """
     ResNet block without the final ReLU (https://torch.ch/blog/2016/02/04/resnets.html).
     """
@@ -379,7 +379,7 @@ class ICTResnetBlock(nn.Module):
         return out
 
 
-class ICTInpaintGenerator(nn.Module):
+class IctInpaintGenerator(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -393,7 +393,7 @@ class ICTInpaintGenerator(nn.Module):
             nn.ReLU(True),
         )
 
-        blocks = [ICTResnetBlock(256) for _ in range(config.num_residual_blocks)]
+        blocks = [IctResnetBlock(256) for _ in range(config.num_residual_blocks)]
 
         self.middle = nn.Sequential(*blocks)
 
@@ -415,7 +415,7 @@ class ICTInpaintGenerator(nn.Module):
         return x
 
 
-class ICTAdversarialLoss(nn.Module):
+class IctAdversarialLoss(nn.Module):
     r"""
     Adversarial loss https://arxiv.org/abs/1711.10337
     """
@@ -454,7 +454,7 @@ class ICTAdversarialLoss(nn.Module):
             return loss
 
 
-class ICTStyleLoss(nn.Module):
+class IctStyleLoss(nn.Module):
     r"""
     Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
@@ -494,7 +494,7 @@ class ICTStyleLoss(nn.Module):
         return style_loss
 
 
-class ICTPerceptualLoss(nn.Module):
+class IctPerceptualLoss(nn.Module):
     r"""
     Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
     https://github.com/dxyang/StyleTransfer/blob/master/utils.py
@@ -640,11 +640,11 @@ class VGG19(torch.nn.Module):
         return out
 
 
-class ICTGuidedUpsampler(ICTPretrainedModel):
-    def __init__(self, config: ICTGuidedUpsamplerConfig):
+class IctGuidedUpsampler(IctPretrainedModel):
+    def __init__(self, config: IctGuidedUpsamplerConfig):
         super().__init__(config)
 
-        self.generator = ICTInpaintGenerator(config)
+        self.generator = IctInpaintGenerator(config)
 
         self.post_init()
 
@@ -665,7 +665,7 @@ ICT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ICTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`IctConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -673,7 +673,7 @@ ICT_START_DOCSTRING = r"""
 ICT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ICTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IctImageProcessor.__call__`]
             for details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
@@ -690,27 +690,27 @@ ICT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(ICT_START_DOCSTRING)
-class ICTModel(ICTPretrainedModel):
-    config_class = ICTConfig
+class IctModel(IctPretrainedModel):
+    config_class = IctConfig
 
-    def __init__(self, config: ICTConfig, use_mask_token: bool = True):
+    def __init__(self, config: IctConfig, use_mask_token: bool = True):
         super().__init__(config)
 
-        if not isinstance(config.transformer_config, ICTTransformerConfig):
+        if not isinstance(config.transformer_config, IctTransformerConfig):
             raise ValueError(
-                "config.transformer_config is expected to be of type ICTTransformerConfig but is of type"
+                "config.transformer_config is expected to be of type IctTransformerConfig but is of type"
                 f" {type(config.transformer_config)}."
             )
 
-        if not isinstance(config.guided_upsampler_config, ICTGuidedUpsamplerConfig):
+        if not isinstance(config.guided_upsampler_config, IctGuidedUpsamplerConfig):
             raise ValueError(
-                "config.guided_upsampler_config is expected to be of type ICTGuidedUpsamplerConfig but is of type"
+                "config.guided_upsampler_config is expected to be of type IctGuidedUpsamplerConfig but is of type"
                 f" {type(config.guided_upsampler_config)}."
             )
 
         self.config = config
-        self.transformer = ICTTransformerModel(config.transformer_config, use_mask_token=use_mask_token)
-        self.guided_upsampler = ICTGuidedUpsampler(config.guided_upsampler_config)
+        self.transformer = IctTransformerModel(config.transformer_config, use_mask_token=use_mask_token)
+        self.guided_upsampler = IctGuidedUpsampler(config.guided_upsampler_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -735,10 +735,10 @@ class ICTModel(ICTPretrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> from transformers import AutoImageProcessor, ICTModel
+        >>> from transformers import AutoImageProcessor, IctModel
 
         >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
-        >>> model = ICTModel.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> model = IctModel.from_pretrained("sheonhan/ict-imagenet-256")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

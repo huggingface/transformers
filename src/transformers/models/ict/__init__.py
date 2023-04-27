@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ICTConfig", "ICTOnnxConfig"]}
+_import_structure = {"configuration_ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IctConfig"]}
 
 try:
     if not is_vision_available():
@@ -31,7 +31,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_ict"] = ["ICTImageProcessor"]
+    _import_structure["image_processing_ict"] = ["IctImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -41,12 +41,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_ict"] = [
         "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ICTModel",
-        "ICTPreTrainedModel",
+        "IctModel",
+        "IctPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig, ICTOnnxConfig
+    from .configuration_ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, IctConfig
 
     try:
         if not is_vision_available():
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_ict import ICTImageProcessor
+        from .image_processing_ict import IctImageProcessor
 
     try:
         if not is_torch_available():
@@ -64,8 +64,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_ict import (
             ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ICTModel,
-            ICTPreTrainedModel,
+            IctModel,
+            IctPreTrainedModel,
         )
 
 else:

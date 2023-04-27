@@ -38,7 +38,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class ICTImageProcessor(BaseImageProcessor):
+class IctImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ICT image processor.
 

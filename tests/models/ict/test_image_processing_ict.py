@@ -32,10 +32,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ICTImageProcessor
+    from transformers import IctImageProcessor
 
 
-class ICTImageProcessingTester(unittest.TestCase):
+class IctImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -75,11 +75,11 @@ class ICTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ICTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-    image_processing_class = ICTImageProcessor if is_vision_available() else None
+class IctImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+    image_processing_class = IctImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = ICTImageProcessingTester(self)
+        self.image_processor_tester = IctImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
