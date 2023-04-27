@@ -37,6 +37,9 @@ from _pytest.outcomes import skip
 import doctest
 import re
 
+
+
+
 def preprocess_string(string, skip_cuda_tests):
     # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"    
@@ -46,10 +49,13 @@ def preprocess_string(string, skip_cuda_tests):
             # let's add everything we need here, but the DATASET_VERBOSITY should work.
             finale_block = codeblock
             finale_block += "import transformers;transformers.logging.set_verbosity_error();"
-            finale_block += "import datasets;datasets.logging.set_verbosity_error();"
+            finale_block += "import datasets;datasets.logging.set_verbosity_error();from contextlib import redirect_stdout;"
             finale_block += "import huggingface_hub;huggingface_hub.logging.set_verbosity_error();"
             codeblocks[i] = finale_block
-            
+        if "load_dataset" in codeblock:
+            dataset_pattern = re.compile(r">>> (.*)load_dataset")
+            re.sub(dataset_pattern, r">>> with redirect_stdout(None): \1load_dataset", codeblock)
+            codeblock = codeblock.replace(">>> ", ">>> with redirect_stdout(None):")
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
                 continue

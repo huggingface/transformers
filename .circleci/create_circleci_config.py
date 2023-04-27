@@ -434,32 +434,32 @@ doc_test_job = CircleCIJob(
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None},
+    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None, "-capture=tee-sys":None},
     timeout=1200, # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 
 )
 
 REGULAR_TESTS = [
-    # torch_and_tf_job,
-    # torch_and_flax_job,
-    # torch_job,
-    # tf_job,
-    # flax_job,
-    # custom_tokenizers_job,
-    # hub_job,
-    # onnx_job,
-    # exotic_models_job,
+    torch_and_tf_job,
+    torch_and_flax_job,
+    torch_job,
+    tf_job,
+    flax_job,
+    custom_tokenizers_job,
+    hub_job,
+    onnx_job,
+    exotic_models_job,
     doc_test_job
 ]
 EXAMPLES_TESTS = [
-    # examples_torch_job,
-    # examples_tensorflow_job,
-    # examples_flax_job,
+    examples_torch_job,
+    examples_tensorflow_job,
+    examples_flax_job,
 ]
 PIPELINE_TESTS = [
-    # pipelines_torch_job,
-    # pipelines_tf_job,
+    pipelines_torch_job,
+    pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 
