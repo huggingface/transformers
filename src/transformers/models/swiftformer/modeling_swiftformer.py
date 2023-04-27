@@ -136,8 +136,8 @@ class SwiftFormerEmbeddings(nn.Module):
         padding=config.down_pad
         embed_dims = config.embed_dims
         
-        in_chans=embed_dims[index],
-        embed_dim=embed_dims[index + 1],
+        in_chans=embed_dims[index]
+        embed_dim=embed_dims[index + 1]
         
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
@@ -162,11 +162,11 @@ class SwiftFormerConvEncoder(nn.Module):
                  config: SwiftFormerConfig,
                  dim, hidden_dim=64, kernel_size=3, drop_path=0.0, use_layer_scale=True):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
+        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
         self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.pwconv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
+        self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
         self.act = nn.GELU()
-        self.pwconv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
+        self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
         self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
@@ -174,11 +174,11 @@ class SwiftFormerConvEncoder(nn.Module):
 
     def forward(self, x):
         input = x
-        x = self.dwconv(x)
+        x = self.depth_wise_conv(x)
         x = self.norm(x)
-        x = self.pwconv1(x)
+        x = self.point_wise_conv1(x)
         x = self.act(x)
-        x = self.pwconv2(x)
+        x = self.point_wise_conv2(x)
         if self.use_layer_scale:
             x = input + self.drop_path(self.layer_scale * x)
         else:
@@ -264,11 +264,11 @@ class SwiftFormerLocalRepresentation(nn.Module):
                  config: SwiftFormerConfig,
                  dim, kernel_size=3, drop_path=0.0, use_layer_scale=True):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
+        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
         self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
-        self.pwconv1 = nn.Conv2d(dim, dim, kernel_size=1)
+        self.point_wise_conv1 = nn.Conv2d(dim, dim, kernel_size=1)
         self.act = nn.GELU()
-        self.pwconv2 = nn.Conv2d(dim, dim, kernel_size=1)
+        self.point_wise_conv2 = nn.Conv2d(dim, dim, kernel_size=1)
         self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
@@ -276,11 +276,11 @@ class SwiftFormerLocalRepresentation(nn.Module):
 
     def forward(self, x):
         input = x
-        x = self.dwconv(x)
+        x = self.depth_wise_conv(x)
         x = self.norm(x)
-        x = self.pwconv1(x)
+        x = self.point_wise_conv1(x)
         x = self.act(x)
-        x = self.pwconv2(x)
+        x = self.point_wise_conv2(x)
         if self.use_layer_scale:
             x = input + self.drop_path(self.layer_scale * x)
         else:
@@ -347,7 +347,6 @@ class SwiftFormerEncoderBlk(nn.Module):
 
 def Stage(
         config: SwiftFormerConfig,
-        dim,
         index,
     ):
     """
@@ -558,7 +557,7 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         embed_dims = config.embed_dims
 
         self.num_labels = config.num_labels
-        self.swiftformer = SwiftFormerModel(config, add_pooling_layer=False)
+        self.swiftformer = SwiftFormerModel(config)
 
         # Classifier head
         self.norm = nn.BatchNorm2d(embed_dims[-1], eps=config.batch_norm_eps)
