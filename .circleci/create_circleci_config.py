@@ -112,7 +112,11 @@ class CircleCIJob:
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
-        test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command = ""
+        if self.timeout:
+            test_command = f"timeout {self.timeout} "
+        test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
@@ -433,7 +437,7 @@ doc_test_job = CircleCIJob(
         # that are modified by this pr. *py files
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","rAs":None, "dist":"loadfile"}, # max duration of 20min
+    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","vs":None, "dist":"loadfile"}, # max duration of 20min
     timeout=1200,
     pytest_num_workers=1,
 
