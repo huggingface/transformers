@@ -294,6 +294,7 @@ _import_structure = {
         "FlavaTextConfig",
     ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
+    "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
@@ -1618,6 +1619,15 @@ else:
             "FNetPreTrainedModel",
         ]
     )
+    _import_structure["models.focalnet"].extend(
+        [
+            "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FocalNetForImageClassification",
+            "FocalNetForMaskedImageModeling",
+            "FocalNetModel",
+            "FocalNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.fsmt"].extend(["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"])
     _import_structure["models.funnel"].extend(
         [
@@ -1678,6 +1688,7 @@ else:
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoForCausalLM",
             "GPTNeoForSequenceClassification",
+            "GPTNeoForTokenClassification",
             "GPTNeoModel",
             "GPTNeoPreTrainedModel",
             "load_tf_weights_in_gpt_neo",
@@ -1688,6 +1699,7 @@ else:
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoXForCausalLM",
             "GPTNeoXForSequenceClassification",
+            "GPTNeoXForTokenClassification",
             "GPTNeoXLayer",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
@@ -3442,6 +3454,7 @@ else:
         [
             "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFWav2Vec2ForCTC",
+            "TFWav2Vec2ForSequenceClassification",
             "TFWav2Vec2Model",
             "TFWav2Vec2PreTrainedModel",
         ]
@@ -4026,6 +4039,7 @@ if TYPE_CHECKING:
         FlavaTextConfig,
     )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
+    from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
@@ -5164,6 +5178,13 @@ if TYPE_CHECKING:
             FNetModel,
             FNetPreTrainedModel,
         )
+        from .models.focalnet import (
+            FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FocalNetForImageClassification,
+            FocalNetForMaskedImageModeling,
+            FocalNetModel,
+            FocalNetPreTrainedModel,
+        )
         from .models.fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
         from .models.funnel import (
             FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5213,6 +5234,7 @@ if TYPE_CHECKING:
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
             GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
             GPTNeoModel,
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
@@ -5221,6 +5243,7 @@ if TYPE_CHECKING:
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
             GPTNeoXForSequenceClassification,
+            GPTNeoXForTokenClassification,
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
@@ -6624,6 +6647,7 @@ if TYPE_CHECKING:
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
+            TFWav2Vec2ForSequenceClassification,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
         )

@@ -3348,7 +3348,7 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
