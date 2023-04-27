@@ -54,7 +54,7 @@ def preprocess_string(string, skip_cuda_tests):
             # let's add everything we need here
             finale_block = codeblock
             finale_block += "import transformers;transformers.logging.set_verbosity_error();"
-            finale_block += "import datasets;datasets.logging.set_verbosity_error();"
+            finale_block += "import datasets;datasets.logging.set_verbosity_error();datasets.logging.disable_default_handler();"
             codeblocks[i] = finale_block
             
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
