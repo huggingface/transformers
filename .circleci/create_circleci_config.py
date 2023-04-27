@@ -109,9 +109,9 @@ class CircleCIJob:
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
-        pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        )
+        # pytest_flags.append(
+        #     f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+        # )
         test_command = ""
         if self.timeout:
             test_command = f"timeout {self.timeout} "
@@ -428,16 +428,13 @@ doc_test_job = CircleCIJob(
                 "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '\.(py|mdx)$' | grep -Ev '^\..*|/\.' > pr_documentation_tests.txt"
         },
         {
-            "name": "Debug only : print content of the `pr_documentation_tests.txt`",
+            "name": "List files beings tested : `pr_documentation_tests.txt`",
             "command":
                 "cat pr_documentation_tests.txt"
         },
-
-        # get git diffs -> pr_documentation_tests.txt to only run these doctests on specific files 
-        # that are modified by this pr. *py files
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","vs":None, "dist":"loadfile", "rSA":None},
+    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None},
     timeout=1200, # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 
