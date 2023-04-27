@@ -411,14 +411,13 @@ repo_utils_job = CircleCIJob(
 
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
-    additional_env={"TRANSFORMERS_VERBOSITY":"error", "DATASETS_VERBOSITY":"error"},
+    additional_env={"TRANSFORMERS_VERBOSITY":"error", "DATASETS_VERBOSITY":"error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade pip",
-        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
+        "pip install .[dev]",
         "pip install git+https://github.com/huggingface/accelerate",
         "pip install --upgrade pytest pytest-sugar",
-        "pip install .[quality,testing]",
         "find -name '*.pyc' -delete",
         "find -name __pycache__ -delete",
         {

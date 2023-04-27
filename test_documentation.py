@@ -27,21 +27,16 @@
     be processed based on the modified files. It should also run the tests on the fly and delete the
     temp file when finished.
 """
-from typing import Iterable
+import doctest
 import inspect
+import os
 from pytest import DoctestItem
+import re
+from typing import Iterable
 from _pytest.doctest import Module, _is_mocked, _patch_unwrap_mock_aware, get_optionflags, _get_runner, _get_continue_on_failure, _get_checker, import_path
 from _pytest.outcomes import skip
-import os
-
-import doctest
-import re
-
-
-
 
 def preprocess_string(string, skip_cuda_tests):
-    # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"    
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
     for i,codeblock in enumerate(codeblocks):
@@ -63,7 +58,6 @@ def preprocess_string(string, skip_cuda_tests):
     codeblocks = "".join(codeblocks)
     return codeblocks
 
-    
 class HfDocTestParser(doctest.DocTestParser):
     # This regular expression is used to find doctest examples in a
     # string.  It defines three groups: `source` is the source code
