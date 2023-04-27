@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 지난 두 튜토리얼에서 분산 설정을 위해 PyTorch, Keras 및 🤗 Accelerate를 사용하여 모델을 미세 조정하는 방법을 보았습니다. 다음 단계는 모델을 커뮤니티와 공유하는 것입니다! Hugging Face는 인공지능의 민주화를 위해 모두에게 지식과 자원을 공개적으로 공유해야 한다고 믿습니다. 다른 사람들이 시간과 자원을 절약할 수 있도록 커뮤니티에 모델을 공유하는 것을 고려해 보세요.
 
-이 튜토리얼에서 [Model Hub](https://huggingface.co/models)에서 훈련되거나 피세 조정 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
+이 튜토리얼에서 [Model Hub](https://huggingface.co/models)에서 훈련되거나 미세 조정 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
 
 - API를 통해 파일을 Hub에 푸시합니다.
 - 웹사이트를 통해 파일을 Hub로 끌어다 놓습니다.
@@ -71,7 +71,7 @@ pip install huggingface_hub
 
 ## 프레임워크 간 모델 변환하기[[convert-a-model-for-all-frameworks]]
 
-다른 프레임워크를 작업하는 사용자가 모델을 사용할 수 있도록 하려면, PyTorch 및 TensorFlow 체크포인트를 모두 사용하여 모델을 변환하고 업로드하는 것이 좋습니다. 이 단계를 건너뛰어도 사용자는 다른 프레임워크에서 모델을 가져올 수 있지만, 🤗 Transformers가 체크포인트를 즉석에서 변환해야 하므로 속도가 느려질 수 있습니다.
+다른 프레임워크로 작업하는 사용자가 모델을 사용할 수 있도록 하려면, PyTorch 및 TensorFlow 체크포인트를 모두 사용하여 모델을 변환하고 업로드하는 것이 좋습니다. 이 단계를 건너뛰어도 사용자는 다른 프레임워크에서 모델을 가져올 수 있지만, 🤗 Transformers가 체크포인트를 즉석에서 변환해야 하므로 속도가 느려질 수 있습니다.
 
 체크포인트를 다른 프레임워크로 변환하는 것은 쉽습니다. PyTorch 및 TensorFlow가 설치되어 있는지 확인한 다음(설치 지침은 [여기](installation) 참조) 다른 프레임워크에서 작업에 대한 특정 모델을 찾습니다.
 
@@ -191,7 +191,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 >>> tokenizer.push_to_hub("my-awesome-model")
 ```
 
-또는 미세 조정 PyTorch 모델의 TensorFlow 버전을 추가할 수도 있습니다:
+또는 미세 조정된 PyTorch 모델의 TensorFlow 버전을 추가할 수도 있습니다:
 
 ```py
 >>> tf_model.push_to_hub("my-awesome-model")
@@ -214,7 +214,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 - 모델이 공개인지 비공개인지 선택합니다.
 - 모델의 라이센스 사용을 지정합니다.
 
-이제 **Files** 탭을 클릭하고 **Add file** 버튼을 클릭하여 새로운 파일을 저장소에 업로드합니다. 그런 다음 업로드할 파일을 드래그 앤 드롭하고 커밋 메시지를 추가하세요.
+이제 **Files** 탭을 클릭하고 **Add file** 버튼을 클릭하여 새로운 파일을 저장소에 업로드합니다. 그런 다음 업로드할 파일을 끌어다 놓고 커밋 메시지를 추가하세요.
 
 ![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
 
