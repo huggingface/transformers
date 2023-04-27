@@ -81,7 +81,7 @@ class BridgeTowerTextModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size=intermediate_size
+        self.intermediate_size = intermediate_size
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = 99
         self.seq_length = 4
