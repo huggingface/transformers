@@ -176,7 +176,7 @@ socket.socket = offline_socket
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn(
             "You cannot infer task automatically within `pipeline` when using offline mode",
-            result.stderr.decode().replace("\n", "")
+            result.stderr.decode().replace("\n", ""),
         )
 
     @require_torch
