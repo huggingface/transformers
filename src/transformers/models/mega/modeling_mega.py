@@ -1541,7 +1541,6 @@ class MegaModel(MegaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1560,7 +1559,6 @@ class MegaModel(MegaPreTrainedModel):
                 raise ValueError(
                     f"config.use_chunking is activated; input sequence length must be shorter than or a multiple of config.chunk_size\nreceived sequence length of {sequence_length} with chunk size {self.config.chunk_size}"
                 )
-
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
