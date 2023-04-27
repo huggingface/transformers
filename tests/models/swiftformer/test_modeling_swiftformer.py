@@ -54,43 +54,22 @@ class SwiftFormerModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
-        # hidden_size=32,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        ###
-        layers=[3, 3, 6, 4],
-        embed_dims=[48, 56, 112, 220],
-        mlp_ratios=4,
-        downsamples=[True, True, True, True],
-        vit_num=1,
-        act_layer="gelu",
+
+        image_size = 224,
         num_labels=1000,
-        down_patch_size=3,
-        down_stride=2,
-        down_pad=1,
-        drop_rate=0.0,
-        drop_path_rate=0.0,
-        use_layer_scale=True,
-        layer_scale_init_value=1e-5,
+
     ):
         self.parent = parent
-
         self.batch_size = batch_size
-
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
-
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-
         self.type_sequence_label_size = num_labels
-
-        self.image_size = 224
-
-        # self.
-
-        # in SwiftFormer, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        self.image_size = image_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -107,7 +86,7 @@ class SwiftFormerModelTester:
         return SwiftFormerConfig(
             layers=[3, 3, 6, 4],
             embed_dims=[48, 56, 112, 220],
-            mlp_ratios=4,
+            mlp_ratio=4,
             downsamples=[True, True, True, True],
             vit_num=1,
             act_layer="gelu",
@@ -145,12 +124,7 @@ class SwiftFormerModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        (config,pixel_values,labels) = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -171,11 +145,9 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     fx_compatible = False
-
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-
     has_attentions = False
 
     def setUp(self):

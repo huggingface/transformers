@@ -47,13 +47,10 @@ class SwiftFormerConfig(PretrainedConfig):
             Depth of each stage
         embed_dims (`List[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
             The embedding dimension at each stage
-        mlp_ratios (`int`, *optional*, defaults to 4):
+        mlp_ratio (`int`, *optional*, defaults to 4):
             Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
-
         downsamples (`List[bool]`, *optional*, defaults to `[True, True, True, True]`)
             Whether or not to downsample inputs between two stages.
-        vit_num (`int`, *optional*, defaults to `1`):
-            ??
         act_layer (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string). `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         down_patch_size (`int`, *optional*, defaults to 3):
@@ -90,9 +87,8 @@ class SwiftFormerConfig(PretrainedConfig):
         self,
         layers=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
-        mlp_ratios=4,
+        mlp_ratio=4,
         downsamples=[True, True, True, True],
-        vit_num=1,
         act_layer="gelu",
         down_patch_size=3,
         down_stride=2,
@@ -100,12 +96,13 @@ class SwiftFormerConfig(PretrainedConfig):
         drop_path_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
+        batch_norm_eps =  0.00001,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.layers = layers
         self.embed_dims = embed_dims
-        self.mlp_ratios = mlp_ratios
+        self.mlp_ratio = mlp_ratio
         self.downsamples = downsamples
         self.act_layer = act_layer
         self.down_patch_size = down_patch_size
@@ -114,8 +111,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
-        self.vit_num = vit_num
-
+        self.batch_norm_eps = batch_norm_eps
 
 class SwiftFormerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
