@@ -32,7 +32,7 @@ import inspect
 from pytest import DoctestItem
 from _pytest.doctest import Module, _is_mocked, _patch_unwrap_mock_aware, get_optionflags, _get_runner, _get_continue_on_failure, _get_checker, import_path
 from _pytest.outcomes import skip
-
+import os
 
 import doctest
 import re
@@ -83,9 +83,11 @@ class HfDocTestParser(doctest.DocTestParser):
              (?:\n|$)  # Match a new line or end of string
           )*)
         ''', re.MULTILINE | re.VERBOSE)
-    
-    def parse(self, string, name='<string>', skip_cuda_tests = True):
-        string = preprocess_string(string, skip_cuda_tests)
+
+
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    def parse(self, string, name='<string>'):
+        string = preprocess_string(string, self.skip_cuda_tests)
         return super().parse(string, name)
 
 
