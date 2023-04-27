@@ -33,7 +33,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, logging
+from ..utils import ModelOutput, is_torch_tpu_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -71,6 +71,9 @@ from .stopping_criteria import (
     validate_stopping_criteria,
 )
 
+
+if is_torch_tpu_available():
+    import torch_xla.core.xla_model as xm
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -777,6 +780,152 @@ class GenerationMixin:
 
         return model_kwargs
 
+    def _update_model_kwargs_for_xla_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        batch_size: int,
+        is_encoder_decoder: bool = False,
+        standardize_cache_format: bool = False,
+        max_length: int = None,
+        seq_length: int = None,
+        use_cache=True,
+    ) -> Dict[str, Any]:
+        def _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder):
+            """initializes the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
+            if is_encoder_decoder:
+                # One 1 for decoder_start_token_id, 0s for the currently-unfilled locations in the past_key_values tensor,
+                # 1s for the actual input_ids
+                decoder_attention_mask = torch.cat(
+                    [
+                        torch.zeros((batch_size, num_padding_values), dtype=torch.int32),
+                        torch.ones((batch_size, 2), dtype=torch.int32),
+                    ],
+                    axis=1,
+                ).to(outputs.logits.device)
+                mask = {"decoder_attention_mask": decoder_attention_mask}
+            else:
+                attention_mask = model_kwargs.pop("attention_mask")
+                # 0s for the currently-unfilled locations in the past_key_values tensor, 1s for the actual input_ids
+                attention_mask = torch.cat(
+                    [
+                        torch.zeros(
+                            (batch_size, num_padding_values), dtype=attention_mask.dtype, device=attention_mask.device
+                        ),
+                        attention_mask,
+                        torch.ones((batch_size, 1), dtype=attention_mask.dtype, device=attention_mask.device),
+                    ],
+                    axis=1,
+                )
+                mask = {"attention_mask": attention_mask}
+
+            return mask
+
+        def _update_attention(model_kwargs, is_encoder_decoder):
+            """updates the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
+            if is_encoder_decoder:
+                decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
+                decoder_attention_mask_update_slice = torch.ones(
+                    (batch_size, 1), dtype=decoder_attention_mask.dtype, device=decoder_attention_mask.device
+                )
+                decoder_attention_mask = torch.cat(
+                    [decoder_attention_mask[:, 1:], decoder_attention_mask_update_slice], dim=-1
+                )
+                mask = {"decoder_attention_mask": decoder_attention_mask}
+            else:
+                attention_mask = model_kwargs.pop("attention_mask")
+                attention_mask_update_slice = torch.ones(
+                    (batch_size, 1), dtype=attention_mask.dtype, device=attention_mask.device
+                )
+                attention_mask = torch.cat([attention_mask[:, 1:], attention_mask_update_slice], dim=-1)
+                mask = {"attention_mask": attention_mask}
+            return mask
+
+        def _initialize_past(past_key_values, num_padding_values):
+            """initialize past_key_values with zeros -- the structure depends on `batch_axis`"""
+
+            # padding_values = torch.tensor([[0, 0], [0, 0], [0, num_padding_values], [0, 0]], dtype=torch.int32)
+            new_past = ()
+            for past_layer in past_key_values:
+                new_past_layer = list(past_layer)
+                for i in range(len(new_past_layer[:2])):
+                    b, n_heads, _, head_dim = past_layer[i].shape
+                    new_past_layer[i] = torch.cat(
+                        [
+                            torch.zeros(
+                                (b, n_heads, num_padding_values, head_dim),
+                                dtype=past_layer[i].dtype,
+                                device=past_layer[i].device,
+                            ),
+                            past_layer[i],
+                        ],
+                        dim=2,
+                    )
+                new_past += (tuple(new_past_layer),)
+
+            return new_past
+
+        def _update_past(past_key_values):
+            new_past = ()
+            for past_layer in past_key_values:
+                new_past_layer = list(past_layer)
+                for i in range(len(new_past_layer[:2])):
+                    new_past_layer[i] = past_layer[i][:, :, 1:]
+                new_past += (tuple(new_past_layer),)
+
+            return new_past
+
+        if use_cache:
+            past_key_values = self._extract_past_from_model_output(outputs)
+            if past_key_values is None:
+                raise ValueError(
+                    "No known `past_key_values variable` found in model outputs (model outputs keys:"
+                    f" {list(outputs.keys())})"
+                )
+            is_past_initialized = model_kwargs.pop("past_key_values", None) is not None
+
+            if not is_past_initialized:
+                # The padded version of `past_key_values` has a length of `max_length - 1`, as `past_key_values` holds information relative to
+                # previous autoregressive generation steps (step 0 has no past_key_values, step 1 has 1 past_key_values value, ..., the last step
+                # has `max_length - 1` past_key_values values).
+                num_padding_values = max_length - seq_length
+                mask = _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder)
+                new_past = _initialize_past(past_key_values, num_padding_values)
+            else:
+                mask = _update_attention(model_kwargs, is_encoder_decoder)
+                new_past = _update_past(past_key_values)
+
+            # sets the updated variables (mask and past_key_values)
+            model_kwargs.update(mask)
+            model_kwargs["past_key_values"] = tuple(new_past)
+        else:
+            if "token_type_ids" in model_kwargs:
+                token_type_ids = model_kwargs["token_type_ids"]
+                model_kwargs["token_type_ids"] = torch.cat(
+                    [token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1
+                )
+
+            if not is_encoder_decoder:
+                # update attention mask
+                if "attention_mask" in model_kwargs:
+                    attention_mask = model_kwargs["attention_mask"]
+                    model_kwargs["attention_mask"] = torch.cat(
+                        [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                    )
+            else:
+                # update decoder attention mask
+                if "decoder_attention_mask" in model_kwargs:
+                    decoder_attention_mask = model_kwargs["decoder_attention_mask"]
+                    model_kwargs["decoder_attention_mask"] = torch.cat(
+                        [
+                            decoder_attention_mask,
+                            decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1)),
+                        ],
+                        dim=-1,
+                    )
+
+        return model_kwargs
+
     def _reorder_cache(self, past_key_values, beam_idx):
         raise NotImplementedError(
             f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
@@ -1370,6 +1519,21 @@ class GenerationMixin:
                 " increasing `max_new_tokens`."
             )
 
+        # Pad to max_length
+        if is_torch_tpu_available():
+            input_ids = torch.cat(
+                [
+                    input_ids,
+                    torch.ones(
+                        (batch_size, (generation_config.max_length - input_ids_seq_length)),
+                        dtype=torch.long,
+                        device=input_ids.device,
+                    )
+                    * generation_config.pad_token_id,
+                ],
+                1,
+            )
+
         # 7. determine generation mode
         is_constraint_gen_mode = (
             generation_config.constraints is not None or generation_config.force_words_ids is not None
@@ -1519,6 +1683,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                seq_length=input_ids_seq_length,
                 streamer=streamer,
                 **model_kwargs,
             )
@@ -2172,6 +2337,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
+        seq_length: Optional[int] = int,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
@@ -2217,9 +2383,12 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            seq_length:
+                Length of current input_ids sequence
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+                Unsupported for XLA devices
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2324,7 +2493,16 @@ class GenerationMixin:
                     break
 
             # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            if model_kwargs["use_cache"] and is_torch_tpu_available():
+                # From max_length-sized input_ids, select first
+                # seq_length - 1 values.
+                update_indices = torch.stack(
+                    [torch.arange(input_ids.size(0)), torch.tensor(seq_length - 1).repeat(input_ids.size(0))], dim=-1
+                )
+                input_ids_ = input_ids[update_indices[:, 0], update_indices[:, 1], None]
+                model_inputs = self.prepare_inputs_for_generation(input_ids_, **model_kwargs)
+            else:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
             outputs = self(
@@ -2337,7 +2515,23 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits[:, -1, :]
+            if not model_kwargs["use_cache"] and is_torch_tpu_available():
+                one_hot = (
+                    torch.cat(
+                        [
+                            torch.tensor([0]).repeat(1, seq_length - 1),
+                            torch.tensor([1]).repeat(1, 1),
+                            torch.tensor([0]).repeat(1, input_ids.size(1) - seq_length),
+                        ],
+                        dim=1,
+                    )
+                    .to(device=outputs.logits.device)
+                    .float()
+                )
+                next_token_logits = torch.matmul(one_hot, outputs.logits)
+                next_token_logits = next_token_logits.squeeze(1)
+            else:
+                next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
@@ -2370,12 +2564,30 @@ class GenerationMixin:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
-            )
+            if is_torch_tpu_available():
+                batch_size, _ = input_ids.shape
+                update_indices = torch.stack(
+                    [torch.arange(batch_size), torch.tensor(seq_length).repeat(batch_size)], dim=-1
+                )
+                input_ids[update_indices[:, 0], update_indices[:, 1]] = next_tokens[:]
+                model_kwargs = self._update_model_kwargs_for_xla_generation(
+                    outputs,
+                    model_kwargs,
+                    batch_size=batch_size,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    max_length=stopping_criteria.max_length,
+                    seq_length=seq_length,
+                    use_cache=model_kwargs["use_cache"],
+                )
+
+                seq_length += 1
+            else:
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+                if streamer is not None:
+                    streamer.put(next_tokens.cpu())
+                model_kwargs = self._update_model_kwargs_for_generation(
+                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                )
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
@@ -2383,12 +2595,37 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            if is_torch_tpu_available():
+                xm.mark_step()
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished, or if we exceed the maximum length
+            stop_criterion_1 = unfinished_sequences.max() == 0
+
+            if is_torch_tpu_available():
+                if isinstance(stopping_criteria, list):
+                    if len(stopping_criteria) == 1:
+                        stopping_criteria = stopping_criteria[0]
+
+                # Cases that can be handled in XLA without requiring
+                # non-padded input_ids
+                if isinstance(stopping_criteria, MaxLengthCriteria):
+                    stop_criterion_2 = seq_length >= stopping_criteria.max_length
+                elif isinstance(stopping_criteria, MaxTimeCriteria):
+                    stop_criterion_2 = stopping_criteria(input_ids, scores)
+                else:
+                    # Other cases will be handled on CPU
+                    batch_size, _ = input_ids.shape
+                    mask = torch.cat(
+                        [torch.ones(batch_size, seq_length), torch.zeros(batch_size, input_ids.shape[1] - seq_length)],
+                        dim=1,
+                    ).bool()
+                    input_ids_cpu = torch.masked_select(input_ids, mask).reshape((batch_size, seq_length)).to("cpu")
+                    scores_cpu = scores.to("cpu") if torch.is_tensor(scores) else scores
+                    stop_criterion_2 = stopping_criteria(input_ids_cpu, scores_cpu)
+            else:
+                stop_criterion_2 = stopping_criteria(input_ids, scores)
+
+            if stop_criterion_1 or stop_criterion_2:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
