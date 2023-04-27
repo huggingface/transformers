@@ -419,11 +419,11 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             self.assertListEqual(
                 list(hidden_states_text[0].shape[-2:]),
-                [seq_length, self.text_model_tester.hidden_size],
+                [seq_length, self.model_tester.text_model_tester.hidden_size],
             )
             self.assertListEqual(
                 list(hidden_states_vision[0].shape),
-                [num_image_features, 1, self.vision_model_tester.hidden_size],
+                [num_image_features, 1, self.model_tester.vision_modmoel_tester.hidden_size],
             )
             self.assertListEqual(
                 list(hidden_states_cross[0][0].shape[-2:]),
