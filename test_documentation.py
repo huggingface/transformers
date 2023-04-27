@@ -61,7 +61,8 @@ def preprocess_string(string, skip_cuda_tests):
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
                 continue
-            codeblocks[i-1] += 'from pytest import skip;skip("Codeblock line xxx in xxxx has cuda involved. Skipping");'
+            line_num = "".join(codeblocks[:i+1]).count("\n")
+            codeblocks[i-1] += f'from pytest import skip;skip("Codeblock line {line_num} uses `cuda`. Skipping",allow_module_level=True);'
     codeblocks = "".join(codeblocks)
     return codeblocks
 
