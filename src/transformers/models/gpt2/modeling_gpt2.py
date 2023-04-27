@@ -1589,7 +1589,6 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-
 @add_start_docstrings(
     """
     The GPT-2 Model transformer with a span classification head on top for extractive question-answering tasks like
@@ -1604,11 +1603,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()

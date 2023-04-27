@@ -386,7 +386,8 @@ class GPT2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_gpt2_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
