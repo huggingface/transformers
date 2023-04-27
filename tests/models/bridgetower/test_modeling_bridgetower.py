@@ -297,7 +297,6 @@ class BridgeTowerModelTester:
         return config, inputs_dict
 
 
-@slow
 @require_torch
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -423,7 +422,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             )
             self.assertListEqual(
                 list(hidden_states_vision[0].shape),
-                [num_image_features, 1, self.model_tester.vision_modmoel_tester.hidden_size],
+                [num_image_features, 1, self.model_tester.model_tester.vision_modmoel_tester.hidden_size],
             )
             self.assertListEqual(
                 list(hidden_states_cross[0][0].shape[-2:]),
