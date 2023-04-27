@@ -121,6 +121,7 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
