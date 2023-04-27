@@ -17,6 +17,7 @@ import json
 import os
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -110,7 +111,7 @@ LANGUAGES = {
     "hi": "hindi",
     "fi": "finnish",
     "vi": "vietnamese",
-    "iw": "hebrew",
+    "he": "hebrew",
     "uk": "ukrainian",
     "el": "greek",
     "ms": "malay",
@@ -267,9 +268,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         language=None,
         task=None,
         predict_timestamps=False,
-        **kwargs
+        **kwargs,
     ):
-
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
@@ -477,8 +477,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.decoder.get(self.unk_token_id))
+        """
+        Converts an index (integer) in a token (str) using the vocab. Whisper's base tokenizer always decodes OOV
+        tokens as "", thus we do not use the `unk_token` here.
+        """
+        return self.decoder.get(index, "")
 
     def _normalize(self, text):
         """
@@ -487,6 +490,116 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
+
+    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+        """
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
+        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        """
+        timestamp_begin = self.all_special_ids[-1] + 1
+        outputs = [[]]
+        for token in token_ids:
+            if token >= timestamp_begin:
+                timestamp = f"<|{(token - timestamp_begin) * time_precision:.2f}|>"
+                outputs.append(timestamp)
+                outputs.append([])
+            else:
+                outputs[-1].append(token)
+        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        return "".join(outputs)
+
+    def _compute_offsets(self, token_ids, time_precision=0.02):
+        """
+        Compute offsets for a given tokenized input
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
+        offsets = []
+        token_ids = np.array(token_ids)
+        if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
+            raise ValueError("Can only process a single input at a time")
+        timestamp_begin = self.all_special_ids[-1] + 1
+        timestamp_tokens = token_ids >= timestamp_begin
+
+        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
+            # either there are no timestamps or there are no consecutive ones
+            return []
+        elif np.where(timestamp_tokens)[0][-1] + 1 not in consecutive:
+            # we add the final timestamp if it is not already in the list
+            consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
+
+        last_slice = np.where(timestamp_tokens)[0][0]
+        for current_slice in consecutive:
+            sliced_tokens = token_ids[last_slice:current_slice]
+            if len(sliced_tokens) > 1:
+                start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
+                end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                offsets.append(
+                    {
+                        "text": self._decode(sliced_tokens),
+                        "timestamp": (
+                            start_timestamp_position * time_precision,
+                            end_timestamp_position * time_precision,
+                        ),
+                    }
+                )
+            last_slice = current_slice
+
+        return offsets
+
+    def decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        output_offsets: bool = False,
+        time_precision=0.02,
+        decode_with_timestamps: bool = False,
+        **kwargs,
+    ) -> str:
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+            output_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output the offsets of the tokens. This should only be set if the model predicted
+                timestamps.
+            decode_with_timestamps (`bool`, *optional*, defaults to `False`):
+                WHether or not to decode with timestamps included in the raw text.
+        Returns:
+            `str`: The decoded sentence.
+        """
+        text = super().decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        if decode_with_timestamps:
+            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+        # retrieve offsets
+        if output_offsets:
+            offsets = None
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
+            return {"text": text, "offsets": offsets}
+        return text
 
     def _decode(
         self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
@@ -591,3 +704,287 @@ class WhisperTokenizer(PreTrainedTokenizer):
         forced_tokens = self.prefix_tokens[1:]
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
+
+    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
+        return _decode_asr(
+            self,
+            model_outputs,
+            return_timestamps=return_timestamps,
+            return_language=return_language,
+            time_precision=time_precision,
+        )
+
+
+def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
+    """
+    Internal method meant to only be used by asr pipeline. Handles all the little quirks specific to whisper to handle
+    the various options not allowed in other seq2seq models
+    """
+
+    # =========== Overview ============
+    # - iterate over all outputs
+    # - all tokens within output
+    # - Each token can be
+    #   - language token
+    #   - special token
+    #   - timestamp token
+    #   - text token
+    # - We accumulate the text tokens.
+    # - We split on end timestamps
+    # - Lots of complexity comes from stride and timestamps
+
+    last_language = None
+
+    def new_chunk():
+        return {"language": last_language, "timestamp": [None, None], "text": ""}
+
+    # Welcome to the state machine !
+    chunks = []
+    chunk = new_chunk()
+    time_offset = 0.0
+    timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
+    previous_tokens = []
+    skip = False
+    right_stride_start = None
+
+    all_special_ids = set(tokenizer.all_special_ids)
+    # - iterate over all outputs
+    for chunk_id, output in enumerate(model_outputs):
+        # We can drop everything to Python list, it's going to make
+        # our lives easier
+        token_ids = output["tokens"][0].tolist()
+
+        # Those keep track of timestamps within strides
+        # Which need to be skipped and resolve all tokens in a single
+        # chunk.
+        last_timestamp = None
+        first_timestamp = timestamp_begin
+
+        if "stride" in output:
+            chunk_len, stride_left, stride_right = output["stride"]
+            # Offset the timings to account for the other `model_outputs`.
+            time_offset -= stride_left
+            right_stride_start = chunk_len - stride_right
+
+            # Keeping track of timestamps within strides
+            # We're going to NOT split on those, and delay until we're
+            # out of BOTH stride. Otherwise lots of issues occur and
+            # corner cases
+            if stride_left:
+                first_timestamp = stride_left / time_precision + timestamp_begin
+            if stride_right:
+                for token in reversed(token_ids):
+                    if token >= timestamp_begin:
+                        # There can be several token in the right stride
+                        # But the last one is ALWAYS going to be skipped
+                        if (
+                            last_timestamp is not None
+                            and (token - timestamp_begin) * time_precision < right_stride_start
+                        ):
+                            break
+                        last_timestamp = token
+
+        current_tokens = []
+
+        # - all tokens within output
+        for i, token in enumerate(token_ids):
+            # 4 possible states for each token
+            # - 1/ Language code
+            # - 2/ all other special tokens (which we ignore)
+            # - 3/ Timestamp
+            # - 4/ Regular text
+            if token in all_special_ids:
+                # Either language code or other
+                text = tokenizer.decode([token])
+                # Removing outer shell <|XX|>
+                text = text[2:-2]
+                language = LANGUAGES.get(text, None)
+                if language is not None:
+                    # 1/ Indeed some language
+                    # TODO Handle when language is different from the previous
+                    # one, and we cannot use timestamped tokens to create chunks
+                    if last_language and language != last_language and not return_timestamps:
+                        previous_tokens.append(current_tokens)
+                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                        resolved_text = tokenizer.decode(resolved_tokens)
+                        chunk["text"] = resolved_text
+                        chunks.append(chunk)
+
+                        # Flush all our temporary context
+                        previous_tokens = []
+                        current_tokens = []
+                        chunk = new_chunk()
+                    chunk["language"] = language
+                    last_language = language
+                else:
+                    # 2/ This is a regular special token, ignoring it
+                    pass
+            elif token >= timestamp_begin:
+                # 3/ Timestamp token
+                time = (token - timestamp_begin) * time_precision + time_offset
+                time = round(time, 2)
+                if last_timestamp and token >= last_timestamp:
+                    # Whisper outputted a timestamp token, but it falls within
+                    # our stride, so we're going to skip it for the time being
+                    # and resolve this later
+                    # Skip is necessary because timestamp tokens always come
+                    # by pair, so we need to skip the next one too (which would mark the start of another chunk).
+                    skip = True
+                elif skip or (previous_tokens and token < first_timestamp):
+                    skip = False
+                elif chunk["timestamp"][0] is None:
+                    chunk["timestamp"][0] = time
+                else:
+                    # This is the end of the timestamp chunk
+                    if time == chunk["timestamp"][0]:
+                        # This is a bug in timestamp token output
+                        # where we're taking the duplicate token
+                        # as a stop where it should be a start.
+                        # This is an issue in the underlying model output
+                        # Let's just skip it so it becomes de-factor
+                        # a start agin
+                        pass
+                    else:
+                        chunk["timestamp"][1] = time
+                        # Handling merges.
+                        previous_tokens.append(current_tokens)
+                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                        resolved_text = tokenizer.decode(resolved_tokens)
+                        chunk["text"] = resolved_text
+                        chunks.append(chunk)
+
+                        # Flush all our temporary context
+                        previous_tokens = []
+                        current_tokens = []
+                        chunk = new_chunk()
+            else:
+                # 4/ Regular token
+                # We just append to the list of all tokens so we can handle
+                # merges later and decode into text.
+                current_tokens.append(token)
+
+        if "stride" in output:
+            time_offset += chunk_len - stride_right
+
+        # Leftover tokens
+        if current_tokens:
+            previous_tokens.append(current_tokens)
+        elif not (any(p for p in previous_tokens)):
+            # print("Flushing previous tokens (END)")
+            chunk = new_chunk()
+            previous_tokens = []
+            current_tokens = []
+
+    if previous_tokens:
+        if return_timestamps:
+            logger.warning(
+                "There was an error while processing timestamps, we haven't found a timestamp as last token. Was"
+                " WhisperTimeStampLogitsProcessor used?"
+            )
+        # Happens when we don't use timestamps
+        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+        # print("Flushing previous tokens (FINAL)")
+        resolved_text = tokenizer.decode(resolved_tokens)
+        chunk["text"] = resolved_text
+        chunks.append(chunk)
+
+    # Preparing and cleaning up the pipeline output
+    full_text = "".join(chunk["text"] for chunk in chunks)
+    if return_timestamps or return_language:
+        for chunk in chunks:
+            if not return_timestamps:
+                chunk.pop("timestamp")
+            else:
+                chunk["timestamp"] = tuple(chunk["timestamp"])
+            if not return_language:
+                chunk.pop("language")
+        optional = {"chunks": chunks}
+    else:
+        optional = {}
+    return full_text, optional
+
+
+def _find_longest_common_sequence(sequences):
+    # It would be much harder to do O(n) because of fault tolerance.
+    # We actually have a really good property which is that the total sequence
+    # MUST be those subsequences in order.
+    left_sequence = sequences[0]
+    left_length = len(left_sequence)
+    total_sequence = []
+    for right_sequence in sequences[1:]:
+        # index = 0
+        max_ = 0.0
+        max_indices = (left_length, left_length, 0, 0)
+        # Here we're sliding matches
+        # [a, b, c, d]
+        #          [c, d, f]
+        # =        [c] == [d]
+        #
+        # [a, b, c, d]
+        #       [c, d, f]
+        # =     [c, d] == [c, d]
+        #
+        #
+        # [a, b, c, d]
+        #    [c, d, f]
+        #
+        # =  [b, c, d] == [c, d, f]
+        #
+        # [a, b, c, d]
+        # [c, d, f]
+        #
+        # [a, b, c] == [c, d, f]
+        #
+        # [a, b, c, d]
+        # [d, f]
+        #
+        # [a, b] == [d, f]
+        #
+        # [a, b, c, d]
+        # [f]
+        #
+        # [a] == [f]
+        right_length = len(right_sequence)
+        for i in range(1, left_length + right_length):
+            # epsilon to favor long perfect matches
+            eps = i / 10000.0
+
+            # Slightly convoluted because we don't want out of bound indices
+            # This will be necessary for a small conflict resolution optimization
+            # later
+            left_start = max(0, left_length - i)
+            left_stop = min(left_length, left_length + right_length - i)
+            left = np.array(left_sequence[left_start:left_stop])
+
+            right_start = max(0, i - left_length)
+            right_stop = min(right_length, i)
+            right = np.array(right_sequence[right_start:right_stop])
+
+            # We can only match subsequences of the same size.
+            if len(left) != len(right):
+                raise RuntimeError(
+                    "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
+                )
+
+            matches = np.sum(left == right)
+            matching = matches / i + eps
+            if matches > 1 and matching > max_:
+                max_ = matching
+                max_indices = (left_start, left_stop, right_start, right_stop)
+
+        (left_start, left_stop, right_start, right_stop) = max_indices
+
+        # This is a small conflict optimization since those sequences overlap
+        # in audio.
+        # We're going to give more confidence to the left sequence
+        # for the left of the overlap,
+        # and to the right of the sequence, for the right of the overlap
+        left_mid = (left_stop + left_start) // 2
+        right_mid = (right_stop + right_start) // 2
+        total_sequence.extend(left_sequence[:left_mid])
+        left_sequence = right_sequence[right_mid:]
+        left_length = len(left_sequence)
+
+    total_sequence.extend(left_sequence)
+
+    return total_sequence

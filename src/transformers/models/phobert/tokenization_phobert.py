@@ -129,7 +129,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token=bos_token,
@@ -297,7 +297,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token):

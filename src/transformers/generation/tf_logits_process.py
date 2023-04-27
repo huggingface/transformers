@@ -132,12 +132,11 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = top_k
+        self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        top_k = min(self.top_k, scores.shape[-1])  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
         next_scores = tf.where(indices_to_remove, self.filter_value, scores)
@@ -297,7 +296,6 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
-
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
@@ -422,7 +420,6 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         return banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-
         # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
         # https://github.com/huggingface/transformers/pull/16974
         if not tf.executing_eagerly():
@@ -558,7 +555,8 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
         # Indexes without forced tokens will have an negative value.
         force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
         for index, token in force_token_map.items():
-            force_token_array[index] = token
+            if token is not None:
+                force_token_array[index] = token
         self.force_token_array = tf.convert_to_tensor(force_token_array, dtype=tf.int32)
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:

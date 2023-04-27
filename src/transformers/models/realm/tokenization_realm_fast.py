@@ -160,7 +160,7 @@ class RealmTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -259,7 +259,7 @@ class RealmTokenizerFast(PreTrainedTokenizerFast):
             if encoded_token_type_ids is not None:
                 output_data["token_type_ids"].append(encoded_token_type_ids)
 
-        output_data = dict((key, item) for key, item in output_data.items() if len(item) != 0)
+        output_data = {key: item for key, item in output_data.items() if len(item) != 0}
 
         return BatchEncoding(output_data, tensor_type=return_tensors)
 

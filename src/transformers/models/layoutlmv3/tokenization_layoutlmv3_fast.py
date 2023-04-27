@@ -156,7 +156,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -243,7 +243,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -262,6 +262,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -396,9 +397,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -462,7 +462,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
@@ -508,7 +508,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._batch_encode_plus with LayoutLMv2->LayoutLMv3
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -534,7 +533,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -641,6 +639,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 else:
                     original_index = batch_index
                 labels_example = []
+                previous_token_empty = False
                 for id, offset, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index],
                     sanitized_tokens["offset_mapping"][batch_index],
@@ -648,11 +647,15 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            if offset[0] == 0 and not previous_token_empty:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
                                 labels_example.append(self.pad_token_label)
+                            if offset == (0, 0):
+                                previous_token_empty = True
+                            else:
+                                previous_token_empty = False
                         else:
                             labels_example.append(word_labels[original_index][word_id])
                     else:
@@ -687,9 +690,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str
@@ -762,7 +764,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

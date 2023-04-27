@@ -78,7 +78,7 @@ class RegNetConfig(PretrainedConfig):
         groups_width=64,
         layer_type="y",
         hidden_act="relu",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:

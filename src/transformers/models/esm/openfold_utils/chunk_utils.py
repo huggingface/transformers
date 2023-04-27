@@ -62,6 +62,7 @@ def _get_minimal_slice_set(
 
     end is INCLUSIVE.
     """
+
     # start_edges and end_edges both indicate whether, starting from any given
     # dimension, the start/end index is at the top/bottom edge of the
     # corresponding tensor, modeled as a tree
@@ -82,7 +83,7 @@ def _get_minimal_slice_set(
     # Base cases. Either start/end are empty and we're done, or the final,
     # one-dimensional tensor can be simply sliced
     if len(start) == 0:
-        return [tuple()]
+        return [()]
     elif len(start) == 1:
         return [(slice(start[0], end[0] + 1),)]
 

@@ -116,13 +116,15 @@ class DebertaTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import DebertaTokenizer
+
     >>> tokenizer = DebertaTokenizer.from_pretrained("microsoft/deberta-base")
-    >>> tokenizer("Hello world")['input_ids']
-    [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
+    >>> tokenizer("Hello world")["input_ids"]
+    [1, 31414, 232, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
+    [1, 20920, 232, 2]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
@@ -191,7 +193,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         add_prefix_space=False,
         add_bos_token=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token

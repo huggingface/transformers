@@ -250,6 +250,13 @@ class TFTrainingArguments(TrainingArguments):
         return self._setup_strategy.num_replicas_in_sync
 
     @property
+    def should_log(self):
+        """
+        Whether or not the current process should produce log.
+        """
+        return False  # TF Logging is handled by Keras not the Trainer
+
+    @property
     def train_batch_size(self) -> int:
         """
         The actual batch size for training (may differ from `per_gpu_train_batch_size` in distributed training).

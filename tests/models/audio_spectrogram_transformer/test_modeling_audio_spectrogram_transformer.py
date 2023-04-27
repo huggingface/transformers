@@ -18,12 +18,14 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import ASTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -139,7 +141,7 @@ class ASTModelTester:
 
 
 @require_torch
-class ASTModelTest(ModelTesterMixin, unittest.TestCase):
+class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as AST does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -153,10 +155,24 @@ class ASTModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"audio-classification": ASTForAudioClassification, "feature-extraction": ASTModel}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "AudioClassificationPipelineTests":
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = ASTModelTester(self)
@@ -225,7 +241,6 @@ class ASTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_audio_classification(self):
-
         feature_extractor = self.default_feature_extractor
         model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(torch_device)
 

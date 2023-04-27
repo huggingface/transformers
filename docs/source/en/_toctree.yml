@@ -44,6 +44,8 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
+    - local: generation_strategies
+      title: Text generation strategies
     - sections:
       - local: tasks/sequence_classification
         title: Text classification
@@ -52,7 +54,9 @@
       - local: tasks/question_answering
         title: Question answering
       - local: tasks/language_modeling
-        title: Language modeling
+        title: Causal language modeling
+      - local: tasks/masked_language_modeling
+        title: Masked language modeling
       - local: tasks/translation
         title: Translation
       - local: tasks/summarization
@@ -73,7 +77,23 @@
       title: Image classification
     - local: tasks/semantic_segmentation
       title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
+    - local: tasks/zero_shot_object_detection
+      title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
+    - local: tasks/monocular_depth_estimation
+      title: Depth estimation
     title: Computer Vision
+  - sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    - local: tasks/document_question_answering
+      title: Document Question Answering
+    title: Multimodal
   - sections:
     - local: performance
       title: Overview
@@ -87,6 +107,8 @@
       title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -105,6 +127,8 @@
       title: Debugging
     - local: hpo_train
       title: Hyperparameter Search using Trainer API
+    - local: tf_xla
+      title: XLA Integration for TensorFlow Models
     title: Performance and scalability
   - sections:
     - local: contributing
@@ -135,11 +159,15 @@
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
-    title: Summary of the models
+    title: The Transformer model family
   - local: tokenizer_summary
     title: Summary of the tokenizers
+  - local: attention
+    title: Attention mechanisms
   - local: pad_truncation
     title: Padding and truncation
   - local: bertology
@@ -177,6 +205,8 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/quantization
+      title: Quantization
     - local: main_classes/tokenizer
       title: Tokenizer
     - local: main_classes/trainer
@@ -233,6 +263,8 @@
         title: ConvBERT
       - local: model_doc/cpm
         title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
       - local: model_doc/deberta
@@ -251,10 +283,14 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie_m
+        title: ErnieM
       - local: model_doc/esm
         title: ESM
       - local: model_doc/flan-t5
         title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -275,6 +311,10 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
+      - local: model_doc/gptsan-japanese
+        title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
         title: GPTSw3
       - local: model_doc/herbert
@@ -283,12 +323,10 @@
         title: I-BERT
       - local: model_doc/jukebox
         title: Jukebox
-      - local: model_doc/layoutlm
-        title: LayoutLM
       - local: model_doc/led
         title: LED
-      - local: model_doc/lilt
-        title: LiLT
+      - local: model_doc/llama
+        title: LLaMA
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -303,6 +341,8 @@
         title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
       - local: model_doc/megatron-bert
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
@@ -321,6 +361,8 @@
         title: NEZHA
       - local: model_doc/nllb
         title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/opt
@@ -365,14 +407,14 @@
         title: T5
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tapas
-        title: TAPAS
       - local: model_doc/tapex
         title: TAPEX
       - local: model_doc/transfo-xl
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm
@@ -383,6 +425,8 @@
         title: XLM-RoBERTa
       - local: model_doc/xlm-roberta-xl
         title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
       - local: model_doc/yoso
@@ -398,12 +442,16 @@
         title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/deta
+        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat
@@ -412,12 +460,20 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
+      - local: model_doc/efficientnet
+        title: EfficientNet
+      - local: model_doc/focalnet
+        title: FocalNet
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/mask2former
+        title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
       - local: model_doc/mobilenet_v1
@@ -446,6 +502,8 @@
         title: Table Transformer
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -465,6 +523,8 @@
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/clap
+        title: CLAP
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -477,6 +537,8 @@
         title: Speech2Text
       - local: model_doc/speech_to_text_2
         title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
       - local: model_doc/unispeech
         title: UniSpeech
       - local: model_doc/unispeech-sat
@@ -498,6 +560,16 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/align
+        title: ALIGN
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -506,28 +578,50 @@
         title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/layoutlm
+        title: LayoutLM
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
+      - local: model_doc/mgp-str
+        title: MGP-STR
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/pix2struct
+        title: Pix2Struct
+      - local: model_doc/sam
+        title: Segment Anything
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
+      - local: model_doc/tvlt
+        title: TVLT
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder
@@ -548,9 +642,16 @@
       title: Reinforcement learning models
     - isExpanded: false
       sections:
+      - local: model_doc/informer
+        title: Informer
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils
@@ -565,7 +666,11 @@
       title: Utilities for Generation
     - local: internal/image_processing_utils
       title: Utilities for Image Processors
+    - local: internal/audio_utils
+      title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/time_series_utils
+      title: Utilities for Time Series
     title: Internal Helpers
   title: API

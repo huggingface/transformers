@@ -14,6 +14,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,

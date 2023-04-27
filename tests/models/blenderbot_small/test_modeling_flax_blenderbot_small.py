@@ -34,6 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers.models.blenderbot_small.modeling_flax_blenderbot_small import (
         FlaxBlenderbotSmallForConditionalGeneration,
         FlaxBlenderbotSmallModel,

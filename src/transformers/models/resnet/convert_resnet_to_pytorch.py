@@ -22,12 +22,12 @@ from functools import partial
 from pathlib import Path
 from typing import List
 
+import timm
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
 from torch import Tensor
 
-import timm
-from huggingface_hub import hf_hub_download
 from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
@@ -51,7 +51,7 @@ class Tracker:
         for m in self.module.modules():
             self.handles.append(m.register_forward_hook(self._forward_hook))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property

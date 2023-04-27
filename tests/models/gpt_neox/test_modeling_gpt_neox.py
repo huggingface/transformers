@@ -17,17 +17,19 @@
 
 import unittest
 
-from transformers import GPTNeoXConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoTokenizer, GPTNeoXConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import GPTNeoXForCausalLM, GPTNeoXModel
+    from transformers import GPTNeoXForCausalLM, GPTNeoXForSequenceClassification, GPTNeoXModel
 
 
 class GPTNeoXModelTester:
@@ -78,6 +80,7 @@ class GPTNeoXModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.pad_token_id = vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -108,6 +111,7 @@ class GPTNeoXModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -139,6 +143,15 @@ class GPTNeoXModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_for_sequence_classification(self, config, input_ids, input_mask, token_labels):
+        config.num_labels = self.num_labels
+        model = GPTNeoXForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
         config.is_decoder = True
@@ -185,10 +198,21 @@ class GPTNeoXModelTester:
 
 
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
+class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (GPTNeoXModel, GPTNeoXForCausalLM, GPTNeoXForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTNeoXModel,
+            "text-classification": GPTNeoXForSequenceClassification,
+            "text-generation": GPTNeoXForCausalLM,
+            "zero-shot": GPTNeoXForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
@@ -225,6 +249,35 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
+    def test_model_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+
+@require_torch
+class GPTNeoXLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_gptneox(self):
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
+        for checkpointing in [True, False]:
+            model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
+
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
+            model.to(torch_device)
+
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            expected_output = (
+                "My favorite food is the chicken and rice.\n\nI love to cook and bake. I love to cook and bake"
+            )
+
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            output_str = tokenizer.batch_decode(output_ids)[0]
+
+            self.assertEqual(output_str, expected_output)

@@ -95,7 +95,7 @@ Once you are satisfied with your model configuration, you can save it with [`~Pr
 To reuse the configuration file, load it with [`~PretrainedConfig.from_pretrained`]:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")
 ```
 
 <Tip>
@@ -115,7 +115,7 @@ Load your custom configuration attributes into the model:
 ```py
 >>> from transformers import DistilBertModel
 
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")
 >>> model = DistilBertModel(my_config)
 ```
 

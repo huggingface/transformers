@@ -48,8 +48,8 @@ class T5Config(PretrainedConfig):
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
+            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+            be defined as `num_heads * d_kv`.
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `T5Block`.
         num_layers (`int`, *optional*, defaults to 6):
@@ -98,7 +98,7 @@ class T5Config(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model

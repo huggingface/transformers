@@ -294,11 +294,11 @@ def main():
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
         # No need to convert the labels since they are already ints.
-        id2label = {k: v for k, v in enumerate(label_list)}
+        id2label = dict(enumerate(label_list))
         label2id = {v: k for k, v in enumerate(label_list)}
     else:
         label_list = get_label_list(datasets["train"][label_column_name])
-        id2label = {k: v for k, v in enumerate(label_list)}
+        id2label = dict(enumerate(label_list))
         label2id = {v: k for k, v in enumerate(label_list)}
     num_labels = len(label_list)
 
@@ -340,7 +340,7 @@ def main():
     model.config.id2label = id2label
 
     # Preprocessing the dataset
-    # The processor does everything for us (prepare the image using LayoutLMv3FeatureExtractor
+    # The processor does everything for us (prepare the image using LayoutLMv3ImageProcessor
     # and prepare the words, boxes and word-level labels using LayoutLMv3TokenizerFast)
     def prepare_examples(examples):
         images = examples[image_column_name]

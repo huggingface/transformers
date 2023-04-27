@@ -22,8 +22,8 @@ import json
 from collections import OrderedDict
 
 import torch
-
 from huggingface_hub import cached_download, hf_hub_url
+
 from transformers import AutoFeatureExtractor, CvtConfig, CvtForImageClassification
 
 
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--cvt_file_name",
-        default="cvtmodels\CvT-w24-384x384-IN-22k.pth",
+        default=r"cvtmodels\CvT-w24-384x384-IN-22k.pth",
         type=str,
         help="Input Image Size",
     )

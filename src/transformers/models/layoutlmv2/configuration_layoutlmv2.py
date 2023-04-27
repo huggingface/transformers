@@ -145,7 +145,7 @@ class LayoutLMv2Config(PretrainedConfig):
         has_spatial_attention_bias=True,
         has_visual_segment_embedding=False,
         detectron2_config_args=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,

@@ -31,7 +31,6 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
-    HfFolder,
     create_commit,
     create_repo,
     get_hf_file_metadata,
@@ -45,10 +44,10 @@ from huggingface_hub.utils import (
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    build_hf_headers,
     hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
-from transformers.utils.logging import tqdm
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
@@ -60,6 +59,7 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+from .logging import tqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -390,7 +390,7 @@ def cached_file(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    if _commit_hash is not None:
+    if _commit_hash is not None and not force_download:
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(
             path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
@@ -583,7 +583,7 @@ def has_file(
     use_auth_token: Optional[Union[bool, str]] = None,
 ):
     """
-    Checks if a repo contains a given file wihtout downloading it. Works for remote repos and local folders.
+    Checks if a repo contains a given file without downloading it. Works for remote repos and local folders.
 
     <Tip warning={false}>
 
@@ -596,15 +596,7 @@ def has_file(
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
     url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
-
-    headers = {"user-agent": http_user_agent()}
-    if isinstance(use_auth_token, str):
-        headers["authorization"] = f"Bearer {use_auth_token}"
-    elif use_auth_token:
-        token = HfFolder.get_token()
-        if token is None:
-            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
-        headers["authorization"] = f"Bearer {token}"
+    headers = build_hf_headers(use_auth_token=use_auth_token, user_agent=http_user_agent())
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
@@ -636,10 +628,10 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
-    ):
+    ) -> str:
         """
-        Create the repo if needed, cleans up repo_id with deprecated kwards `repo_url` and `organization`, retrives the
-        token.
+        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
+        the token.
         """
         if repo_url is not None:
             warnings.warn(
@@ -657,13 +649,12 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        token = HfFolder.get_token() if use_auth_token is True else use_auth_token
-        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
+        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
 
         # If the namespace is not there, add it or `upload_file` will complain
         if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=token)
-        return repo_id, token
+            repo_id = get_full_repo_name(repo_id, token=use_auth_token)
+        return repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
         """
@@ -677,7 +668,7 @@ class PushToHubMixin:
         repo_id: str,
         files_timestamps: Dict[str, float],
         commit_message: Optional[str] = None,
-        token: Optional[str] = None,
+        token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
     ):
         """
@@ -718,7 +709,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
-        **deprecated_kwargs
+        **deprecated_kwargs,
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
@@ -776,7 +767,7 @@ class PushToHubMixin:
         else:
             working_dir = repo_id.split("/")[-1]
 
-        repo_id, token = self._create_repo(
+        repo_id = self._create_repo(
             repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
         )
 
@@ -790,13 +781,16 @@ class PushToHubMixin:
             self.save_pretrained(work_dir, max_shard_size=max_shard_size)
 
             return self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token, create_pr=create_pr
+                work_dir,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=use_auth_token,
+                create_pr=create_pr,
             )
 
 
 def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
-    if token is None:
-        token = HfFolder.get_token()
     if organization is None:
         username = whoami(token)["name"]
         return f"{username}/{model_id}"
@@ -907,7 +901,7 @@ def get_checkpoint_shard_files(
     with open(index_filename, "r") as f:
         index = json.loads(f.read())
 
-    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    shard_filenames = sorted(set(index["weight_map"].values()))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
@@ -919,7 +913,13 @@ def get_checkpoint_shard_files(
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
     cached_filenames = []
-    for shard_filename in shard_filenames:
+    # Check if the model is already cached or not. We only try the last checkpoint, this should cover most cases of
+    # downloaded (if interrupted).
+    last_shard = try_to_load_from_cache(
+        pretrained_model_name_or_path, shard_filenames[-1], cache_dir=cache_dir, revision=_commit_hash
+    )
+    show_progress_bar = last_shard is None or force_download
+    for shard_filename in tqdm(shard_filenames, desc="Downloading shards", disable=not show_progress_bar):
         try:
             # Load from URL
             cached_filename = cached_file(
@@ -1040,17 +1040,15 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             cache_dir = str(old_cache)
         else:
             cache_dir = new_cache_dir
-    if token is None:
-        token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
-    print(f"Moving {len(cached_files)} files to the new cache system")
+    logger.info(f"Moving {len(cached_files)} files to the new cache system")
 
     hub_metadata = {}
     for file_info in tqdm(cached_files):
         url = file_info.pop("url")
         if url not in hub_metadata:
             try:
-                hub_metadata[url] = get_hf_file_metadata(url, use_auth_token=token)
+                hub_metadata[url] = get_hf_file_metadata(url, token=token)
             except requests.HTTPError:
                 continue
 
@@ -1084,7 +1082,10 @@ if not os.path.isfile(cache_version_file):
     cache_version = 0
 else:
     with open(cache_version_file) as f:
-        cache_version = int(f.read())
+        try:
+            cache_version = int(f.read())
+        except ValueError:
+            cache_version = 0
 
 cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
 

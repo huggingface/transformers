@@ -29,9 +29,6 @@ import numpy as np
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
-if is_tf_available():
-    import tensorflow as tf
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -57,6 +54,21 @@ class cached_property(property):
             cached = self.fget(obj)
             setattr(obj, attr, cached)
         return cached
+
+
+# vendored from distutils.util
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return 1
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
 
 
 def is_tensor(x):
@@ -152,6 +164,23 @@ def is_tf_tensor(x):
     Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
     """
     return False if not is_tf_available() else _is_tensorflow(x)
+
+
+def _is_tf_symbolic_tensor(x):
+    import tensorflow as tf
+
+    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
+    if hasattr(tf, "is_symbolic_tensor"):
+        return tf.is_symbolic_tensor(x)
+    return type(x) == tf.Tensor
+
+
+def is_tf_symbolic_tensor(x):
+    """
+    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
+    installed.
+    """
+    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
 
 
 def _is_jax(x):
@@ -285,7 +314,7 @@ class ModelOutput(OrderedDict):
 
     def __getitem__(self, k):
         if isinstance(k, str):
-            inner_dict = {k: v for (k, v) in self.items()}
+            inner_dict = dict(self.items())
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
@@ -369,13 +398,14 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -392,12 +422,15 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
+
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:
@@ -437,6 +470,8 @@ def transpose(array, axes=None):
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
@@ -454,6 +489,8 @@ def reshape(array, newshape):
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
         return jnp.reshape(array, newshape)
@@ -471,6 +508,8 @@ def squeeze(array, axis=None):
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.squeeze(array, axis=axis)
@@ -488,6 +527,8 @@ def expand_dims(array, axis):
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
@@ -504,8 +545,23 @@ def tensor_size(array):
     elif is_torch_tensor(array):
         return array.numel()
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.size(array)
     elif is_jax_tensor(array):
         return array.size
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def add_model_info_to_auto_map(auto_map, repo_id):
+    """
+    Adds the information of the repo_id to a given auto map.
+    """
+    for key, value in auto_map.items():
+        if isinstance(value, (tuple, list)):
+            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+        elif value is not None and "--" not in value:
+            auto_map[key] = f"{repo_id}--{value}"
+
+    return auto_map

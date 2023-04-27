@@ -19,9 +19,10 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import transformers
 from seq2seq_trainer import Seq2SeqTrainer
 from seq2seq_training_args import Seq2SeqTrainingArguments
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -337,7 +338,6 @@ def main():
         metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
-
             handle_metrics("val", metrics, training_args.output_dir)
             all_metrics.update(metrics)
 

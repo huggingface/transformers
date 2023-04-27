@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -111,13 +112,18 @@ class TFRegNetModelTester:
 
 
 @require_tf
-class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as RegNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (TFRegNetModel, TFRegNetForImageClassification) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFRegNetModel, "image-classification": TFRegNetForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_onnx = False

@@ -18,9 +18,8 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfig
-
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -111,7 +110,7 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         quant_mode=False,
         force_dequant="none",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

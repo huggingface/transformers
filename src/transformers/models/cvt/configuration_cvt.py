@@ -121,7 +121,7 @@ class CvtConfig(PretrainedConfig):
         stride_q=[1, 1, 1],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.num_channels = num_channels

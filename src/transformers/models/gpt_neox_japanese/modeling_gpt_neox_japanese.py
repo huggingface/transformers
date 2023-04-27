@@ -33,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXJapaneseTokenizer"
 
 GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
@@ -181,13 +180,13 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # -> [bs, seq_len, hidden_size]
         return tensor
 
-    def _create_casual_mask(self, key_length, query_length):
-        casual_mask = torch.tril(
-            torch.ones((self.max_positions, self.max_positions), dtype=torch.uint8).view(
+    def _create_causal_mask(self, key_length, query_length):
+        causal_mask = torch.tril(
+            torch.ones((self.max_positions, self.max_positions), dtype=torch.bool).view(
                 1, 1, self.max_positions, self.max_positions
             )
         )
-        return casual_mask[:, :, key_length - query_length : key_length, :key_length].bool()
+        return causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -195,7 +194,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        causal_mask = self._create_casual_mask(key_length, query_length)
+        causal_mask = self._create_causal_mask(key_length, query_length)
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
@@ -392,7 +391,7 @@ GPT_NEOX_JAPANESE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoXJapaneseTokenizer`].
+            Indices can be obtained using [`AutoTokenizer`].
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -485,10 +484,10 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseModel
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseModel
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> model = GPTNeoXJapaneseModel.from_pretrained("abeja/gpt-neox-japanese-2.7b")
 
         >>> inputs = tokenizer("日本語のGPT-neoxがHugging Faceで使えます😀", return_tensors="pt")
@@ -591,7 +590,6 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "embed_out.weight"]
 
     def __init__(self, config):
@@ -651,10 +649,10 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config = GPTNeoXJapaneseConfig.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config.is_decoder = True
         >>> model = GPTNeoXJapaneseForCausalLM.from_pretrained("abeja/gpt-neox-japanese-2.7b", config=config)
@@ -684,6 +682,9 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
 
         lm_loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
+
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shift_logits = lm_logits[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
@@ -702,7 +703,7 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -710,14 +711,14 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past and past[0] is not None:
+        if past_key_values and past_key_values[0] is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )

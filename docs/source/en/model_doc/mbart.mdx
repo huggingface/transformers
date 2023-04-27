@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # MBart and MBart-50
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mbart">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mbart-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/mbart-large-50-one-to-many-mmt">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
 @patrickvonplaten
 
@@ -142,6 +151,15 @@ generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.la
 tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 # => "The Secretary-General of the United Nations says there is no military solution in Syria."
 ```
+
+## Documentation resources
+
+- [Text classification task guide](../tasks/sequence_classification)
+- [Question answering task guide](../tasks/question_answering)
+- [Causal language modeling task guide](../tasks/language_modeling)
+- [Masked language modeling task guide](../tasks/masked_language_modeling)
+- [Translation task guide](../tasks/translation)
+- [Summarization task guide](../tasks/summarization)
 
 ## MBartConfig
 

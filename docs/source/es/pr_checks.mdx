@@ -71,13 +71,13 @@ Si estás interesado en compilar u obtener una vista previa de la documentación
 
 ## Estilo de código y documentación.
 
-El formato de código se aplica a todos los archivos fuente, los ejemplos y las pruebas utilizando `black` e `isort`. También tenemos una herramienta personalizada que se ocupa del formato de los _docstrings_ y archivos `rst` (`utils/style_doc.py`), así como del orden de las importaciones _lazy_ realizadas en los archivos `__init__.py` de Transformers (`utils /custom_init_isort.py`). Todo esto se puede probar ejecutando
+El formato de código se aplica a todos los archivos fuente, los ejemplos y las pruebas utilizando `black` e `ruff`. También tenemos una herramienta personalizada que se ocupa del formato de los _docstrings_ y archivos `rst` (`utils/style_doc.py`), así como del orden de las importaciones _lazy_ realizadas en los archivos `__init__.py` de Transformers (`utils /custom_init_isort.py`). Todo esto se puede probar ejecutando
 
 ```bash
 make style
 ```
 
-CI verifica que se hayan aplicado dentro de la verificación `ci/circleci: check_code_quality`. También se ejecuta `flake8`, que hará una verificación básica a tu código y te hará saber si encuentra una variable no definida, o una que no se usa. Para ejecutar esa verificación localmente, usa
+CI verifica que se hayan aplicado dentro de la verificación `ci/circleci: check_code_quality`. También se ejecuta `ruff`, que hará una verificación básica a tu código y te hará saber si encuentra una variable no definida, o una que no se usa. Para ejecutar esa verificación localmente, usa
 
 ```bash
 make quality

@@ -32,6 +32,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -341,7 +342,7 @@ class UniSpeechSatModelTester:
 
 
 @require_torch
-class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
+class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             UniSpeechSatForCTC,
@@ -353,6 +354,15 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": UniSpeechSatForSequenceClassification,
+            "automatic-speech-recognition": UniSpeechSatForCTC,
+            "feature-extraction": UniSpeechSatModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False

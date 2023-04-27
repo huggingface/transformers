@@ -96,6 +96,7 @@ def ignore_underscore(key):
 
 def sort_objects(objects, key=None):
     "Sort a list of `objects` following the rules of isort. `key` optionally maps an object to a str."
+
     # If no key is provided, we use a noop.
     def noop(x):
         return x
@@ -117,6 +118,7 @@ def sort_objects_in_import(import_statement):
     """
     Return the same `import_statement` but with objects properly sorted.
     """
+
     # This inner function sort imports between [ ].
     def _replace(match):
         imports = match.groups()[0]

@@ -28,13 +28,14 @@ import tempfile
 import time
 import unittest
 from collections.abc import Mapping
-from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+import requests
+
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -51,17 +52,20 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_cython_available,
     is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_natten_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
@@ -83,12 +87,15 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
+    is_torchvision_available,
     is_vision_available,
+    strtobool,
 )
 
 
@@ -135,12 +142,12 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
-_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
+_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=True)
+_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
+_run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 
 
 def is_pt_tf_cross_test(test_case):
@@ -198,6 +205,22 @@ def is_staging_test(test_case):
             return pytest.mark.is_staging_test()(test_case)
 
 
+def is_pipeline_test(test_case):
+    """
+    Decorator marking a test as a pipeline test. If RUN_PIPELINE_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_pipeline_tests:
+        return unittest.skip("test is pipeline test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_pipeline_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -236,16 +259,6 @@ def require_bs4(test_case):
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
 
 
-def require_git_lfs(test_case):
-    """
-    Decorator marking a test that requires git-lfs.
-
-    git-lfs requires additional dependencies, and tests are skipped by default. Set the RUN_GIT_LFS_TESTS environment
-    variable to a truthy value to run them.
-    """
-    return unittest.skipUnless(_run_git_lfs_tests, "test of git lfs workflow")(test_case)
-
-
 def require_accelerate(test_case):
     """
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
@@ -265,6 +278,13 @@ def require_rjieba(test_case):
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
     """
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
+
+
+def require_jieba(test_case):
+    """
+    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
+    """
+    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
 
 
 def require_tf2onnx(test_case):
@@ -303,6 +323,16 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torchvision(test_case):
+    """
+    Decorator marking a test that requires Torchvision.
+
+    These tests are skipped when Torchvision isn't installed.
+
+    """
+    return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
 def require_torch_or_tf(test_case):
@@ -500,6 +530,15 @@ def require_torch_tpu(test_case):
     return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
 
 
+def require_torch_neuroncore(test_case):
+    """
+    Decorator marking a test that requires NeuronCore (in PyTorch).
+    """
+    return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
+        test_case
+    )
+
+
 if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
@@ -655,6 +694,13 @@ def require_bitsandbytes(test_case):
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
 
 
+def require_optimum(test_case):
+    """
+    Decorator for optimum dependency
+    """
+    return unittest.skipUnless(is_optimum_available(), "test requires optimum")(test_case)
+
+
 def require_phonemizer(test_case):
     """
     Decorator marking a test that requires phonemizer
@@ -699,6 +745,13 @@ def require_jumanpp(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
+
+
+def require_cython(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
 
 
 def get_gpu_count():
@@ -748,6 +801,7 @@ def get_tests_dir(append_path=None):
 # Helper functions for dealing with testing text outputs
 # The original code came from:
 # https://github.com/fastai/fastai/blob/master/tests/utils/text.py
+
 
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys
@@ -1643,12 +1697,16 @@ class RequestCounter:
         self.head_request_count = 0
         self.get_request_count = 0
         self.other_request_count = 0
-        self.old_request = huggingface_hub.file_download.requests.request
-        huggingface_hub.file_download.requests.request = self.new_request
+
+        # Mock `get_session` to count HTTP calls.
+        self.old_get_session = huggingface_hub.utils._http.get_session
+        self.session = requests.Session()
+        self.session.request = self.new_request
+        huggingface_hub.utils._http.get_session = lambda: self.session
         return self
 
     def __exit__(self, *args, **kwargs):
-        huggingface_hub.file_download.requests.request = self.old_request
+        huggingface_hub.utils._http.get_session = self.old_get_session
 
     def new_request(self, method, **kwargs):
         if method == "GET":
@@ -1658,10 +1716,10 @@ class RequestCounter:
         else:
             self.other_request_count += 1
 
-        return self.old_request(method=method, **kwargs)
+        return requests.request(method=method, **kwargs)
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -1670,6 +1728,9 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*):
             If provided, will wait that number of seconds before retrying the test.
+        description (`str`, *optional*):
+            A string to describe the situation (what / where / why is flaky, link to GH issue/PR comments, errors,
+            etc.)
     """
 
     def decorator(test_func_ref):
@@ -1694,7 +1755,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
     return decorator
 
 
-def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
+def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     """
     To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
 
@@ -1705,9 +1766,12 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
             The function implementing the actual testing logic.
         inputs (`dict`, *optional*, defaults to `None`):
             The inputs that will be passed to `target_func` through an (input) queue.
-        timeout (`int`, *optional*, defaults to 600):
-            The timeout (in seconds) that will be passed to the input and output queues.
+        timeout (`int`, *optional*, defaults to `None`):
+            The timeout (in seconds) that will be passed to the input and output queues. If not specified, the env.
+            variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
+    if timeout is None:
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)

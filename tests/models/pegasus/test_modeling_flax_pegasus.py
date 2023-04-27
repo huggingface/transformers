@@ -30,10 +30,10 @@ if is_flax_available():
     # This makes JAX allocate exactly what is needed on demand, and deallocate memory that is no longer needed
     # but will be slower as stated here https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    import numpy as np
-
     import jax
     import jax.numpy as jnp
+    import numpy as np
+
     from transformers import FlaxPegasusForConditionalGeneration, FlaxPegasusModel
 
 

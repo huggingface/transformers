@@ -27,6 +27,7 @@ if is_flax_available():
 
     import jax.numpy as jnp
     from jax import jit
+
     from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 

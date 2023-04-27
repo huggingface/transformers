@@ -44,7 +44,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 1024):
@@ -73,7 +73,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         mean=-4.2677393,
         std=4.5689974,
         return_attention_mask=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
@@ -127,7 +127,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).

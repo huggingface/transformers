@@ -86,7 +86,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         mask_token=chr(MASK),
         add_prefix_space=False,
         model_max_length=2048,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token

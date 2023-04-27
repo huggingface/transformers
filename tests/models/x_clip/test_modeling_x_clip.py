@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -393,7 +394,6 @@ class XCLIPTextModelTester:
 
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -445,7 +445,6 @@ class XCLIPModelTester:
         mit_hidden_size=64,
         is_training=True,
     ):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -508,8 +507,9 @@ class XCLIPModelTester:
 
 
 @require_torch
-class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

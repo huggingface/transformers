@@ -20,8 +20,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -316,7 +317,6 @@ class ChineseCLIPVisionModelTester:
 
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
 
@@ -478,7 +478,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
 class ChineseCLIPModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -535,8 +534,9 @@ class ChineseCLIPModelTester:
 
 
 @require_torch
-class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": ChineseCLIPModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

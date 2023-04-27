@@ -43,8 +43,8 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.base')
         #  xlmr.eval()
         #  expected_output_values_last_dim = xlmr.extract_features(input_ids[0])[:, :, -1]
-
-        output = model(input_ids)["last_hidden_state"].detach()
+        with torch.no_grad():
+            output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
@@ -62,8 +62,8 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.large')
         #  xlmr.eval()
         #  expected_output_values_last_dim = xlmr.extract_features(input_ids[0])[:, :, -1]
-
-        output = model(input_ids)["last_hidden_state"].detach()
+        with torch.no_grad():
+            output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))

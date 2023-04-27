@@ -126,7 +126,7 @@ class DPRConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         projection_dim: int = 0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

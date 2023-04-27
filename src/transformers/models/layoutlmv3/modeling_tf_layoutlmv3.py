@@ -1067,7 +1067,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
             token. See `pixel_values` for `patch_sequence_length`.
 
-            Indices can be obtained using [`LayoutLMv3Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)

@@ -22,8 +22,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -42,6 +42,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -435,7 +436,6 @@ class FlavaTextModelTester:
 
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -569,7 +569,6 @@ class FlavaMultimodalModelTester:
 
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -667,7 +666,6 @@ class FlavaImageCodebookTester:
 
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -756,7 +754,6 @@ class FlavaModelTester:
         initializer_range=0.02,
         layer_norm_eps=1e-12,
     ):
-
         if text_kwargs is None:
             text_kwargs = {}
         if image_kwargs is None:
@@ -860,8 +857,9 @@ class FlavaModelTester:
 
 
 @require_torch
-class FlavaModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False

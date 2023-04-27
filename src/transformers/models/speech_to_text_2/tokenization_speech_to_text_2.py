@@ -108,7 +108,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         do_lower_case=False,
         merges_file=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -213,7 +213,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

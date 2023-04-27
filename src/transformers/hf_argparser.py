@@ -394,7 +394,7 @@ class HfArgumentParser(ArgumentParser):
 
     def parse_yaml_file(self, yaml_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
         """
-        Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
+        Alternative helper method that does not use `argparse` at all, instead loading a yaml file and populating the
         dataclass types.
 
         Args:

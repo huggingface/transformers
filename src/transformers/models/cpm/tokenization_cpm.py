@@ -53,7 +53,7 @@ class CpmTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and

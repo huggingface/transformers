@@ -186,7 +186,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
             input_ids_query (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the queries in a batch.
 
-                Indices can be obtained using [`RetriBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)

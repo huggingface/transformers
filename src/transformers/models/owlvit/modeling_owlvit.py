@@ -204,8 +204,8 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the unnormalized
-            bounding boxes.
+            possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
@@ -248,13 +248,13 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual target image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the
-            unnormalized bounding boxes.
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
+            retrieve the unnormalized bounding boxes.
         query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the
-            unnormalized bounding boxes.
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
+            retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
@@ -476,9 +476,9 @@ class OwlViTEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = OwlViTAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = OwlViTMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -594,7 +594,7 @@ OWLVIT_START_DOCSTRING = r"""
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -629,7 +629,7 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -656,7 +656,7 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -790,7 +790,7 @@ class OwlViTTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
@@ -894,10 +894,10 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTTextModel
+        >>> from transformers import AutoProcessor, OwlViTTextModel
 
         >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -922,9 +922,9 @@ class OwlViTVisionTransformer(nn.Module):
         self.config = config
 
         self.embeddings = OwlViTVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(config.hidden_size)
+        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
@@ -1003,10 +1003,10 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTVisionModel
+        >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1076,10 +1076,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -1112,10 +1112,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1160,10 +1160,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1276,7 +1276,6 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
-
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1318,7 +1317,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.class_head = OwlViTClassPredictionHead(config)
         self.box_head = OwlViTBoxPredictionHead(config)
 
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
@@ -1408,7 +1407,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1478,7 +1476,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def embed_image_query(
         self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
     ) -> torch.FloatTensor:
-
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
@@ -1535,9 +1532,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1631,9 +1628,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1644,18 +1641,18 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
-        >>> # Convert outputs (bounding boxes and class logits) to COCO API
-        >>> results = processor.post_process(outputs=outputs, target_sizes=target_sizes)
+        >>> # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
+        >>> results = processor.post_process_object_detection(
+        ...     outputs=outputs, threshold=0.1, target_sizes=target_sizes
+        ... )
 
         >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
         >>> text = texts[i]
         >>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
 
-        >>> score_threshold = 0.1
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     if score >= score_threshold:
-        ...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+        ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
         Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
         Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""

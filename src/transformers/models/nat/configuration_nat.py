@@ -62,8 +62,6 @@ class NatConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        patch_norm (`bool`, *optional*, defaults to `True`):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -72,7 +70,12 @@ class NatConfig(PretrainedConfig):
             The initial value for the layer scale. Disabled if <=0.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -109,12 +112,12 @@ class NatConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
         out_features=None,
-        **kwargs
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -131,7 +134,6 @@ class NatConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # we set the hidden_size attribute in order to make Nat work with VisionEncoderDecoderModel
@@ -139,6 +141,21 @@ class NatConfig(PretrainedConfig):
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.layer_scale_init_value = layer_scale_init_value
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+
+        if out_features is not None and out_indices is not None:
+            if len(out_features) != len(out_indices):
+                raise ValueError("out_features and out_indices should have the same length if both are set")
+            elif out_features != [self.stage_names[idx] for idx in out_indices]:
+                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
+
+        if out_features is None and out_indices is not None:
+            out_features = [self.stage_names[idx] for idx in out_indices]
+        elif out_features is not None and out_indices is None:
+            out_indices = [self.stage_names.index(feature) for feature in out_features]
+        elif out_features is None and out_indices is None:
+            out_features = [self.stage_names[-1]]
+            out_indices = [len(self.stage_names) - 1]
+
         if out_features is not None:
             if not isinstance(out_features, list):
                 raise ValueError("out_features should be a list")
@@ -147,4 +164,12 @@ class NatConfig(PretrainedConfig):
                     raise ValueError(
                         f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
                     )
+        if out_indices is not None:
+            if not isinstance(out_indices, (list, tuple)):
+                raise ValueError("out_indices should be a list or tuple")
+            for idx in out_indices:
+                if idx >= len(self.stage_names):
+                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
+
         self.out_features = out_features
+        self.out_indices = out_indices

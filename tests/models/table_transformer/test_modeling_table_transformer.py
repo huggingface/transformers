@@ -20,18 +20,20 @@ import math
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import TableTransformerConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
     import torch
 
-    from transformers import TableTransformerForObjectDetection, TableTransformerModel
+    from transformers import ResNetConfig, TableTransformerForObjectDetection, TableTransformerModel
 
 
 if is_vision_available():
@@ -153,9 +155,28 @@ class TableTransformerModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
+    def create_and_check_table_transformer_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
+        config.use_timm_backbone = False
+        config.backbone_config = ResNetConfig()
+        model = TableTransformerForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
 
 @require_timm
-class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,
@@ -163,6 +184,11 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False
@@ -211,6 +237,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_table_transformer_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_table_transformer_object_detection_head_model(*config_and_inputs)
+
+    def test_table_transformer_no_timm_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_table_transformer_no_timm_backbone(*config_and_inputs)
 
     @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):

@@ -20,6 +20,7 @@ from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, s
 
 if is_flax_available():
     import jax
+
     from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
     from transformers.models.bert.modeling_flax_bert import FlaxBertModel
     from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel

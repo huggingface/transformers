@@ -112,7 +112,7 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         use_cache=True,
         forced_eos_token_id=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token_id=bos_token_id,

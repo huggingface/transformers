@@ -93,12 +93,12 @@ class MvpConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MvpModel, MvpConfig
+    >>> from transformers import MvpConfig, MvpModel
 
     >>> # Initializing a MVP RUCAIBox/mvp style configuration
     >>> configuration = MvpConfig()
 
-    >>> # Initializing a model from the RUCAIBox/mvp style configuration
+    >>> # Initializing a model (with random weights) from the RUCAIBox/mvp style configuration
     >>> model = MvpModel(configuration)
 
     >>> # Accessing the model configuration
@@ -138,7 +138,7 @@ class MvpConfig(PretrainedConfig):
         use_prompt=False,
         prompt_length=100,
         prompt_mid_dim=800,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

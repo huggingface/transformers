@@ -98,7 +98,7 @@ class ViTMSNConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

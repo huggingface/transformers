@@ -20,6 +20,7 @@ import re
 
 from flax.traverse_util import flatten_dict, unflatten_dict
 from t5x import checkpoints
+
 from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration
 from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 from transformers.utils import logging
@@ -92,7 +93,6 @@ def rename_keys(s_dict):
     # 3. Take extra care of the EXPERTS layer
     for key in list(s_dict.keys()):
         if "expert" in key:
-
             num_experts = s_dict[key].shape[0]
             expert_weihts = s_dict[key]
             for idx in range(num_experts):

@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
-_TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/yoso-4096",
@@ -99,7 +98,6 @@ def normalize(input_tensors):
 
 
 def hashing(query, key, num_hash, hash_len):
-
     if len(query.size()) != 3:
         raise ValueError("Query has incorrect size.")
     if len(key.size()) != 3:
@@ -766,7 +764,6 @@ class YosoModel(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -875,7 +872,6 @@ class YosoForMaskedLM(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -971,7 +967,6 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1064,7 +1059,6 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1157,7 +1151,6 @@ class YosoForTokenClassification(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1244,7 +1237,6 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

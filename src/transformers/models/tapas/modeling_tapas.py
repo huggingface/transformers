@@ -29,7 +29,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -43,8 +47,6 @@ from .configuration_tapas import TapasConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TapasConfig"
-_TOKENIZER_FOR_DOC = "TapasTokenizer"
-_TOKENIZER_FOR_DOC = "google/tapas-base"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -291,7 +293,6 @@ class TapasEmbeddings(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.config.reset_position_index_per_cell:
-
                 # shape (batch_size, seq_len)
                 col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
@@ -793,7 +794,7 @@ TAPAS_START_DOCSTRING = r"""
 TAPAS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`TapasTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -805,7 +806,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0}, 7)`, *optional*):
-            Token indices that encode tabular structure. Indices can be obtained using [`TapasTokenizer`]. See this
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
             class for more info.
 
             [What are token type IDs?](../glossary#token-type-ids)
@@ -896,10 +897,10 @@ class TapasModel(TapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasModel
+        >>> from transformers import AutoTokenizer, TapasModel
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasModel.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1025,7 +1026,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1038,10 +1039,10 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForMaskedLM
+        >>> from transformers import AutoTokenizer, TapasForMaskedLM
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1166,7 +1167,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             padding are 0.
         labels (`torch.LongTensor` of shape `(batch_size, seq_length)`, *optional*):
             Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the
-            answer appearing in the table. Can be obtained using [`TapasTokenizer`].
+            answer appearing in the table. Can be obtained using [`AutoTokenizer`].
 
             - 1 for tokens that are **part of the answer**,
             - 0 for tokens that are **not part of the answer**.
@@ -1180,10 +1181,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             required in case of weak supervision (WTQ) to calculate the aggregate mask and regression loss.
         numeric_values (`torch.FloatTensor` of shape `(batch_size, seq_length)`, *optional*):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
-            [`TapasTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
+            [`AutoTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
             regression loss.
         numeric_values_scale (`torch.FloatTensor` of shape `(batch_size, seq_length)`, *optional*):
-            Scale of the numeric values of every token. Can be obtained using [`TapasTokenizer`]. Only required in case
+            Scale of the numeric values of every token. Can be obtained using [`AutoTokenizer`]. Only required in case
             of weak supervision for aggregation (WTQ) to calculate the regression loss.
 
         Returns:
@@ -1191,10 +1192,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
+        >>> from transformers import AutoTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
         >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
 
         >>> data = {
@@ -1489,11 +1490,11 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+        >>> from transformers import AutoTokenizer, TapasForSequenceClassification
         >>> import torch
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
         >>> model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
 
         >>> data = {
@@ -1635,11 +1636,8 @@ class ProductIndexMap(IndexMap):
 
     def project_outer(self, index):
         """Projects an index with the same index set onto the outer components."""
-        return IndexMap(
-            indices=(index.indices // self.inner_index.num_segments).type(torch.float).floor().type(torch.long),
-            num_segments=self.outer_index.num_segments,
-            batch_dims=index.batch_dims,
-        )
+        indices = torch.div(index.indices, self.inner_index.num_segments, rounding_mode="floor").type(torch.long)
+        return IndexMap(indices=indices, num_segments=self.outer_index.num_segments, batch_dims=index.batch_dims)
 
     def project_inner(self, index):
         """Projects an index with the same index set onto the inner components."""

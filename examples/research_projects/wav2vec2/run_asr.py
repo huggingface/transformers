@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import datasets
+import librosa
 import numpy as np
 import torch
+from lang_trans import arabic
 from packaging import version
 from torch import nn
 
-import librosa
-from lang_trans import arabic
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -365,7 +365,7 @@ def main():
     target_sr = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
     vocabulary_chars_str = "".join(t for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
     vocabulary_text_cleaner = re.compile(  # remove characters not in vocabulary
-        f"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
+        rf"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
         flags=re.IGNORECASE if processor.tokenizer.do_lower_case else 0,
     )
     text_updates = []

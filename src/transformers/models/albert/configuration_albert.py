@@ -132,7 +132,7 @@ class AlbertConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

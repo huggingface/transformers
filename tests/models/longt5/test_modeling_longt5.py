@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -71,7 +72,6 @@ class LongT5ModelTester:
         decoder_layers=None,
         large_model_config_path="google/long-t5-local-large",
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -501,10 +501,20 @@ class LongT5ModelTester:
 
 
 @require_torch
-class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": LongT5ForConditionalGeneration,
+            "feature-extraction": LongT5Model,
+            "summarization": LongT5ForConditionalGeneration,
+            "text2text-generation": LongT5ForConditionalGeneration,
+            "translation": LongT5ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_torchscript = True
@@ -919,7 +929,6 @@ class LongT5EncoderOnlyModelTester:
         scope=None,
         large_model_config_path="google/long-t5-local-large",
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

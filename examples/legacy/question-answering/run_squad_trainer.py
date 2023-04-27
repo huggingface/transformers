@@ -30,9 +30,10 @@ from transformers import (
     DataCollatorWithPadding,
     HfArgumentParser,
     SquadDataset,
+    Trainer,
+    TrainingArguments,
 )
 from transformers import SquadDataTrainingArguments as DataTrainingArguments
-from transformers import Trainer, TrainingArguments
 from transformers.trainer_utils import is_main_process
 
 

@@ -25,6 +25,7 @@ from transformers.utils import cached_property, is_scipy_available, is_torch_ava
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_scipy_available():
@@ -115,13 +116,18 @@ class VanModelTester:
 
 
 @require_torch
-class VanModelTest(ModelTesterMixin, unittest.TestCase):
+class VanModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Van does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (VanModel, VanForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": VanModel, "image-classification": VanForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False

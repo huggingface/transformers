@@ -155,7 +155,7 @@ class RealmTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             do_lower_case=do_lower_case,
@@ -203,7 +203,6 @@ class RealmTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -295,7 +294,7 @@ class RealmTokenizer(PreTrainedTokenizer):
             if encoded_token_type_ids is not None:
                 output_data["token_type_ids"].append(encoded_token_type_ids)
 
-        output_data = dict((key, item) for key, item in output_data.items() if len(item) != 0)
+        output_data = {key: item for key, item in output_data.items() if len(item) != 0}
 
         return BatchEncoding(output_data, tensor_type=return_tensors)
 

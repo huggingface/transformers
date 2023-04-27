@@ -16,9 +16,16 @@ import unittest
 
 from transformers import is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -31,13 +38,14 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
-class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
     # and only CLIP would be there for now.
     # model_mapping = {CLIPConfig: CLIPModel}
 
-    # def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    # def get_test_pipeline(self, model, tokenizer, processor):
     #     if tokenizer is None:
     #         # Side effect of no Fast Tokenizer class for these model, so skipping
     #         # But the slow tokenizer test should still run as they're quite small
@@ -46,7 +54,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     #         # return None, None
 
     #     image_classifier = ZeroShotImageClassificationPipeline(
-    #         model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+    #         model=model, tokenizer=tokenizer, feature_extractor=processor
     #     )
 
     #     # test with a raw waveform
@@ -70,9 +78,14 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
 
-        self.assertEqual(
+        # The floating scores are so close, we enter floating error approximation and the order is not guaranteed across
+        # python and torch versions.
+        self.assertIn(
             nested_simplify(output),
-            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+            [
+                [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+                [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "c"}, {"score": 0.333, "label": "b"}],
+            ],
         )
 
         output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)

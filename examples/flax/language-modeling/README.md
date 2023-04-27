@@ -129,7 +129,7 @@ look at [this](https://colab.research.google.com/github/huggingface/notebooks/bl
 
 In the following, we demonstrate how to train an auto-regressive causal transformer model 
 in JAX/Flax.
-More specifically, we pretrain a randomely initialized [**`gpt2`**](https://huggingface.co/gpt2) model in Norwegian on a single TPUv3-8.
+More specifically, we pretrain a randomly initialized [**`gpt2`**](https://huggingface.co/gpt2) model in Norwegian on a single TPUv3-8.
 to pre-train 124M [**`gpt2`**](https://huggingface.co/gpt2)
 in Norwegian on a single TPUv3-8 pod.
 

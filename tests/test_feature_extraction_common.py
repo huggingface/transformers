@@ -22,19 +22,11 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
+
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import (
-    TOKEN,
-    USER,
-    check_json_file_has_correct_format,
-    get_tests_dir,
-    is_staging_test,
-    require_torch,
-    require_vision,
-)
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -42,103 +34,7 @@ sys.path.append(str(Path(__file__).parent.parent / "utils"))
 from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
 
 
-if is_torch_available():
-    import numpy as np
-    import torch
-
-if is_vision_available():
-    from PIL import Image
-
-
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
-
-
-def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
-    """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-    or a list of PyTorch tensors if one specifies torchify=True.
-
-    One can specify whether the images are of the same resolution or not.
-    """
-
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-    image_inputs = []
-    for i in range(feature_extract_tester.batch_size):
-        if equal_resolution:
-            width = height = feature_extract_tester.max_resolution
-        else:
-            # To avoid getting image width/height 0
-            min_resolution = feature_extract_tester.min_resolution
-            if getattr(feature_extract_tester, "size_divisor", None):
-                # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-                min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
-            width, height = np.random.choice(np.arange(min_resolution, feature_extract_tester.max_resolution), 2)
-        image_inputs.append(
-            np.random.randint(
-                255,
-                size=(
-                    feature_extract_tester.num_channels,
-                    width,
-                    height,
-                ),
-                dtype=np.uint8,
-            )
-        )
-
-    if not numpify and not torchify:
-        # PIL expects the channel dimension as last dimension
-        image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
-
-    if torchify:
-        image_inputs = [torch.from_numpy(image) for image in image_inputs]
-
-    return image_inputs
-
-
-def prepare_video(feature_extract_tester, width=10, height=10, numpify=False, torchify=False):
-    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
-
-    video = []
-    for i in range(feature_extract_tester.num_frames):
-        video.append(np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8))
-
-    if not numpify and not torchify:
-        # PIL expects the channel dimension as last dimension
-        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
-
-    if torchify:
-        video = [torch.from_numpy(frame) for frame in video]
-
-    return video
-
-
-def prepare_video_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
-    """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
-    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
-
-    One can specify whether the videos are of the same resolution or not.
-    """
-
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-    video_inputs = []
-    for i in range(feature_extract_tester.batch_size):
-        if equal_resolution:
-            width = height = feature_extract_tester.max_resolution
-        else:
-            width, height = np.random.choice(
-                np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
-            )
-            video = prepare_video(
-                feature_extract_tester=feature_extract_tester,
-                width=width,
-                height=height,
-                numpify=numpify,
-                torchify=torchify,
-            )
-        video_inputs.append(video)
-
-    return video_inputs
 
 
 class FeatureExtractionSavingTestMixin:
@@ -174,41 +70,6 @@ class FeatureExtractionSavingTestMixin:
         feat_extract = self.feature_extraction_class()
         self.assertIsNotNone(feat_extract)
 
-    @require_torch
-    @require_vision
-    def test_cast_dtype_device(self):
-        if self.test_cast_dtype is not None:
-            # Initialize feature_extractor
-            feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-
-            # create random PyTorch tensors
-            image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
-
-            encoding = feature_extractor(image_inputs, return_tensors="pt")
-            # for layoutLM compatiblity
-            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-            self.assertEqual(encoding.pixel_values.dtype, torch.float32)
-
-            encoding = feature_extractor(image_inputs, return_tensors="pt").to(torch.float16)
-            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
-
-            encoding = feature_extractor(image_inputs, return_tensors="pt").to("cpu", torch.bfloat16)
-            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-            self.assertEqual(encoding.pixel_values.dtype, torch.bfloat16)
-
-            with self.assertRaises(TypeError):
-                _ = feature_extractor(image_inputs, return_tensors="pt").to(torch.bfloat16, "cpu")
-
-            # Try with text + image feature
-            encoding = feature_extractor(image_inputs, return_tensors="pt")
-            encoding.update({"input_ids": torch.LongTensor([[1, 2, 3], [4, 5, 6]])})
-            encoding = encoding.to(torch.float16)
-
-            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
-            self.assertEqual(encoding.input_ids.dtype, torch.long)
-
 
 class FeatureExtractorUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):
@@ -222,7 +83,7 @@ class FeatureExtractorUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -239,7 +100,6 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

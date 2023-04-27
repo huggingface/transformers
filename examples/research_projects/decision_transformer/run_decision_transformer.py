@@ -1,8 +1,8 @@
+import gym
 import numpy as np
 import torch
-
-import gym
 from mujoco_py import GlfwContext
+
 from transformers import DecisionTransformerModel
 
 

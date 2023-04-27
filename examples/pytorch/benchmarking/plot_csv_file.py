@@ -83,7 +83,7 @@ def can_convert_to_float(string):
 class Plot:
     def __init__(self, args):
         self.args = args
-        self.result_dict = defaultdict(lambda: dict(bsz=[], seq_len=[], result={}))
+        self.result_dict = defaultdict(lambda: {"bsz": [], "seq_len": [], "result": {}})
 
         with open(self.args.csv_file, newline="") as csv_file:
             reader = csv.DictReader(csv_file)
@@ -116,8 +116,8 @@ class Plot:
             axis.set_major_formatter(ScalarFormatter())
 
         for model_name_idx, model_name in enumerate(self.result_dict.keys()):
-            batch_sizes = sorted(list(set(self.result_dict[model_name]["bsz"])))
-            sequence_lengths = sorted(list(set(self.result_dict[model_name]["seq_len"])))
+            batch_sizes = sorted(set(self.result_dict[model_name]["bsz"]))
+            sequence_lengths = sorted(set(self.result_dict[model_name]["seq_len"]))
             results = self.result_dict[model_name]["result"]
 
             (x_axis_array, inner_loop_array) = (
@@ -132,7 +132,7 @@ class Plot:
                 if self.args.plot_along_batch:
                     y_axis_array = np.asarray(
                         [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
-                        dtype=np.int,
+                        dtype=int,
                     )
                 else:
                     y_axis_array = np.asarray(
@@ -144,7 +144,7 @@ class Plot:
                     ("batch_size", "len") if self.args.plot_along_batch else ("in #tokens", "bsz")
                 )
 
-                x_axis_array = np.asarray(x_axis_array, np.int)[: len(y_axis_array)]
+                x_axis_array = np.asarray(x_axis_array, int)[: len(y_axis_array)]
                 plt.scatter(
                     x_axis_array, y_axis_array, label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}"
                 )

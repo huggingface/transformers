@@ -49,7 +49,6 @@ from .configuration_longt5 import LongT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
@@ -232,7 +231,6 @@ class LongT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # LongT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -277,6 +275,12 @@ class LongT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -1180,7 +1184,6 @@ class LongT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1347,8 +1350,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the"
-            " pad_token_id. See LongT5 docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id."
+            " See LongT5 docs for more information"
         )
 
         # shift inputs to the right
@@ -1449,11 +1452,6 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
@@ -1482,6 +1480,13 @@ class LongT5Stack(LongT5PreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -1502,8 +1507,6 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1616,7 +1619,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1633,7 +1636,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1711,7 +1714,7 @@ LONGT5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [LONGT5
@@ -1832,9 +1835,9 @@ class LongT5Model(LongT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, LongT5Model
+        >>> from transformers import AutoTokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/long-t5-local-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
         >>> model = LongT5Model.from_pretrained("google/long-t5-local-base")
 
         >>> # Let's try a very long encoder input.
@@ -2071,6 +2074,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
+
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
@@ -2093,23 +2098,22 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2121,15 +2125,15 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()

@@ -25,6 +25,7 @@ from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -128,6 +129,9 @@ class ImageProcessingMixin(PushToHubMixin):
                 functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
                 consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
                 `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
@@ -185,7 +189,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -201,7 +205,11 @@ class ImageProcessingMixin(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
         return [output_image_processor_file]
@@ -217,6 +225,9 @@ class ImageProcessingMixin(PushToHubMixin):
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
 
         Returns:
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
@@ -228,6 +239,7 @@ class ImageProcessingMixin(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -265,6 +277,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     use_auth_token=use_auth_token,
                     user_agent=user_agent,
                     revision=revision,
+                    subfolder=subfolder,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -297,6 +310,11 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
+        if "auto_map" in image_processor_dict and not is_local:
+            image_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                image_processor_dict["auto_map"], pretrained_model_name_or_path
+            )
+
         return image_processor_dict, kwargs
 
     @classmethod
@@ -316,7 +334,16 @@ class ImageProcessingMixin(PushToHubMixin):
             [`~image_processing_utils.ImageProcessingMixin`]: The image processor object instantiated from those
             parameters.
         """
+        image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
+        # We set `size` here directly to the `image_processor_dict` so that it is converted to the appropriate
+        # dict within the image processor and isn't overwritten if `size` is passed in as a kwarg.
+        if "size" in kwargs and "size" in image_processor_dict:
+            image_processor_dict["size"] = kwargs.pop("size")
+        if "crop_size" in kwargs and "crop_size" in image_processor_dict:
+            image_processor_dict["crop_size"] = kwargs.pop("crop_size")
 
         image_processor = cls(**image_processor_dict)
 
@@ -440,7 +467,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
 
-VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"})
+VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
 
 
 def is_valid_size_dict(size_dict):
@@ -474,6 +501,10 @@ def convert_to_size_dict(
         return {"height": size[0], "width": size[1]}
     elif isinstance(size, (tuple, list)) and not height_width_order:
         return {"height": size[1], "width": size[0]}
+    elif size is None and max_size is not None:
+        if default_to_square:
+            raise ValueError("Cannot specify both default_to_square=True and max_size")
+        return {"longest_edge": max_size}
 
     raise ValueError(f"Could not convert size input to size dict: {size}")
 
@@ -509,8 +540,8 @@ def get_size_dict(
     if not isinstance(size, dict):
         size_dict = convert_to_size_dict(size, max_size, default_to_square, height_width_order)
         logger.info(
-            "{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
-            " Converted to {size_dict}.",
+            f"{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
+            f" Converted to {size_dict}.",
         )
     else:
         size_dict = size

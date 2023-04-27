@@ -29,6 +29,7 @@ from .utils import (
     FEATURE_EXTRACTOR_NAME,
     PushToHubMixin,
     TensorType,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -353,7 +354,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -369,7 +370,11 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
         return [output_feature_extractor_file]
@@ -463,6 +468,11 @@ class FeatureExtractionMixin(PushToHubMixin):
         else:
             logger.info(
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
+            )
+
+        if "auto_map" in feature_extractor_dict and not is_local:
+            feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
+                feature_extractor_dict["auto_map"], pretrained_model_name_or_path
             )
 
         return feature_extractor_dict, kwargs

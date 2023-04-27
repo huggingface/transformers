@@ -4,6 +4,7 @@ import sys
 from unittest.mock import patch
 
 import run_glue_deebert
+
 from transformers.testing_utils import TestCasePlus, get_gpu_count, require_torch_non_multi_gpu, slow
 
 
@@ -45,7 +46,6 @@ class DeeBertTests(TestCasePlus):
     @slow
     @require_torch_non_multi_gpu
     def test_glue_deebert_train(self):
-
         train_args = """
             --model_type roberta
             --model_name_or_path roberta-base

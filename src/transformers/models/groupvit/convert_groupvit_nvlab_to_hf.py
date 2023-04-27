@@ -21,10 +21,10 @@ URL: https://github.com/NVlabs/GroupViT
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import CLIPProcessor, GroupViTConfig, GroupViTModel
 
 

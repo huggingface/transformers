@@ -18,9 +18,6 @@ from typing import Dict, Iterable, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
@@ -30,11 +27,11 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import is_pytesseract_available, logging, requires_backends
+from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():
@@ -157,7 +154,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = "",
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
@@ -181,7 +178,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]) dimensions.
@@ -207,7 +204,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -228,7 +225,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         mean: Union[float, Iterable[float]],
         std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image.
@@ -320,8 +317,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

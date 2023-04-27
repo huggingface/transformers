@@ -15,8 +15,8 @@
 """ TrajectoryTransformer pytorch checkpoint conversion"""
 
 import torch
-
 import trajectory.utils as utils
+
 from transformers import TrajectoryTransformerModel
 
 

@@ -142,7 +142,7 @@ class TFWhisperAttention(tf.keras.layers.Layer):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
@@ -520,7 +520,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
+            [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
             tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -644,7 +644,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the fbank features,
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
             head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
@@ -1026,11 +1026,11 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
 
          ```python
          >>> import tensorflow as tf
-         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from transformers import TFWhisperModel, AutoFeatureExtractor
          >>> from datasets import load_dataset
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
@@ -1151,11 +1151,11 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
 
          ```python
          >>> import tensorflow as tf
-         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from transformers import TFWhisperModel, AutoFeatureExtractor
          >>> from datasets import load_dataset
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
@@ -1272,10 +1272,10 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import WhisperProcessor, TFWhisperForConditionalGeneration
+        >>> from transformers import AutoProcessor, TFWhisperForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1283,7 +1283,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
 
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> generated_ids = model.generate(input_features=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
@@ -1358,21 +1358,21 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
         decoder_attention_mask=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # no xla + past
-            decoder_position_ids = past[0][0].shape[2]
+        elif past_key_values is not None:  # no xla + past
+            decoder_position_ids = past_key_values[0][0].shape[2]
         else:  # no xla + no past
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
         decoder_position_ids = tf.broadcast_to(decoder_position_ids, decoder_input_ids.shape)
@@ -1380,17 +1380,9 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         return {
             "input_features": None,  # Needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
         }
-
-    #
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
-        return reordered_past

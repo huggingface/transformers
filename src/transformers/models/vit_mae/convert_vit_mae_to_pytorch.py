@@ -16,10 +16,10 @@
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import ViTMAEConfig, ViTMAEFeatureExtractor, ViTMAEForPreTraining
 
 

@@ -15,22 +15,25 @@
 
 import argparse
 import collections.abc
-import importlib
+import copy
 import inspect
 import json
+import multiprocessing
 import os
 import shutil
-import sys
 import tempfile
+import traceback
 from pathlib import Path
 
-from datasets import load_dataset
-
 from check_config_docstrings import get_checkpoint_from_config_class
-from huggingface_hub import Repository, create_repo, upload_folder
+from datasets import load_dataset
+from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
+from huggingface_hub import Repository, create_repo, hf_api, upload_folder
+
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoTokenizer,
@@ -55,7 +58,6 @@ logging.set_verbosity_error()
 logging.disable_progress_bar()
 logger = logging.get_logger(__name__)
 
-sys.path.append(".")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 if not is_torch_available():
@@ -64,9 +66,84 @@ if not is_torch_available():
 if not is_tf_available():
     raise ValueError("Please install TensorFlow.")
 
+
 FRAMEWORKS = ["pytorch", "tensorflow"]
 INVALID_ARCH = []
 TARGET_VOCAB_SIZE = 1024
+
+data = {"training_ds": None, "testing_ds": None}
+
+COMPOSITE_MODELS = {
+    "EncoderDecoderModel": "EncoderDecoderModel-bert-bert",
+    "SpeechEncoderDecoderModel": "SpeechEncoderDecoderModel-wav2vec2-bert",
+    "VisionEncoderDecoderModel": "VisionEncoderDecoderModel-vit-gpt2",
+    "VisionTextDualEncoderModel": "VisionTextDualEncoderModel-vit-bert",
+}
+
+# This list contains the model architectures for which a tiny version could not be created.
+# Avoid to add new architectures here - unless we have verified carefully that it's (almost) impossible to create them.
+# One such case is: no model tester class is implemented for a model type (like `MT5`) because its architecture is
+# identical to another one (`MT5` is based on `T5`), but trained on different datasets or with different techniques.
+UNCONVERTIBLE_MODEL_ARCHITECTURES = {
+    "BertGenerationEncoder",
+    "BertGenerationDecoder",
+    "CamembertForSequenceClassification",
+    "CamembertForMultipleChoice",
+    "CamembertForMaskedLM",
+    "CamembertForCausalLM",
+    "CamembertForTokenClassification",
+    "CamembertForQuestionAnswering",
+    "CamembertModel",
+    "TFCamembertForMultipleChoice",
+    "TFCamembertForTokenClassification",
+    "TFCamembertForQuestionAnswering",
+    "TFCamembertForSequenceClassification",
+    "TFCamembertForMaskedLM",
+    "TFCamembertModel",
+    "TFCamembertForCausalLM",
+    "DecisionTransformerModel",
+    "GraphormerModel",
+    "InformerModel",
+    "JukeboxModel",
+    "MarianForCausalLM",
+    "MaskFormerSwinModel",
+    "MaskFormerSwinBackbone",
+    "MT5Model",
+    "MT5ForConditionalGeneration",
+    "TFMT5ForConditionalGeneration",
+    "TFMT5Model",
+    "QDQBertForSequenceClassification",
+    "QDQBertForMaskedLM",
+    "QDQBertModel",
+    "QDQBertForTokenClassification",
+    "QDQBertLMHeadModel",
+    "QDQBertForMultipleChoice",
+    "QDQBertForQuestionAnswering",
+    "QDQBertForNextSentencePrediction",
+    "ReformerModelWithLMHead",
+    "RetriBertModel",
+    "Speech2Text2ForCausalLM",
+    "TimeSeriesTransformerModel",
+    "TrajectoryTransformerModel",
+    "TrOCRForCausalLM",
+    "XLMProphetNetForConditionalGeneration",
+    "XLMProphetNetForCausalLM",
+    "XLMProphetNetModel",
+    "XLMRobertaModel",
+    "XLMRobertaForTokenClassification",
+    "XLMRobertaForMultipleChoice",
+    "XLMRobertaForMaskedLM",
+    "XLMRobertaForCausalLM",
+    "XLMRobertaForSequenceClassification",
+    "XLMRobertaForQuestionAnswering",
+    "TFXLMRobertaForSequenceClassification",
+    "TFXLMRobertaForMaskedLM",
+    "TFXLMRobertaForCausalLM",
+    "TFXLMRobertaForQuestionAnswering",
+    "TFXLMRobertaModel",
+    "TFXLMRobertaForMultipleChoice",
+    "TFXLMRobertaForTokenClassification",
+}
 
 
 def get_processor_types_from_config_class(config_class, allowed_mappings=None):
@@ -74,29 +151,36 @@ def get_processor_types_from_config_class(config_class, allowed_mappings=None):
 
     We use `tuple` here to include (potentially) both slow & fast tokenizers.
     """
+
+    # To make a uniform return type
+    def _to_tuple(x):
+        if not isinstance(x, collections.abc.Sequence):
+            x = (x,)
+        else:
+            x = tuple(x)
+        return x
+
     if allowed_mappings is None:
-        allowed_mappings = ["processor", "tokenizer", "feature_extractor"]
+        allowed_mappings = ["processor", "tokenizer", "image_processor", "feature_extractor"]
 
     processor_types = ()
 
-    # Check first if a model has `ProcessorMixin`. Otherwise, check if it has tokenizers or a feature extractor.
+    # Check first if a model has `ProcessorMixin`. Otherwise, check if it has tokenizers, and/or an image processor or
+    # a feature extractor
     if config_class in PROCESSOR_MAPPING and "processor" in allowed_mappings:
-        processor_types = PROCESSOR_MAPPING[config_class]
-    elif config_class in TOKENIZER_MAPPING and "tokenizer" in allowed_mappings:
-        processor_types = TOKENIZER_MAPPING[config_class]
-    elif config_class in FEATURE_EXTRACTOR_MAPPING and "feature_extractor" in allowed_mappings:
-        processor_types = FEATURE_EXTRACTOR_MAPPING[config_class]
+        processor_types = _to_tuple(PROCESSOR_MAPPING[config_class])
     else:
-        # Some configurations have no processor at all. For example, generic composite models like
-        # `EncoderDecoderModel` is used for any (compatible) text models. Also, `DecisionTransformer` doesn't
-        # require any processor.
-        pass
+        if config_class in TOKENIZER_MAPPING and "tokenizer" in allowed_mappings:
+            processor_types = TOKENIZER_MAPPING[config_class]
 
-    # make a uniform return type
-    if not isinstance(processor_types, collections.abc.Sequence):
-        processor_types = (processor_types,)
-    else:
-        processor_types = tuple(processor_types)
+        if config_class in IMAGE_PROCESSOR_MAPPING and "image_processor" in allowed_mappings:
+            processor_types += _to_tuple(IMAGE_PROCESSOR_MAPPING[config_class])
+        elif config_class in FEATURE_EXTRACTOR_MAPPING and "feature_extractor" in allowed_mappings:
+            processor_types += _to_tuple(FEATURE_EXTRACTOR_MAPPING[config_class])
+
+    # Remark: some configurations have no processor at all. For example, generic composite models like
+    # `EncoderDecoderModel` is used for any (compatible) text models. Also, `DecisionTransformer` doesn't
+    # require any processor.
 
     # We might get `None` for some tokenizers - remove them here.
     processor_types = tuple(p for p in processor_types if p is not None)
@@ -104,7 +188,7 @@ def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     return processor_types
 
 
-def get_architectures_from_config_class(config_class, arch_mappings):
+def get_architectures_from_config_class(config_class, arch_mappings, models_to_skip=None):
     """Return a tuple of all possible architectures attributed to a configuration class `config_class`.
 
     For example, BertConfig -> [BertModel, BertForMaskedLM, ..., BertForQuestionAnswering].
@@ -117,12 +201,16 @@ def get_architectures_from_config_class(config_class, arch_mappings):
     # We avoid the duplication.
     architectures = set()
 
+    if models_to_skip is None:
+        models_to_skip = []
+    models_to_skip = UNCONVERTIBLE_MODEL_ARCHITECTURES.union(models_to_skip)
+
     for mapping in arch_mappings:
         if config_class in mapping:
             models = mapping[config_class]
             models = tuple(models) if isinstance(models, collections.abc.Sequence) else (models,)
             for model in models:
-                if model.__name__ not in unexportable_model_architectures:
+                if model.__name__ not in models_to_skip:
                     architectures.add(model)
 
     architectures = tuple(architectures)
@@ -154,7 +242,7 @@ def get_config_class_from_processor_class(processor_class):
     return new_config_class
 
 
-def build_processor(config_class, processor_class):
+def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     """Create a processor for `processor_class`.
 
     If a processor is not able to be built with the original arguments, this method tries to change the arguments and
@@ -177,8 +265,7 @@ def build_processor(config_class, processor_class):
     try:
         processor = processor_class.from_pretrained(checkpoint)
     except Exception as e:
-        logger.error(e)
-        pass
+        logger.error(f"{e.__class__.__name__}: {e}")
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
     # processor while `processor_class` is an Auto class. For example, `sew` has `Wav2Vec2Processor` in
@@ -194,7 +281,7 @@ def build_processor(config_class, processor_class):
         try:
             config = AutoConfig.from_pretrained(checkpoint)
         except Exception as e:
-            logger.error(e)
+            logger.error(f"{e.__class__.__name__}: {e}")
             config = None
         if config is not None:
             if not isinstance(config, config_class):
@@ -254,8 +341,7 @@ def build_processor(config_class, processor_class):
                 try:
                     processor = processor_class(**{k: v[0] for k, v in attrs.items()})
                 except Exception as e:
-                    logger.error(e)
-                    pass
+                    logger.error(f"{e.__class__.__name__}: {e}")
         else:
             # `checkpoint` might lack some file(s) to load a processor. For example, `facebook/hubert-base-ls960`
             # has no tokenizer file to load `Wav2Vec2CTCTokenizer`. In this case, we try to build a processor
@@ -263,6 +349,17 @@ def build_processor(config_class, processor_class):
             config_class_from_processor_class = get_config_class_from_processor_class(processor_class)
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
+
+    # Try to create an image processor or a feature extractor without any checkpoint
+    if (
+        processor is None
+        and allow_no_checkpoint
+        and (issubclass(processor_class, BaseImageProcessor) or issubclass(processor_class, FeatureExtractionMixin))
+    ):
+        try:
+            processor = processor_class()
+        except Exception as e:
+            logger.error(f"{e.__class__.__name__}: {e}")
 
     # validation
     if processor is not None:
@@ -275,7 +372,7 @@ def build_processor(config_class, processor_class):
     return processor
 
 
-def get_tiny_config(config_class, **model_tester_kwargs):
+def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
 
     Args:
@@ -298,15 +395,28 @@ def get_tiny_config(config_class, **model_tester_kwargs):
         module_name = model_type_to_module_name(model_type)
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
-        module = importlib.import_module(f".models.{module_name}.test_modeling_{modeling_name}", package="tests")
-        camel_case_model_name = config_class.__name__.split("Config")[0]
-        model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
-    except ModuleNotFoundError as e:
-        error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name"
-        raise ValueError(f"{error}: {e}")
+        test_file = os.path.join("tests", "models", module_name, f"test_modeling_{modeling_name}.py")
+        models_to_model_testers = get_model_to_tester_mapping(test_file)
+        # Find the model tester class
+        model_tester_class = None
+        tester_classes = []
+        if model_class is not None:
+            tester_classes = get_tester_classes_for_model(test_file, model_class)
+        else:
+            for _tester_classes in models_to_model_testers.values():
+                tester_classes.extend(_tester_classes)
+        if len(tester_classes) > 0:
+            # sort with the length of the class names first, then the alphabetical order
+            # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
+            # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
+            # TODO: More fine grained control of the desired tester class.
+            model_tester_class = sorted(tester_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
+    except ModuleNotFoundError:
+        error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
+        raise ValueError(error)
 
     if model_tester_class is None:
-        error = f"Tiny config not created for {model_type} - no model tester is found in the testing module"
+        error = f"Tiny config not created for {model_type} - no model tester is found in the testing module."
         raise ValueError(error)
 
     # `parent` is an instance of `unittest.TestCase`, but we don't need it here.
@@ -329,18 +439,18 @@ def get_tiny_config(config_class, **model_tester_kwargs):
 
 
 def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
-
-    new_tokenizer = tokenizer_fast.train_new_from_iterator(training_ds["text"], TARGET_VOCAB_SIZE, show_progress=False)
+    new_tokenizer = tokenizer_fast.train_new_from_iterator(
+        data["training_ds"]["text"], TARGET_VOCAB_SIZE, show_progress=False
+    )
 
     # Make sure it at least runs
     if not isinstance(new_tokenizer, LayoutLMv3TokenizerFast):
-        new_tokenizer(testing_ds["text"])
+        new_tokenizer(data["testing_ds"]["text"])
 
     return new_tokenizer
 
 
 def convert_feature_extractor(feature_extractor, tiny_config):
-
     to_convert = False
     kwargs = {}
     if hasattr(tiny_config, "image_size"):
@@ -379,84 +489,216 @@ def convert_processors(processors, tiny_config, output_folder, result):
     This method should not fail: we catch the errors and put them in `result["warnings"]` with descriptive messages.
     """
 
+    def _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=False):
+        """Set tokenizer(s) to `None` if the fast/slow tokenizers have different values for `vocab_size` or `length`.
+
+        If `keep_fast_tokenizer=True`, the fast tokenizer will be kept.
+        """
+        # sanity check 1: fast and slow tokenizers should be compatible (vocab_size)
+        if fast_tokenizer is not None and slow_tokenizer is not None:
+            if fast_tokenizer.vocab_size != slow_tokenizer.vocab_size:
+                warning_messagae = (
+                    "The fast/slow tokenizers "
+                    f"({fast_tokenizer.__class__.__name__}/{slow_tokenizer.__class__.__name__}) have different "
+                    "vocabulary size: "
+                    f"fast_tokenizer.vocab_size = {fast_tokenizer.vocab_size} and "
+                    f"slow_tokenizer.vocab_size = {slow_tokenizer.vocab_size}."
+                )
+                result["warnings"].append(warning_messagae)
+                if not keep_fast_tokenizer:
+                    fast_tokenizer = None
+                slow_tokenizer = None
+
+        # sanity check 2: fast and slow tokenizers should be compatible (length)
+        if fast_tokenizer is not None and slow_tokenizer is not None:
+            if len(fast_tokenizer) != len(slow_tokenizer):
+                warning_messagae = (
+                    f"The fast/slow tokenizers () have different length: "
+                    f"len(fast_tokenizer) = {len(fast_tokenizer)} and "
+                    f"len(slow_tokenizer) = {len(slow_tokenizer)}."
+                )
+                result["warnings"].append(warning_messagae)
+                if not keep_fast_tokenizer:
+                    fast_tokenizer = None
+                slow_tokenizer = None
+
+        return fast_tokenizer, slow_tokenizer
+
     tokenizers = []
     feature_extractors = []
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
-            tokenizers.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in tokenizers}:
+                tokenizers.append(processor)
         elif isinstance(processor, BaseImageProcessor):
-            feature_extractors.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in feature_extractors}:
+                feature_extractors.append(processor)
         elif isinstance(processor, FeatureExtractionMixin):
-            feature_extractors.append(processor)
+            if processor.__class__.__name__ not in {x.__class__.__name__ for x in feature_extractors}:
+                feature_extractors.append(processor)
         elif isinstance(processor, ProcessorMixin):
+            if hasattr(processor, "tokenizer"):
+                if processor.tokenizer.__class__.__name__ not in {x.__class__.__name__ for x in tokenizers}:
+                    tokenizers.append(processor.tokenizer)
             # Currently, we only have these 2 possibilities
-            tokenizers.append(processor.tokenizer)
-            feature_extractors.append(processor.feature_extractor)
+            if hasattr(processor, "image_processor"):
+                if processor.image_processor.__class__.__name__ not in {
+                    x.__class__.__name__ for x in feature_extractors
+                }:
+                    feature_extractors.append(processor.image_processor)
+            elif hasattr(processor, "feature_extractor"):
+                if processor.feature_extractor.__class__.__name__ not in {
+                    x.__class__.__name__ for x in feature_extractors
+                }:
+                    feature_extractors.append(processor.feature_extractor)
 
     # check the built processors have the unique type
-    num_types = len(set([x.__class__.__name__ for x in feature_extractors]))
+    num_types = len({x.__class__.__name__ for x in feature_extractors})
     if num_types >= 2:
         raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
-    num_types = len(set([x.__class__.__name__.replace("Fast", "") for x in tokenizers]))
+    num_types = len({x.__class__.__name__.replace("Fast", "") for x in tokenizers})
     if num_types >= 2:
         raise ValueError(f"`tokenizers` should contain at most 1 tokenizer type, but it contains {num_types} types!")
 
     fast_tokenizer = None
     slow_tokenizer = None
+
     for tokenizer in tokenizers:
         if isinstance(tokenizer, PreTrainedTokenizerFast):
-            if fast_tokenizer is None:
-                fast_tokenizer = tokenizer
-                try:
-                    # Wav2Vec2ForCTC , ByT5Tokenizer etc. all are already small enough and have no fast version that can
-                    # be retrained
-                    if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
-                        fast_tokenizer = convert_tokenizer(tokenizer)
-                except Exception as e:
-                    result["warnings"].append(
-                        f"Failed to convert the fast tokenizer for {fast_tokenizer.__class__.__name__}: {e}"
-                    )
-                    continue
-        elif slow_tokenizer is None:
+            fast_tokenizer = tokenizer
+        else:
             slow_tokenizer = tokenizer
 
-    # Make sure the fast tokenizer can be saved
+    # If the (original) fast/slow tokenizers don't correspond, keep only the fast tokenizer.
+    # This doesn't necessarily imply the fast/slow tokenizers in a single Hub repo. has issues.
+    # It's more of an issue in `build_processor` which tries to get a checkpoint with as much effort as possible.
+    # For `YosoModel` (which uses `AlbertTokenizer(Fast)`), its real (Hub) checkpoint doesn't contain valid files to
+    # load the slower tokenizer (`AlbertTokenizer`), and it ends up finding the (canonical) checkpoint of `AlbertModel`,
+    # which has different vocabulary.
+    # TODO: Try to improve `build_processor`'s definition and/or usage to avoid the above situation in the first place.
+    fast_tokenizer, slow_tokenizer = _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=True)
+    original_fast_tokenizer, original_slow_tokenizer = fast_tokenizer, slow_tokenizer
+
     if fast_tokenizer:
         try:
-            fast_tokenizer.save_pretrained(output_folder)
-        except Exception as e:
+            # Wav2Vec2ForCTC , ByT5Tokenizer etc. all are already small enough and have no fast version that can
+            # be retrained
+            if fast_tokenizer.vocab_size > TARGET_VOCAB_SIZE:
+                fast_tokenizer = convert_tokenizer(fast_tokenizer)
+        except Exception:
             result["warnings"].append(
-                f"Failed to save the fast tokenizer for {fast_tokenizer.__class__.__name__}: {e}"
+                (
+                    f"Failed to convert the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                    traceback.format_exc(),
+                )
+            )
+
+    # If `fast_tokenizer` exists, `slow_tokenizer` should correspond to it.
+    if fast_tokenizer:
+        # Make sure the fast tokenizer can be saved
+        try:
+            # We don't save it to `output_folder` at this moment - only at the end of this function.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                fast_tokenizer.save_pretrained(tmpdir)
+                try:
+                    slow_tokenizer = AutoTokenizer.from_pretrained(tmpdir, use_fast=False)
+                except Exception:
+                    result["warnings"].append(
+                        (
+                            f"Failed to load the slow tokenizer saved from {fast_tokenizer.__class__.__name__}.",
+                            traceback.format_exc(),
+                        )
+                    )
+                    # Let's just keep the fast version
+                    slow_tokenizer = None
+        except Exception:
+            result["warnings"].append(
+                (
+                    f"Failed to save the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                    traceback.format_exc(),
+                )
             )
             fast_tokenizer = None
 
-    # Make sure the slow tokenizer (if any) corresponds to the fast version (as it might be converted above)
-    if fast_tokenizer:
-        try:
-            slow_tokenizer = AutoTokenizer.from_pretrained(output_folder, use_fast=False)
-        except Exception as e:
-            result["warnings"].append(
-                f"Failed to load the slow tokenizer saved from {fast_tokenizer.__class__.__name__}: {e}"
-            )
-            # Let's just keep the fast version
-            slow_tokenizer = None
+    # If the (possibly converted) fast/slow tokenizers don't correspond, set them to `None`, and use the original
+    # tokenizers.
+    fast_tokenizer, slow_tokenizer = _sanity_check(fast_tokenizer, slow_tokenizer, keep_fast_tokenizer=False)
 
-    # If the fast version can't be created and saved, let's use the slow version
-    if not fast_tokenizer and slow_tokenizer:
-        try:
-            slow_tokenizer.save_pretrained(output_folder)
-        except Exception as e:
-            result["warnings"].append(
-                f"Failed to save the slow tokenizer for {slow_tokenizer.__class__.__name__}: {e}"
-            )
-            slow_tokenizer = None
+    # If there is any conversion failed, we keep the original tokenizers.
+    if (original_fast_tokenizer is not None and fast_tokenizer is None) or (
+        original_slow_tokenizer is not None and slow_tokenizer is None
+    ):
+        warning_messagae = (
+            "There are some issues when converting the fast/slow tokenizers. The original tokenizers from the Hub "
+            " will be used instead."
+        )
+        result["warnings"].append(warning_messagae)
+        # Let's use the original version at the end (`original_fast_tokenizer` and `original_slow_tokenizer`)
+        fast_tokenizer = original_fast_tokenizer
+        slow_tokenizer = original_slow_tokenizer
+
+    # Make sure the fast tokenizer can be saved
+    if fast_tokenizer:
+        # We don't save it to `output_folder` at this moment - only at the end of this function.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                fast_tokenizer.save_pretrained(tmpdir)
+            except Exception:
+                result["warnings"].append(
+                    (
+                        f"Failed to save the fast tokenizer for {fast_tokenizer.__class__.__name__}.",
+                        traceback.format_exc(),
+                    )
+                )
+                fast_tokenizer = None
+    # Make sure the slow tokenizer can be saved
+    if slow_tokenizer:
+        # We don't save it to `output_folder` at this moment - only at the end of this function.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                slow_tokenizer.save_pretrained(tmpdir)
+            except Exception:
+                result["warnings"].append(
+                    (
+                        f"Failed to save the slow tokenizer for {slow_tokenizer.__class__.__name__}.",
+                        traceback.format_exc(),
+                    )
+                )
+                slow_tokenizer = None
 
     # update feature extractors using the tiny config
     try:
         feature_extractors = [convert_feature_extractor(p, tiny_config) for p in feature_extractors]
-    except Exception as e:
-        result["warnings"].append(f"Failed to convert feature extractors: {e}")
+    except Exception:
+        result["warnings"].append(
+            (
+                "Failed to convert feature extractors.",
+                traceback.format_exc(),
+            )
+        )
         feature_extractors = []
+
+    if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
+        if fast_tokenizer is not None:
+            if fast_tokenizer.__class__.__name__ in [
+                "RobertaTokenizerFast",
+                "XLMRobertaTokenizerFast",
+                "LongformerTokenizerFast",
+                "MPNetTokenizerFast",
+            ]:
+                fast_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
+            else:
+                fast_tokenizer.model_max_length = tiny_config.max_position_embeddings
+        if slow_tokenizer is not None:
+            if slow_tokenizer.__class__.__name__ in [
+                "RobertaTokenizer",
+                "XLMRobertaTokenizer",
+                "LongformerTokenizer",
+                "MPNetTokenizer",
+            ]:
+                slow_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
+            else:
+                slow_tokenizer.model_max_length = tiny_config.max_position_embeddings
 
     processors = [fast_tokenizer, slow_tokenizer] + feature_extractors
     processors = [p for p in processors if p is not None]
@@ -491,6 +733,12 @@ def build_model(model_arch, tiny_config, output_dir):
     if os.path.isdir(processor_output_dir):
         shutil.copytree(processor_output_dir, checkpoint_dir, dirs_exist_ok=True)
 
+    tiny_config = copy.deepcopy(tiny_config)
+
+    if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+        tiny_config.is_encoder_decoder = False
+        tiny_config.is_decoder = True
+
     model = model_arch(config=tiny_config)
     model.save_pretrained(checkpoint_dir)
     model.from_pretrained(checkpoint_dir)
@@ -498,9 +746,9 @@ def build_model(model_arch, tiny_config, output_dir):
     return model
 
 
-def fill_result_with_error(result, error, models_to_create):
+def fill_result_with_error(result, error, trace, models_to_create):
     """Fill `result` with errors for all target model arch if we can't build processor"""
-
+    error = (error, trace)
     result["error"] = error
     for framework in FRAMEWORKS:
         if framework in models_to_create:
@@ -508,19 +756,20 @@ def fill_result_with_error(result, error, models_to_create):
             for model_arch in models_to_create[framework]:
                 result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
-    result["processor"] = {type(p).__name__: p.__class__.__name__ for p in result["processor"]}
+    result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
 
-def upload_model(model_dir, organization):
+def upload_model(model_dir, organization, token):
     """Upload the tiny models"""
 
     arch_name = model_dir.split(os.path.sep)[-1]
     repo_name = f"tiny-random-{arch_name}"
+    repo_id = f"{organization}/{repo_name}"
 
     repo_exist = False
     error = None
     try:
-        create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
+        create_repo(repo_id=repo_id, exist_ok=False, repo_type="model", token=token)
     except Exception as e:
         error = e
         if "You already created" in str(e):
@@ -528,15 +777,14 @@ def upload_model(model_dir, organization):
             logger.warning("Remote repository exists and will be cloned.")
             repo_exist = True
             try:
-                create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
+                create_repo(repo_id=repo_id, exist_ok=True, repo_type="model", token=token)
             except Exception as e:
                 error = e
     if error is not None:
-        raise ValueError(error)
+        raise error
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
-        repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
+        repo = Repository(local_dir=tmpdir, clone_from=repo_id, token=token)
         repo.git_pull()
         shutil.copytree(model_dir, tmpdir, dirs_exist_ok=True)
 
@@ -544,23 +792,24 @@ def upload_model(model_dir, organization):
             # Open a PR on the existing Hub repo.
             hub_pr_url = upload_folder(
                 folder_path=model_dir,
-                repo_id=f"{organization}/{repo_name}",
+                repo_id=repo_id,
                 repo_type="model",
                 commit_message=f"Update tiny models for {arch_name}",
                 commit_description=f"Upload tiny models for {arch_name}",
                 create_pr=True,
+                token=token,
             )
-            logger.warning(f"PR open in {hub_pr_url}")
+            logger.warning(f"PR open in {hub_pr_url}.")
+            # TODO: We need this information?
         else:
             # Push to Hub repo directly
             repo.git_add(auto_lfs_track=True)
             repo.git_commit(f"Upload tiny models for {arch_name}")
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
+            logger.warning(f"Tiny models {arch_name} pushed to {repo_id}.")
 
 
 def build_composite_models(config_class, output_dir):
-
     import tempfile
 
     from transformers import (
@@ -577,6 +826,7 @@ def build_composite_models(config_class, output_dir):
         SpeechEncoderDecoderModel,
         TFEncoderDecoderModel,
         TFVisionEncoderDecoderModel,
+        TFVisionTextDualEncoderModel,
         VisionEncoderDecoderModel,
         VisionTextDualEncoderModel,
         ViTConfig,
@@ -626,10 +876,9 @@ def build_composite_models(config_class, output_dir):
         encoder_class = ViTModel
         decoder_class = BertModel
         model_class = VisionTextDualEncoderModel
-        tf_model_class = None
+        tf_model_class = TFVisionTextDualEncoderModel
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         try:
             # build encoder
             models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,), "tensorflow": []}
@@ -678,7 +927,7 @@ def build_composite_models(config_class, output_dir):
                 shutil.copytree(decoder_processor_path, model_path, dirs_exist_ok=True)
 
             # fill `result`
-            result["processor"] = tuple(set([x.__name__ for x in encoder_processor + decoder_processor]))
+            result["processor"] = {x.__name__: x.__name__ for x in encoder_processor + decoder_processor}
 
             result["pytorch"] = {model_class.__name__: {"model": model_class.__name__, "checkpoint": model_path}}
 
@@ -687,9 +936,11 @@ def build_composite_models(config_class, output_dir):
                 result["tensorflow"] = {
                     tf_model_class.__name__: {"model": tf_model_class.__name__, "checkpoint": model_path}
                 }
-
-        except Exception as e:
-            result["error"] = f"Failed to build models for {config_class.__name__}: {e}"
+        except Exception:
+            result["error"] = (
+                f"Failed to build models for {config_class.__name__}.",
+                traceback.format_exc(),
+            )
 
     if not result["error"]:
         del result["error"]
@@ -722,7 +973,6 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
 
 def get_config_overrides(config_class, processors):
-
     config_overrides = {}
 
     # Check if there is any tokenizer (prefer fast version if any)
@@ -738,14 +988,35 @@ def get_config_overrides(config_class, processors):
         return config_overrides
 
     # Get some properties of the (already converted) tokenizer (smaller vocab size, special token ids, etc.)
-    vocab_size = tokenizer.vocab_size
+    # We use `len(tokenizer)` instead of `tokenizer.vocab_size` to avoid potential issues for tokenizers with non-empty
+    # `added_tokens_encoder`. One example is the `DebertaV2Tokenizer` where the mask token is the extra token.
+    vocab_size = len(tokenizer)
+
+    # The original checkpoint has length `35998`, but it doesn't have ids `30400` and `30514` but instead `35998` and
+    # `35999`.
+    if config_class.__name__ == "GPTSanJapaneseConfig":
+        vocab_size += 2
+
     config_overrides["vocab_size"] = vocab_size
 
     # Used to create a new model tester with `tokenizer.vocab_size` in order to get the (updated) special token ids.
     model_tester_kwargs = {"vocab_size": vocab_size}
     # CLIP-like models have `text_model_tester` and `vision_model_tester`, and we need to pass `vocab_size` to
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
-    if config_class.__name__ in ["CLIPConfig", "GroupViTConfig", "OwlViTConfig", "XCLIPConfig", "FlavaConfig"]:
+    if config_class.__name__ in [
+        "AlignConfig",
+        "AltCLIPConfig",
+        "ChineseCLIPConfig",
+        "CLIPSegConfig",
+        "ClapConfig",
+        "CLIPConfig",
+        "GroupViTConfig",
+        "OwlViTConfig",
+        "XCLIPConfig",
+        "FlavaConfig",
+        "BlipConfig",
+        "Blip2Config",
+    ]:
         del model_tester_kwargs["vocab_size"]
         model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
     # `FSMTModelTester` accepts `src_vocab_size` and `tgt_vocab_size` but not `vocab_size`.
@@ -793,6 +1064,10 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
+    if data["training_ds"] is None or data["testing_ds"] is None:
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+        data["training_ds"] = ds["train"]
+        data["testing_ds"] = ds["test"]
 
     if config_class.model_type in [
         "encoder-decoder",
@@ -813,33 +1088,35 @@ def build(config_class, models_to_create, output_dir):
 
     if len(processor_classes) == 0:
         error = f"No processor class could be found in {config_class.__name__}."
-        fill_result_with_error(result, error, models_to_create)
-        logger.error(result["error"])
+        fill_result_with_error(result, error, None, models_to_create)
+        logger.error(result["error"][0])
         return result
 
     for processor_class in processor_classes:
         try:
-            processor = build_processor(config_class, processor_class)
+            processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 result["processor"][processor_class] = processor
-        except Exception as e:
-            error = f"Failed to build processor for {processor_class.__name__}: {e}"
-            fill_result_with_error(result, error, models_to_create)
-            logger.error(result["error"])
+        except Exception:
+            error = f"Failed to build processor for {processor_class.__name__}."
+            trace = traceback.format_exc()
+            fill_result_with_error(result, error, trace, models_to_create)
+            logger.error(result["error"][0])
             return result
 
     if len(result["processor"]) == 0:
         error = f"No processor could be built for {config_class.__name__}."
-        fill_result_with_error(result, error, models_to_create)
-        logger.error(result["error"])
+        fill_result_with_error(result, error, None, models_to_create)
+        logger.error(result["error"][0])
         return result
 
     try:
         tiny_config = get_tiny_config(config_class)
     except Exception as e:
         error = f"Failed to get tiny config for {config_class.__name__}: {e}"
-        fill_result_with_error(result, error, models_to_create)
-        logger.error(result["error"])
+        trace = traceback.format_exc()
+        fill_result_with_error(result, error, trace, models_to_create)
+        logger.error(result["error"][0])
         return result
 
     # Convert the processors (reduce vocabulary size, smaller image size, etc.)
@@ -847,22 +1124,24 @@ def build(config_class, models_to_create, output_dir):
     processor_output_folder = os.path.join(output_dir, "processors")
     try:
         processors = convert_processors(processors, tiny_config, processor_output_folder, result)
-    except Exception as e:
-        error = f"Failed to convert the processors: {e}"
-        result["warnings"].append(error)
+    except Exception:
+        error = "Failed to convert the processors."
+        trace = traceback.format_exc()
+        result["warnings"].append((error, trace))
 
     if len(processors) == 0:
         error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
-        fill_result_with_error(result, error, models_to_create)
-        logger.error(result["error"])
+        fill_result_with_error(result, error, None, models_to_create)
+        logger.error(result["error"][0])
         return result
 
     try:
         config_overrides = get_config_overrides(config_class, processors)
     except Exception as e:
         error = f"Failure occurs while calling `get_config_overrides`: {e}"
-        fill_result_with_error(result, error, models_to_create)
-        logger.error(result["error"])
+        trace = traceback.format_exc()
+        fill_result_with_error(result, error, trace, models_to_create)
+        logger.error(result["error"][0])
         return result
 
     # Just for us to see this easily in the report
@@ -886,7 +1165,7 @@ def build(config_class, models_to_create, output_dir):
                 tiny_config.text_config_dict[k] = v
 
     if result["warnings"]:
-        logger.warning(result["warnings"])
+        logger.warning(result["warnings"][0][0])
 
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
@@ -899,13 +1178,14 @@ def build(config_class, models_to_create, output_dir):
         except Exception as e:
             model = None
             error = f"Failed to create the pytorch model for {pytorch_arch}: {e}"
+            trace = traceback.format_exc()
 
         result["pytorch"][pytorch_arch.__name__]["model"] = model.__class__.__name__ if model is not None else None
         result["pytorch"][pytorch_arch.__name__]["checkpoint"] = (
             get_checkpoint_dir(output_dir, pytorch_arch) if model is not None else None
         )
         if error is not None:
-            result["pytorch"][pytorch_arch.__name__]["error"] = error
+            result["pytorch"][pytorch_arch.__name__]["error"] = (error, trace)
             logger.error(f"{pytorch_arch.__name__}: {error}")
 
     for tensorflow_arch in models_to_create["tensorflow"]:
@@ -925,12 +1205,14 @@ def build(config_class, models_to_create, output_dir):
                 # Conversion may fail. Let's not create a model with different weights to avoid confusion (for now).
                 model = None
                 error = f"Failed to convert the pytorch model to the tensorflow model for {pt_arch}: {e}"
+                trace = traceback.format_exc()
         else:
             try:
                 model = build_model(tensorflow_arch, tiny_config, output_dir=output_dir)
             except Exception as e:
                 model = None
                 error = f"Failed to create the tensorflow model for {tensorflow_arch}: {e}"
+                trace = traceback.format_exc()
 
         result["tensorflow"][tensorflow_arch.__name__]["model"] = (
             model.__class__.__name__ if model is not None else None
@@ -939,7 +1221,7 @@ def build(config_class, models_to_create, output_dir):
             get_checkpoint_dir(output_dir, tensorflow_arch) if model is not None else None
         )
         if error is not None:
-            result["tensorflow"][tensorflow_arch.__name__]["error"] = error
+            result["tensorflow"][tensorflow_arch.__name__]["error"] = (error, trace)
             logger.error(f"{tensorflow_arch.__name__}: {error}")
 
     if not result["error"]:
@@ -950,8 +1232,62 @@ def build(config_class, models_to_create, output_dir):
     return result
 
 
-def build_failed_report(results, include_warning=True):
+def build_tiny_model_summary(results, organization=None, token=None):
+    """Build a summary: a dictionary of the form
+    {
+      model architecture name:
+        {
+          "tokenizer_classes": [...],
+          "processor_classes": [...],
+          "model_classes": [...],
+        }
+      ..
+    }
+    """
+    tiny_model_summary = {}
+    for config_name in results:
+        processors = [key for key, value in results[config_name]["processor"].items()]
+        tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
+        processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
+        for framework in FRAMEWORKS:
+            if framework not in results[config_name]:
+                continue
+            for arch_name in results[config_name][framework]:
+                model_classes = [arch_name]
+                base_arch_name = arch_name[2:] if arch_name.startswith("TF") else arch_name
+                # tiny model is not created for `arch_name`
+                if results[config_name][framework][arch_name]["model"] is None:
+                    model_classes = []
+                if base_arch_name not in tiny_model_summary:
+                    tiny_model_summary[base_arch_name] = {}
+                tiny_model_summary[base_arch_name].update(
+                    {
+                        "tokenizer_classes": tokenizer_classes,
+                        "processor_classes": processor_classes,
+                    }
+                )
+                tiny_model_summary[base_arch_name]["model_classes"] = sorted(
+                    tiny_model_summary[base_arch_name].get("model_classes", []) + model_classes
+                )
+                if organization is not None:
+                    repo_name = f"tiny-random-{base_arch_name}"
+                    # composite models' checkpoints have more precise repo. names on the Hub.
+                    if base_arch_name in COMPOSITE_MODELS:
+                        repo_name = f"tiny-random-{COMPOSITE_MODELS[base_arch_name]}"
+                    repo_id = f"{organization}/{repo_name}"
+                    try:
+                        commit_hash = hf_api.repo_info(repo_id, token=token).sha
+                    except Exception:
+                        # The directory is not created, but processor(s) is/are included in `results`.
+                        logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
+                        del tiny_model_summary[base_arch_name]
+                        continue
+                    tiny_model_summary[base_arch_name]["sha"] = commit_hash
 
+    return tiny_model_summary
+
+
+def build_failed_report(results, include_warning=True):
     failed_results = {}
     for config_name in results:
         if "error" in results[config_name]:
@@ -982,7 +1318,6 @@ def build_failed_report(results, include_warning=True):
 
 
 def build_simple_report(results):
-
     text = ""
     failed_text = ""
     for config_name in results:
@@ -992,19 +1327,58 @@ def build_simple_report(results):
             for arch_name in results[config_name][framework]:
                 if "error" in results[config_name][framework][arch_name]:
                     result = results[config_name][framework][arch_name]["error"]
-                    failed_text += f"{arch_name}: {result}\n"
+                    failed_text += f"{arch_name}: {result[0]}\n"
                 else:
-                    result = "OK"
-                text += f"{arch_name}: {result}\n"
+                    result = ("OK",)
+                text += f"{arch_name}: {result[0]}\n"
 
     return text, failed_text
 
 
-if __name__ == "__main__":
+def update_tiny_model_summary_file(report_path):
+    with open(os.path.join(report_path, "tiny_model_summary.json")) as fp:
+        new_data = json.load(fp)
+    with open("tests/utils/tiny_model_summary.json") as fp:
+        data = json.load(fp)
+    for key, value in new_data.items():
+        if key not in data:
+            data[key] = value
+        else:
+            for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
+                # we might get duplication here. We will remove them below when creating `updated_data`.
+                data[key][attr].extend(value[attr])
+            new_sha = value.get("sha", None)
+            if new_sha is not None:
+                data[key]["sha"] = new_sha
 
+    updated_data = {}
+    for key in sorted(data.keys()):
+        updated_data[key] = {}
+        for attr, value in data[key].items():
+            # deduplication and sort
+            updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
+
+    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
+        json.dump(updated_data, fp, indent=4, ensure_ascii=False)
+
+
+def create_tiny_models(
+    output_path,
+    all,
+    model_types,
+    models_to_skip,
+    no_check,
+    upload,
+    organization,
+    token,
+    num_workers=1,
+):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
         raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")
+
+    report_path = os.path.join(output_path, "reports")
+    os.makedirs(report_path)
 
     _pytorch_arch_mappings = [
         x
@@ -1014,17 +1388,101 @@ if __name__ == "__main__":
     _tensorflow_arch_mappings = [
         x for x in dir(transformers_module) if x.startswith("TF_MODEL_") and x.endswith("_MAPPING")
     ]
-    # _flax_arch_mappings = [x for x in dir(transformers_module) if x.startswith("FLAX_MODEL_") and x.endswith("_MAPPING")]
 
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
     tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
-    # flax_arch_mappings = [getattr(transformers_module, x) for x in _flax_arch_mappings]
 
-    unexportable_model_architectures = []
+    config_classes = CONFIG_MAPPING.values()
+    if not all:
+        config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    training_ds = ds["train"]
-    testing_ds = ds["test"]
+    # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
+    processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
+
+    to_create = {}
+    for c in config_classes:
+        processors = processor_type_map[c]
+        models = get_architectures_from_config_class(c, pytorch_arch_mappings, models_to_skip)
+        tf_models = get_architectures_from_config_class(c, tensorflow_arch_mappings, models_to_skip)
+        if len(models) + len(tf_models) > 0:
+            to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
+
+    results = {}
+    if num_workers <= 1:
+        for c, models_to_create in list(to_create.items()):
+            print(f"Create models for {c.__name__} ...")
+            result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
+            results[c.__name__] = result
+            print("=" * 40)
+    else:
+        all_build_args = []
+        for c, models_to_create in list(to_create.items()):
+            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(build, all_build_args)
+            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
+
+    if upload:
+        if organization is None:
+            raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
+
+        to_upload = []
+        for model_type in os.listdir(output_path):
+            # This is the directory containing the reports
+            if model_type == "reports":
+                continue
+            for arch in os.listdir(os.path.join(output_path, model_type)):
+                if arch == "processors":
+                    continue
+                to_upload.append(os.path.join(output_path, model_type, arch))
+        to_upload = sorted(to_upload)
+
+        upload_results = {}
+        if len(to_upload) > 0:
+            for model_dir in to_upload:
+                try:
+                    upload_model(model_dir, organization, token)
+                except Exception as e:
+                    error = f"Failed to upload {model_dir}. {e.__class__.__name__}: {e}"
+                    logger.error(error)
+                    upload_results[model_dir] = error
+
+        with open(os.path.join(report_path, "failed_uploads.json"), "w") as fp:
+            json.dump(upload_results, fp, indent=4)
+
+    # Build the tiny model summary file. The `tokenizer_classes` and `processor_classes` could be both empty lists.
+    # When using the items in this file to update the file `tests/utils/tiny_model_summary.json`, the model
+    # architectures with `tokenizer_classes` and `processor_classes` being both empty should **NOT** be added to
+    # `tests/utils/tiny_model_summary.json`.
+    tiny_model_summary = build_tiny_model_summary(results, organization=organization, token=token)
+    with open(os.path.join(report_path, "tiny_model_summary.json"), "w") as fp:
+        json.dump(tiny_model_summary, fp, indent=4)
+
+    with open(os.path.join(report_path, "tiny_model_creation_report.json"), "w") as fp:
+        json.dump(results, fp, indent=4)
+
+    # Build the warning/failure report (json format): same format as the complete `results` except this contains only
+    # warnings or errors.
+    failed_results = build_failed_report(results)
+    with open(os.path.join(report_path, "failed_report.json"), "w") as fp:
+        json.dump(failed_results, fp, indent=4)
+
+    simple_report, failed_report = build_simple_report(results)
+    # The simplified report: a .txt file with each line of format:
+    # {model architecture name}: {OK or error message}
+    with open(os.path.join(report_path, "simple_report.txt"), "w") as fp:
+        fp.write(simple_report)
+
+    # The simplified failure report: same above except this only contains line with errors
+    with open(os.path.join(report_path, "simple_failed_report.txt"), "w") as fp:
+        fp.write(failed_report)
+
+    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))
+
+
+if __name__ == "__main__":
+    # This has to be `spawn` to avoid hanging forever!
+    multiprocessing.set_start_method("spawn")
 
     def list_str(values):
         return values.split(",")
@@ -1042,6 +1500,14 @@ if __name__ == "__main__":
         type=list_str,
         help="Comma-separated list of model type(s) from which the tiny models will be created.",
     )
+    parser.add_argument(
+        "--models_to_skip",
+        type=list_str,
+        help=(
+            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually"
+            "the list of model classes that have their tiny versions already uploaded to the Hub."
+        ),
+    )
     parser.add_argument("--upload", action="store_true", help="If to upload the created tiny models to the Hub.")
     parser.add_argument(
         "--organization",
@@ -1049,74 +1515,25 @@ if __name__ == "__main__":
         type=str,
         help="The organization on the Hub to which the tiny models will be uploaded.",
     )
+    parser.add_argument(
+        "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
+    )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
+    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
 
     args = parser.parse_args()
 
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    config_classes = CONFIG_MAPPING.values()
-    if not args.all:
-        config_classes = [CONFIG_MAPPING[model_type] for model_type in args.model_types]
-
-    # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
-    processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
-
-    to_create = {
-        c: {
-            "processor": processor_type_map[c],
-            "pytorch": get_architectures_from_config_class(c, pytorch_arch_mappings),
-            "tensorflow": get_architectures_from_config_class(c, tensorflow_arch_mappings),
-            # "flax": get_architectures_from_config_class(c, flax_arch_mappings),
-        }
-        for c in config_classes
-    }
-
-    results = {}
-    for c, models_to_create in list(to_create.items()):
-        print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type))
-        results[c.__name__] = result
-        print("=" * 40)
-
-    with open("tiny_model_creation_report.json", "w") as fp:
-        json.dump(results, fp, indent=4)
-
-    # Build the failure report
-    failed_results = build_failed_report(results)
-    with open("failed_report.json", "w") as fp:
-        json.dump(failed_results, fp, indent=4)
-
-    # Build the failure report
-    simple_report, failed_report = build_simple_report(results)
-    with open("simple_report.txt", "w") as fp:
-        fp.write(simple_report)
-
-    with open("simple_failed_report.txt", "w") as fp:
-        fp.write(failed_report)
-
-    if args.upload:
-        if args.organization is None:
-            raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
-
-        to_upload = []
-        for model_type in os.listdir(args.output_path):
-            for arch in os.listdir(os.path.join(args.output_path, model_type)):
-                if arch == "processors":
-                    continue
-                to_upload.append(os.path.join(args.output_path, model_type, arch))
-        to_upload = sorted(to_upload)
-
-        upload_results = {}
-        if len(to_upload) > 0:
-            for model_dir in to_upload:
-                try:
-                    upload_model(model_dir, args.organization)
-                except Exception as e:
-                    error = f"Failed to upload {model_dir}: {e}"
-                    logger.error(error)
-                    upload_results[model_dir] = error
-
-        with open("failed_uploads.json", "w") as fp:
-            json.dump(upload_results, fp, indent=4)
+    create_tiny_models(
+        args.output_path,
+        args.all,
+        args.model_types,
+        args.models_to_skip,
+        args.no_check,
+        args.upload,
+        args.organization,
+        args.token,
+        args.num_workers,
+    )

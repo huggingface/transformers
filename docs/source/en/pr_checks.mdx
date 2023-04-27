@@ -24,7 +24,7 @@ When you open a pull request on 🤗 Transformers, a fair number of checks will 
 
 In this document, we will take a stab at explaining what those various checks are and the reason behind them, as well as how to debug them locally if one of them fails on your PR.
 
-Note that they all require you to have a dev install:
+Note that, ideally, they require you to have a dev install:
 
 ```bash
 pip install transformers[dev]
@@ -36,7 +36,18 @@ or for an editable install:
 pip install -e .[dev]
 ```
 
-inside the Transformers repo.
+inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install the Deep Learning framework you are working with (PyTorch, TensorFlow and/or Flax) then do
+
+```bash
+pip install transformers[quality]
+```
+
+or for an editable install:
+
+```bash
+pip install -e .[quality]
+```
+
 
 ## Tests
 
@@ -71,13 +82,13 @@ If you're interested in building or previewing the documentation locally, take a
 
 ## Code and documentation style
 
-Code formatting is applied to all the source files, the examples and the tests using `black` and `isort`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
+Code formatting is applied to all the source files, the examples and the tests using `black` and `ruff`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
 
 ```bash
 make style
 ```
 
-The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `flake8`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
+The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
 
 ```bash
 make quality
@@ -105,6 +116,7 @@ This checks that:
 - All `__init__.py` files have the same content in their two sections (performed by `utils/check_inits.py`)
 - All code identified as a copy from another module is consistent with the original (performed by `utils/check_copies.py`)
 - All configuration classes have at least one valid checkpoint mentioned in their docstrings (performed by `utils/check_config_docstrings.py`)
+- All configuration classes only contain attributes that are used in corresponding modeling files (performed by `utils/check_config_attributes.py`)
 - The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
 - The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
 - The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)

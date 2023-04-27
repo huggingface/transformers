@@ -92,7 +92,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         sep_token="<::::>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

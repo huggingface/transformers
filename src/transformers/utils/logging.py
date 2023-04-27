@@ -14,23 +14,26 @@
 # limitations under the License.
 """ Logging utilities."""
 
+
+import functools
 import logging
 import os
 import sys
 import threading
-from logging import CRITICAL  # NOQA
-from logging import DEBUG  # NOQA
-from logging import ERROR  # NOQA
-from logging import FATAL  # NOQA
-from logging import INFO  # NOQA
-from logging import NOTSET  # NOQA
-from logging import WARN  # NOQA
-from logging import WARNING  # NOQA
+from logging import (
+    CRITICAL,  # NOQA
+    DEBUG,  # NOQA
+    ERROR,  # NOQA
+    FATAL,  # NOQA
+    INFO,  # NOQA
+    NOTSET,  # NOQA
+    WARN,  # NOQA
+    WARNING,  # NOQA
+)
 from typing import Optional
 
-from tqdm import auto as tqdm_lib
-
 import huggingface_hub.utils as hf_hub_utils
+from tqdm import auto as tqdm_lib
 
 
 _lock = threading.Lock()
@@ -67,17 +70,14 @@ def _get_default_logging_level():
 
 
 def _get_library_name() -> str:
-
     return __name__.split(".")[0]
 
 
 def _get_library_root_logger() -> logging.Logger:
-
     return logging.getLogger(_get_library_name())
 
 
 def _configure_library_root_logger() -> None:
-
     global _default_handler
 
     with _lock:
@@ -95,7 +95,6 @@ def _configure_library_root_logger() -> None:
 
 
 def _reset_library_root_logger() -> None:
-
     global _default_handler
 
     with _lock:
@@ -282,6 +281,21 @@ def warning_advice(self, *args, **kwargs):
 
 
 logging.Logger.warning_advice = warning_advice
+
+
+@functools.lru_cache(None)
+def warning_once(self, *args, **kwargs):
+    """
+    This method is identical to `logger.warning()`, but will emit the warning with the same message only once
+
+    Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
+    The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
+    another type of cache that includes the caller frame information in the hashing function.
+    """
+    self.warning(*args, **kwargs)
+
+
+logging.Logger.warning_once = warning_once
 
 
 class EmptyTqdm:

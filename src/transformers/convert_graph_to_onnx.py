@@ -328,7 +328,6 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-
         import tf2onnx
         from tf2onnx import __version__ as t2ov
 
@@ -358,7 +357,7 @@ def convert(
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format

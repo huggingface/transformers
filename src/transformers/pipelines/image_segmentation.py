@@ -81,9 +81,11 @@ class ImageSegmentationPipeline(Pipeline):
         )
 
     def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
         postprocess_kwargs = {}
         if "subtask" in kwargs:
             postprocess_kwargs["subtask"] = kwargs["subtask"]
+            preprocess_kwargs["subtask"] = kwargs["subtask"]
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         if "mask_threshold" in kwargs:
@@ -91,7 +93,7 @@ class ImageSegmentationPipeline(Pipeline):
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
 
-        return {}, {}, postprocess_kwargs
+        return preprocess_kwargs, {}, postprocess_kwargs
 
     def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
@@ -134,10 +136,23 @@ class ImageSegmentationPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, image):
+    def preprocess(self, image, subtask=None):
         image = load_image(image)
         target_size = [(image.height, image.width)]
-        inputs = self.feature_extractor(images=[image], return_tensors="pt")
+        if self.model.config.__class__.__name__ == "OneFormerConfig":
+            if subtask is None:
+                kwargs = {}
+            else:
+                kwargs = {"task_inputs": [subtask]}
+            inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
+            inputs["task_inputs"] = self.tokenizer(
+                inputs["task_inputs"],
+                padding="max_length",
+                max_length=self.model.config.task_seq_len,
+                return_tensors=self.framework,
+            )["input_ids"]
+        else:
+            inputs = self.image_processor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
         return inputs
 
@@ -150,12 +165,11 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(
         self, model_outputs, subtask=None, threshold=0.9, mask_threshold=0.5, overlap_mask_area_threshold=0.5
     ):
-
         fn = None
-        if subtask in {"panoptic", None} and hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
-            fn = self.feature_extractor.post_process_panoptic_segmentation
-        elif subtask in {"instance", None} and hasattr(self.feature_extractor, "post_process_instance_segmentation"):
-            fn = self.feature_extractor.post_process_instance_segmentation
+        if subtask in {"panoptic", None} and hasattr(self.image_processor, "post_process_panoptic_segmentation"):
+            fn = self.image_processor.post_process_panoptic_segmentation
+        elif subtask in {"instance", None} and hasattr(self.image_processor, "post_process_instance_segmentation"):
+            fn = self.image_processor.post_process_instance_segmentation
 
         if fn is not None:
             outputs = fn(
@@ -176,8 +190,8 @@ class ImageSegmentationPipeline(Pipeline):
                 score = segment["score"]
                 annotation.append({"score": score, "label": label, "mask": mask})
 
-        elif subtask in {"semantic", None} and hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
-            outputs = self.feature_extractor.post_process_semantic_segmentation(
+        elif subtask in {"semantic", None} and hasattr(self.image_processor, "post_process_semantic_segmentation"):
+            outputs = self.image_processor.post_process_semantic_segmentation(
                 model_outputs, target_sizes=model_outputs["target_size"]
             )[0]
 

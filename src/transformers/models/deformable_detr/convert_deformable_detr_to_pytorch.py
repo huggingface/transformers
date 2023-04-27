@@ -19,11 +19,11 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import cached_download, hf_hub_url
 from PIL import Image
 
-import requests
-from huggingface_hub import cached_download, hf_hub_url
 from transformers import DeformableDetrConfig, DeformableDetrFeatureExtractor, DeformableDetrForObjectDetection
 from transformers.utils import logging
 

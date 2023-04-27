@@ -24,10 +24,10 @@ import math
 
 import numpy as np
 import torch
+from configuration_bertabs import BertAbsConfig
 from torch import nn
 from torch.nn.init import xavier_uniform_
 
-from configuration_bertabs import BertAbsConfig
 from transformers import BertConfig, BertModel, PreTrainedModel
 
 
@@ -54,7 +54,7 @@ class BertAbs(BertAbsPreTrainedModel):
         load_bert_pretrained_extractive = True if bert_extractive_checkpoint else False
         if load_bert_pretrained_extractive:
             self.bert.model.load_state_dict(
-                dict([(n[11:], p) for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")]),
+                {n[11:]: p for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")},
                 strict=True,
             )
 

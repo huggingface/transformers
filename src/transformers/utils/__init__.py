@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,6 +33,7 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    add_model_info_to_auto_map,
     cached_property,
     can_return_loss,
     expand_dims,
@@ -45,12 +42,14 @@ from .generic import (
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
+    is_tf_symbolic_tensor,
     is_tf_tensor,
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
     reshape,
     squeeze,
+    strtobool,
     tensor_size,
     to_numpy,
     to_py_obj,
@@ -86,6 +85,7 @@ from .hub import (
     is_remote_url,
     move_cache,
     send_example_telemetry,
+    try_to_load_from_cache,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -98,11 +98,13 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    direct_transformers_import,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_cython_available,
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
@@ -111,15 +113,17 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jieba_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
     is_librosa_available,
-    is_more_itertools_available,
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_protobuf_available,
     is_psutil_available,
@@ -153,13 +157,14 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
-    is_torch_onnx_dict_inputs_support_available,
+    is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
+    is_torchvision_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,

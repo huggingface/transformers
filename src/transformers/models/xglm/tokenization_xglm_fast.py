@@ -110,7 +110,7 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
         # Compatibility with the original tokenizer
         self.num_madeup_words = 7

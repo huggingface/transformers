@@ -180,7 +180,7 @@ class FlaubertConfig(PretrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         """Constructs FlaubertConfig."""
         self.pre_norm = pre_norm

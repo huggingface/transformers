@@ -49,7 +49,6 @@ from .configuration_switch_transformers import SwitchTransformersConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 
 ####################################################
@@ -242,7 +241,6 @@ class SwitchTransformersLayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -274,6 +272,12 @@ class SwitchTransformersDenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -333,7 +337,6 @@ class SwitchTransformersSparseMLP(nn.Module):
 
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
-
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert(hidden_states[token_indices])
 
@@ -720,7 +723,6 @@ class SwitchTransformersBlock(nn.Module):
         output_router_logits=True,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -938,7 +940,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         config.num_layers = config.num_decoder_layers if self.is_decoder else config.num_layers
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
-
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
 
             self.block.append(
@@ -1038,6 +1039,13 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -1059,11 +1067,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1186,7 +1189,7 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1203,7 +1206,7 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1284,7 +1287,7 @@ SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
@@ -1405,9 +1408,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, SwitchTransformersModel
+        >>> from transformers import AutoTokenizer, SwitchTransformersModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
         >>> model = SwitchTransformersModel.from_pretrained("google/switch-base-8")
 
         >>> input_ids = tokenizer(
@@ -1589,9 +1592,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, SwitchTransformersForConditionalGeneration
+        >>> from transformers import AutoTokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
         >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8")
 
         >>> # training
@@ -1697,6 +1700,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
 
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
             if output_router_logits and labels is not None:
@@ -1750,23 +1755,22 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1778,15 +1782,15 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1871,9 +1875,9 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, SwitchTransformersEncoderModel
+        >>> from transformers import AutoTokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
         >>> model = SwitchTransformersEncoderModel.from_pretrained("google/switch-base-8")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"

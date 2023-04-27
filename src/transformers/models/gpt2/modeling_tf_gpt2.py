@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
@@ -164,7 +163,6 @@ class TFAttention(tf.keras.layers.Layer):
         output_attentions,
         training=False,
     ):
-
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
@@ -184,7 +182,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=0)
+            past_key, past_value = tf.unstack(layer_past, axis=0, num=2)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
 
@@ -231,7 +229,6 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
         if config.add_cross_attention:
-
             self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
             self.ln_cross_attn = tf.keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
@@ -314,7 +311,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
 
         self.num_hidden_layers = config.n_layer
-        self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
@@ -367,7 +363,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -446,10 +441,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.wte(input_ids, mode="embedding")
@@ -656,7 +651,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only input IDs that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -727,7 +722,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -828,10 +822,10 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
             if token_type_ids is not None:
                 token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
@@ -841,14 +835,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
-            if past:
+            if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
             "token_type_ids": token_type_ids,
         }
@@ -856,7 +850,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1007,9 +1000,9 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
+        >>> from transformers import AutoTokenizer, TFGPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = TFGPT2DoubleHeadsModel.from_pretrained("gpt2")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
@@ -1058,6 +1051,12 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
+        if return_dict and output_hidden_states:
+            # We do this to match the slightly odd PT behaviour - the final hidden state is reshaped to rank 4 when the
+            # input is rank 3, but all other hidden states remain at rank-3 (with the first 2 dims merged)
+            all_hidden_states = transformer_outputs.hidden_states[:-1] + (hidden_states,)
+        else:
+            all_hidden_states = None
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
@@ -1069,7 +1068,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             logits=lm_logits,
             mc_logits=mc_logits,
             past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
+            hidden_states=all_hidden_states,
             attentions=transformer_outputs.attentions,
         )
 
@@ -1131,7 +1130,6 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="microsoft/DialogRPT-updown",
         output_type=TFSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,

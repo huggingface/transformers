@@ -43,11 +43,10 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swin2SRConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "caidas/swin2sr-classicalsr-x2-64"
-_EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
+_CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
+_EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
 SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -521,9 +520,8 @@ class Swin2SRLayer(nn.Module):
             if isinstance(self.shift_size, collections.abc.Iterable)
             else (self.shift_size, self.shift_size)
         )
-        self.window_size = (
-            input_resolution[0] if input_resolution[0] <= target_window_size[0] else target_window_size[0]
-        )
+        window_dim = input_resolution[0].item() if torch.is_tensor(input_resolution[0]) else input_resolution[0]
+        self.window_size = window_dim if window_dim <= target_window_size[0] else target_window_size[0]
         self.shift_size = (
             0
             if input_resolution
@@ -576,8 +574,12 @@ class Swin2SRLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.set_shift_and_window_size(input_dimensions)
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        else:
+            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -819,8 +821,8 @@ SWIN2SR_START_DOCSTRING = r"""
 SWIN2SR_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`Swin2SRImageProcessor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -893,7 +895,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1141,19 +1142,28 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         Example:
          ```python
          >>> import torch
-         >>> from transformers import Swin2SRFeatureExtractor, Swin2SRForImageSuperResolution
-         >>> from datasets import load_dataset
+         >>> import numpy as np
+         >>> from PIL import Image
+         >>> import requests
 
-         >>> feature_extractor = Swin2SRFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> model = Swin2SRForImageSuperResolution.from_pretrained("openai/whisper-base")
+         >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 512]
+         >>> processor = AutoImageProcessor.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
+         >>> model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
+
+         >>> url = "https://huggingface.co/spaces/jjourney1125/swin2sr/resolve/main/samples/butterfly.jpg"
+         >>> image = Image.open(requests.get(url, stream=True).raw)
+         >>> # prepare image for the model
+         >>> inputs = processor(image, return_tensors="pt")
+
+         >>> # forward pass
+         >>> with torch.no_grad():
+         ...     outputs = model(**inputs)
+
+         >>> output = outputs.reconstruction.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+         >>> output = np.moveaxis(output, source=0, destination=-1)
+         >>> output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
+         >>> # you can visualize `output` with `Image.fromarray`
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

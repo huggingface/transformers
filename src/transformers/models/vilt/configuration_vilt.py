@@ -120,7 +120,7 @@ class ViltConfig(PretrainedConfig):
         max_image_length=-1,
         tie_word_embeddings=False,
         num_images=-1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

@@ -44,7 +44,7 @@ class FeatureExtractionPipeline(Pipeline):
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
-        return_tensor (`bool`, *optional*):
+        return_tensors (`bool`, *optional*):
             If `True`, returns a tensor according to the specified framework, otherwise returns a list.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
@@ -53,6 +53,8 @@ class FeatureExtractionPipeline(Pipeline):
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
+        tokenize_kwargs (`dict`, *optional*):
+            Additional dictionary of keyword arguments passed along to the tokenizer.
     """
 
     def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):

@@ -15,8 +15,8 @@
 """
 Feature extractor class for Whisper
 """
-
-from typing import List, Optional, Union
+import copy
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from numpy.fft import fft
@@ -33,8 +33,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Whisper feature extractor.
 
-    This feature extractor inherits from [`WhisperFeatureExtractor`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
@@ -43,7 +43,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, defaults to 30):
@@ -66,7 +66,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -215,6 +215,29 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         return log_spec
 
+    @staticmethod
+    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
+        """
+        Every array in the list is normalized to have zero mean and unit variance
+        """
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
+
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
+        return normed_input_values
+
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
@@ -225,7 +248,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        do_normalize: Optional[bool] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -240,7 +264,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -249,8 +273,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
-                subtle bugs.
+                For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
+                bugs.
 
                 </Tip>
 
@@ -266,14 +290,17 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
+            do_normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
+                improve the performance of the model.
         """
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
@@ -307,7 +334,18 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask or do_normalize,
         )
+
+        # zero-mean and unit-variance normalization
+        if do_normalize:
+            padded_inputs["input_features"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_features"],
+                attention_mask=padded_inputs["attention_mask"],
+                padding_value=self.padding_value,
+            )
+            padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], axis=0)
+
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
@@ -318,7 +356,24 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
+        if return_attention_mask:
+            # rescale from sample (48000) to feature (3000)
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["feature_extractor_type"] = self.__class__.__name__
+        if "mel_filters" in output:
+            del output["mel_filters"]
+        return output

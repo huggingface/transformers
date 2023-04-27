@@ -38,6 +38,10 @@ To create the package for pypi.
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
+   Clean up your build and dist folders (to avoid re-uploading oldies):
+   rm -rf dist
+   rm -rf build
+
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
    (this will build a wheel for the python version you use to build it).
 
@@ -46,10 +50,10 @@ To create the package for pypi.
 
 8. Check that everything looks correct by uploading the package to the pypi test server:
 
-   twine upload dist/* -r pypitest
+   twine upload dist/* -r testpypi
    (pypi suggest using twine as other methods upload files via plaintext.)
    You may have to specify the repository url, use the following command then:
-   twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
+   twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
@@ -57,6 +61,8 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
+
+   If making a patch release, double check the bug you are patching is indeed resolved.
 
 9. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
@@ -70,10 +76,9 @@ To create the package for pypi.
 import os
 import re
 import shutil
-from distutils.core import Command
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import Command, find_packages, setup
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
@@ -97,27 +102,28 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.10.0",
-    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
+    "accelerate>=0.17.0",
+    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
+    "beautifulsoup4",
+    "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.6.5",
+    "deepspeed>=0.8.3",
     "dill<0.3.5",
     "evaluate>=0.2.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flake8>=3.8.3",
-    "flax>=0.4.1",
+    "flax>=0.4.1,<=0.6.9",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.10.0,<1.0",
+    "huggingface-hub>=0.11.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -126,14 +132,15 @@ _deps = [
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
+    "librosa",
     "nltk",
-    "natten>=0.14.4",
+    "natten>=0.14.6",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
-    "optax>=0.0.8",
+    "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
@@ -148,8 +155,10 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rhoknp>=1.1.0",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
+    "ruff>=0.0.241,<=0.0.259",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.2.1",
@@ -157,26 +166,25 @@ _deps = [
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
-    "librosa",
     "starlette",
-    "tensorflow-cpu>=2.4,<2.12",
-    "tensorflow>=2.4,<2.12",
-    "tensorflow-text",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
+    # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
+    "tensorflow-cpu>=2.4,<2.13",
+    "tensorflow>=2.4,<2.13",
+    "tensorflow-text<2.13",
     "tf2onnx",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
-    "torch>=1.7,!=1.12.0",
+    "torch>=1.9,!=1.12.0",
     "torchaudio",
+    "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "beautifulsoup4",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
-    "pyknp>=0.6.1",
 ]
 
 
@@ -201,7 +209,7 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] f
 # You can then feed this for example to `pip`:
 #
 # pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
-# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
+# print(" ".join([deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
 #
 
 
@@ -243,15 +251,16 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
+
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
-extras["torch"] = deps_list("torch")
+extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 
 if os.name == "nt":  # windows
@@ -285,9 +294,10 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord")
+extras["video"] = deps_list("decord", "av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -319,7 +329,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "datasets", "isort", "flake8", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -331,6 +341,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
@@ -351,6 +362,7 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
@@ -413,18 +425,19 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.26.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.29.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords="NLP vision speech deep learning transformer pytorch tensorflow BERT GPT-2 Wav2Vec2 ViT",
-    license="Apache",
+    keywords="NLP vision speech deep learning transformer pytorch tensorflow jax BERT GPT-2 Wav2Vec2 ViT",
+    license="Apache 2.0 License",
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h"]},
+    include_package_data=True,
+    package_data={"transformers": ["*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
@@ -441,6 +454,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

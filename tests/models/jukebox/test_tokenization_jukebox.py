@@ -21,10 +21,10 @@ from transformers.testing_utils import require_torch
 
 class JukeboxTokenizationTest(unittest.TestCase):
     tokenizer_class = JukeboxTokenizer
-    metas = dict(
-        artist="Zac Brown Band",
-        genres="Country",
-        lyrics="""I met a traveller from an antique land,
+    metas = {
+        "artist": "Zac Brown Band",
+        "genres": "Country",
+        "lyrics": """I met a traveller from an antique land,
         Who said "Two vast and trunkless legs of stone
         Stand in the desert. . . . Near them, on the sand,
         Half sunk a shattered visage lies, whose frown,
@@ -39,7 +39,7 @@ class JukeboxTokenizationTest(unittest.TestCase):
         Of that colossal Wreck, boundless and bare
         The lone and level sands stretch far away
         """,
-    )
+    }
 
     @require_torch
     def test_1b_lyrics_tokenizer(self):

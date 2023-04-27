@@ -24,6 +24,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.models.roberta_prelayernorm.modeling_flax_roberta_prelayernorm import (
         FlaxRobertaPreLayerNormForCausalLM,
         FlaxRobertaPreLayerNormForMaskedLM,
@@ -135,7 +136,6 @@ class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
 @require_flax
 # Copied from tests.models.roberta.test_modelling_flax_roberta.FlaxRobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class FlaxRobertaPreLayerNormModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     test_head_masking = True
 
     all_model_classes = (

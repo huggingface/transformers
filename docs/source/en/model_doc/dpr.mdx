@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # DPR
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dpr">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/dpr-question_encoder-bert-base-multilingual">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 Dense Passage Retrieval (DPR) is a set of tools and models for state-of-the-art open-domain Q&A research. It was
@@ -30,6 +39,12 @@ benchmarks.*
 
 This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The original code can be found [here](https://github.com/facebookresearch/DPR).
 
+Tips:
+- DPR consists in three models:
+
+    * Question encoder: encode questions as vectors
+    * Context encoder: encode contexts as vectors
+    * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
 ## DPRConfig
 

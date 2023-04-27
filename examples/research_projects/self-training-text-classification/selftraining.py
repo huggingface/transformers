@@ -23,12 +23,12 @@ import shutil
 from typing import List, Optional
 
 import datasets
+from accelerate import Accelerator
 from datasets import load_dataset
+from finetuning import finetune
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from finetuning import finetune
 from transformers import AutoConfig, set_seed
 from transformers.trainer_utils import IntervalStrategy
 

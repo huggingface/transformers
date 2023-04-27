@@ -36,7 +36,6 @@ def log_results(result: Dataset, args: Dict[str, str]):
         target_file = f"log_{dataset_id}_targets.txt"
 
         with open(pred_file, "w") as p, open(target_file, "w") as t:
-
             # mapping function to write output
             def write_to_file(batch, i):
                 p.write(f"{i}" + "\n")

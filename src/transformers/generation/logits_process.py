@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -100,16 +100,18 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     Args:
         min_length (`int`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, min_length: int, eos_token_id: int):
+    def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
         if not isinstance(min_length, int) or min_length < 0:
-            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+            raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
-        if not isinstance(eos_token_id, int) or eos_token_id < 0:
-            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -117,7 +119,47 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len < self.min_length:
-            scores[:, self.eos_token_id] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = -float("inf")
+        return scores
+
+
+class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
+
+    Args:
+        prompt_length_to_skip (`int`):
+            The input tokens length.
+        min_new_tokens (`int`):
+            The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+    """
+
+    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
+        for arg_name, arg_value in [
+            ("prompt_length_to_skip", prompt_length_to_skip),
+            ("min_new_tokens", min_new_tokens),
+        ]:
+            if not isinstance(arg_value, int) or arg_value < 0:
+                raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
+
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
+            logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+
+        self.prompt_length_to_skip = prompt_length_to_skip
+        self.min_new_tokens = min_new_tokens
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
+        if new_tokens_length < self.min_new_tokens:
+            for i in self.eos_token_id:
+                scores[:, i] = -float("inf")
+
         return scores
 
 
@@ -164,6 +206,34 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, input_ids, score)
+        return scores
+
+
+class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
+
+    Args:
+        hallucination_penalty (`float`):
+            The parameter for hallucination penalty. 1.0 means no penalty.
+        encoder_input_ids (`torch.LongTensor`):
+            The encoder_input_ids that should not be repeated within the decoder ids.
+    """
+
+    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+        if not isinstance(penalty, float) or not (penalty > 0):
+            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+        self.penalty = 1 / penalty
+        self.encoder_input_ids = encoder_input_ids
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        score = torch.gather(scores, 1, self.encoder_input_ids)
+
+        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
+        scores.scatter_(1, self.encoder_input_ids, score)
         return scores
 
 
@@ -223,12 +293,11 @@ class TopKLogitsWarper(LogitsWarper):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = top_k
+        self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
+        top_k = min(self.top_k, scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
@@ -259,7 +328,6 @@ class TypicalLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         # calculate entropy
         normalized = torch.nn.functional.log_softmax(scores, dim=-1)
         p = torch.exp(normalized)
@@ -279,6 +347,90 @@ class TypicalLogitsWarper(LogitsWarper):
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
             sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
+class EpsilonLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
+    largest min_tokens_to_keep tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+
+    Args:
+        epsilon (`float`):
+            If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        epsilon = float(epsilon)
+        if epsilon <= 0 or epsilon >= 1:
+            raise ValueError(f"`epsilon_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
+
+        min_tokens_to_keep = int(min_tokens_to_keep)
+        if min_tokens_to_keep < 1:
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
+
+        self.epsilon = epsilon
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Determine which indices to remove
+        probabilities = scores.softmax(dim=-1)
+        indices_to_remove = probabilities < self.epsilon
+
+        # Keep the words with the 'min_tokens_to_keep'-highest probabilities
+        top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
+
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
+class EtaLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs eta-sampling, i.e. calculates a dynamic cutoff `eta := min(epsilon, sqrt(epsilon,
+    e^-entropy(probabilities)))` and restricts to tokens with `prob >= eta`. Takes the largest min_tokens_to_keep
+    tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+
+    Args:
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered."""
+
+    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        epsilon = float(epsilon)
+        if epsilon <= 0 or epsilon >= 1:
+            raise ValueError(f"`eta_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
+
+        min_tokens_to_keep = int(min_tokens_to_keep)
+        if min_tokens_to_keep < 1:
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
+
+        self.epsilon = torch.tensor(epsilon)
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Calculate the adaptive cutoff
+        probabilities = scores.softmax(dim=-1)
+        entropy = torch.distributions.Categorical(logits=scores).entropy()
+        eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
+        indices_to_remove = probabilities < eta
+
+        # Keep the words with the 'min_tokens_to_keep'-highest probabilities
+        top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
 
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
@@ -395,12 +547,11 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
             List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
             that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
             add_special_tokens=False).input_ids`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
-
+    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
@@ -413,7 +564,14 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
+        if eos_token_id is None:
+            eos_token_id = []
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+
+        bad_words_ids = list(
+            filter(lambda bad_token_seq: all([bad_token_seq != [i] for i in eos_token_id]), bad_words_ids)
+        )
         self.bad_words_id_length_1 = []
         self.bad_words_id_length_greater_than_1 = []
         for word in bad_words_ids:
@@ -628,28 +786,31 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     Args:
         max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (`int`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, max_length: int, eos_token_id: int):
+    def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
         self.max_length = max_length
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len == self.max_length - 1:
             num_tokens = scores.shape[1]
-            scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
-            scores[:, self.eos_token_id] = 0
+            scores[:, [i for i in range(num_tokens) if i not in self.eos_token_id]] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = 0
         return scores
 
 
 class InfNanRemoveLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation method to fail. Note that using
-    the logits processor should only be used if necessary since it can slow down the generation method. `max_length` is
-    reached.
+    the logits processor should only be used if necessary since it can slow down the generation method.
     """
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -668,26 +829,32 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     reached.
 
     Args:
-        exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+        exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         input_ids_seq_length (`int`):
             The length of the input sequence.
     """
 
-    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int, input_ids_seq_length: int):
+    def __init__(
+        self,
+        exponential_decay_length_penalty: Tuple[int, float],
+        eos_token_id: Union[int, List[int]],
+        input_ids_seq_length: int,
+    ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
-            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(
-                self.regulation_factor, cur_len - self.regulation_start
-            )
+            for i in self.eos_token_id:
+                scores[:, i] = scores[:, i] * pow(self.regulation_factor, cur_len - self.regulation_start)
         return scores
 
 
@@ -748,4 +915,68 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         if current_token is not None:
             scores[:, :] = -float("inf")
             scores[:, current_token] = 0
+        return scores
+
+
+class WhisperTimeStampLogitsProcessor(LogitsProcessor):
+    r"""
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
+
+    Args:
+        generate_config (`GenerateConfig`):
+            The generate config used to generate the output. The following parameters are required:
+                eos_token_id (`int`, *optional*, defaults to 50257):
+                    The id of the *end-of-sequence* token.
+                no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+                    The id of the `"<|notimestamps|>"` token.
+                max_initial_timestamp_index (`int`, *optional*, defaults to 1):
+                    Used to set the maximum value of the initial timestamp. This is used to prevent the model from
+                    predicting timestamps that are too far in the future.
+    """
+
+    def __init__(self, generate_config):  # support for the kwargs
+        self.eos_token_id = generate_config.eos_token_id
+        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
+        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+
+        self.begin_index = len(generate_config.forced_decoder_ids) + 2
+        if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
+            self.begin_index -= 1
+        self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
+
+    def __call__(self, input_ids, scores):
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        scores[:, self.no_timestamps_token_id] = -float("inf")
+
+        if input_ids.shape[1] == self.begin_index - 1:
+            scores[:, :] = -float("inf")
+            scores[:, self.timestamp_begin] = 0
+            return scores
+
+        # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        for k in range(input_ids.shape[0]):
+            seq = list(input_ids[k, self.begin_index :].tolist())
+            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
+            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+
+            if last_was_timestamp:
+                if penultimate_was_timestamp:  # has to be non-timestamp
+                    scores[k, self.timestamp_begin :] = -float("inf")
+                else:  # cannot be normal text tokens
+                    scores[k, : self.eos_token_id] = -float("inf")
+
+            # apply the `max_initial_timestamp` option
+            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                scores[:, last_allowed + 1 :] = -float("inf")
+
+        # if sum of probability over timestamps is above any other token, sample timestamp
+        logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        for k in range(input_ids.shape[0]):
+            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+            if timestamp_logprob > max_text_token_logprob:
+                scores[k, : self.timestamp_begin] = -float("inf")
+
         return scores

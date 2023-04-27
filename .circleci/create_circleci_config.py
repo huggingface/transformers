@@ -15,16 +15,25 @@
 
 import argparse
 import copy
+import glob
 import os
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import yaml
 
 
-COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120}
+COMMON_ENV_VARIABLES = {
+    "OMP_NUM_THREADS": 1,
+    "TRANSFORMERS_IS_CI": True,
+    "PYTEST_TIMEOUT": 120,
+    "RUN_PIPELINE_TESTS": False,
+    "RUN_PT_TF_CROSS_TESTS": False,
+    "RUN_PT_FLAX_CROSS_TESTS": False,
+}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
-DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
+DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
 @dataclass
@@ -32,7 +41,7 @@ class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.5"
+    cache_version: str = "0.6"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
@@ -58,12 +67,16 @@ class CircleCIJob:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
             self.tests_to_run = [self.tests_to_run]
+        if self.parallelism is None:
+            self.parallelism = 1
 
     def to_dict(self):
+        env = COMMON_ENV_VARIABLES.copy()
+        env.update(self.additional_env)
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
-            "environment": {**COMMON_ENV_VARIABLES, **self.additional_env},
+            "environment": env,
         }
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
@@ -99,10 +112,57 @@ class CircleCIJob:
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
         test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        if self.tests_to_run is None:
-            test_command += " << pipeline.parameters.tests_to_run >>"
+        if self.parallelism == 1:
+            if self.tests_to_run is None:
+                test_command += " << pipeline.parameters.tests_to_run >>"
+            else:
+                test_command += " " + " ".join(self.tests_to_run)
         else:
-            test_command += " " + " ".join(self.tests_to_run)
+            # We need explicit list instead of `pipeline.parameters.tests_to_run` (only available at job runtime)
+            tests = self.tests_to_run
+            if tests is None:
+                folder = os.environ["test_preparation_dir"]
+                test_file = os.path.join(folder, "filtered_test_list.txt")
+                if os.path.exists(test_file):
+                    with open(test_file) as f:
+                        tests = f.read().split(" ")
+
+            # expand the test list
+            if tests == ["tests"]:
+                tests = [os.path.join("tests", x) for x in os.listdir("tests")]
+            expanded_tests = []
+            for test in tests:
+                if test.endswith(".py"):
+                    expanded_tests.append(test)
+                elif test == "tests/models":
+                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                elif test == "tests/pipelines":
+                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                else:
+                    expanded_tests.append(test)
+            # Avoid long tests always being collected together
+            random.shuffle(expanded_tests)
+            tests = " ".join(expanded_tests)
+
+            # Each executor to run ~10 tests
+            n_executors = max(len(tests) // 10, 1)
+            # Avoid empty test list on some executor(s) or launching too many executors
+            if n_executors > self.parallelism:
+                n_executors = self.parallelism
+            job["parallelism"] = n_executors
+
+            # Need to be newline separated for the command `circleci tests split` below
+            command = f'echo {tests} | tr " " "\\n" >> tests.txt'
+            steps.append({"run": {"name": "Get tests", "command": command}})
+
+            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
+            steps.append({"run": {"name": "Split tests", "command": command}})
+
+            steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
+            steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
+
+            test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
         test_command += " | tee tests_output.txt"
@@ -122,7 +182,7 @@ torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
         "git lfs install",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
@@ -156,6 +216,7 @@ torch_job = CircleCIJob(
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
+    parallelism=1,
     pytest_num_workers=3,
 )
 
@@ -163,11 +224,12 @@ torch_job = CircleCIJob(
 tf_job = CircleCIJob(
     "tf",
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
     ],
+    parallelism=1,
     pytest_options={"rA": None},
 )
 
@@ -179,31 +241,35 @@ flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
+    parallelism=1,
     pytest_options={"rA": None},
 )
 
 
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
 pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
@@ -253,6 +319,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -r examples/tensorflow/_tests_requirements.txt",
@@ -290,6 +357,7 @@ hub_job = CircleCIJob(
 onnx_job = CircleCIJob(
     "onnx",
     install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade pip",
         "pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
@@ -305,6 +373,7 @@ exotic_models_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[torch,testing,vision]",
         "pip install torchvision",
+        "pip install scipy",
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
@@ -313,6 +382,7 @@ exotic_models_job = CircleCIJob(
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
+        "tests/models/deta",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
@@ -323,11 +393,11 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[quality,testing]",
+        "pip install .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
-    resource_class=None,
+    resource_class="large",
     tests_to_run="tests/repo_utils",
 )
 
@@ -356,6 +426,8 @@ REPO_UTIL_TESTS = [repo_utils_job]
 def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
+    # Used in CircleCIJob.to_dict() to expand the test list (for using parallelism)
+    os.environ["test_preparation_dir"] = folder
     jobs = []
     all_test_file = os.path.join(folder, "test_list.txt")
     if os.path.exists(all_test_file):
@@ -378,7 +450,7 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
-    
+
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)

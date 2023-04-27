@@ -15,13 +15,98 @@
 import subprocess
 import sys
 
+from transformers import BertConfig, BertModel, BertTokenizer, pipeline
 from transformers.testing_utils import TestCasePlus, require_torch
 
 
 class OfflineTests(TestCasePlus):
     @require_torch
     def test_offline_mode(self):
+        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
+        # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
+        # while running an external program
 
+        # python one-liner segments
+
+        # this must be loaded before socket.socket is monkey-patched
+        load = """
+from transformers import BertConfig, BertModel, BertTokenizer, pipeline
+        """
+
+        run = """
+mname = "hf-internal-testing/tiny-random-bert"
+BertConfig.from_pretrained(mname)
+BertModel.from_pretrained(mname)
+BertTokenizer.from_pretrained(mname)
+pipe = pipeline(task="fill-mask", model=mname)
+print("success")
+        """
+
+        mock = """
+import socket
+def offline_socket(*args, **kwargs): raise RuntimeError("Offline mode is enabled, we shouldn't access internet")
+socket.socket = offline_socket
+        """
+
+        # Force fetching the files so that we can use the cache
+        mname = "hf-internal-testing/tiny-random-bert"
+        BertConfig.from_pretrained(mname)
+        BertModel.from_pretrained(mname)
+        BertTokenizer.from_pretrained(mname)
+        pipeline(task="fill-mask", model=mname)
+
+        # baseline - just load from_pretrained with normal network
+        cmd = [sys.executable, "-c", "\n".join([load, run, mock])]
+
+        # should succeed
+        env = self.get_env()
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+    @require_torch
+    def test_offline_mode_no_internet(self):
+        # python one-liner segments
+        # this must be loaded before socket.socket is monkey-patched
+        load = """
+from transformers import BertConfig, BertModel, BertTokenizer, pipeline
+        """
+
+        run = """
+mname = "hf-internal-testing/tiny-random-bert"
+BertConfig.from_pretrained(mname)
+BertModel.from_pretrained(mname)
+BertTokenizer.from_pretrained(mname)
+pipe = pipeline(task="fill-mask", model=mname)
+print("success")
+        """
+
+        mock = """
+import socket
+def offline_socket(*args, **kwargs): raise socket.error("Faking flaky internet")
+socket.socket = offline_socket
+        """
+
+        # Force fetching the files so that we can use the cache
+        mname = "hf-internal-testing/tiny-random-bert"
+        BertConfig.from_pretrained(mname)
+        BertModel.from_pretrained(mname)
+        BertTokenizer.from_pretrained(mname)
+        pipeline(task="fill-mask", model=mname)
+
+        # baseline - just load from_pretrained with normal network
+        cmd = [sys.executable, "-c", "\n".join([load, run, mock])]
+
+        # should succeed
+        env = self.get_env()
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+    @require_torch
+    def test_offline_mode_sharded_checkpoint(self):
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
@@ -34,16 +119,15 @@ from transformers import BertConfig, BertModel, BertTokenizer
         """
 
         run = """
-mname = "hf-internal-testing/tiny-random-bert"
+mname = "hf-internal-testing/tiny-random-bert-sharded"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
-BertTokenizer.from_pretrained(mname)
 print("success")
         """
 
         mock = """
 import socket
-def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled")
+def offline_socket(*args, **kwargs): raise ValueError("Offline mode is enabled")
 socket.socket = offline_socket
         """
 
@@ -71,30 +155,39 @@ socket.socket = offline_socket
         self.assertIn("success", result.stdout.decode())
 
     @require_torch
-    def test_offline_mode_sharded_checkpoint(self):
-
-        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
-        # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
-        # while running an external program
-
-        # python one-liner segments
-
-        # this must be loaded before socket.socket is monkey-patched
+    def test_offline_mode_pipeline_exception(self):
         load = """
-from transformers import BertConfig, BertModel, BertTokenizer
+from transformers import pipeline
         """
-
         run = """
-mname = "hf-internal-testing/tiny-random-bert-sharded"
-BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname)
-print("success")
+mname = "hf-internal-testing/tiny-random-bert"
+pipe = pipeline(model=mname)
         """
 
         mock = """
 import socket
 def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled")
 socket.socket = offline_socket
+        """
+        env = self.get_env()
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "You cannot infer task automatically within `pipeline` when using offline mode",
+            result.stderr.decode().replace("\n", ""),
+        )
+
+    @require_torch
+    def test_offline_model_dynamic_model(self):
+        load = """
+from transformers import AutoModel
+        """
+        run = """
+mname = "hf-internal-testing/test_dynamic_model"
+AutoModel.from_pretrained(mname, trust_remote_code=True)
+print("success")
         """
 
         # baseline - just load from_pretrained with normal network
@@ -105,14 +198,6 @@ socket.socket = offline_socket
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
-
-        # next emulate no network
-        cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
-
-        # Doesn't fail anymore since the model is in the cache due to other tests, so commenting this.
-        # env["TRANSFORMERS_OFFLINE"] = "0"
-        # result = subprocess.run(cmd, env=env, check=False, capture_output=True)
-        # self.assertEqual(result.returncode, 1, result.stderr)
 
         # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
         env["TRANSFORMERS_OFFLINE"] = "1"

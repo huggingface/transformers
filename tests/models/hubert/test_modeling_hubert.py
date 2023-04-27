@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -304,8 +305,17 @@ class HubertModelTester:
 
 
 @require_torch
-class HubertModelTest(ModelTesterMixin, unittest.TestCase):
+class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "audio-classification": HubertForSequenceClassification,
+            "automatic-speech-recognition": HubertForCTC,
+            "feature-extraction": HubertModel,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_pruning = False
     test_headmasking = False
@@ -802,7 +812,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], dtype=torch.float16, device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=2e-2))
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=3e-2))
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(

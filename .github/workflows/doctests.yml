@@ -6,7 +6,7 @@ on:
       - doctest*
   repository_dispatch:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "17 2 * * *"
 
 
 env:
@@ -33,6 +33,9 @@ jobs:
       - name: GPU visibility
         run: |
           python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
 
       - name: Prepare files for doctests
         run: |

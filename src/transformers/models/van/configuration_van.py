@@ -94,7 +94,7 @@ class VanConfig(PretrainedConfig):
         layer_scale_init_value=1e-2,
         drop_path_rate=0.0,
         dropout_rate=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.image_size = image_size

@@ -18,10 +18,10 @@ URL: https://github.com/microsoft/Swin-Transformer/blob/main/MODELHUB.md#simmim-
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import SwinConfig, SwinForMaskedImageModeling, ViTFeatureExtractor
 
 

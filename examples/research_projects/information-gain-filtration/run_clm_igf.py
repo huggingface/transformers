@@ -28,11 +28,9 @@ Last, a plot is generated to compare the performance of IGF to standard fine-tun
 import argparse
 import random
 
+import joblib
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler
-
-import joblib
 from igf.igf import (
     SecondaryLearner,
     collect_objective_set,
@@ -43,6 +41,8 @@ from igf.igf import (
     set_seed,
     train_secondary_learner,
 )
+from torch.utils.data import DataLoader, RandomSampler
+
 from transformers import GPT2LMHeadModel
 
 
@@ -55,7 +55,6 @@ def generate_n_pairs(
     data_file="data/tokenized_stories_train_wikitext103.jbl",
     igf_data_file="igf_context_pairs.jbl",
 ):
-
     """
     Collecting *n* pairs for training the secondary learner
     Args:

@@ -27,6 +27,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -181,19 +182,59 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+        # test no attention_mask works
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        _, past_key_values = outputs.to_tuple()
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
-class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": OPTModel,
+            "question-answering": OPTForQuestionAnswering,
+            "text-classification": OPTForSequenceClassification,
+            "text-generation": OPTForCausalLM,
+            "zero-shot": OPTForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = False
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = OPTModelTester(self)

@@ -28,7 +28,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = CodeGenTokenizer
     rust_tokenizer_class = CodeGenTokenizerFast
     test_rust_tokenizer = True

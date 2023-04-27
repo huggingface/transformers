@@ -21,10 +21,9 @@ from typing import List
 
 import numpy as np
 
-from transformers import is_flax_available, is_tf_available, is_torch_available
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 
 class OwlViTProcessor(ProcessorMixin):
@@ -178,6 +177,13 @@ class OwlViTProcessor(ProcessorMixin):
         of this method for more information.
         """
         return self.image_processor.post_process(*args, **kwargs)
+
+    def post_process_object_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
+        to the docstring of this method for more information.
+        """
+        return self.image_processor.post_process_object_detection(*args, **kwargs)
 
     def post_process_image_guided_detection(self, *args, **kwargs):
         """

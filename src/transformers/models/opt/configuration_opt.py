@@ -118,7 +118,7 @@ class OPTConfig(PretrainedConfig):
         eos_token_id=2,
         enable_bias=True,
         layer_norm_elementwise_affine=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

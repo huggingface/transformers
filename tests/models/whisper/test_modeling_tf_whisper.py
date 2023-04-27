@@ -15,7 +15,6 @@
 """ Testing suite for the TensorFlow Whisper model. """
 
 import inspect
-import os
 import tempfile
 import traceback
 import unittest
@@ -29,6 +28,7 @@ from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
@@ -80,7 +80,7 @@ class TFWhisperModelTester:
         seq_length=60,
         is_training=True,
         use_labels=False,
-        vocab_size=99,
+        vocab_size=200,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -254,9 +254,10 @@ class TFWhisperModelTester:
 
 
 @require_tf
-class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFWhisperModel, TFWhisperForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFWhisperForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFWhisperModel} if is_tf_available() else {}
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False
@@ -302,7 +303,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
         input_ids = input_ids[:max_batch_size, :, :]
 
         # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
+        max_length = 4
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
@@ -629,7 +630,6 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 def _load_datasamples(num_samples):
-
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
@@ -638,7 +638,6 @@ def _load_datasamples(num_samples):
 
 
 def _test_large_logits_librispeech(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -687,7 +686,6 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
 
 
 def _test_large_generation(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -699,8 +697,9 @@ def _test_large_generation(in_queue, out_queue, timeout):
         input_speech = _load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        generated_ids = model.generate(
+            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
@@ -714,7 +713,6 @@ def _test_large_generation(in_queue, out_queue, timeout):
 
 
 def _test_large_generation_multilingual(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -728,26 +726,25 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        generated_ids = model.generate(
+            input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            max_length=20,
+            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Kimura-san called me."
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        generated_ids = model.generate(
+            input_features, do_sample=False, max_length=20, language="<|ja|>", task="translate"
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
@@ -761,7 +758,6 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
 
 
 def _test_large_batched_generation(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -779,10 +775,10 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
             [
-                [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
-                [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
-                [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
-                [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+                [50258, 50259, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404],
+                [50258, 50259, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257],
+                [50258, 50259, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904],
+                [50258, 50259, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439]
             ]
         )
         # fmt: on
@@ -791,10 +787,10 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            ' Mr. Quilter is the apostle of the middle classes and we are glad to',
+            " Mr. Quilter is the apostle of the middle classes and we are glad",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast beef",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+            " He tells us that at this festive season of the year, with Christmas and roast",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all",
         ]
         # fmt: on
 
@@ -896,10 +892,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_logits_librispeech, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_logits_librispeech, inputs=None)
 
     @slow
     def test_tiny_en_generation(self):
@@ -964,22 +957,15 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None, timeout=timeout)
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None)
 
     @slow
     def test_large_generation_multilingual(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_generation_multilingual, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation_multilingual, inputs=None)
 
     @slow
     def test_large_batched_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None)
 
     @slow
     def test_tiny_en_batched_generation(self):

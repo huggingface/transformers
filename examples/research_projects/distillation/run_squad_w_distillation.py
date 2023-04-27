@@ -189,7 +189,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -851,9 +850,9 @@ def main():
             logger.info("Loading checkpoints saved during training for evaluation")
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
@@ -866,7 +865,7 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
     logger.info("Results: {}".format(results))

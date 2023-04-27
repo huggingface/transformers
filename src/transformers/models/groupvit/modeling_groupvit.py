@@ -195,7 +195,6 @@ class GroupViTAssignAttention(nn.Module):
         self.assign_eps = config.assign_eps
 
     def get_attn(self, attn, gumbel=True, hard=True):
-
         if gumbel and self.training:
             attn = gumbel_softmax(attn, dim=-2, hard=hard)
         else:
@@ -714,9 +713,9 @@ class GroupViTEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GroupViTAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = GroupViTMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -857,7 +856,7 @@ GROUPVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -891,8 +890,8 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -931,7 +930,6 @@ class GroupViTVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1076,7 +1074,7 @@ class GroupViTTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GroupViTTextConfig)
@@ -1100,7 +1098,7 @@ class GroupViTTextTransformer(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is None:
-            raise ValueError("You have to specify either input_ids")
+            raise ValueError("You have to specify input_ids")
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
@@ -1110,8 +1108,8 @@ class GroupViTTextTransformer(nn.Module):
         bsz, seq_len = input_shape
         # CLIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len, hidden_states.dtype).to(
-            hidden_states.device
+        causal_attention_mask = self._build_causal_attention_mask(
+            bsz, seq_len, hidden_states.dtype, device=hidden_states.device
         )
         # expand attention_mask
         if attention_mask is not None:
@@ -1148,11 +1146,11 @@ class GroupViTTextTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-    def _build_causal_attention_mask(self, bsz, seq_len, dtype):
+    def _build_causal_attention_mask(self, bsz, seq_len, dtype, device=None):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype)
-        mask.fill_(torch.tensor(torch.finfo(dtype).min))
+        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype, device=device)
+        mask.fill_(torch.finfo(dtype).min)
         mask.triu_(1)  # zero out the lower diagonal
         mask = mask.unsqueeze(1)  # expand mask
         return mask
@@ -1219,7 +1217,7 @@ class GroupViTVisionTransformer(nn.Module):
 
         self.embeddings = GroupViTVisionEmbeddings(config)
         self.encoder = GroupViTVisionEncoder(config)
-        self.layernorm = nn.LayerNorm(embed_dim)
+        self.layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GroupViTVisionConfig)

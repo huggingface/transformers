@@ -360,7 +360,6 @@ class RagRetrieverTest(TestCase):
     @require_tokenizers
     @require_sentencepiece
     def test_custom_hf_index_end2end_retriever_call(self):
-
         context_encoder_tokenizer = self.get_dpr_ctx_encoder_tokenizer()
         n_docs = 1
         retriever = self.get_dummy_custom_hf_index_retriever(from_disk=False)

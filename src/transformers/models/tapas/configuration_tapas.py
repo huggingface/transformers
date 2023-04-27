@@ -193,9 +193,8 @@ class TapasConfig(PretrainedConfig):
         disable_per_token_loss=False,
         aggregation_labels=None,
         no_aggregation_label_index=None,
-        **kwargs
+        **kwargs,
     ):
-
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)

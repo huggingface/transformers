@@ -19,11 +19,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, normalize, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -32,11 +29,11 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -51,46 +48,6 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     Return the maximum value across all indices of an iterable of values.
     """
     return [max(values_i) for values_i in zip(*values)]
-
-
-def pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to the output size.
-
-    Args:
-        image (`np.ndarray`):
-            Image to pad.
-        output_size (`Tuple[int, int]`):
-            Output size of the image.
-        input_channel_dimension (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be inferred from the input image.
-        data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
 
 
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
@@ -109,7 +66,7 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
     return mask
 
 
-def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
+def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -205,7 +162,7 @@ class ViltImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -225,6 +182,18 @@ class ViltImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
 
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        is created using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint,
+        pad_and_return_pixel_mask=False)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "pad_and_return_pixel_mask" in kwargs:
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+        return super().from_dict(image_processor_dict, **kwargs)
+
     def resize(
         self,
         image: np.ndarray,
@@ -232,7 +201,7 @@ class ViltImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image.
@@ -266,7 +235,7 @@ class ViltImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -287,7 +256,7 @@ class ViltImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -303,6 +272,27 @@ class ViltImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+
+    def _pad_image(
+        self,
+        image: np.ndarray,
+        output_size: Tuple[int, int],
+        constant_values: Union[float, Iterable[float]] = 0,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pad an image with zeros to the given size.
+        """
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = output_size
+
+        pad_bottom = output_height - input_height
+        pad_right = output_width - input_width
+        padding = ((0, pad_bottom), (0, pad_right))
+        padded_image = pad(
+            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+        )
+        return padded_image
 
     def pad(
         self,
@@ -330,8 +320,10 @@ class ViltImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        pad_size = get_max_dimensions(images)
-        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
+        pad_size = get_max_height_width(images)
+        padded_images = [
+            self._pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
+        ]
         data = {"pixel_values": padded_images}
         if return_pixel_mask:
             masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
@@ -446,8 +438,7 @@ class ViltImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

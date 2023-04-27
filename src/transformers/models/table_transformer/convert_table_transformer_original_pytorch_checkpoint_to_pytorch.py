@@ -23,10 +23,10 @@ from collections import OrderedDict
 from pathlib import Path
 
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import functional as F
 
-from huggingface_hub import hf_hub_download
 from transformers import DetrFeatureExtractor, TableTransformerConfig, TableTransformerForObjectDetection
 from transformers.utils import logging
 

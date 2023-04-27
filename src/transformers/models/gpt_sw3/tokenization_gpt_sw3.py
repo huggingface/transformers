@@ -47,10 +47,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Example usage:
-    ```
+    ```python
     >>> from transformers import GPTSw3Tokenizer
+
     >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-    >>> tokenizer("Svenska är kul!")['input_ids']
+    >>> tokenizer("Svenska är kul!")["input_ids"]
     [1814, 377, 3617, 63504]
     ```
 
@@ -115,9 +116,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         eos_token=None,
         bos_token=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         name_or_path = kwargs.get("name_or_path")

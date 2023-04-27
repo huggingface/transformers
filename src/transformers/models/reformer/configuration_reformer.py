@@ -197,7 +197,7 @@ class ReformerConfig(PretrainedConfig):
         tie_word_embeddings=False,
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size

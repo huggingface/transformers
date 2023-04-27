@@ -12,28 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import importlib
 import logging
 import os
-import random
-import string
 import sys
 import tempfile
 import unittest
-from abc import abstractmethod
-from functools import lru_cache
 from pathlib import Path
-from unittest import skipIf
 
+import datasets
 import numpy as np
-
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
+
 from transformers import (
-    FEATURE_EXTRACTOR_MAPPING,
-    TOKENIZER_MAPPING,
-    AutoFeatureExtractor,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
@@ -48,6 +39,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
+    is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_tensorflow_probability,
@@ -56,7 +48,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
 )
-from transformers.utils import is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -68,106 +60,11 @@ from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 logger = logging.getLogger(__name__)
 
 
-ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
-    "CamembertConfig",
-    "IBertConfig",
-    "LongformerConfig",
-    "MarkupLMConfig",
-    "RobertaConfig",
-    "RobertaPreLayerNormConfig",
-    "XLMRobertaConfig",
-]
+PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/transformers")
 
 
-def get_checkpoint_from_architecture(architecture):
-    try:
-        module = importlib.import_module(architecture.__module__)
-    except ImportError:
-        logger.error(f"Ignoring architecture {architecture}")
-        return
-
-    if hasattr(module, "_CHECKPOINT_FOR_DOC"):
-        return module._CHECKPOINT_FOR_DOC
-    else:
-        logger.warning(f"Can't retrieve checkpoint from {architecture.__name__}")
-
-
-def get_tiny_config_from_class(configuration_class):
-    if "OpenAIGPT" in configuration_class.__name__:
-        # This is the only file that is inconsistent with the naming scheme.
-        # Will rename this file if we decide this is the way to go
-        return
-
-    model_type = configuration_class.model_type
-    camel_case_model_name = configuration_class.__name__.split("Config")[0]
-
-    try:
-        model_slug = model_type.replace("-", "_")
-        module = importlib.import_module(f".test_modeling_{model_slug}", package=f"tests.models.{model_slug}")
-        model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
-    except (ImportError, AttributeError):
-        logger.error(f"No model tester class for {configuration_class.__name__}")
-        return
-
-    if model_tester_class is None:
-        logger.warning(f"No model tester class for {configuration_class.__name__}")
-        return
-
-    model_tester = model_tester_class(parent=None)
-
-    if hasattr(model_tester, "get_pipeline_config"):
-        config = model_tester.get_pipeline_config()
-    elif hasattr(model_tester, "get_config"):
-        config = model_tester.get_config()
-    else:
-        config = None
-        logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
-
-    return config
-
-
-@lru_cache(maxsize=100)
-def get_tiny_tokenizer_from_checkpoint(checkpoint):
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    if tokenizer.vocab_size < 300:
-        # Wav2Vec2ForCTC for instance
-        # ByT5Tokenizer
-        # all are already small enough and have no Fast version that can
-        # be retrained
-        return tokenizer
-    logger.info("Training new from iterator ...")
-    vocabulary = string.ascii_letters + string.digits + " "
-    tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
-    logger.info("Trained.")
-    return tokenizer
-
-
-def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
-    try:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
-    except Exception:
-        try:
-            if feature_extractor_class is not None:
-                feature_extractor = feature_extractor_class()
-            else:
-                feature_extractor = None
-        except Exception:
-            feature_extractor = None
-    if hasattr(tiny_config, "image_size") and feature_extractor:
-        feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
-
-    # Audio Spectogram Transformer specific.
-    if feature_extractor.__class__.__name__ == "ASTFeatureExtractor":
-        feature_extractor = feature_extractor.__class__(
-            max_length=tiny_config.max_length, num_mel_bins=tiny_config.num_mel_bins
-        )
-
-    # Speech2TextModel specific.
-    if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
-        feature_extractor = feature_extractor.__class__(
-            feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
-        )
-    return feature_extractor
+# Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
+transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 class ANY:
@@ -181,146 +78,7 @@ class ANY:
         return f"ANY({', '.join(_type.__name__ for _type in self._types)})"
 
 
-class PipelineTestCaseMeta(type):
-    def __new__(mcs, name, bases, dct):
-        def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
-            @skipIf(
-                tiny_config is None,
-                "TinyConfig does not exist, make sure that you defined a `_CONFIG_FOR_DOC` variable in the modeling"
-                " file",
-            )
-            @skipIf(
-                checkpoint is None,
-                "checkpoint does not exist, make sure that you defined a `_CHECKPOINT_FOR_DOC` variable in the"
-                " modeling file",
-            )
-            def test(self):
-                if ModelClass.__name__.endswith("ForCausalLM"):
-                    tiny_config.is_encoder_decoder = False
-                    if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
-                        # specific for blenderbot which supports both decoder-only
-                        # encoder/decoder but the test config  only reflects
-                        # encoder/decoder arch
-                        tiny_config.encoder_no_repeat_ngram_size = 0
-                if ModelClass.__name__.endswith("WithLMHead"):
-                    tiny_config.is_decoder = True
-                try:
-                    model = ModelClass(tiny_config)
-                except ImportError as e:
-                    self.skipTest(
-                        f"Cannot run with {tiny_config} as the model requires a library that isn't installed: {e}"
-                    )
-                if hasattr(model, "eval"):
-                    model = model.eval()
-                if tokenizer_class is not None:
-                    try:
-                        tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                        # XLNet actually defines it as -1.
-                        if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
-                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
-                        elif (
-                            hasattr(model.config, "max_position_embeddings")
-                            and model.config.max_position_embeddings > 0
-                        ):
-                            tokenizer.model_max_length = model.config.max_position_embeddings
-                    # Rust Panic exception are NOT Exception subclass
-                    # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
-                    # provide some default tokenizer and hope for the best.
-                    except:  # noqa: E722
-                        self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
-                else:
-                    tokenizer = None
-                feature_extractor = get_tiny_feature_extractor_from_checkpoint(
-                    checkpoint, tiny_config, feature_extractor_class
-                )
-
-                if tokenizer is None and feature_extractor is None:
-                    self.skipTest(
-                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor (PerceiverConfig with"
-                        " no FastTokenizer ?)"
-                    )
-                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
-                if pipeline is None:
-                    # The test can disable itself, but it should be very marginal
-                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-                    return
-                self.run_pipeline_test(pipeline, examples)
-
-                def run_batch_test(pipeline, examples):
-                    # Need to copy because `Conversation` are stateful
-                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
-                        return  # No batching for this and it's OK
-
-                    # 10 examples with batch size 4 means there needs to be a unfinished batch
-                    # which is important for the unbatcher
-                    def data(n):
-                        for _ in range(n):
-                            # Need to copy because Conversation object is mutated
-                            yield copy.deepcopy(random.choice(examples))
-
-                    out = []
-                    for item in pipeline(data(10), batch_size=4):
-                        out.append(item)
-                    self.assertEqual(len(out), 10)
-
-                run_batch_test(pipeline, examples)
-
-            return test
-
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
-            mapping = dct.get(key, {})
-            if mapping:
-                for configuration, model_architectures in mapping.items():
-                    if not isinstance(model_architectures, tuple):
-                        model_architectures = (model_architectures,)
-
-                    for model_architecture in model_architectures:
-                        checkpoint = get_checkpoint_from_architecture(model_architecture)
-                        tiny_config = get_tiny_config_from_class(configuration)
-                        tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-                        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
-                        feature_extractor_name = (
-                            feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
-                        )
-                        if not tokenizer_classes:
-                            # We need to test even if there are no tokenizers.
-                            tokenizer_classes = [None]
-                        else:
-                            # Remove the non defined tokenizers
-                            # ByT5 and Perceiver are bytes-level and don't define
-                            # FastTokenizer, we can just ignore those.
-                            tokenizer_classes = [
-                                tokenizer_class for tokenizer_class in tokenizer_classes if tokenizer_class is not None
-                            ]
-
-                        for tokenizer_class in tokenizer_classes:
-                            if tokenizer_class is not None:
-                                tokenizer_name = tokenizer_class.__name__
-                            else:
-                                tokenizer_name = "notokenizer"
-
-                            test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_name}_{feature_extractor_name}"
-
-                            if tokenizer_class is not None or feature_extractor_class is not None:
-                                dct[test_name] = gen_test(
-                                    model_architecture,
-                                    checkpoint,
-                                    tiny_config,
-                                    tokenizer_class,
-                                    feature_extractor_class,
-                                )
-
-        @abstractmethod
-        def inner(self):
-            raise NotImplementedError("Not implemented test")
-
-        # Force these 2 methods to exist
-        dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
-        dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
-
-        return type.__new__(mcs, name, bases, dct)
-
-
+@is_pipeline_test
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):
@@ -438,6 +196,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
 
+@is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):
     @require_torch
     def test_pipeline_predict_pt(self):
@@ -488,6 +247,7 @@ class PipelineScikitCompatTest(unittest.TestCase):
         self.assertEqual(expected_output, actual_output)
 
 
+@is_pipeline_test
 class PipelinePadTest(unittest.TestCase):
     @require_torch
     def test_pipeline_padding(self):
@@ -569,6 +329,7 @@ class PipelinePadTest(unittest.TestCase):
         )
 
 
+@is_pipeline_test
 class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     def test_pipeline_dataset(self):
@@ -596,7 +357,7 @@ class PipelineUtilsTest(unittest.TestCase):
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2})
         self.assertEqual(len(dataset), 4)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -614,7 +375,7 @@ class PipelineUtilsTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             len(dataset)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -628,7 +389,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
 
     @require_torch
@@ -644,7 +405,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
         )
@@ -661,7 +422,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineChunkIterator(dataset, preprocess_chunk, {}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
 
         self.assertEqual(outputs, [0, 1, 0, 1, 2])
 
@@ -682,7 +443,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dataset, pack, {})
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             outputs,
             [
@@ -709,7 +470,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
 
         # is_false Across batch
@@ -720,8 +481,16 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
+
+    def test_pipeline_negative_device(self):
+        # To avoid regressing, pipeline used to accept device=-1
+        classifier = pipeline("text-generation", "hf-internal-testing/tiny-random-bert", device=-1)
+
+        expected_output = [{"generated_text": ANY(str)}]
+        actual_output = classifier("Test input.")
+        self.assertEqual(expected_output, actual_output)
 
     @slow
     @require_torch
@@ -864,6 +633,7 @@ class CustomPipeline(Pipeline):
         return model_outputs["logits"].softmax(-1).numpy()
 
 
+@is_pipeline_test
 class CustomPipelineTest(unittest.TestCase):
     def test_warning_logs(self):
         transformers_logging.set_verbosity_debug()
@@ -965,6 +735,29 @@ class CustomPipelineTest(unittest.TestCase):
             self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)
 
+    @require_torch
+    def test_chunk_pipeline_batching_single_file(self):
+        # Make sure we have cached the pipeline.
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        # For some reason scoping doesn't work if not using `self.`
+        self.COUNT = 0
+        forward = pipe.model.forward
+
+        def new_forward(*args, **kwargs):
+            self.COUNT += 1
+            return forward(*args, **kwargs)
+
+        pipe.model.forward = new_forward
+
+        for out in pipe(audio, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024):
+            pass
+
+        self.assertEqual(self.COUNT, 1)
+
 
 @require_torch
 @is_staging_test
@@ -974,7 +767,6 @@ class DynamicPipelineTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -999,7 +791,8 @@ class DynamicPipelineTester(unittest.TestCase):
         model = BertForSequenceClassification(config).eval()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", use_auth_token=self._token)
+            create_repo(f"{USER}/test-dynamic-pipeline", token=self._token)
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", token=self._token)
 
             vocab_file = os.path.join(tmp_dir, "vocab.txt")
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:

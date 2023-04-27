@@ -64,6 +64,14 @@ class ConvNextConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
     ```python
@@ -93,7 +101,9 @@ class ConvNextConfig(PretrainedConfig):
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
-        **kwargs
+        out_features=None,
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -108,10 +118,42 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+
+        if out_features is not None and out_indices is not None:
+            if len(out_features) != len(out_indices):
+                raise ValueError("out_features and out_indices should have the same length if both are set")
+            elif out_features != [self.stage_names[idx] for idx in out_indices]:
+                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
+
+        if out_features is None and out_indices is not None:
+            out_features = [self.stage_names[idx] for idx in out_indices]
+        elif out_features is not None and out_indices is None:
+            out_indices = [self.stage_names.index(feature) for feature in out_features]
+        elif out_features is None and out_indices is None:
+            out_features = [self.stage_names[-1]]
+            out_indices = [len(self.stage_names) - 1]
+
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
+        if out_indices is not None:
+            if not isinstance(out_indices, (list, tuple)):
+                raise ValueError("out_indices should be a list or tuple")
+            for idx in out_indices:
+                if idx >= len(self.stage_names):
+                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
+
+        self.out_features = out_features
+        self.out_indices = out_indices
 
 
 class ConvNextOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
