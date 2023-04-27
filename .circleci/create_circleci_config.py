@@ -434,7 +434,7 @@ doc_test_job = CircleCIJob(
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
     pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","rAs":None, "dist":"loadfile"}, # max duration of 20min
-    timout=1200,
+    timeout=1200,
     pytest_num_workers=1,
 
 )
