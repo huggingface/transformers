@@ -1593,7 +1593,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
 @add_start_docstrings(
     """
     The GPT-2 Model transformer with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     GPT2_START_DOCSTRING,
 )
