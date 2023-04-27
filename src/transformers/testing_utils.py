@@ -65,6 +65,7 @@ from .utils import (
     is_librosa_available,
     is_natten_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
@@ -691,6 +692,13 @@ def require_bitsandbytes(test_case):
     Decorator for bits and bytes (bnb) dependency
     """
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+
+
+def require_optimum(test_case):
+    """
+    Decorator for optimum dependency
+    """
+    return unittest.skipUnless(is_optimum_available(), "test requires optimum")(test_case)
 
 
 def require_phonemizer(test_case):
