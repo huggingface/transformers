@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate import PartialState
+    from accelerate import Accelerator, PartialState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
@@ -1286,6 +1286,20 @@ class TrainingArguments:
             self.torch_compile = True
         if self.torch_compile and self.torch_compile_backend is None:
             self.torch_compile_backend = "inductor"
+
+        # accelerate integration for torch compile
+        if self.torch_compile:
+            # set env vars for accelerate
+            prefix = "ACCELERATE_DYNAMO_"
+            os.environ[prefix + "BACKEND"] = self.torch_compile_backend
+            if self.torch_compile_mode is not None:
+                os.environ[prefix + "MODE"] = self.torch_compile_mode
+
+            # unset `torch_compile` as accelerate will handle it
+            self.torch_compile = False
+            self.torch_compile_backend = None
+            self.torch_compile_mode = None
+
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
@@ -1419,6 +1433,37 @@ class TrainingArguments:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
+        # accelerate integration for FSDP
+        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+            os.environ["ACCELERATE_USE_FSDP"] = "true"
+            prefix = "FSDP_"
+            from accelerate.utils.constants import (
+                FSDP_AUTO_WRAP_POLICY,
+                FSDP_BACKWARD_PREFETCH,
+                FSDP_SHARDING_STRATEGY,
+            )
+
+            for fsdp_option in self.fsdp:
+                if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
+                    # set environment variable for FSDP sharding strategy
+                    os.environ["FSDP_SHARDING_STRATEGY"] = FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
+                elif fsdp_option == FSDPOption.OFFLOAD:
+                    os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
+                elif fsdp_option == FSDPOption.AUTO_WRAP:
+                    if self.fsdp_config["fsdp_min_num_params"] > 0:
+                        os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
+                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
+                    elif self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
+                        os.environ["FSDP_TRANSFORMER_LAYER_CLS_TO_WRAP"] = ",".join(
+                            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
+                        )
+                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
+            prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
+            os.environ["FSDP_BACKWARD_PREFETCH"] = FSDP_BACKWARD_PREFETCH.index(prefetch_policy.upper()) + 1
+
+            # unset `self.fsdp` to avoid conflict with Accelerate
+            self.fsdp = []
+
         if self.tpu_metrics_debug:
             warnings.warn(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1430,6 +1475,7 @@ class TrainingArguments:
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
 
+        deepspeed_plugin = None
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
@@ -1441,6 +1487,15 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+            # Accelerate DeepSpeed Plugin
+            from accelerate.utils import DeepSpeedPlugin
+
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
+            deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
+
+            # unset `self.deepspeed` to avoid conflict with Accelerate
+            self.deepspeed = None
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -1476,6 +1531,28 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
+
+        # create accelerator object
+        # if training args is specified, it will override the one specified in the accelerate config
+        if self.half_precision_backend != "apex":
+            mixed_precision_dtype = "no"
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
+            # unset `self.fp16` and `self.bf16` as accelerate will handle it
+            self.fp16 = self.bf16 = False
+
+        # create accelerator object
+        self.accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+
+        # post accelerator creation setup
+        if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true":
+            fsdp_plugin = self.accelerator.state.fsdp_plugin
+            fsdp_plugin.limit_all_gathers = self.fsdp_config.get("limit_all_gathers", False)
+            fsdp_plugin.use_orig_params = self.fsdp_config.get("use_orig_params", False)
 
     def __str__(self):
         self_as_dict = asdict(self)

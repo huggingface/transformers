@@ -336,6 +336,9 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
+        self.accelerator = self.args.accelerator
+        self.is_accelerate_deepspeed_enabled = os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true"
+        self.is_accelerate_fsdp_enabled = os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -484,6 +487,8 @@ class Trainer:
             or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
             or (self.fsdp is not None)
+            or self.is_accelerate_deepspeed_enabled
+            or self.is_accelerate_fsdp_enabled
         ):
             self.place_model_on_device = False
 
@@ -527,9 +532,13 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
-            self.optimizer is not None or self.lr_scheduler is not None
-        ):
+        if (
+            (self.sharded_ddp is not None)
+            or args.deepspeed
+            or (self.fsdp is not None)
+            or self.is_accelerate_deepspeed_enabled
+            or self.is_accelerate_fsdp_enabled
+        ) and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing `optimizers` is not allowed if Fairscale, Deepspeed or PyTorch FSDP is enabled."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
@@ -551,7 +560,7 @@ class Trainer:
             if is_torch_tpu_available():
                 xm.rendezvous("init git repo")
             elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
+                self.accelerator.wait_for_everyone()
 
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -1269,6 +1278,17 @@ class Trainer:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
+
+        if self.is_accelerate_deepspeed_enabled:
+            # Rebuild the deepspeed config to reflect the updated training parameters
+            from accelerate.utils import DeepSpeedPlugin
+
+            from transformers.deepspeed import HfTrainerDeepSpeedConfig
+
+            self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
+            self.args.hf_deepspeed_config.trainer_config_process(self.args)
+            self.accelerator.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
+
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
@@ -1647,8 +1667,8 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
-            self._load_from_checkpoint(resume_from_checkpoint)
+        # if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
+        #     self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1726,6 +1746,8 @@ class Trainer:
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
+            or self.is_accelerate_deepspeed_enabled
+            or self.is_accelerate_fsdp_enabled
         )
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
@@ -2110,7 +2132,7 @@ class Trainer:
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
         if not any(
-            [os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]]
+            os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
