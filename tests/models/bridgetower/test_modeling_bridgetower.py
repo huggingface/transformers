@@ -70,6 +70,7 @@ class BridgeTowerTextModelTester:
         layer_norm_eps=1e-05,
         num_attention_heads=4,
         num_hidden_layers=2,
+        intermediate_size=256,
         tie_word_embeddings=False,
         output_hidden_states=False,
     ):
@@ -80,6 +81,7 @@ class BridgeTowerTextModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
+        self.intermediate_size=intermediate_size
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = 99
         self.seq_length = 4
@@ -103,6 +105,7 @@ class BridgeTowerTextModelTester:
             layer_norm_eps=self.layer_norm_eps,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
+            intermediate_size=self.intermediate_size,
             tie_word_embeddings=self.tie_word_embeddings,
             output_hidden_states=self.output_hidden_states,
         )
@@ -168,6 +171,10 @@ class BridgeTowerModelTester:
         init_layernorm_from_vision_encoder=False,
         contrastive_hidden_size=512,
         logit_scale_init_value=2.6592,
+        hidden_size=128,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=256,
     ):
         if text_kwargs is None:
             text_kwargs = {}
@@ -189,6 +196,11 @@ class BridgeTowerModelTester:
         self.expected_num_hidden_layers = 32
         self.is_training = False
 
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values, pixel_mask = self.vision_model_tester.prepare_config_and_inputs()
@@ -207,6 +219,10 @@ class BridgeTowerModelTester:
             init_layernorm_from_vision_encoder=self.init_layernorm_from_vision_encoder,
             contrastive_hidden_size=self.contrastive_hidden_size,
             logit_scale_init_value=self.logit_scale_init_value,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
         )
 
     def create_and_check_model(
