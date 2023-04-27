@@ -408,7 +408,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install git+https://github.com/huggingface/accelerate",
-        "pip install --upgrade pytest",
+        "pip install --upgrade pytest pytest-sugar",
         "pip install .[quality,testing]",
         "find -name '*.pyc' -delete",
         "find -name __pycache__ -delete",
