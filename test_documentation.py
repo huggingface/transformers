@@ -28,21 +28,13 @@
     temp file when finished.
 """
 from typing import Iterable
-from pytest import DoctestItem
-from _pytest.doctest import DoctestModule, Module, _is_mocked, _patch_unwrap_mock_aware, get_optionflags, _get_runner, _get_continue_on_failure, _get_checker, import_path, _is_main_py, _is_setup_py, _is_doctest
 import inspect
+from pytest import DoctestItem
+from _pytest.doctest import Module, _is_mocked, _patch_unwrap_mock_aware, get_optionflags, _get_runner, _get_continue_on_failure, _get_checker, import_path
 from _pytest.outcomes import skip
 
-from pathlib import Path
-from typing import Optional, Union
 
-from _pytest.doctest import Collector, DoctestModule, DoctestTextfile
-
-
-import unittest
-import argparse
 import doctest
-import os
 import re
 
 def preprocess_string(string, skip_cuda_tests):
@@ -164,31 +156,3 @@ class HfDoctestModule(Module):
                 yield DoctestItem.from_parent(
                     self, name=test.name, runner=runner, dtest=test
                 )
-
-def get_tests_to_run(files_to_test_path):
-    """
-    Util to run test if the file is called
-    """
-    flags = doctest.REPORT_NDIFF 
-    parser = HfDocTestParser()
-    with open(files_to_test_path, "r") as f:
-        content = f.read().splitlines()
-    test_cases = []    
-    for file_name in content:
-        if os.path.isdir(file_name):
-            continue
-        with open(file_name, "r") as f:
-            text = f.read()
-        test_to_run = parser.get_doctest(text, {}, file_name, None, None)
-        test_cases.append(doctest.DocFileCase(test_to_run, optionflags=flags))
-    return test_cases
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--files", action = "store", default=None, type = str, help="The file(s) or folder(s) to run the doctests on.")
-    args = parser.parse_args()
-    tests = get_tests_to_run(args.files, temp_dir = "temp")
-    runner = doctest.DocTestRunner()
-    runner.run(tests)
