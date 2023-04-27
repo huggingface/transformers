@@ -16,8 +16,8 @@ specific language governing permissions and limitations under the License.
 
 이 튜토리얼에서 [모델 허브](https://huggingface.co/models)에서 훈련되거나 파인 튜닝된 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
 
-- 파일을 프로그래밍 방식으로 허브에 푸시합니다.
-- 웹 인터페이스를 사용하여 파일을 허브로 드래그 앤 드롭합니다.
+- API를 통해 파일을 Hub에 푸시합니다.
+- 웹사이트를 통해 파일을 Hub로 끌어다 놓습니다.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="YouTube video player"
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
@@ -69,9 +69,9 @@ pip install huggingface_hub
 >>> notebook_login()
 ```
 
-## 모든 프레임워크에 대한 모델 변환하기[[convert-a-model-for-all-frameworks]]
+## 프레임워크 간 모델 변환하기[[convert-a-model-for-all-frameworks]]
 
-다른 프레임워크를 작업하는 사용자가 모델을 사용할 수 있도록 하려면, PyTorch 및 TensorFlow 체크포인트를 모두 사용하여 모델을 변환하고 업로드하는 것이 좋습니다. 이 단계를 건너뛰어도 사용자는 다른 프레임워크에서 모델을 로드할 수 있지만, 🤗 Transformers가 체크포인트를 즉석에서 변환해야 하므로 속도가 느려질 수 있습니다.
+다른 프레임워크를 작업하는 사용자가 모델을 사용할 수 있도록 하려면, PyTorch 및 TensorFlow 체크포인트를 모두 사용하여 모델을 변환하고 업로드하는 것이 좋습니다. 이 단계를 건너뛰어도 사용자는 다른 프레임워크에서 모델을 가져올 수 있지만, 🤗 Transformers가 체크포인트를 즉석에서 변환해야 하므로 속도가 느려질 수 있습니다.
 
 체크포인트를 다른 프레임워크로 변환하는 것은 쉽습니다. PyTorch 및 TensorFlow가 설치되어 있는지 확인한 다음(설치 지침은 [여기](installation) 참조) 다른 프레임워크에서 작업에 대한 특정 모델을 찾습니다.
 
@@ -139,11 +139,11 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 ```
 </pt>
 <tf>
-['PushToHubCallback']을(를) 사용하여 모델을 허브에 공유합니다. ['PushToHubCallback'] 기능에서 다음을 추가하세요:
+[`PushToHubCallback`]을 사용하여 모델을 허브에 공유하려면, [`PushToHubCallback`]에 다음 인수를 정의하세요:
 
-- 모델의 출력 작업 경로.
-- 토크나이저.
-- 허브 사용자 이름 및 모델 이름인 `hub_model_id`.
+- 출력된 모델의 파일 경로
+- 토크나이저
+- `{Hub 사용자 이름}/{모델 이름}` 형식의 `hub_model_id`.
 
 ```py
 >>> from transformers import PushToHubCallback
@@ -153,7 +153,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 ... )
 ```
 
-[`fit`](https://keras.io/api/models/model_training_apis/)에 콜백을 추가하고, 🤗 Transformers가 훈련된 모델을 허브로 푸시하세요:
+[`fit`](https://keras.io/api/models/model_training_apis/)에 콜백을 추가하면, 🤗 Transformers가 훈련된 모델을 허브로 푸시합니다:
 
 ```py
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
