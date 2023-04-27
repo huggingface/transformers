@@ -49,11 +49,10 @@ def preprocess_string(string, skip_cuda_tests):
     # 1. Split in codeblocks
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"    
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL),string)
-    # TODO import logging and ingore all logs
-    for i,c in enumerate(codeblocks):
-        if ">>>" in c and "```py" in c:
+    for i,codeblock in enumerate(codeblocks):
+        if ">>>" in c and "```py" in codeblock:
             # let's add everything we need here
-            finale_block = c
+            finale_block = codeblock
             finale_block += "import transformers;transformers.logging.set_verbosity_error();"
             finale_block += "import datasets;datasets.logging.set_verbosity_error();"
             codeblocks[i] = finale_block
@@ -62,7 +61,7 @@ def preprocess_string(string, skip_cuda_tests):
             finale_block = ""
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in c:
                 continue
-            lines = c.split("\n")
+            lines = codeblock.split("\n")
             for example in lines:
                 if len(example)>0 and "```" not in example:
                     finale_block += example + ' # doctest: +SKIP\n'
