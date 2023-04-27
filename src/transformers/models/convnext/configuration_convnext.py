@@ -22,7 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -33,7 +33,7 @@ CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ConvNextConfig(PretrainedConfig):
+class ConvNextConfig(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
     ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -124,8 +124,8 @@ class ConvNextConfig(PretrainedConfig):
         out_features, out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-        self.out_features = out_features
-        self.out_indices = out_indices
+        self._out_features = out_features
+        self._out_indices = out_indices
 
 
 class ConvNextOnnxConfig(OnnxConfig):

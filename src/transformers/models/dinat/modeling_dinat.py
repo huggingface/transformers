@@ -39,7 +39,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.backbone_utils import BackboneMixin, verify_out_features_out_indices
+from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
 from .configuration_dinat import DinatConfig
 
 
@@ -891,12 +891,11 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         self.embeddings = DinatEmbeddings(config)
         self.encoder = DinatEncoder(config)
 
-        self._out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-        if config.out_indices is not None:
-            self._out_indices = config.out_indices
-        else:
-            self._out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self._out_features)
-        verify_out_features_out_indices(self._out_features, self._out_indices, self.stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            config.out_features, config.out_indices, self.stage_names
+        )
+        self._out_features = out_features
+        self._out_indices = out_indices
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features

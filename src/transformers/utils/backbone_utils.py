@@ -111,14 +111,6 @@ def get_aligned_output_features_output_indices(
 
 class BackboneMixin:
     @property
-    def out_features(self):
-        return self._out_features
-
-    @property
-    def out_indices(self):
-        return self._out_indices
-
-    @property
     def out_feature_channels(self):
         # the current backbones will output the number of channels for each stage
         # even if that stage is not in the out_features list.
@@ -141,6 +133,53 @@ class BackboneMixin:
         return_dict: Optional[bool] = None,
     ):
         raise NotImplementedError("This method should be implemented by the derived class.")
+
+    @property
+    def out_features(self):
+        return self._out_features
+
+    @property
+    def out_indices(self):
+        return self._out_indices
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        if key in ("out_indices", "out_features"):
+            raise ValueError(f"Cannot set {key} directly, please use set_{key} instead")
+        super().__setattr__(key, value)
+
+    def set_out_features(self, out_features: List[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=None, stage_names=self.stage_names
+        )
+        self._out_features = out_features
+        self._out_indices = out_indices
+
+    def set_out_indices(self, out_indices: Union[Tuple[int], List[int]]):
+        """
+        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
+        """
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            out_features=None, out_indices=out_indices, stage_names=self.stage_names
+        )
+        self._out_features = out_features
+        self._out_indices = out_indices
+
+
+class BackboneConfigMixin:
+    """
+    A Mixin to support handling the `out_features` and `out_indices` attributes for the backbone configurations.
+    """
+
+    @property
+    def out_features(self):
+        return self._out_features
+
+    @property
+    def out_indices(self):
+        return self._out_indices
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key in ("out_indices", "out_features"):

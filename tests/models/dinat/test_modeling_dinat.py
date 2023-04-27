@@ -175,7 +175,7 @@ class DinatModelTester:
         self.parent.assertEqual(len(model.channels), len(config.out_features))
 
         # verify backbone works with out_features=None
-        config.out_features = None
+        config.set_out_features(None)
         model = DinatBackbone(config=config)
         model.to(torch_device)
         model.eval()

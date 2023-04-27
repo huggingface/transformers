@@ -16,13 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
 
-class MaskFormerSwinConfig(PretrainedConfig):
+class MaskFormerSwinConfig(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
     a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -146,5 +146,5 @@ class MaskFormerSwinConfig(PretrainedConfig):
         out_features, out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-        self.out_features = out_features
-        self.out_indices = out_indices
+        self._out_features = out_features
+        self._out_indices = out_indices
