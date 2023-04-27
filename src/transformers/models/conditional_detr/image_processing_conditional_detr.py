@@ -1281,7 +1281,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
-    def post_process(self, outputs, target_sizes):
+    def post_process(self, outputs, target_sizes, top_k: int = 300):
         """
         Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
         supports PyTorch.
@@ -1293,6 +1293,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
+            top_k (`int`, *optional*, defaults to 300):
+                Keep only top k bounding boxes.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -1310,7 +1313,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        k_value = min(top_k, prob.view(out_logits.shape[0], -1).size(1))
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), k_value, dim=1)
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
@@ -1328,7 +1332,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->ConditionalDetr
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -1342,6 +1346,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            top_k (`int`, *optional*, defaults to 100):
+                Keep only top k bounding boxes before filtering by thresholding.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -1356,7 +1362,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 )
 
         prob = out_logits.sigmoid()
-        k_value = min(100, prob.view(out_logits.shape[0], -1).size(1))
+        k_value = min(top_k, prob.view(out_logits.shape[0], -1).size(1))
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), k_value, dim=1)
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
