@@ -27,7 +27,7 @@ DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class DinatConfig(PretrainedConfig, BackboneConfigMixin):
+class DinatConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DinatModel`]. It is used to instantiate a Dinat
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -27,7 +27,7 @@ CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ConvNextV2Config(PretrainedConfig, BackboneConfigMixin):
+class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextV2Model`]. It is used to instantiate an
     ConvNeXTV2 model according to the specified arguments, defining the model architecture. Instantiating a

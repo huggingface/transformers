@@ -35,7 +35,7 @@ SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class SwinConfig(PretrainedConfig, BackboneConfigMixin):
+class SwinConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate a Swin
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

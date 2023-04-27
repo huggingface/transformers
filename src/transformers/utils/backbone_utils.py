@@ -205,3 +205,13 @@ class BackboneConfigMixin:
         )
         self._out_features = out_features
         self._out_indices = out_indices
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        include the `out_features` and `out_indices` attributes.
+        """
+        output = super().to_dict()
+        output["out_features"] = output.pop("_out_features")
+        output["out_indices"] = output.pop("_out_indices")
+        return output

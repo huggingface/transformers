@@ -33,7 +33,7 @@ CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ConvNextConfig(PretrainedConfig, BackboneConfigMixin):
+class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
     ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration

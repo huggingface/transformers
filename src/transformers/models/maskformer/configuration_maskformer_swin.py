@@ -22,7 +22,7 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class MaskFormerSwinConfig(PretrainedConfig, BackboneConfigMixin):
+class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
     a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration

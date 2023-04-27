@@ -32,7 +32,7 @@ RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ResNetConfig(PretrainedConfig, BackboneConfigMixin):
+class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
