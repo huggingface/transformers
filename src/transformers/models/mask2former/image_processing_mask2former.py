@@ -982,21 +982,17 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         # [batch_size, num_queries, num_classes+1]
         class_queries_logits = outputs.class_queries_logits
-
         # [batch_size, num_queries, height, width]
         masks_queries_logits = outputs.masks_queries_logits
+
+        # Scale back to preprocessed image size - (384, 384) for all models
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
+        )
 
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
-
-        mask_size = (384, 384)
-        num_topk_queries = num_queries
-
-        # Scale back to preprocessed image size for all models
-        masks_queries_logits = torch.nn.functional.interpolate(
-            masks_queries_logits, size=mask_size, mode="bilinear", align_corners=False
-        )
 
         # Loop over items in batch size
         results: List[Dict[str, TensorType]] = []
@@ -1008,107 +1004,54 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
             labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
-            # keep top-k predictions
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_topk_queries, sorted=False)
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
             labels_per_image = labels[topk_indices]
 
             topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
             mask_pred = mask_pred[topk_indices]
-
-            segmentation = torch.zeros(mask_size) - 1
-
-            pred_classes = labels_per_image
-
-            # calculate final prediction scores and masks
             pred_masks = (mask_pred > 0).float()
+
             # Calculate average mask prob
             mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
                 pred_masks.flatten(1).sum(1) + 1e-6
             )
             pred_scores = scores_per_image * mask_scores_per_image
+            pred_classes = labels_per_image
 
-            # resize prediction masks
+            segmentation = torch.zeros((384, 384)) - 1
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
                     pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
                 )[0]
 
-            # Compute segmentation maps and segments_info
-            segmentation, segments = self._post_process_instance_segmentation(
-                num_topk_queries,
-                pred_masks,
-                pred_classes,
-                pred_scores,
-                segmentation,
-                threshold,
-                return_coco_annotation,
-                return_binary_maps,
-            )
+            instance_maps, segments = [], []
+            current_segment_id = 0
+            for j in range(num_queries):
+                score = pred_scores[j].item()
+
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                    segmentation[pred_masks[j] == 1] = current_segment_id
+                    segments.append(
+                        {
+                            "id": current_segment_id,
+                            "label_id": pred_classes[j].item(),
+                            "was_fused": False,
+                            "score": round(score, 6),
+                        }
+                    )
+                    current_segment_id += 1
+                    instance_maps.append(pred_masks[j])
+                    # Return segmentation map in run-length encoding (RLE) format
+                    if return_coco_annotation:
+                        segmentation = convert_segmentation_to_rle(segmentation)
+
+            # Return a concatenated tensor of binary instance maps
+            if return_binary_maps and len(instance_maps) != 0:
+                segmentation = torch.stack(instance_maps, dim=0)
 
             results.append({"segmentation": segmentation, "segments_info": segments})
-
         return results
-
-    def _post_process_instance_segmentation(
-        self,
-        num_predictions: int,
-        pred_masks: "torch.Tensor",
-        pred_classes: "torch.Tensor",
-        pred_scores: "torch.Tensor",
-        segmentation: "torch.Tensor",
-        threshold: float = 0.5,
-        return_coco_annotation: Optional[bool] = False,
-        return_binary_maps: Optional[bool] = False,
-    ):
-        """
-        Compute segmentation maps and segments_info corresponding to the prediction masks.
-
-        Args:
-            num_predictions (`int`):
-                The number of output predictions.
-            pred_masks (`torch.Tensor`):
-                The predicted masks.
-            pred_classes (`torch.Tensor`):
-                The predicted classes corresponding to the predicted masks.
-            pred_scores (`torch.Tensor`):
-                The prediction scores corresponding to the predicted classes.
-            segmentation (`torch.Tensor`):
-                Default segmentation map.
-            threshold (`float`, *optional*, defaults to 0.5):
-                The probability score threshold to keep predicted instance masks.
-            return_coco_annotation (`bool`, *optional*, defaults to `False`):
-                If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE) format.
-            return_binary_maps (`bool`, *optional*, defaults to `False`):
-                If set to `True`, segmentation maps are returned as a concatenated tensor of binary segmentation maps
-                (one per detected instance).
-        """
-        instance_maps, segments = [], []
-        current_segment_id = 0
-        for j in range(num_predictions):
-            score = pred_scores[j].item()
-
-            if not torch.all(pred_masks[j] == 0) and score >= threshold:
-                segmentation[pred_masks[j] == 1] = current_segment_id
-                segments.append(
-                    {
-                        "id": current_segment_id,
-                        "label_id": pred_classes[j].item(),
-                        "was_fused": False,
-                        "score": round(score, 6),
-                    }
-                )
-                current_segment_id += 1
-                instance_maps.append(pred_masks[j])
-                # Return segmentation map in run-length encoding (RLE) format
-                if return_coco_annotation:
-                    segmentation = convert_segmentation_to_rle(segmentation)
-
-        # Return a concatenated tensor of binary instance maps
-        if return_binary_maps and len(instance_maps) != 0:
-            segmentation = torch.stack(instance_maps, dim=0)
-
-        return segmentation, segments
 
     def post_process_panoptic_segmentation(
         self,
