@@ -12,9 +12,9 @@ specific language governing permissions and limitations under the License.
 
 # 모델 공유하기[[share-a-model]]
 
-지난 두 튜토리얼에서 분산 설정을 위해 PyTorch, Keras 및 🤗 Accelerate를 사용하여 모델을 파인 튜닝하는 방법을 보았습니다. 다음 단계는 모델을 커뮤니티와 공유하는 것입니다! Hugging Face는 인공지능의 민주화를 위해 모두에게 지식과 자원을 공개적으로 공유해야 한다고 믿습니다. 다른 사람들이 시간과 자원을 절약할 수 있도록 커뮤니티와 함께 모델을 공유하는 것을 고려해 보세요.
+지난 두 튜토리얼에서 분산 설정을 위해 PyTorch, Keras 및 🤗 Accelerate를 사용하여 모델을 미세 조정하는 방법을 보았습니다. 다음 단계는 모델을 커뮤니티와 공유하는 것입니다! Hugging Face는 인공지능의 민주화를 위해 모두에게 지식과 자원을 공개적으로 공유해야 한다고 믿습니다. 다른 사람들이 시간과 자원을 절약할 수 있도록 커뮤니티에 모델을 공유하는 것을 고려해 보세요.
 
-이 튜토리얼에서 [모델 허브](https://huggingface.co/models)에서 훈련되거나 파인 튜닝된 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
+이 튜토리얼에서 [Model Hub](https://huggingface.co/models)에서 훈련되거나 피세 조정 모델을 공유하는 두 가지 방법에 대해 알아봅시다:
 
 - API를 통해 파일을 Hub에 푸시합니다.
 - 웹사이트를 통해 파일을 Hub로 끌어다 놓습니다.
@@ -25,7 +25,7 @@ picture-in-picture" allowfullscreen></iframe>
 
 <Tip>
 
-커뮤니티와 함께 모델을 공유하려면, [huggingface.co](https://huggingface.co/join)에 계정이 필요합니다. 기존 조직에 가입하거나 새로 만들 수도 있습니다.
+커뮤니티에 모델을 공유하려면, [huggingface.co](https://huggingface.co/join)에 계정이 필요합니다. 기존 조직에 가입하거나 새로 만들 수도 있습니다.
 
 </Tip>
 
@@ -114,7 +114,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 <pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
-모델을 허브에 공유하는 것은 추가 매개변수나 콜백을 추가하는 것만큼 간단합니다. [파인 튜닝 튜토리얼](training)에서 [`TrainingArguments`] 클래스는 하이퍼파라미터와 추가 훈련 옵션을 지정하는 곳이라는 것을 기억하세요. 이러한 훈련 옵션 중 하나는 모델을 허브로 직접 푸시하는 기능을 포함합니다. [`TrainingArguments`]에서 `push_to_hub=True`를 설정하세요:
+모델을 허브에 공유하는 것은 추가 매개변수나 콜백을 추가하는 것만큼 간단합니다. [미세 조정 튜토리얼](training)에서 [`TrainingArguments`] 클래스는 하이퍼파라미터와 추가 훈련 옵션을 지정하는 곳이라는 것을 기억하세요. 이러한 훈련 옵션 중 하나는 모델을 허브로 직접 푸시하는 기능을 포함합니다. [`TrainingArguments`]에서 `push_to_hub=True`를 설정하세요:
 
 ```py
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
@@ -132,7 +132,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 ... )
 ```
 
-모델을 파인 튜닝한 후, [`Trainer`]에서 [`~transformers.Trainer.push_to_hub`]를 호출하여 훈련된 모델을 허브로 푸시하세요. 🤗 Transformers는 훈련 하이퍼파라미터, 훈련 결과 및 프레임워크 버전을 모델 카드에 자동으로 추가합니다!
+모델을 미세 조정한 후, [`Trainer`]에서 [`~transformers.Trainer.push_to_hub`]를 호출하여 훈련된 모델을 허브로 푸시하세요. 🤗 Transformers는 훈련 하이퍼파라미터, 훈련 결과 및 프레임워크 버전을 모델 카드에 자동으로 추가합니다!
 
 ```py
 >>> trainer.push_to_hub()
@@ -143,7 +143,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 
 - 출력된 모델의 파일 경로
 - 토크나이저
-- `{Hub 사용자 이름}/{모델 이름}` 형식의 `hub_model_id`.
+- `{Hub 사용자 이름}/{모델 이름}` 형식의 `hub_model_id`
 
 ```py
 >>> from transformers import PushToHubCallback
@@ -179,7 +179,7 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 >>> model = AutoModel.from_pretrained("your_username/my-awesome-model")
 ```
 
-조직에 속하고 모델을 조직 이름으로 대신 밀어넣으려면 `repo_id`에 추가하세요:
+조직에 속하고 모델을 조직 이름으로 대신 푸시하려면 `repo_id`에 추가하세요:
 
 ```py
 >>> pt_model.push_to_hub("my-awesome-org/my-awesome-model")
@@ -191,13 +191,13 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 >>> tokenizer.push_to_hub("my-awesome-model")
 ```
 
-또는 파인 튜닝된 PyTorch 모델의 TensorFlow 버전을 추가할 수도 있습니다:
+또는 미세 조정 PyTorch 모델의 TensorFlow 버전을 추가할 수도 있습니다:
 
 ```py
 >>> tf_model.push_to_hub("my-awesome-model")
 ```
 
-이제 허깅 페이스 프로필로 이동하면, 새로 생성한 모델 저장소가 표시됩니다. **Files** 탭을 클릭하면 저장소에 업로드한 모든 파일이 표시됩니다.
+이제 Hugging Face 프로필로 이동하면, 새로 생성한 모델 저장소가 표시됩니다. **Files** 탭을 클릭하면 저장소에 업로드한 모든 파일이 표시됩니다.
 
 저장소에 파일을 만들고 업로드하는 방법에 대한 자세한 내용은 허브 설명서 [여기](https://huggingface.co/docs/hub/how-to-upstream)를 참조하세요.
 
