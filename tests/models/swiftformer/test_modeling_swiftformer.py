@@ -17,8 +17,9 @@
 
 import inspect
 import unittest
+import copy
 
-from transformers import SwiftFormerConfig
+from transformers import SwiftFormerConfig, PretrainedConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -59,6 +60,8 @@ class SwiftFormerModelTester:
 
         image_size = 224,
         num_labels=1000,
+        layer_depths = [3, 3, 6, 4],
+        embed_dims = [48, 56, 112, 220]
 
     ):
         self.parent = parent
@@ -68,15 +71,17 @@ class SwiftFormerModelTester:
         self.use_labels = use_labels
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = num_labels
+        self.num_labels = num_labels
         self.image_size = image_size
+        self.layer_depths = layer_depths
+        self.embed_dims = embed_dims
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
@@ -84,13 +89,12 @@ class SwiftFormerModelTester:
 
     def get_config(self):
         return SwiftFormerConfig(
-            layers=[3, 3, 6, 4],
-            embed_dims=[48, 56, 112, 220],
+            layers=self.layer_depths,
+            embed_dims=self.embed_dims,
             mlp_ratio=4,
             downsamples=[True, True, True, True],
-            vit_num=1,
             act_layer="gelu",
-            num_labels=1000,
+            num_labels=self.num_labels,
             down_patch_size=3,
             down_stride=2,
             down_pad=1,
@@ -101,19 +105,19 @@ class SwiftFormerModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = SwiftFormerForImageClassification(config=config)
+        model = SwiftFormerModel(config=config)
         model.to(torch_device)
         model.eval()
-        model(pixel_values)
-        # self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)) #TODO
+        result = model(pixel_values)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = SwiftFormerForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
         model = SwiftFormerForImageClassification(config)
         model.to(torch_device)
@@ -121,7 +125,7 @@ class SwiftFormerModelTester:
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         (config,pixel_values,labels) = self.prepare_config_and_inputs()
@@ -173,7 +177,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            # self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
@@ -208,13 +211,62 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     def test_hidden_states_output(self):
-        pass
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
+            hidden_states = outputs.hidden_states
+
+            expected_num_stages = 8
+            self.assertEqual(len(hidden_states), expected_num_stages) #TODO
+
+            # SwiftFormer's feature maps are of shape (batch_size, embed_dims, height, width)
+            # with the width and height being successively divided by 2, after every 2 blocks
+            for i in range(len(hidden_states)):
+                self.assertEqual(hidden_states[i].shape, 
+                                 torch.Size([self.model_tester.batch_size, self.model_tester.embed_dims[ i//2], 
+                                             (self.model_tester.image_size//4) // 2**(i//2),   
+                                             (self.model_tester.image_size//4) // 2**(i//2) ]))
+    
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+   
     def test_initialization(self):
-        pass
+        def _config_zero_init(config):
+            configs_no_init = copy.deepcopy(config)
+            for key in configs_no_init.__dict__.keys():
+                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+                    setattr(configs_no_init, key, 1e-10)
+                if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+                    no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
+                    setattr(configs_no_init, key, no_init_subconfig)
+            return configs_no_init
+        
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9)/ 1e9).round().item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
 
 # We will verify our results on an image of cute cats
@@ -246,6 +298,5 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        # expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        # self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor([[-2.1703e+00,  2.1107e+00, -2.0811e+00]])
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
