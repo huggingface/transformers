@@ -126,6 +126,12 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Install
+        if: inputs.framework == 'pytorch'
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: Environment
         working-directory: /transformers
         run: |
@@ -192,6 +198,12 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Install
+        if: inputs.framework == 'pytorch'
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: Environment
         working-directory: /transformers
         run: |
@@ -243,6 +255,11 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      - name: Install
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/
 
@@ -253,7 +270,7 @@ jobs:
           python3 -m pip uninstall -y deepspeed
           rm -rf DeepSpeed
           git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |

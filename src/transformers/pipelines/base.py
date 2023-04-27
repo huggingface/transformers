@@ -97,6 +97,8 @@ def _pad(items, key, padding_value, padding_side):
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+        elif dim == 4:
+            tensor = torch.zeros((batch_size, max_length, shape[-2], shape[-1]), dtype=dtype) + padding_value
 
         for i, item in enumerate(items):
             if dim == 2:
@@ -109,6 +111,12 @@ def _pad(items, key, padding_value, padding_side):
                     tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
                 else:
                     tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+            elif dim == 4:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone()
+
         return tensor
     else:
         return [item[key] for item in items]
