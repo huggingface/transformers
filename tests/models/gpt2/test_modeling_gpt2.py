@@ -458,6 +458,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
+            "question-answering": GPT2ForQuestionAnswering,
             "text-classification": GPT2ForSequenceClassification,
             "text-generation": GPT2LMHeadModel,
             "token-classification": GPT2ForTokenClassification,
