@@ -65,11 +65,11 @@ class BridgeTowerTextModelTester:
         self,
         parent,
         hidden_act="gelu",
-        hidden_size=768,
+        hidden_size=128,
         initializer_factor=1,
         layer_norm_eps=1e-05,
-        num_attention_heads=12,
-        num_hidden_layers=6,
+        num_attention_heads=4,
+        num_hidden_layers=2,
         tie_word_embeddings=False,
         output_hidden_states=False,
     ):
@@ -112,13 +112,13 @@ class BridgeTowerImageModelTester:
     def __init__(
         self,
         parent,
-        hidden_size=768,
+        hidden_size=128,
         initializer_factor=1,
         layer_norm_eps=1e-05,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         init_layernorm_from_vision_encoder=False,
         output_hidden_states=False,
-        image_size=288,
+        image_size=64,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
