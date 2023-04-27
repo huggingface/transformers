@@ -53,9 +53,8 @@ def preprocess_string(string, skip_cuda_tests):
             finale_block += "import huggingface_hub;huggingface_hub.logging.set_verbosity_error();"
             codeblocks[i] = finale_block
         if "load_dataset(" in codeblock:
-            dataset_pattern = re.compile(r">>> (.*)load_dataset")
-            re.sub(dataset_pattern, r">>> with redirect_stdout(None): \1load_dataset", codeblock)
-            codeblock = codeblock.replace(">>> ", ">>> import sys;with redirect_stdout(sys.stderr):")
+            codeblock = re.sub(r">>> (.*)load_dataset", r">>> import sys;with redirect_stdout(sys.stderr): \1load_dataset", codeblock)
+
         if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
                 continue
