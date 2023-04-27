@@ -83,11 +83,10 @@ class SwiftFormerPatchEmbedding(nn.Module):
     def forward(self, x):
         return self.pe(x)
         
-
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
     Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
     however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
     See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
@@ -103,16 +102,15 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
         random_tensor.div_(keep_prob)
     return x * random_tensor
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: float = 0.0):
-        super(SwiftFormerDropPath, self).__init__()
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self):
         return f"drop_prob={round(self.drop_prob,3):0.3f}"
