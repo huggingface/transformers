@@ -2,6 +2,13 @@ from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
 from .base import PipelineTool
 
 
+TRANSLATION_DESCRIPTION = (
+    "This is a tool that translates text from {src_lang} to {tgt_lang}. It takes an input named `text` which "
+    "should be the text in {src_lang} and returns a dictionary with a single key `'translated_text'` that "
+    "contains the translation in {tgt_lang}."
+)
+
+
 class TranslationTool(PipelineTool):
     """
     Example:
@@ -15,14 +22,9 @@ class TranslationTool(PipelineTool):
     """
 
     default_checkpoint = "facebook/nllb-200-distilled-600M"
+    description = TRANSLATION_DESCRIPTION
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
-
-    description = (
-        "This is a tool that translates text from {src_lang} to {tgt_lang}. It takes an input named `text` which "
-        "should be the text in {src_lang} and returns a dictionary with a single key `'translated_text'` that "
-        "contains the translation in {tgt_lang}."
-    )
 
     def __init__(
         self,
