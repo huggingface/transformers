@@ -19,6 +19,7 @@ import re
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
+from doctest import DocTestFinder
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
@@ -28,7 +29,7 @@ from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_M
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
+from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import, HfDocTestParser
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -338,6 +339,9 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     ]
 )
 
+IGNORE_NON_DOC_TESTED = [
+    
+]
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
@@ -531,17 +535,6 @@ def find_tested_models(test_file):
                     model_tested.append(name)
         return model_tested
 
-
-def find_doc_tested_models(documentation_test_file):
-    """Parse the content of test_file to detect what's in all_model_classes"""
-    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
-    with open(os.path.join(PATH_TO_TRANSFORMERS, documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
-        content = f.read()
-    all_models = re.findall(r"(?:configuration_|modeling_|tokenization_).*.py", content)
-    # Check with one less parenthesis as well
-    return all_models
-
-
 def check_models_are_tested(module, test_file):
     """Check models defined in module are tested in test_file."""
     # XxxPreTrainedModel are not tested
@@ -566,32 +559,63 @@ def check_models_are_tested(module, test_file):
             )
     return failures
 
+def find_doc_tested_doc(documentation_test_file="utils/documentation_tests.txt"):
+    """Parse the content of test_file to detect what's in all_model_classes"""
+    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
+    with open(os.path.join(documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
+        content = f.read()
+    all_docs = re.findall(r"(?:docs/).*.mdx", content)
+    # Check with one less parenthesis as well
+    return all_docs
 
-def check_models_are_doc_tested(module, test_file):
-    """Check models defined in module have their documentation tested in documentation_text.txt for nighly CI. Otherwise the documentation for each model
-    should be tested when each PR is pushed.
-    """
-    # XxxPreTrainedModel are not tested
-    defined_models = get_models(module)
-    tested_models = find_doc_tested_models(test_file)
-    if tested_models is None:
-        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
-            return
-        return [
-            f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
-            + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
-            + "`utils/check_repo.py`."
-        ]
+def find_doc_tested_models(documentation_test_file="utils/documentation_tests.txt"):
+    """Parse the content of test_file to detect what's in all_model_classes"""
+    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
+    with open(os.path.join(documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
+        content = f.read()
+    all_models = re.findall(r"(?:configuration_|modeling_|tokenization_|feature_extraction|processor|image_processing).*.py", content)
+    # Check with one less parenthesis as well
+    return all_models
+
+
+def check_all_doc_are_doc_tested():
+    tested_documentation = filter(lambda x: "/doc" in x, find_doc_tested_doc())
     failures = []
-    for model_name, _ in defined_models:
-        if model_name not in tested_models and model_name not in IGNORE_NON_TESTED:
-            failures.append(
-                f"{model_name} is defined in {module.__name__} but is not tested in "
-                + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
-                + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
-                + "in the file `utils/check_repo.py`."
-            )
-    return failures
+    doctest_parser = HfDocTestParser()
+    import glob
+    for file_name in glob.glob(PATH_TO_DOC + "/**/*.mdx"):
+        if file_name not in tested_documentation:
+            with open(file_name, "r") as f:
+                tests = doctest_parser.get_examples(f.read())
+            if len(tests) > 0 and  file_name not in IGNORE_NON_DOC_TESTED:
+                failures.append(f"{file_name} has doctring examples that are not tested. Add {file_name} to the `utils/documentation_test.txt` file.")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+    
+def check_all_models_are_doc_tested():
+    """Check all models, configuration, tokenization, feature_extraction , image_processing, processor docstring are properly tested if they have code samples."""
+    tested_modules = find_doc_tested_models()
+    modules = []
+    for model in dir(transformers.models):
+        # There are some magic dunder attributes in the dir, we ignore them
+        if not model.startswith("__"):
+            model_module = getattr(transformers.models, model)
+            for submodule in dir(model_module):
+                if submodule.startswith(("modeling","configuration","tokenization","feature_extraction","image_processing","processor")):
+                    modeling_module = getattr(model_module, submodule)
+                    if inspect.ismodule(modeling_module):
+                        modules.append(modeling_module)
+
+    doctest_finder = DocTestFinder(parser = HfDocTestParser())
+    failures = []
+    for module in modules:
+        file_name = module.__file__.split('/')[-1]
+        if file_name not in tested_modules and "flax" not in file_name:
+            tests = doctest_finder.find(module, module.__name__)
+            if len(tests) > 0 and  file_name not in IGNORE_NON_DOC_TESTED:
+                failures.append(f"{file_name} has doctring examples that are not tested. Add {file_name} to the `utils/documentation_test.txt` file.")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
 def check_all_models_are_tested():
@@ -1024,6 +1048,10 @@ def check_repo_quality():
     check_all_auto_object_names_being_defined()
     print("Checking all keys in auto name mappings are defined in `CONFIG_MAPPING_NAMES`.")
     check_all_auto_mapping_names_in_config_mapping_names()
+    print("Checking docstrings in the /doc/* folder are tested")
+    check_all_doc_are_doc_tested()
+    print("Checking docstring of all models are tested")
+    check_all_models_are_doc_tested()
 
 
 if __name__ == "__main__":
