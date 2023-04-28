@@ -17,8 +17,6 @@
 import warnings
 from typing import List, Optional, Union
 
-import essentia
-import essentia.standard
 import librosa
 import numpy as np
 import scipy
@@ -28,7 +26,17 @@ from torch.nn.utils.rnn import pad_sequence
 from ...audio_utils import fram_wave, get_mel_filter_banks, stft
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import OptionalDependencyNotAvailable, TensorType, is_essentia_available, logging
+
+
+try:
+    if not is_essentia_available:
+        raise OptionalDependencyNotAvailable()
+except ImportError:
+    raise ImportError("There was an error while importing essentia!")
+else:
+    import essentia
+    import essentia.standard
 
 
 logger = logging.get_logger(__name__)
@@ -43,35 +51,35 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
     This class extracts rhythm and does preprocesses before being passed through the transformer model.
-        n_bars (`int`, *optional*, defaults to 2):
-            Determines `n_steps` in method `preprocess_mel`.
         sampling_rate (`int`, *optional*, defaults to 22050):
             Sample rate of audio signal.
         use_mel (`bool`, *optional*, defaults to `True`):
             Whether to preprocess for `LogMelSpectrogram` or not. For the current implementation this must be `True`.
         padding_value (`int`, *optional*, defaults to 0):
             Padding value used to pad the audio. Should correspond to silences.
-        n_fft (`int`, *optional*, defaults to 4096):
-            Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
+        fft_window_size (`int`, *optional*, defaults to 4096):
+            Size of the window om which the Fourier transform is applied.
         hop_length (`int`, *optional*, defaults to 1024):
-            Length of hop between Short-Time Fourier Transform windows.
-        f_min (`float`, *optional*, defaults to 10.0):
+            Step between each window of the waveform.
+        frequency_min (`float`, *optional*, defaults to 10.0):
             Minimum frequency.
-        n_mels (`int`, *optional*, defaults to 512):
-            Number of mel filterbanks.
+        nb_mel_filters (`int`, *optional*, defaults to 512):
+            Number of Mel filers to generate.
+        n_bars (`int`, *optional*, defaults to 2):
+            Determines `n_steps` in method `preprocess_mel`. Per `n_step` th beat is taken from each sequence.
     """
     model_input_names = ["input_features"]
 
     def __init__(
         self,
-        n_bars: int = 2,
         sampling_rate: int = 22050,
         use_mel: int = True,
         padding_value: int = 0,
-        n_fft: int = 4096,
+        fft_window_size: int = 4096,
         hop_length: int = 1024,
-        f_min: float = 10.0,
-        n_mels: int = 512,
+        frequency_min: float = 10.0,
+        nb_mel_filters: int = 512,
+        n_bars: int = 2,
         feature_size=None,
         **kwargs,
     ):
@@ -85,18 +93,18 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.use_mel = use_mel
         self.padding_value = padding_value
-        self.n_fft = n_fft
+        self.fft_window_size = fft_window_size
         self.hop_length = hop_length
-        self.f_min = f_min
-        self.n_mels = n_mels
+        self.frequency_min = frequency_min
+        self.nb_mel_filters = nb_mel_filters
 
     def log_mel_spectogram(self, sequence):
         """Generates MelSpectrogram then applies log base e."""
 
         mel_fb = get_mel_filter_banks(
-            nb_frequency_bins=(self.n_fft // 2) + 1,
-            nb_mel_filters=self.n_mels,
-            frequency_min=self.f_min,
+            nb_frequency_bins=(self.fft_window_size // 2) + 1,
+            nb_mel_filters=self.nb_mel_filters,
+            frequency_min=self.frequency_min,
             frequency_max=float(self.sampling_rate // 2),
             sample_rate=self.sampling_rate,
             norm=None,
@@ -105,9 +113,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         spectrogram = []
         for seq in sequence:
-            window = np.hanning(self.n_fft + 1)[:-1]
-            framed_audio = fram_wave(seq, self.hop_length, self.n_fft)
-            spec = stft(framed_audio, window, fft_window_size=self.n_fft)
+            window = np.hanning(self.fft_window_size + 1)[:-1]
+            framed_audio = fram_wave(seq, self.hop_length, self.fft_window_size)
+            spec = stft(framed_audio, window, fft_window_size=self.fft_window_size)
             spec = np.abs(spec) ** 2.0
             spectrogram.append(spec)
 
@@ -172,25 +180,15 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         n_target_step = len(beatstep)
         ext_beatstep = self.extrapolate_beat_times(beatstep, (n_bars + 1) * 4 + 1)
 
-        def split_audio(audio):
-            """
-            Split audio corresponding beat intervals. Each audio's lengths are different. Because each corresponding
-            beat interval times are different.
-            """
+        batch = []
+        for i in range(0, n_target_step, n_steps):
+            start_idx = i
+            end_idx = min(i + n_steps, n_target_step)
 
-            batch = []
-
-            for i in range(0, n_target_step, n_steps):
-                start_idx = i
-                end_idx = min(i + n_steps, n_target_step)
-
-                start_sample = int(ext_beatstep[start_idx] * self.sampling_rate)
-                end_sample = int(ext_beatstep[end_idx] * self.sampling_rate)
-                feature = audio[start_sample:end_sample]
-                batch.append(feature)
-            return batch
-
-        batch = split_audio(audio)
+            start_sample = int(ext_beatstep[start_idx] * self.sampling_rate)
+            end_sample = int(ext_beatstep[end_idx] * self.sampling_rate)
+            feature = audio[start_sample:end_sample]
+            batch.append(feature)
         batch = pad_sequence(batch, batch_first=True, padding_value=padding_value)
 
         return batch, ext_beatstep
@@ -253,7 +251,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
-        warnings.warn("Please make sure to have the audio sampling_rate as 44100, to get the optimal performence!")
+        warnings.warn("If you are not getting optimal performence, please try audio sampling_rate as 44100.")
         warnings.warn(
             "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
         )

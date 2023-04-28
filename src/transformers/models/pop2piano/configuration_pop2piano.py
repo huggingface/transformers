@@ -62,8 +62,8 @@ class Pop2PianoConfig(PretrainedConfig):
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 2400):
-            Vocabulary size of the Pop2PianoForConditionalGeneration model. Defines the number of different tokens that
-            can be represented by the `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
+            Vocabulary size of the `Pop2PianoForConditionalGeneration` model. Defines the number of different tokens
+            that can be represented by the `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -94,10 +94,6 @@ class Pop2PianoConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
-        dataset_target_length (`int`, *optional*, defaults to 256):
-            Determines `max_length` for transformer `generate` function along with `dataset_n_bars`.
-        dataset_n_bars (`int`, *optional*, defaults to 2):
-            Determines `max_length` for transformer `generate` function along with `dataset_target_length`.
     """
 
     model_type = "pop2piano"
@@ -124,8 +120,6 @@ class Pop2PianoConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
-        dataset_target_length=256,
-        dataset_n_bars=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,9 +141,6 @@ class Pop2PianoConfig(PretrainedConfig):
         self.dense_act_fn = dense_act_fn
         self.is_gated_act = act_info[0] == "gated"
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
-
-        self.dataset_target_length = dataset_target_length
-        self.dataset_n_bars = dataset_n_bars
 
         super().__init__(
             pad_token_id=pad_token_id,

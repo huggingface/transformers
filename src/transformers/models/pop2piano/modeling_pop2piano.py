@@ -47,6 +47,22 @@ from .configuration_pop2piano import Pop2PianoConfig
 
 logger = logging.get_logger(__name__)
 
+_load_pop2piano_layer_norm = True
+
+try:
+    from apex.normalization import FusedRMSNorm
+
+    _load_pop2piano_layer_norm = False
+
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
+except ImportError:
+    # using the normal Pop2PianoLayerNorm
+    pass
+except Exception:
+    logger.warning("discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
+    pass
+
+
 _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "susnato/pop2piano_dev"
 
@@ -153,18 +169,8 @@ class Pop2PianoLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-try:
-    from apex.normalization import FusedRMSNorm
-
+if not _load_pop2piano_layer_norm:
     Pop2PianoLayerNorm = FusedRMSNorm  # noqa
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
-except ImportError:
-    # using the normal Pop2PianoLayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
-    pass
 
 ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
 
@@ -997,14 +1003,15 @@ class ConcatEmbeddingToMel(nn.Module):
 
 
 Pop2Piano_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+    
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+    
     Parameters:
-    The Pop2PianoForConditionalGeneration model was proposed in [POP2PIANO : POP AUDIO-BASED PIANO COVER
-    GENERATION](https://arxiv.org/pdf/2211.00895) by Jongho Choi, Kyogu Lee. It's an encoder decoder transformer
-    pre-trained in a text-to-text denoising generative setting. This model inherits from [`PreTrainedModel`]. Check the:
-    superclass documentation for the generic methods the library implements for all its model (such as downloading or
-    saving, resizing the input embeddings, pruning heads etc.) This model is also a PyTorch
-    [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a regular PyTorch
-    Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
         config ([`Pop2PianoConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1085,6 +1092,20 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def get_mel_conditioner_outputs(self, input_features, composer):
+        # select composer randomly if not already given
+        composer_to_feature_token = self.config.composer_to_feature_token
+        if composer is None:
+            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
+        elif composer not in composer_to_feature_token.keys():
+            raise ValueError(
+                f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}"
+            )
+        composer_value = composer_to_feature_token[composer]
+        composer_value = torch.tensor(composer_value, device=self.device)
+        composer_value = composer_value.repeat(input_features.shape[0])
+        return self.mel_conditioner(input_features, composer_value)
 
     @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1201,7 +1222,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         inputs_embeds=None,
         composer="composer1",
         n_bars: int = 2,
-        max_length: int = None,
+        max_length: int = 256,
         inputs: Optional[torch.Tensor] = None,
         generation_config=None,
         **kwargs,
@@ -1282,26 +1303,9 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         if generation_config is None:
             generation_config = self.generation_config
 
-        # select composer randomly if not already given
-        composer_to_feature_token = self.config.composer_to_feature_token
-        if composer is None:
-            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
-        elif composer not in composer_to_feature_token.keys():
-            raise ValueError(
-                f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}"
-            )
-
-        n_bars = self.config.dataset_n_bars if n_bars is None else n_bars
-        max_length = (
-            self.config.dataset_target_length * max(1, (n_bars // self.config.dataset_n_bars))
-            if max_length is None
-            else max_length
+        inputs_embeds = self.get_mel_conditioner_outputs(
+            input_features=input_features["input_features"], composer=composer
         )
-
-        composer_value = composer_to_feature_token[composer]
-        composer_value = torch.tensor(composer_value, device=self.device)
-        composer_value = composer_value.repeat(input_features["input_features"].shape[0])
-        inputs_embeds = self.mel_conditioner(input_features["input_features"], composer_value)
 
         return super().generate(
             inputs,
