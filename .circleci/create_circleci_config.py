@@ -470,7 +470,7 @@ def create_circleci_config(folder=None):
         for job in jobs:
             if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
                 job.tests_to_run = extended_tests_to_run
-        fn = "filtered_test_list_cross_tests"
+        fn = "filtered_test_list_cross_tests.txt"
         f_path = os.path.join(folder, fn)
         with open(f_path, "w") as fp:
             fp.write(" ".join(extended_tests_to_run))
