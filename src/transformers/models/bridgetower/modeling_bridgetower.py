@@ -981,7 +981,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     config_class = BridgeTowerConfig
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["BridgeTowerSelfAttention"]
+    _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
 
     def _init_weights(self, module):
         if isinstance(module, BridgeTowerVisionModel):
@@ -1868,7 +1868,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         logits = torch.stack([text_embeds, image_embeds, cross_embeds], dim=-2)
 
-        logit_scale = self.logit_scale.exp()
+        logit_scale = self.logit_scale.exp().to(device=text_embeds.device)
         logits_text_to_image = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_text_to_cross = torch.matmul(text_embeds, cross_embeds.t()) * logit_scale
         logits_image_to_cross = torch.matmul(image_embeds, cross_embeds.t()) * logit_scale
