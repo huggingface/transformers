@@ -1606,8 +1606,10 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         self.transformer = GPT2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
-        # legacy code seems to checks this
+        # Model parallel
         self.model_parallel = False
+        self.device_map = None
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
