@@ -13,16 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-    Utils to run the documentation tests without having to overwrite any files.s
+Utils to run the documentation tests without having to overwrite any files.s
 
-    The doc precossing function can be run on a list of files and/org directories of files. It will recursively check
-    if the files have a python code snippet by looking for a ```python or ```py syntax. The script will add a new line
-    before every python code ending ``` line to make the docstrings ready for pytest doctests. However, we don't want
-    to have empty lines displayed in the official documentation which is why the new code is written to a temporary
-    directory / is tested on the fly depending on the configuration.
+The doc precossing function can be run on a list of files and/org directories of files. It will recursively check if
+the files have a python code snippet by looking for a ```python or ```py syntax. The script will add a new line before
+every python code ending ``` line to make the docstrings ready for pytest doctests. However, we don't want to have
+empty lines displayed in the official documentation which is why the new code is written to a temporary directory / is
+tested on the fly depending on the configuration.
 
-    When debugging the doc tests locally, the script should automatically determine which files should be processed
-    based on the modified files. It should also run the tests on the fly and delete the temp file when finished.
+When debugging the doc tests locally, the script should automatically determine which files should be processed based
+on the modified files. It should also run the tests on the fly and delete the temp file when finished.
 """
 import doctest
 import inspect
@@ -48,21 +48,22 @@ def preprocess_string(string, skip_cuda_tests):
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
     for i, codeblock in enumerate(codeblocks):
-        if ">>>" in codeblock and "```py" in codeblock:
-            # let's add everything we need here, but the DATASET_VERBOSITY should work.
-            finale_block = codeblock
-            finale_block += "import transformers;transformers.logging.set_verbosity_error();"
-            finale_block += (
-                "import datasets;datasets.logging.set_verbosity_error();from contextlib import redirect_stdout;"
-            )
-            finale_block += "import huggingface_hub;huggingface_hub.logging.set_verbosity_error();"
-            codeblocks[i] = finale_block
-        if "load_dataset(" in codeblock:
+        # if ">>>" in codeblock and "```py" in codeblock:
+        #     # let's add everything we need here, but the DATASET_VERBOSITY should work.
+        #     finale_block = codeblock
+        #     finale_block += "import transformers;transformers.logging.set_verbosity_error();"
+        #     finale_block += (
+        #         "import datasets;datasets.logging.set_verbosity_error();from contextlib import redirect_stdout;"
+        #     )
+        #     finale_block += "import huggingface_hub;huggingface_hub.logging.set_verbosity_error();"
+        #     codeblocks[i] = finale_block
+        if "load_dataset(" in codeblock and not "# doctest: +IGNORE_RESULT" in codeblock:
+            # adding the ignore results is actually way better! 
             codeblocks[i] = re.sub(
-                r">>> (.*)load_dataset\(", r">>> with redirect_stdout(None): \1load_dataset(", codeblock
+                r"(>>> .*load_dataset\(.*)", r"\1 \# doctest: +IGNORE_RESULT", codeblock
             )
 
-        if "cuda" in codeblock and ">>>" in codeblock and skip_cuda_tests:
+        if ">>>" in codeblock and re.match(r"( cuda | to(0) | device = 0)", codeblock) and skip_cuda_tests :
             if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
                 continue
             line_num = "".join(codeblocks[: i + 1]).count("\n")
@@ -88,20 +89,27 @@ class HfDocTestParser(doctest.DocTestParser):
         \n?
         # Want consists of any non-blank lines that do not start with PS1.
         (?P<want> (?:(?![ ]*$)    # Not a blank line
-             (?![ ]*>>>)  # Not a line starting with PS1
-             (?:(?!```).)*  # Match any character except '`' until a '```' is found (this is specific to HF because black removes the last line)
+             (?![ ]*>>>)          # Not a line starting with PS1
+             # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+             (?:(?!```).)*        # Match any character except '`' until a '```' is found (this is specific to HF because black removes the last line)
+             # !!!!!!!!!!! HF Specific !!!!!!!!!!!
              (?:\n|$)  # Match a new line or end of string
           )*)
         ''', re.MULTILINE | re.VERBOSE
     )
     # fmt: on
 
+    # !!!!!!!!!!! HF Specific !!!!!!!!!!!
     skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
-        string = string.replace(
-            "+IGNORE_RESULT", "+SKIP"
-        )  # for parsing INGORE RESULT? Should check the output checker
+        """
+        Overwrites the `parse` method to incorporate a skip for CUDA tests, and remove logs and dataset prints before
+        calling `super().parse`
+        """
+        # for parsing INGORE RESULT? Should check the output checker
+        # string = string.replace("+IGNORE_RESULT", "+SKIP")  
         string = preprocess_string(string, self.skip_cuda_tests)
         return super().parse(string, name)
 
@@ -161,8 +169,11 @@ class HfDoctestModule(Module):
                     skip("unable to import module %r" % self.path)
                 else:
                     raise
-        # Uses internal doctest module parsing mechanism.
+
+        # !!!!!!!!!!! HF Specific !!!!!!!!!!!
+        # The HF Parser has to be used here to properly find tests!
         finder = MockAwareDocTestFinder(parser=HfDocTestParser())
+        # !!!!!!!!!!! HF Specific !!!!!!!!!!!
         optionflags = get_optionflags(self)
         runner = _get_runner(
             verbose=False,
