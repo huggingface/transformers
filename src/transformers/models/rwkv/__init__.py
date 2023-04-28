@@ -17,8 +17,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_keras_nlp_available,
-    is_tensorflow_text_available,
     is_torch_available,
 )
 
@@ -40,13 +38,6 @@ else:
         "RwkvPreTrainedModel",
     ]
 
-try:
-    if not is_keras_nlp_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_rwkv_tf"] = ["TFGPT2Tokenizer"]
 
 if TYPE_CHECKING:
     from .configuration_rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig, RwkvOnnxConfig
