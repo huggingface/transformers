@@ -1863,8 +1863,12 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         # normalized features
         text_embeds = nn.functional.normalize(self.itc_text_head(text_embeds[:, 0, :]), dim=-1, p=2)
-        image_embeds = nn.functional.normalize(self.itc_image_head(image_embeds[:, 0, :]), dim=-1, p=2)
-        cross_embeds = nn.functional.normalize(self.itc_cross_modal_head(pooler_output), dim=-1, p=2)
+        image_embeds = nn.functional.normalize(self.itc_image_head(image_embeds[:, 0, :]), dim=-1, p=2).to(
+            device=text_embeds.device
+        )
+        cross_embeds = nn.functional.normalize(self.itc_cross_modal_head(pooler_output), dim=-1, p=2).to(
+            device=text_embeds.device
+        )
 
         logits = torch.stack([text_embeds, image_embeds, cross_embeds], dim=-2)
 
