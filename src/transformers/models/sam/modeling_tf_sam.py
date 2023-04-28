@@ -26,8 +26,8 @@ import tensorflow as tf
 
 from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
-from ...modeling_tf_utils import TFPreTrainedModel, shape_list
-from ...tf_utils import functional_layernorm
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list, unpack_inputs
+from ...tf_utils import functional_layernorm, flatten
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
@@ -131,7 +131,7 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
         self.num_patches = num_patches
 
         self.projection = tf.keras.layers.Conv2D(
-            hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
+            hidden_size, kernel_size=patch_size, strides=patch_size, name="projection", data_format="channels_first"
         )
 
     def call(self, pixel_values):
@@ -170,13 +170,16 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last", **kwargs):
         super().__init__(**kwargs)
-        self.weight = self.add_weight(shape=normalized_shape, initializer="ones", name="weight")
-        self.bias = self.add_weight(shape=normalized_shape, initializer="zeros", name="bias")
         self.eps = eps
         self.data_format = data_format
+        self.normalized_shape = normalized_shape
         if self.data_format not in ["channels_last", "channels_first"]:
             raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(shape=self.normalized_shape, initializer="ones", name="weight")
+        self.bias = self.add_weight(shape=self.normalized_shape, initializer="zeros", name="bias")
+        super().build(input_shape)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         if self.data_format == "channels_last":
@@ -357,7 +360,7 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
         self.layers = []
 
         for i in range(self.num_hidden_layers):
-            self.layers.append(TFSamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0), name=f"layers_{i}"))
+            self.layers.append(TFSamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0), name=f"layers_._{i}"))
 
         self.final_attn_token_to_image = TFSamAttention(config, name="final_attn_token_to_image")
         self.layer_norm_final_attn = tf.keras.layers.LayerNormalization(
@@ -384,23 +387,8 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = tf.expand_dims(
-            tf.transpose(
-                tf.reshape(image_embeddings, (shape_list(image_embeddings)[0], -1, shape_list(image_embeddings)[-1])),
-                (0, 2, 1),
-            ),
-            1,
-        )
-        image_positional_embeddings = tf.expand_dims(
-            tf.transpose(
-                tf.reshape(
-                    image_positional_embeddings,
-                    (shape_list(image_positional_embeddings)[0], -1, shape_list(image_positional_embeddings)[-1]),
-                ),
-                (0, 2, 1),
-            ),
-            1,
-        )
+        image_embeddings = tf.transpose(flatten(image_embeddings, 2), perm=(0, 2, 1))[:, None]
+        image_positional_embeddings = tf.transpose(flatten(image_positional_embeddings, 2), (0, 2, 1))[:, None]
 
         # Prepare queries
         queries = point_embeddings
@@ -440,7 +428,7 @@ class TFSamFeedForward(tf.keras.layers.Layer):
         self.proj_in = tf.keras.layers.Dense(hidden_dim, input_shape=(input_dim,), name="proj_in")
         self.proj_out = tf.keras.layers.Dense(output_dim, input_shape=(hidden_dim,), name="proj_out")
         self.layers = [
-            tf.keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layer_{i}")
+            tf.keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layers_._{i}")
             for i in range(num_layers - 2)
         ]
         self.sigmoid_output = sigmoid_output
@@ -466,16 +454,13 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         self.num_multimask_outputs = config.num_multimask_outputs
         self.num_mask_tokens = config.num_multimask_outputs + 1
 
-        self.iou_token = tf.keras.layers.Embedding(1, self.hidden_size, name="iou_token")
-        self.mask_tokens = tf.keras.layers.Embedding(self.num_mask_tokens, self.hidden_size, name="mask_tokens")
-
-        self.transformer = TFSamTwoWayTransformer(config)
+        self.transformer = TFSamTwoWayTransformer(config, name="transformer")
 
         self.upscale_conv1 = tf.keras.layers.Conv2DTranspose(
-            self.hidden_size // 4, kernel_size=2, strides=2, name="upscale_conv1"
+            self.hidden_size // 4, kernel_size=2, strides=2, name="upscale_conv1", data_format="channels_first"
         )
         self.upscale_conv2 = tf.keras.layers.Conv2DTranspose(
-            self.hidden_size // 8, kernel_size=2, strides=2, name="upscale_conv2"
+            self.hidden_size // 8, kernel_size=2, strides=2, name="upscale_conv2", data_format="channels_first"
         )
         self.upscale_layer_norm = TFSamLayerNorm(
             self.hidden_size // 4, data_format="channels_first", name="upscale_layer_norm"
@@ -483,13 +468,19 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         self.activation = tf.nn.gelu
 
         mlps_list = []
-        for _ in range(self.num_mask_tokens):
-            mlps_list += [TFSamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)]
-        self.output_hypernetworks_mlps = tf.keras.layers.LayerList(mlps_list)
+        for i in range(self.num_mask_tokens):
+            mlps_list += [TFSamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3, name=f"output_hypernetworks_mlps_._{i}")]
+        self.output_hypernetworks_mlps = mlps_list
 
         self.iou_prediction_head = TFSamFeedForward(
-            self.hidden_size, config.iou_head_hidden_dim, self.num_mask_tokens, config.iou_head_depth
+            self.hidden_size, config.iou_head_hidden_dim, self.num_mask_tokens, config.iou_head_depth, name="iou_prediction_head"
         )
+
+    def build(self, input_shape):
+        self.iou_token = self.add_weight(shape=(1, self.hidden_size), name="iou_token.weight", trainable=True)
+        self.mask_tokens = self.add_weight(shape=(self.num_mask_tokens, self.hidden_size), name="mask_tokens.weight",
+                                           trainable=True)
+        super().build(input_shape)
 
     def call(
         self,
@@ -501,15 +492,18 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         batch_size, num_channels, height, width = shape_list(image_embeddings)
-        point_batch_size = max(1, shape_list(sparse_prompt_embeddings)[1])
-        output_tokens = tf.concat([self.iou_token.embeddings, self.mask_tokens.embeddings], axis=0)
-        output_tokens = tf.tile(tf.expand_dims(output_tokens, axis=0), [batch_size, point_batch_size, 1, 1])
+        point_batch_size = tf.math.maximum(1, tf.shape(sparse_prompt_embeddings)[1])
 
-        if tf.reduce_sum(sparse_prompt_embeddings) != 0:
+        output_tokens = tf.concat([self.iou_token, self.mask_tokens], axis=0)  # Should be (1, 32) + (4, 32) = (5, 32)
+        output_tokens = tf.tile(output_tokens[None, None, :], [batch_size, point_batch_size, 1, 1])  # Should be (batch_size, point_size, 5, 32)
+
+        # Matt: I think this sum is actually checking that the sparse prompt embeddings aren't an empty tensor
+        #       with shape[1] == 0, so I'm going to replace this
+        if sparse_prompt_embeddings.shape[1] != 0:
             tokens = tf.concat((output_tokens, sparse_prompt_embeddings), axis=2)
         else:
             tokens = output_tokens
-        point_embeddings = tf.cast(tokens, self.iou_token.embeddings.dtype)
+        point_embeddings = tf.cast(tokens, self.iou_token.dtype)
 
         image_embeddings = image_embeddings + dense_prompt_embeddings
         image_embeddings = tf.tile(image_embeddings, [point_batch_size, 1, 1, 1])
@@ -565,9 +559,13 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.scale = config.hidden_size // 2
+        self.config = config
+
+    def build(self, input_shape):
+        # TODO Matt: What is going on here? Why is a non-trainable weight randomly initialized?
         self.positional_embedding = self.add_weight(
             name="positional_embedding",
-            shape=(2, config.num_pos_feats),
+            shape=(2, self.config.num_pos_feats),
             initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
             trainable=False,
         )
@@ -577,16 +575,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         coordinates = tf.identity(input_coords)
 
         if input_shape is not None:
-            coordinates = tf.tensor_scatter_nd_update(
-                coordinates,
-                indices=[[0, 0]],
-                updates=coordinates[:, :, :, 0] / input_shape[1],
-            )
-            coordinates = tf.tensor_scatter_nd_update(
-                coordinates,
-                indices=[[0, 1]],
-                updates=coordinates[:, :, :, 1] / input_shape[0],
-            )
+            coordinates = tf.stack([tf.cast(coordinates[:, :, :, 0], tf.float32) / input_shape[1], tf.cast(coordinates[:, :, :, 1], tf.float32) / input_shape[0]], axis=-1)
 
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
@@ -602,9 +591,9 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.mask_input_channels = config.mask_input_channels // 4
         self.activation = ACT2FN[config.hidden_act]
-        self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
-        self.conv2 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv2")
-        self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
+        self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1", data_format="channels_first")
+        self.conv2 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv2", data_format="channels_first")
+        self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3", data_format="channels_first")
         self.layer_norm1 = TFSamLayerNorm(self.mask_input_channels, config.layer_norm_eps, name="layer_norm1")
         self.layer_norm2 = TFSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps, name="layer_norm2")
 
@@ -624,17 +613,37 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
     def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding, **kwargs):
         super().__init__(**kwargs)
         self.shared_embedding = shared_patch_embedding
-        self.mask_embed = TFSamMaskEmbedding(config)
-        self.no_mask_embed = tf.keras.layers.Embedding(1, config.hidden_size)
+        self.mask_embed = TFSamMaskEmbedding(config, name="mask_embed")
+        self.no_mask_embed = None
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = [
-            tf.keras.layers.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)
-        ]
+        self.point_embed = []
         self.hidden_size = config.hidden_size
-        self.not_a_point_embed = tf.keras.layers.Embedding(1, config.hidden_size)
+        self.not_a_point_embed = None
+        self.config = config
+
+    def build(self, input_shape):
+        self.no_mask_embed = self.add_weight(
+            name="no_mask_embed.weight",
+            shape=(1, self.hidden_size),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            trainable=True,
+        )
+        self.point_embed = [self.add_weight(
+            name=f"point_embed_._{i}.weight",
+            shape=(1, self.hidden_size),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            trainable=True,
+        ) for i in range(self.config.num_point_embeddings)]
+        self.not_a_point_embed = self.add_weight(
+            name="not_a_point_embed.weight",
+            shape=(1, self.hidden_size),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            trainable=True,
+        )
+        super().build(input_shape)
 
     def _embed_points(self, points: tf.Tensor, labels: tf.Tensor, pad: bool) -> tf.Tensor:
         """Embeds point prompts."""
@@ -649,16 +658,15 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
-        point_embedding = tf.where(labels[..., None] == -1, self.not_a_point_embed.weights[0], point_embedding)
+        point_embedding = tf.where(labels[..., None] == -1, self.not_a_point_embed[0], point_embedding)
 
         point_embedding = tf.where(
             labels[..., None] != -10,
             point_embedding,
             tf.zeros_like(point_embedding),
         )
-
-        point_embedding = tf.where(labels == 0, point_embedding + self.point_embed[0].weights[0], point_embedding)
-        point_embedding = tf.where(labels == 1, point_embedding + self.point_embed[1].weights[0], point_embedding)
+        point_embedding = tf.where((labels == 0)[:, :, :, None], point_embedding + self.point_embed[0], point_embedding)
+        point_embedding = tf.where((labels == 1)[:, :, :, None], point_embedding + self.point_embed[1], point_embedding)
         return point_embedding
 
     def _embed_boxes(self, boxes: tf.Tensor) -> tf.Tensor:
@@ -670,13 +678,14 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         corner_embedding = self.shared_embedding(coords, input_shape)
         corner_embedding += tf.where(
             tf.range(corner_embedding.shape[2])[None, None, :, None] == 0,
-            self.point_embed[2].weights[0],
-            self.point_embed[3].weights[0],
+            self.point_embed[2][0],
+            self.point_embed[3][0],
         )
         return corner_embedding
 
     def call(
         self,
+        batch_size: Optional[int],
         input_points: Optional[Tuple[tf.Tensor, tf.Tensor]],
         input_labels: Optional[tf.Tensor],
         input_boxes: Optional[tf.Tensor],
@@ -686,15 +695,14 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`tf.Tensor`, **optionnal**):
+            points (`tf.Tensor`, **optional**):
                 point coordinates and labels to embed.
-            boxes (`tf.Tensor`, **optionnal**):
+            boxes (`tf.Tensor`, **optional**):
                 boxes to embed
-            masks (`tf.Tensor`, **optionnal**):
+            masks (`tf.Tensor`, **optional**):
                 masks to embed
         """
         sparse_embeddings = None
-        batch_size = 1
         if input_points is not None:
             batch_size, point_batch_size = input_points.shape[:2]
             if input_labels is None:
@@ -714,11 +722,11 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         if input_masks is not None:
             dense_embeddings = self.mask_embed(input_masks)
         else:
-            dense_embeddings = tf.reshape(self.no_mask_embed.weights[0], (1, -1, 1, 1))
+            dense_embeddings = self.no_mask_embed[0]
+            dense_embeddings = tf.reshape(dense_embeddings, (1, -1, 1, 1))
             dense_embeddings = tf.tile(
                 dense_embeddings, (batch_size, 1, self.image_embedding_size[0], self.image_embedding_size[1])
             )
-
         if sparse_embeddings is None:
             sparse_embeddings = tf.zeros((batch_size, 0, 1, self.hidden_size), dtype=dense_embeddings.dtype)
 
@@ -735,9 +743,12 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             if window_size == 0
             else (window_size, window_size)
         )
+        self.input_size = input_size
+
 
         self.num_attention_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = head_dim
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
 
@@ -749,13 +760,17 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             if input_size is None:
                 raise ValueError("Input size must be provided if using relative positional encoding.")
 
-            # initialize relative positional embeddings
+
+    def build(self, input_shape):
+        if self.input_size is not None:
+        # initialize relative positional embeddings
             self.rel_pos_h = self.add_weight(
-                shape=(2 * input_size[0] - 1, head_dim), initializer="zeros", name="rel_pos_h"
+                shape=(2 * self.input_size[0] - 1, self.head_dim), initializer="zeros", name="rel_pos_h"
             )
             self.rel_pos_w = self.add_weight(
-                shape=(2 * input_size[1] - 1, head_dim), initializer="zeros", name="rel_pos_w"
+                shape=(2 * self.input_size[1] - 1, self.head_dim), initializer="zeros", name="rel_pos_w"
             )
+        super().build(input_shape)
 
     def get_rel_pos(self, q_size: int, k_size: int, rel_pos: tf.Tensor) -> tf.Tensor:
         """
@@ -841,15 +856,13 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor, output_attentions=False) -> tf.Tensor:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
-        qkv = tf.reshape(
-            self.qkv(hidden_states), (batch_size, height * width, 3, self.num_attention_heads, -1)
-        ).permute(2, 0, 3, 1, 4)
+        qkv = tf.reshape(self.qkv(hidden_states), (batch_size, height * width, 3, self.num_attention_heads, -1))
+        qkv = tf.transpose(qkv, perm=(2, 0, 3, 1, 4))
         # q, k, v with shape (batch_size * nHead, height * width, channel)
         query, key, value = tf.unstack(
             tf.reshape(qkv, (3, batch_size * self.num_attention_heads, height * width, -1)), axis=0
         )
-
-        attn_weights = (query * self.scale) @ tf.transpose(key, perm=(-2, -1))
+        attn_weights = tf.matmul(query * self.scale, key, transpose_b=True)
 
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(
@@ -858,9 +871,11 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
-        attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
+        # attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
+        attn_probs = attn_weights
 
-        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = tf.reshape(attn_probs @ value, (batch_size, self.num_attention_heads, height, width, -1))
+        attn_output = tf.transpose(attn_output, perm=(0, 2, 3, 1, 4))
         attn_output = tf.reshape(attn_output, (batch_size, height, width, -1))
 
         attn_output = self.proj(attn_output)
@@ -952,10 +967,10 @@ class TFSamVisionNeck(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.conv1 = tf.keras.layers.Conv2D(config.output_channels, kernel_size=1, use_bias=False, name="conv1")
+        self.conv1 = tf.keras.layers.Conv2D(config.output_channels, kernel_size=1, use_bias=False, name="conv1", data_format="channels_first")
         self.layer_norm1 = TFSamLayerNorm(config.output_channels, data_format="channels_first", name="layer_norm1")
         self.conv2 = tf.keras.layers.Conv2D(
-            config.output_channels, kernel_size=3, padding="same", use_bias=False, name="conv2"
+            config.output_channels, kernel_size=3, padding="same", use_bias=False, name="conv2", data_format="channels_first"
         )
         self.layer_norm2 = TFSamLayerNorm(config.output_channels, data_format="channels_first", name="layer_norm2")
 
@@ -975,34 +990,36 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
         self.config = config
         self.image_size = config.image_size
 
-        self.patch_embed = TFSamPatchEmbeddings(config)
+        self.patch_embed = TFSamPatchEmbeddings(config, name="patch_embed")
 
         self.pos_embed = None
-        if config.use_abs_pos:
-            # Initialize absolute positional embedding with pretrain image size.
-            self.pos_embed = tf.Variable(
-                tf.zeros(
-                    [
-                        1,
-                        config.image_size // config.patch_size,
-                        config.image_size // config.patch_size,
-                        config.hidden_size,
-                    ]
-                ),
-                trainable=True,
-            )
 
         self.layers = []
         for i in range(config.num_hidden_layers):
             layer = TFSamVisionLayer(
                 config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
+                name=f"layers_._{i}",
             )
             self.layers.append(layer)
 
-        self.neck = TFSamVisionNeck(config)
+        self.neck = TFSamVisionNeck(config, name="neck")
 
-        self.gradient_checkpointing = False
+    def build(self, input_shape):
+        if self.config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = self.add_weight(
+                shape=[
+                    1,
+                    self.config.image_size // self.config.patch_size,
+                    self.config.image_size // self.config.patch_size,
+                    self.config.hidden_size,
+                ],
+                initializer="zeros",
+                trainable=True,
+                name="pos_embed",
+            )
+        super().build(input_shape)
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -1066,16 +1083,38 @@ class TFSamPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (tf.keras.layers.Dense, tf.keras.layers.Conv2D, tf.keras.layers.Conv2DTranspose)):
-            module.kernel.assign(tf.random.normal(module.kernel.shape, mean=0.0, stddev=std))
-            if module.bias is not None:
-                module.bias.assign(tf.zeros(module.bias.shape))
-        elif isinstance(module, tf.keras.layers.Embedding):
-            module.embeddings.assign(tf.random.normal(module.embeddings.shape, mean=0.0, stddev=std))
-            if module.padding_idx is not None:
-                module.embeddings[module.padding_idx].assign(tf.zeros(module.embeddings[module.padding_idx].shape))
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.vision_config.num_channels, self.config.vision_config.image_size, self.config.vision_config.image_size), dtype=tf.float32
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 SAM_START_DOCSTRING = r"""
@@ -1168,13 +1207,11 @@ class TFSamModel(TFSamPreTrainedModel):
 
     def __init__(self, config, **kwargs) -> None:
         super().__init__(config, **kwargs)
-        self.shared_image_embedding = TFSamPositionalEmbedding(config.vision_config)
+        self.shared_image_embedding = TFSamPositionalEmbedding(config.vision_config, name="shared_image_embedding")
 
-        self.vision_encoder = TFSamVisionEncoder(config.vision_config)
-        self.prompt_encoder = TFSamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
-        self.mask_decoder = TFSamMaskDecoder(config.mask_decoder_config)
-
-        self.post_init()
+        self.vision_encoder = TFSamVisionEncoder(config.vision_config, name="vision_encoder")
+        self.prompt_encoder = TFSamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding, name="prompt_encoder")
+        self.mask_decoder = TFSamMaskDecoder(config.mask_decoder_config, name="mask_decoder")
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -1252,6 +1289,7 @@ class TFSamModel(TFSamPreTrainedModel):
         )
         return prompt_output
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(SAM_INPUTS_DOCSTRING)
     def call(
         self,
@@ -1298,10 +1336,9 @@ class TFSamModel(TFSamPreTrainedModel):
                         point_batch_size, box_batch_size
                     )
                 )
-
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
-        batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
+        batch_size = shape_list(pixel_values)[0] if pixel_values is not None else shape_list(image_embeddings)[0]
         image_positional_embeddings = tf.repeat(image_positional_embeddings, batch_size, axis=0)
 
         vision_attentions = None
@@ -1334,6 +1371,7 @@ class TFSamModel(TFSamPreTrainedModel):
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
+            batch_size=image_embeddings.shape[0],
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,
@@ -1364,4 +1402,16 @@ class TFSamModel(TFSamPreTrainedModel):
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
+        )
+
+    def serving_output(self, output: TFSamImageSegmentationOutput) -> TFSamImageSegmentationOutput:
+        hs = tf.convert_to_tensor(output.vision_hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.vision_attentions) if self.config.output_attentions else None
+
+        return TFSamImageSegmentationOutput(
+            iou_scores=output.iou_scores,
+            pred_masks=output.pred_masks,
+            vision_hidden_states=hs,
+            vision_attentions=attns,
+            mask_decoder_attentions=output.mask_decoder_attentions,
         )

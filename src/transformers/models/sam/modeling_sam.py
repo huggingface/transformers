@@ -668,11 +668,11 @@ class SamPromptEncoder(nn.Module):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`torch.Tensor`, **optionnal**):
+            points (`torch.Tensor`, **optional**):
                 point coordinates and labels to embed.
-            boxes (`torch.Tensor`, **optionnal**):
+            boxes (`torch.Tensor`, **optional**):
                 boxes to embed
-            masks (`torch.Tensor`, **optionnal**):
+            masks (`torch.Tensor`, **optional**):
                 masks to embed
         """
         sparse_embeddings = None
