@@ -447,10 +447,10 @@ def create_circleci_config(folder=None):
     if len(test_list) > 0:
         jobs.extend(REGULAR_TESTS)
 
+        extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
         for job in jobs:
             if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
-                extended_tests_to_run = set(test_list.split())
                 for test_path in copy.copy(extended_tests_to_run):
                     dir_path, fn = os.path.split(test_path)
                     if fn.startswith("test_modeling_tf_"):
@@ -466,11 +466,14 @@ def create_circleci_config(folder=None):
                     if os.path.isfile(new_test_file):
                         if new_test_file not in extended_tests_to_run:
                             extended_tests_to_run.add(new_test_file)
-                job.tests_to_run = sorted(extended_tests_to_run)
-                fn = f'{job.job_name.replace("tests_", "filtered_test_list_")}.txt'
-                f_path = os.path.join(folder, fn)
-                with open(f_path, "w") as fp:
-                    fp.write(" ".join(job.tests_to_run))
+        extended_tests_to_run = sorted(extended_tests_to_run)
+        for job in jobs:
+            if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
+                job.tests_to_run = extended_tests_to_run
+        fn = "filtered_test_list_cross_tests"
+        f_path = os.path.join(folder, fn)
+        with open(f_path, "w") as fp:
+            fp.write(" ".join(extended_tests_to_run))
 
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
