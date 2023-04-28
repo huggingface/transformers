@@ -166,7 +166,6 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
-        steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
         job["steps"] = steps
         return job
