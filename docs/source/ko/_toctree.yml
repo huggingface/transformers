@@ -17,8 +17,8 @@
     title: 사전 학습된 모델 미세 조정하기
   - local: accelerate
     title: 🤗 Accelerate를 활용한 분산 학습
-  - local: in_translation
-    title: (번역중) Share a model
+  - local: model_sharing
+    title: 모델 공유하기
   title: (번역중) 튜토리얼
 - sections:
   - sections:
@@ -42,8 +42,8 @@
   - sections:
     - local: in_translation
       title: (번역중) Use tokenizers from 🤗 Tokenizers
-    - local: in_translation
-      title: (번역중) Inference for multilingual models
+    - local: multilingual
+      title: 다국어 모델 추론하기
     - local: in_translation
       title: (번역중) Text generation strategies
     - sections:

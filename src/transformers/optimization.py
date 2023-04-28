@@ -22,7 +22,7 @@ from typing import Callable, Iterable, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
 from .trainer_utils import SchedulerType
 from .utils import logging
@@ -47,6 +47,21 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     """
 
     return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
+
+
+def get_reduce_on_plateau_schedule(optimizer: Optimizer):
+    """
+    Create a schedule with a constant learning rate that decreases when a metric has stopped improving.
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+
+    Return:
+        `torch.optim.lr_scheduler.ReduceLROnPlateau` with the appropriate schedule.
+    """
+
+    return ReduceLROnPlateau(optimizer)
 
 
 def _get_constant_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_steps: int):
@@ -309,6 +324,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.CONSTANT: get_constant_schedule,
     SchedulerType.CONSTANT_WITH_WARMUP: get_constant_schedule_with_warmup,
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
+    SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
 }
 
 
@@ -335,7 +351,7 @@ def get_scheduler(
     """
     name = SchedulerType(name)
     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
-    if name == SchedulerType.CONSTANT:
+    if name == SchedulerType.CONSTANT or name == SchedulerType.REDUCE_ON_PLATEAU:
         return schedule_func(optimizer)
 
     # All other schedulers require `num_warmup_steps`
