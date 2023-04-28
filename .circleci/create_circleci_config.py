@@ -447,6 +447,34 @@ def create_circleci_config(folder=None):
     if len(test_list) > 0:
         jobs.extend(REGULAR_TESTS)
 
+        extended_tests_to_run = set(test_list.split())
+        # Extend the test files for cross test jobs
+        for job in jobs:
+            if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
+                for test_path in copy.copy(extended_tests_to_run):
+                    dir_path, fn = os.path.split(test_path)
+                    if fn.startswith("test_modeling_tf_"):
+                        fn = fn.replace("test_modeling_tf_", "test_modeling_")
+                    elif fn.startswith("test_modeling_flax_"):
+                        fn = fn.replace("test_modeling_flax_", "test_modeling_")
+                    else:
+                        if job.job_name == "test_torch_and_tf":
+                            fn = fn.replace("test_modeling_", "test_modeling_tf_")
+                        elif job.job_name == "test_torch_and_flax":
+                            fn = fn.replace("test_modeling_", "test_modeling_flax_")
+                    new_test_file = str(os.path.join(dir_path, fn))
+                    if os.path.isfile(new_test_file):
+                        if new_test_file not in extended_tests_to_run:
+                            extended_tests_to_run.add(new_test_file)
+        extended_tests_to_run = sorted(extended_tests_to_run)
+        for job in jobs:
+            if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
+                job.tests_to_run = extended_tests_to_run
+        fn = "filtered_test_list_cross_tests.txt"
+        f_path = os.path.join(folder, fn)
+        with open(f_path, "w") as fp:
+            fp.write(" ".join(extended_tests_to_run))
+
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
