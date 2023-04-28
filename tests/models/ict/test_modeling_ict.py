@@ -68,11 +68,8 @@ class IctModelTester:
         image_size=64,
         num_channels=3,
         qkv_bias=False,
-        # Doesn't exist in Ict?
         scope=None,
         is_training=True,
-        use_labels=False,
-        # type_sequence_label_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -98,11 +95,13 @@ class IctModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = ids_tensor([self.batch_size, self.image_size], self.vocab_size)
         bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
-        (np.asarray([[241.0, 212.0, 177.0], [50.0, 125.0, 197.0]]),)
+        
+        np.random.seed(6)
+        clusters = np.random.rand(512, 3)
 
         config = self.get_config()
 
-        return config, pixel_values, bool_masked_pos
+        return config, pixel_values, bool_masked_pos, clusters
 
     def get_config(self):
         return IctConfig(
@@ -136,8 +135,9 @@ class IctModelTester:
             config,
             pixel_values,
             bool_masked_pos,
+            clusters,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "bool_masked_pos": bool_masked_pos}
+        inputs_dict = {"pixel_values": pixel_values, "bool_masked_pos": bool_masked_pos, "clusters": clusters}
         return config, inputs_dict
 
 

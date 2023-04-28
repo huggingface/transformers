@@ -650,6 +650,7 @@ class IctGuidedUpsampler(IctPretrainedModel):
 
     def forward(self, images, edges, masks):
         images_masked = (images * (1 - masks).float()) + masks
+        images_masked = images_masked.permute(0, 3, 1, 2)
         inputs = torch.cat((images_masked, edges), dim=1)
         outputs = self.generator(inputs)
         return outputs
@@ -759,11 +760,10 @@ class IctModel(IctPretrainedModel):
         height = width = math.floor(sequence_length**0.5)
         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
-        # need to have def forward(self, images, edges, masks):
-        pixel_values = [
-            clusters[pixel_values[i]].view(height, width, 3).numpy().astype(np.uint8) for i in range(batch_size)
-        ]
-        reconstructed_pixel_values = self.guided_upsampler(pixel_values, sequence_output, bool_masked_pos)
+        clusters = np.rint(127.5 * (clusters + 1.0))
+        clusters = torch.from_numpy(clusters)
+        pixel_values = torch.stack([clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]).to(torch.float32)
+        reconstructed_pixel_values = self.guided_upsampler(pixel_values, sequence_output, bool_masked_pos.reshape(-1, height, height).unsqueeze(-1).int())
 
         loss = None
         if bool_masked_pos is not None:
