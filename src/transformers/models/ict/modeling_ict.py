@@ -19,13 +19,14 @@
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 import torchvision.models as models
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageCompletionOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedImageModelingOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -84,7 +85,6 @@ class IctEmbeddings(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # each position maps to a learnable vector
-        # NOTE: Need [:, :num_pixel, :]?
         position_embeds = self.position_embedding[:, :num_pixel, :]
         embeddings = embeddings + position_embeds
         embeddings = self.dropout(embeddings)
@@ -185,11 +185,11 @@ class IctLayer(nn.Module):
             nn.Linear(num_embed, intermediate_size),
             self.intermediate_act_fn,
             nn.Linear(intermediate_size, num_embed),
-            nn.Dropout(config.resid_pdrop),
+            nn.Dropout(config.residual_dropout_prob),
         )
 
     def forward(self, hidden_states, output_attentions: bool = False):
-        self_attention_outputs = self.attention(self.ln_1(hidden_states, output_attentions=output_attentions))
+        self_attention_outputs = self.attention(self.ln_1(hidden_states), output_attentions=output_attentions)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -393,7 +393,7 @@ class IctInpaintGenerator(nn.Module):
             nn.ReLU(True),
         )
 
-        blocks = [IctResnetBlock(256) for _ in range(config.num_residual_blocks)]
+        blocks = [IctResnetBlock() for _ in range(config.num_residual_blocks)]
 
         self.middle = nn.Sequential(*blocks)
 
@@ -704,11 +704,12 @@ class IctModel(IctPretrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageCompletionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
+        clusters: Optional[np.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -725,23 +726,24 @@ class IctModel(IctPretrainedModel):
 
         >>> from transformers import AutoImageProcessor, IctModel
 
-        >>> processor = AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
+        >>> image_processor = image_AutoImageProcessor.from_pretrained("sheonhan/ict-imagenet-256")
         >>> model = IctModel.from_pretrained("sheonhan/ict-imagenet-256")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        >>> clusters = image_processor.clusters
 
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos, clusters=clusters)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        outputs = self.tranformer(
+        outputs = self.transformer(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
             output_attentions=output_attentions,
@@ -751,12 +753,17 @@ class IctModel(IctPretrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = sequence_output[:, 1:]
+        # TODO: Change back using clusters
+        # current_img= clusters[pixel_values[i]].view(opts.image_size, opts.image_size, 3).numpy().astype(np.uint8)
         batch_size, sequence_length, num_channels = sequence_output.shape
         height = width = math.floor(sequence_length**0.5)
         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
-        reconstructed_pixel_values = self.guided_upsampler(sequence_output)
+        # need to have def forward(self, images, edges, masks):
+        pixel_values = [
+            clusters[pixel_values[i]].view(height, width, 3).numpy().astype(np.uint8) for i in range(batch_size)
+        ]
+        reconstructed_pixel_values = self.guided_upsampler(pixel_values, sequence_output, bool_masked_pos)
 
         loss = None
         if bool_masked_pos is not None:
@@ -769,7 +776,7 @@ class IctModel(IctPretrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return MaskedImageCompletionOutput(
+        return MaskedImageModelingOutput(
             loss=loss,
             reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
