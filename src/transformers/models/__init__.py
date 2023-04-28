@@ -109,6 +109,7 @@ from . import (
     llama,
     longformer,
     longt5,
+    ltgbert,
     luke,
     lxmert,
     m2m_100,
