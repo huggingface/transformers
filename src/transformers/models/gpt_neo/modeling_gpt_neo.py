@@ -50,6 +50,7 @@ GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 _REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
+
 def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
@@ -1013,6 +1014,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
 
 @add_start_docstrings(
     """
