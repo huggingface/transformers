@@ -34,7 +34,8 @@ class OpenLlamaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OpenLlamaModel`]. It is used to instantiate an
     Open-Llama model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Open-Llama-7B.
+    configuration with the defaults will yield a similar configuration to that of the
+    [s-JoL/Open-Llama-V1](https://huggingface.co/s-JoL/Open-Llama-V1).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

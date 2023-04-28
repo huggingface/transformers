@@ -19,7 +19,6 @@
 # limitations under the License.
 """ PyTorch Open-Llama model."""
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -34,16 +33,16 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_open_llama import OpenLlamaConfig
 
 
+logger = logging.get_logger(__name__)
+
 try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    warnings.warn(
+    logger.warn(
         "Xformers is not installed correctly. If you want to use memorry_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
-
-logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OpenLlamaConfig"
 
