@@ -9,12 +9,15 @@ if is_diffusers_available():
     from diffusers import DiffusionPipeline
 
 
-class StableDiffusionTool(Tool):
+TEXT_TO_IMAGE_DESCRIPTION = (
+    "This is a tool that creates an image according to a text description. It takes an input named `text` which "
+    "contains the image description and outputs an image."
+)
+
+
+class TextToImageTool(Tool):
     default_checkpoint = "runwayml/stable-diffusion-v1-5"
-    description = (
-        "This is a tool that creates an image according to a text description. It takes an input named `text` which "
-        "contains the image description and outputs an image."
-    )
+    description = TEXT_TO_IMAGE_DESCRIPTION
 
     def __init__(self, device=None) -> None:
         if not is_accelerate_available():

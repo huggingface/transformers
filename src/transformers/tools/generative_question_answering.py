@@ -7,15 +7,17 @@ QA_PROMPT = """Here is a text containing a lot of information: '''{text}'''.
 Can you answer this question about the text: '{question}'"""
 
 
+GENERATIVE_QUESTION_ANSWERING_DESCRIPTION = (
+    "This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the "
+    "text where to find the answer, and `question`, which is the question, and returns the answer to the question."
+)
+
+
 class GenerativeQuestionAnsweringTool(PipelineTool):
+    default_checkpoint = "google/flan-t5-base"
+    description = GENERATIVE_QUESTION_ANSWERING_DESCRIPTION
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
-
-    description = (
-        "This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the "
-        "text where to find the answer, and `question`, which is the question, and returns the answer to the question."
-    )
-    default_checkpoint = "google/flan-t5-base"
 
     def encode(self, text: str, question: str):
         prompt = QA_PROMPT.format(text=text, question=question)
@@ -35,10 +37,7 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
 
 class RemoteGenerativeQuestionAnsweringTool(RemoteTool):
     default_checkpoint = "google/flan-t5-base"
-    description = (
-        "This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the "
-        "text where to find the answer, and `question`, which is the question, and returns the answer to the question."
-    )
+    description = GENERATIVE_QUESTION_ANSWERING_DESCRIPTION
 
     def extract_outputs(self, outputs):
         return outputs[0]["generated_text"]

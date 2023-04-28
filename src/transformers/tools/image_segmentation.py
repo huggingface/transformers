@@ -9,15 +9,17 @@ if is_vision_available():
     from PIL import Image
 
 
+IMAGE_SEGMENTATION_DESCRIPTION = (
+    "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
+    "image to caption, and returns a text that contains the description in English."
+)
+
+
 class ImageSegmentationTool(PipelineTool):
+    description = IMAGE_SEGMENTATION_DESCRIPTION
+    default_checkpoint = "CIDAS/clipseg-rd64-refined"
     pre_processor_class = AutoProcessor
     model_class = CLIPSegForImageSegmentation
-
-    description = (
-        "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
-        "image to caption, and returns a text that contains the description in English."
-    )
-    default_checkpoint = "CIDAS/clipseg-rd64-refined"
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():

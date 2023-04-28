@@ -10,16 +10,18 @@ if is_datasets_available():
     from datasets import load_dataset
 
 
+TEXT_TO_SPEECH_DESCRIPTION = (
+    "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
+    "text to read (in English) and returns a waveform object containing the sound."
+)
+
+
 class TextToSpeechTool(PipelineTool):
     default_checkpoint = "microsoft/speecht5_tts"
+    description = TEXT_TO_SPEECH_DESCRIPTION
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
-
-    description = (
-        "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
-        "text to read (in English) and returns a waveform object containing the sound."
-    )
 
     def post_init(self):
         if self.post_processor is None:
