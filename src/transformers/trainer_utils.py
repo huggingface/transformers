@@ -653,7 +653,21 @@ def find_executable_batch_size(
 
         return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
 
-    return functools.partial(function, batch_size=starting_batch_size)
+    batch_size = starting_batch_size
+    while True:
+        try:
+            # Call the function with the current batch size
+            result = function(batch_size)
+            # Check if the learning rate scheduler needs to be updated based on the current batch size
+            if hasattr(result, 'lr_schedulers'):
+                for scheduler in result.lr_schedulers:
+                    if hasattr(scheduler, 'num_batches'):
+                        scheduler.num_batches = math.ceil(result.num_train_examples / batch_size)
+            return result
+        except (RuntimeError, OverflowError, ValueError):
+            # Cut the batch size in half and try again
+            batch_size //= 2
+
 
 
 class FSDPOption(ExplicitEnum):
