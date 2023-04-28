@@ -23,13 +23,10 @@ import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from transformers.testing_utils import require_tf, slow
-from transformers.utils import is_tf_available, is_vision_available, is_torch_available
-
-import tempfile
-import os
+from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, is_pt_tf_cross_test
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -40,7 +37,7 @@ if is_tf_available():
     from transformers.models.sam.modeling_tf_sam import TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_torch_available():
-    import torch
+    pass
 
 
 if is_vision_available():
@@ -658,11 +655,13 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         self.assertTrue(
-            np.allclose(iou_scores.numpy(),
-            np.array([[[0.9848, 0.9788, 0.9713], [0.9211, 0.9128, 0.7427]]]),
-            atol=1e-4,
-            rtol=1e-4,
-        ))
+            np.allclose(
+                iou_scores.numpy(),
+                np.array([[[0.9848, 0.9788, 0.9713], [0.9211, 0.9128, 0.7427]]]),
+                atol=1e-4,
+                rtol=1e-4,
+            )
+        )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
