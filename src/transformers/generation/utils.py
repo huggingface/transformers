@@ -4355,37 +4355,37 @@ class GenerationMixin:
             candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
             n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
 
-            # 5. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
-            # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
-            # cost of forecasting incorrect assistant tokens.
-            if n_matches == int(assistant_model.max_assistant_tokens):
-                assistant_model.max_assistant_tokens += 2.0
-            else:
-                assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
-
-            # 6. Update variables according to the number of matching assistant tokens. Remember: the token generated
+            # 5. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
 
-            # 6.1. Ensure we don't generate beyond max_len or an EOS token
+            # 5.1. Ensure we don't generate beyond max_len or an EOS token
             if last_assistant_token_is_eos and n_matches == candidate_length:
                 n_matches -= 1
             n_matches = min(n_matches, max_len - cur_len - 1)
 
-            # 6.2. Get the valid continuation, after the matching tokens
+            # 5.2. Get the valid continuation, after the matching tokens
             valid_tokens = selected_tokens[:, : n_matches + 1]
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[-1]
 
-            # 6.3. Discard past key values relative to unused assistant tokens
+            # 5.3. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
             model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
                 assistant_model, model_kwargs["assistant_past_key_values"], new_cache_size - 1
             )  # the assistant does not have the token after the last match, hence the -1
+
+            # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
+            # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
+            # cost of forecasting incorrect assistant tokens.
+            if n_matches == int(assistant_model.max_assistant_tokens):
+                assistant_model.max_assistant_tokens += 2.0
+            else:
+                assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
 
             # Assistant: main logic end
 
