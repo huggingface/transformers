@@ -415,7 +415,7 @@ doc_test_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade pip",
-        "pip install .[dev]",
+        "pip install -e .[dev]",
         "pip install git+https://github.com/huggingface/accelerate",
         "pip install --upgrade pytest pytest-sugar",
         "find -name __pycache__ -delete",
