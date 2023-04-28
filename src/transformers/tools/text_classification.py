@@ -4,6 +4,13 @@ from ..models.auto import AutoConfig, AutoModelForSequenceClassification, AutoTo
 from .base import PipelineTool, RemoteTool
 
 
+TEXT_CLASSIFIER_DESCRIPTION = (
+    "This is a tool that classifies an English text using the following {n_labels} labels: {labels}. It takes an "
+    "input named `text` which should be in English and returns a dictionary with two keys named 'label' (the "
+    "predicted label) and 'score' (the probability associated to it)."
+)
+
+
 class TextClassificationTool(PipelineTool):
     """
     Example:
@@ -17,14 +24,9 @@ class TextClassificationTool(PipelineTool):
     """
 
     default_checkpoint = "distilbert-base-uncased-finetuned-sst-2-english"  # Needs to be updated
+    description = TEXT_CLASSIFIER_DESCRIPTION
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
-
-    description = (
-        "classifies an English text using the following {n_labels} labels: {labels}. It takes a input named `text` "
-        "which should be in English and returns a dictionary with two keys named 'label' (the predicted label ) and "
-        "'score' (the probability associated to it)."
-    )
 
     def post_init(self):
         if isinstance(self.model, str):
@@ -68,11 +70,7 @@ class RemoteTextClassificationTool(RemoteTool):
     """
 
     default_checkpoint = "distilbert-base-uncased-finetuned-sst-2-english"  # Needs to be updated
-    description = (
-        "classifies an English text using the following {n_labels} labels: {labels}. It takes a input named `text` "
-        "which should be in English and returns a dictionary with two keys named 'label' (the predicted label ) and "
-        "'score' (the probability associated to it)."
-    )
+    description = TEXT_CLASSIFIER_DESCRIPTION
 
     def post_init(self):
         config = AutoConfig.from_pretrained(self.repo_id)

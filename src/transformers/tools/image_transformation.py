@@ -23,15 +23,17 @@ if is_opencv_available():
     import cv2
 
 
-class ControlNetTool(Tool):
+IMAGE_TRANSFORMATION_DESCRIPTION = (
+    "This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which should be "
+    "the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the "
+    "modified image."
+)
+
+
+class ImageTransformationTool(Tool):
     default_stable_diffusion_checkpoint = "runwayml/stable-diffusion-v1-5"
     default_controlnet_checkpoint = "lllyasviel/sd-controlnet-canny"
-
-    description = (
-        "This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which should be "
-        "the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the "
-        "modified image."
-    )
+    description = IMAGE_TRANSFORMATION_DESCRIPTION
 
     def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
         if not is_accelerate_available():

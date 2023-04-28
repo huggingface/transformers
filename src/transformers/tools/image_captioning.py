@@ -9,15 +9,17 @@ if is_vision_available():
     from PIL import Image
 
 
+IMAGE_CAPTIONING_DESCRIPTION = (
+    "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
+    "image to caption, and returns a text that contains the description in English."
+)
+
+
 class ImageCaptioningTool(PipelineTool):
+    default_checkpoint = "Salesforce/blip-image-captioning-base"
+    description = IMAGE_CAPTIONING_DESCRIPTION
     pre_processor_class = AutoProcessor
     model_class = AutoModelForVision2Seq
-
-    description = (
-        "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
-        "image to caption, and returns a text that contains the description in English."
-    )
-    default_checkpoint = "Salesforce/blip-image-captioning-base"
 
     inputs = ["image"]
     outputs = ["text"]
@@ -40,10 +42,7 @@ class ImageCaptioningTool(PipelineTool):
 
 class RemoteImageCaptioningTool(RemoteTool):
     default_checkpoint = "Salesforce/blip-image-captioning-large"
-    description = (
-        "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
-        "image to caption, and returns a text that contains the description in English."
-    )
+    description = IMAGE_CAPTIONING_DESCRIPTION
 
     def extract_outputs(self, outputs):
         return outputs[0]["generated_text"]

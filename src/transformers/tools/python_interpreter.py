@@ -94,7 +94,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         # If -> execute the right branch
         evaluate_if(expression, state, tools)
     elif isinstance(expression, ast.JoinedStr):
-        return "".join([evaluate_ast(v, state, tools) for v in expression.values])
+        return "".join([str(evaluate_ast(v, state, tools)) for v in expression.values])
     elif isinstance(expression, ast.Name):
         # Name -> pick up the value in the state
         return evaluate_name(expression, state, tools)
