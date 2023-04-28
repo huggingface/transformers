@@ -79,19 +79,23 @@ class HfDocTestParser(doctest.DocTestParser):
     # (including leading indentation and prompts); `indent` is the
     # indentation of the first (PS1) line of the source code; and
     # `want` is the expected output (including leading indentation).
-    _EXAMPLE_RE = re.compile(
-        r"""
-        # Source consists of a PS1 line followed by zero or more PS2 lines. (?P<source>
-            (?:^(?P<indent> [ ]*) >>> .*) # PS1 line (?:\n [ ]* \.\.\. .*)*) # PS2 lines
-        \n? # Want consists of any non-blank lines that do not start with PS1. (?P<want> (?:(?![ ]*$) # Not a blank
-        line
-             (?![ ]*>>>) # Not a line starting with PS1 (?:(?!```).)* # Match any character except '`' until a '```' is
-             found (this is specific to HF because black removes the last line) (?:\n|$) # Match a new line or end of
-             string
+    # fmt: off
+    _EXAMPLE_RE = re.compile(r'''
+        # Source consists of a PS1 line followed by zero or more PS2 lines.
+        (?P<source>
+            (?:^(?P<indent> [ ]*) >>>    .*)    # PS1 line
+            (?:\n           [ ]*  \.\.\. .*)*)  # PS2 lines
+        \n?
+        # Want consists of any non-blank lines that do not start with PS1.
+        (?P<want> (?:(?![ ]*$)    # Not a blank line
+             (?![ ]*>>>)  # Not a line starting with PS1
+             (?:(?!```).)*  # Match any character except '`' until a '```' is found (this is specific to HF because black removes the last line)
+             (?:\n|$)  # Match a new line or end of string
           )*)
-        """,
-        re.MULTILINE | re.VERBOSE,
+        ''', re.MULTILINE | re.VERBOSE
     )
+    # fmt: on
+
     skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
 
     def parse(self, string, name="<string>"):
