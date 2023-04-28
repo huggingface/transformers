@@ -158,7 +158,7 @@ class FlaxModelTesterMixin:
         if "ForMultipleChoice" in model_class.__name__:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
-                if isinstance(v, (jnp.ndarray, np.ndarray))
+                if isinstance(v, (jnp.ndarray, np.ndarray)) and k != "indices_prng_key"
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -629,7 +629,6 @@ class FlaxModelTesterMixin:
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 

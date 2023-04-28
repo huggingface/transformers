@@ -407,6 +407,10 @@ def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_peft_available():
+    return importlib.util.find_spec("peft") is not None
+
+
 def is_bs4_available():
     return importlib.util.find_spec("bs4") is not None
 

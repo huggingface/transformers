@@ -3273,6 +3273,13 @@ class GPTNeoForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3302,6 +3309,13 @@ class GPTNeoXForCausalLM(metaclass=DummyObject):
 
 
 class GPTNeoXForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
