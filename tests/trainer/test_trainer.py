@@ -576,19 +576,22 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
     def test_reduce_lr_on_plateau_args(self):
-        # test the parsing of arguments for the ReduceLROnPlateau scheduler
+        # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
         eval_dataset = RegressionDataset(length=64)
         args = TrainingArguments(
             "./regression",
-            lr_scheduler_type="reduce_lr_on_plateau",
-            reduce_lr_on_plateau_args="factor=0.2,patience=5,cooldown=2",
             evaluation_strategy="epoch",
             metric_for_best_model="eval_loss",
         )
         model = RegressionModel()
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=2)
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, optimizers=(optimizer, lr_scheduler)
+        )
         trainer.train()
+
         self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
         self.assertEqual(trainer.lr_scheduler.factor, 0.2)
         self.assertEqual(trainer.lr_scheduler.patience, 5)
@@ -606,12 +609,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         train_dataset = RegressionDataset(length=64)
         eval_dataset = RegressionDataset(length=64)
-        patience = 1
 
         args = TrainingArguments(
             "./regression",
             lr_scheduler_type="reduce_lr_on_plateau",
-            reduce_lr_on_plateau_args=f"patience={patience}",
             evaluation_strategy="epoch",
             metric_for_best_model="eval_loss",
             num_train_epochs=10,
@@ -620,6 +621,9 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionModel()
         trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train()
+
+        self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        patience = trainer.lr_scheduler.patience
 
         logs = trainer.state.log_history[1:]
         best_loss = logs[0]["eval_loss"]

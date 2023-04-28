@@ -117,7 +117,6 @@ from .trainer_utils import (
     IntervalStrategy,
     PredictionOutput,
     RemoveColumnsCollator,
-    SchedulerType,
     ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
@@ -1205,36 +1204,6 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
-    @staticmethod
-    def get_reduce_on_plateau_scheduler(
-        args: TrainingArguments, optimizer: torch.optim.Optimizer = None
-    ) -> torch.optim.lr_scheduler.ReduceLROnPlateau:
-        """
-        Returns the ReduceLROnPlateau scheduler based on the training arguments.
-
-        Args:
-            args (`transformers.training_args.TrainingArguments`):
-                The training arguments for the training session.
-        """
-        # parse args.reduce_lr_on_plateau_args
-        scheduler_args = {}
-        if args.reduce_lr_on_plateau_args:
-            for mapping in args.reduce_lr_on_plateau_args.replace(" ", "").split(","):
-                key, value = mapping.split("=")
-                if key in ("factor", "threshold", "eps"):
-                    scheduler_args[key] = float(value)
-                elif key in ("patience", "cooldown"):
-                    scheduler_args[key] = int(value)
-                elif key == "min_lr":  # can be stored as a float or list of floats
-                    try:
-                        scheduler_args[key] = float(value)
-                    except ValueError:
-                        scheduler_args[key] = [float(x) for x in value[1:-1].split(",")]
-                else:
-                    scheduler_args[key] = value
-
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_args)
-
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
@@ -1244,15 +1213,12 @@ class Trainer:
             num_training_steps (int): The number of training steps to do.
         """
         if self.lr_scheduler is None:
-            if self.args.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
-                self.lr_scheduler = Trainer.get_reduce_on_plateau_scheduler(self.args, optimizer)
-            else:
-                self.lr_scheduler = get_scheduler(
-                    self.args.lr_scheduler_type,
-                    optimizer=self.optimizer if optimizer is None else optimizer,
-                    num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
-                    num_training_steps=num_training_steps,
-                )
+            self.lr_scheduler = get_scheduler(
+                self.args.lr_scheduler_type,
+                optimizer=self.optimizer if optimizer is None else optimizer,
+                num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
+                num_training_steps=num_training_steps,
+            )
         return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
