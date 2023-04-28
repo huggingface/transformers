@@ -1997,7 +1997,9 @@ class Trainer:
                         self.optimizer.step()
 
                     if optimizer_was_run and not self.deepspeed:
-                        self.lr_scheduler.step()
+                        # Delay optimizer scheduling until metrics are generated
+                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                            self.lr_scheduler.step()
 
                     model.zero_grad()
                     self.state.global_step += 1
@@ -2287,6 +2289,10 @@ class Trainer:
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
+
+            # Run delayed LR scheduler now that metrics are populated
+            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.lr_scheduler.step(metrics[self.args.metric_for_best_model])
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
