@@ -397,7 +397,13 @@ class GPTNeoModelTester:
 @require_torch
 class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPTNeoModel, GPTNeoForCausalLM, GPTNeoForQuestionAnswering, GPTNeoForSequenceClassification, GPTNeoForTokenClassification)
+        (
+            GPTNeoModel,
+            GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
+            GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -405,6 +411,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTNeoModel,
+            "question-answering": GPTNeoForQuestionAnswering,
             "text-classification": GPTNeoForSequenceClassification,
             "token-classification": GPTNeoForTokenClassification,
             "text-generation": GPTNeoForCausalLM,
