@@ -2327,10 +2327,10 @@ class Trainer:
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
+                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
             else:
                 try:
-                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+                    torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
                 except Exception as e:
                     logger.info(
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
