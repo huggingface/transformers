@@ -56,13 +56,11 @@ torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e
 
 [[autodoc]] RwkvModel
     - forward
-    - forward_rnn
 
 ## RwkvLMHeadModel
 
 [[autodoc]] RwkvForCausalLM
     - forward
-    - forward_rnn
 
 ## Rwkv attention and the recurrent formulas
 
