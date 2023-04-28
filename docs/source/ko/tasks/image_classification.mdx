@@ -17,13 +17,13 @@ specific language governing permissions and limitations under the License.
 <Youtube id="tjAIM7BOYhw"/>
 
 이미지 분류는 이미지에 레이블 또는 클래스를 할당합니다. 텍스트 또는 오디오 분류와 달리 입력은
-이미지를 구성하는 픽셀 값입니다. 자연재해 후 피해 감지, 농작물 건강 모니터링, 의료 영상의 질병 징후 선별 지원 등
+이미지를 구성하는 픽셀 값입니다. 자연재해 후 피해 감지, 농작물 건강 모니터링, 의료 이미지에서 질병의 징후 검사 지원 등
 이미지 분류에서의 다양한 응용 사례가 있습니다.
 
 이 가이드에서는 다음을 설명합니다:
 
-1. [Food-101](https://huggingface.co/datasets/food101) 데이터 세트에서 [ViT](model_doc/vit)를 파인 튜닝하여 이미지에서 식품 항목을 분류합니다.
-2. 추론을 위해 파인 튜닝 모델을 사용합니다.
+1. [Food-101](https://huggingface.co/datasets/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
+2. 추론을 위해 미세 조정 모델을 사용합니다.
 
 <Tip>
 이 튜토리얼에서 설명하는 작업은 다음 모델 아키텍처에 의해 지원됩니다:
@@ -80,7 +80,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 - `label`: 식품 항목의 레이블 클래스
 
 모델이 레이블 ID에서 레이블 이름을 쉽게 가져올 수 있도록
-레이블 이름을 정수 또는 그 반대로 매핑하는 사전을 만드세요:
+레이블 이름을 정수로 매핑하고, 정수를 레이블 이름으로 매핑하는 사전을 만드세요:
 
 ```py
 >>> labels = food["train"].features["label"].names
@@ -112,7 +112,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 <pt>
 이미지에 몇 가지 이미지 변환을 적용하여 과적합에 대해 모델을 더 견고하게 만듭니다. 여기서 Torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하지만, 원하는 이미지 라이브러리를 사용할 수도 있습니다.
 
-이미지의 임의 부분을 자르고 크기를 조정한 다음, 이미지 평균과 표준 편차로 정규화하세요:
+이미지의 임의 부분을 크롭하고 크기를 조정한 다음, 이미지 평균과 표준 편차로 정규화하세요:
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
@@ -141,7 +141,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> food = food.with_transform(transforms)
 ```
 
-이제 [`DefaultDataCollator`]를 사용하여 예제 배치를 만듭니다. 🤗 Transformers의 다른 데이터 수집기와 달리, `DefaultDataCollator`는  패딩과 같은 추가적인 전처리를 적용하지 않습니다.
+이제 [`DefaultDataCollator`]를 사용하여 예제 배치를 만듭니다. 🤗 Transformers의 다른 데이터 수집기와 달리, `DefaultDataCollator`는 패딩과 같은 추가적인 전처리를 적용하지 않습니다.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -186,7 +186,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ... )
 ```
 
-다음으로 한 번에 하나의 이미지가 아닌 이미지 배치에 적절한 변환을 적용하는 함수를 만듭니다.
+다음으로 한 번에 하나의 이미지가 아니라 이미지 배치에 적절한 변환을 적용하는 함수를 만듭니다.
 
 ```py
 >>> import numpy as np
@@ -270,11 +270,11 @@ food["test"].set_transform(preprocess_val)
 <pt>
 <Tip>
 
-[`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
+[`Trainer`]를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
 
 </Tip>
 
-이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForImageClassification`]로 ViT를 가져옵니다. 예상되는 레이블 수 및 레이블 매핑과 함께 레이블 수를 지정하세요:
+이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForImageClassification`]로 ViT를 가져옵니다. 예상되는 레이블 수, 레이블 매핑 및 레이블 수를 지정하세요:
 
 ```py
 >>> from transformers import AutoModelForImageClassification, TrainingArguments, Trainer
@@ -289,9 +289,9 @@ food["test"].set_transform(preprocess_val)
 
 이제 세 단계만 거치면 끝입니다:
 
-1. [`TrainingArguments`]에서 훈련 하이퍼파라미터를 정의하세요. `image` 열이 삭제되기 때문에 미사용 열을 제거하지 않는 것이 중요합니다. `image` 열이 없으면 `pixel_values`을 생성할 수 없습니다. 이 동작을 방지하려면 `remove_unused_columns=False`로 설정하세요! 다른 유일한 필수 매개변수는 모델 저장 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`로 설정하면 이 모델을 허브에 푸시합니다(모델을 업로드하려면 허깅 페이스에 로그인해야 합니다). 각 에폭이 끝날 때마다, [`Trainer`]가 정확도를 평가하고 훈련 체크포인트를 저장합니다.
+1. [`TrainingArguments`]에서 훈련 하이퍼파라미터를 정의하세요. `image` 열이 삭제되기 때문에 미사용 열을 제거하지 않는 것이 중요합니다. `image` 열이 없으면 `pixel_values`을 생성할 수 없습니다. 이 동작을 방지하려면 `remove_unused_columns=False`로 설정하세요! 다른 유일한 필수 매개변수는 모델 저장 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`로 설정하면 이 모델을 허브에 푸시합니다(모델을 업로드하려면 Hugging Face에 로그인해야 합니다). 각 에폭이 끝날 때마다, [`Trainer`]가 정확도를 평가하고 훈련 체크포인트를 저장합니다.
 2. [`Trainer`]에 모델, 데이터 세트, 토크나이저, 데이터 콜레이터 및 `compute_metrics` 함수와 함께 훈련 인수를 전달하세요.
-3. [`~Trainer.train`]을 호출하여 모델을 파인 튜닝하세요.
+3. [`~Trainer.train`]을 호출하여 모델을 미세 조정하세요.
 
 ```py
 >>> training_args = TrainingArguments(
@@ -337,11 +337,11 @@ food["test"].set_transform(preprocess_val)
 
 <Tip>
 
-Keras를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, 먼저 [기본 튜토리얼](./training#train-a-tensorflow-model-with-keras)을 확인하세요!
+Keras를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, 먼저 [기본 튜토리얼](./training#train-a-tensorflow-model-with-keras)을 확인하세요!
 
 </Tip>
 
-TensorFlow에서 모델을 파인 튜닝하려면 다음 단계를 따르세요:
+TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 1. 훈련 하이퍼파라미터를 정의하고 옵티마이저와 학습률 스케쥴을 설정합니다.
 2. 사전 훈련된 모델을 인스턴스화합니다.
 3. 🤗 Dataset을 `tf.data.Dataset`으로 변환합니다.
@@ -368,7 +368,7 @@ TensorFlow에서 모델을 파인 튜닝하려면 다음 단계를 따르세요:
 ... )
 ```
 
-그런 다음 레이블 매핑과 함께 [`TFAuto ModelForImageClassification`]으로 ViT를 로드합니다:
+그런 다음 레이블 매핑과 함께 [`TFAuto ModelForImageClassification`]으로 ViT를 가져옵니다:
 
 ```py
 >>> from transformers import TFAutoModelForImageClassification
@@ -420,7 +420,7 @@ TensorFlow에서 모델을 파인 튜닝하려면 다음 단계를 따르세요:
 ```
 
 이제 모델을 훈련할 준비가 되었습니다! 훈련 및 검증 데이터 세트, 에폭 수와 함께 `fit()`을 호출하고,
-콜백을 사용하여 모델을 파인 튜닝합니다:
+콜백을 사용하여 모델을 미세 조정합니다:
 
 ```py
 >>> model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=num_epochs, callbacks=callbacks)
@@ -436,20 +436,20 @@ Epoch 5/5
 250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
 ```
 
-축하합니다! 모델을 파인 튜닝하고 🤗 Hub에 공유했습니다. 이제 추론에 사용할 수 있습니다!
+축하합니다! 모델을 미세 조정하고 🤗 Hub에 공유했습니다. 이제 추론에 사용할 수 있습니다!
 </tf>
 </frameworkcontent>
 
 
 <Tip>
 
-이미지 분류를 위한 모델을 파인 튜닝하는 자세한 예제는 다음 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 참조하세요.
+이미지 분류를 위한 모델을 미세 조정하는 자세한 예제는 다음 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 참조하세요.
 
 </Tip>
 
 ## 추론[[inference]]
 
-좋아요, 이제 모델을 파인 튜닝했으니 추론에 사용할 수 있습니다!
+좋아요, 이제 모델을 미세 조정했으니 추론에 사용할 수 있습니다!
 
 추론을 수행하고자 하는 이미지를 가져와봅시다:
 
@@ -462,7 +462,7 @@ Epoch 5/5
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png" alt="image of beignets"/>
 </div>
 
-파인 튜닝 모델로 추론을 시도하는 가장 간단한 방법은 [`pipeline`]을 사용하는 것입니다. 모델로 이미지 분류를 위한 `pipeline`을 인스턴스화하고 이미지를 전달합니다:
+미세 조정 모델로 추론을 시도하는 가장 간단한 방법은 [`pipeline`]을 사용하는 것입니다. 모델로 이미지 분류를 위한 `pipeline`을 인스턴스화하고 이미지를 전달합니다:
 
 ```py
 >>> from transformers import pipeline
