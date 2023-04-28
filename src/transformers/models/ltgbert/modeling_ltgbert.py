@@ -45,7 +45,7 @@ _CONFIG_FOR_DOC = "LtgBertConfig"
 
 LTG_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bnc-bert-span",
-    "bnc-bert-span-2x":,
+    "bnc-bert-span-2x",
     "bnc-bert-span-0.5x",
     "bnc-bert-span-0.25x",
     "bnc-bert-span-order",
