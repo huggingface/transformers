@@ -187,35 +187,8 @@ RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 
 ### Run documentation tests 
 
-This is way simpler now! 
-
 In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
 As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
-
-```python 
-r"""
-Returns:
-
-Example:
-    ```python
-    >>> import torch
-    >>> from transformers import WhisperModel, WhisperFeatureExtractor
-    >>> from datasets import load_dataset
-
-    >>> model = WhisperModel.from_pretrained("openai/whisper-base")
-    >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-    >>> input_features = inputs.input_features.cuda()
-    >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-    >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-    >>> list(last_hidden_state.shape)
-    [1, 2, 512]
-    ```"""
-
-```
-
-Now the following should not be skipped
 
 ```python 
 r"""
@@ -244,6 +217,7 @@ Just run the following line to automatically test every docstring example in the
 ```bash 
 pytest --doctest-modules <path_to_file_or_dir>
 ```
+If the file has a markdown extention, you should add the `--doctest-glob="*.mdx"` argument.
 
 ### Run only modified tests
 
