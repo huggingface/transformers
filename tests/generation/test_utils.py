@@ -1517,7 +1517,7 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    def test_assisted_decoding_matches_sample(self):
+    def test_assisted_decoding_sample(self):
         # Seeded assisted decoding will not match sample for the same seed, as the forward pass does not return the
         # exact same logits (the forward pass of the main model, now with several tokens at once, has causal masking).
 
