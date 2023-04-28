@@ -22,7 +22,6 @@
   - local: model_sharing
     title: Share your model
   title: Tutorials
-
 - sections:
   - sections:
       - local: tasks/sequence_classification
@@ -75,7 +74,6 @@
     title: Multimodal
     isExpanded: false
   title: Task Guides
-
 - sections:
     - local: fast_tokenizers
       title: Use fast tokenizers from 🤗 Tokenizers
@@ -84,13 +82,11 @@
     - local: generation_strategies
       title: Customize text generation strategy
     - local: create_a_model
-      title: Create a custom architecture
+      title: Use model-specific APIs
     - local: custom_models
       title: Share a custom model
     - local: sagemaker
       title: Run training on Amazon SageMaker
-    - local: converting_tensorflow_models
-      title: Converting from TensorFlow checkpoints
     - local: serialization
       title: Export to ONNX
     - local: torchscript
@@ -101,8 +97,6 @@
       title: Notebooks with examples
     - local: community
       title: Community resources
-    - local: migration
-      title: Migrating from previous packages
     - local: troubleshooting
       title: Troubleshoot
   title: Developer guides
