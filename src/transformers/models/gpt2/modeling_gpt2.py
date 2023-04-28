@@ -1606,6 +1606,9 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         self.transformer = GPT2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
+        # in case legacy code checks this
+        self.model_parallel = False
+
         # Initialize weights and apply final processing
         self.post_init()
 
