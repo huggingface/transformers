@@ -19,7 +19,7 @@ import doctest
 import sys
 import warnings
 from os.path import abspath, dirname, join
-from test_documentation import HfDoctestModule, HfDocTestParser
+from transformers.utils.doctest_utils import HfDoctestModule, HfDocTestParser
 import _pytest
 
 # allow having multiple repository checkouts and not needing to remember to rerun

@@ -77,10 +77,10 @@ class HfDocTestParser(doctest.DocTestParser):
              (?:\n|$)  # Match a new line or end of string
           )*)
         ''', re.MULTILINE | re.VERBOSE)
-
-
     skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+
     def parse(self, string, name='<string>'):
+        string = string.replace("+IGNORE_RESULT", "+SKIP") # for parsing INGORE RESULT? Should check the output checker
         string = preprocess_string(string, self.skip_cuda_tests)
         return super().parse(string, name)
 

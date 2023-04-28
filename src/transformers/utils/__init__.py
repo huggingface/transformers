@@ -171,7 +171,7 @@ from .import_utils import (
     torch_only_method,
     torch_version,
 )
-
+from .doctest_utils import HfDocTestParser
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
