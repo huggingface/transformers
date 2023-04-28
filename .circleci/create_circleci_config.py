@@ -51,7 +51,7 @@ class CircleCIJob:
     resource_class: Optional[str] = "xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
-    timeout:int = None
+    timeout :int = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
