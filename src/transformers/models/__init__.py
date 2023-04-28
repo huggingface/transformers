@@ -138,6 +138,7 @@ from . import (
     nllb_moe,
     nystromformer,
     oneformer,
+    open_llama,
     openai,
     opt,
     owlvit,
