@@ -561,7 +561,6 @@ def check_models_are_tested(module, test_file):
 
 def find_doc_tested_doc(documentation_test_file="utils/documentation_tests.txt"):
     """Parse the content of test_file to detect what's in all_model_classes"""
-    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
     with open(os.path.join(documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_docs = re.findall(r"(?:docs/).*.mdx", content)
@@ -570,11 +569,10 @@ def find_doc_tested_doc(documentation_test_file="utils/documentation_tests.txt")
 
 def find_doc_tested_models(documentation_test_file="utils/documentation_tests.txt"):
     """Parse the content of test_file to detect what's in all_model_classes"""
-    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
     with open(os.path.join(documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(
-        r"(?:configuration_|modeling_|tokenization_|feature_extraction|processor|image_processing).*.py", content
+        r"(?:configuration_|modeling_|tokenization_|feature_extraction|processor|image_processing).*?.py", content
     )
     return all_models
 
