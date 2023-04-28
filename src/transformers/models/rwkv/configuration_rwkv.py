@@ -89,7 +89,6 @@ class RwkvConfig(PretrainedConfig):
         attention_hidden_size=None,
         intermediate_size=None,
         layer_norm_epsilon=1e-5,
-        # initializer_range=0.02,
         # bos_token_id=50256,
         # eos_token_id=50256,
         rescale_every=6,

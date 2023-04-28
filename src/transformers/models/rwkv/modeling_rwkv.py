@@ -364,10 +364,10 @@ class RwkvBlock(nn.Module):
         self.layer_id = layer_id
 
         if layer_id == 0:
-            self.pre_ln = nn.LayerNorm(config.hidden_size)
+            self.pre_ln = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        self.ln1 = nn.LayerNorm(config.hidden_size)
-        self.ln2 = nn.LayerNorm(config.hidden_size)
+        self.ln1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.ln2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         self.attention = RwkvSelfAttention(config, layer_id)
         self.feed_forward = RwkvFeedForward(config, layer_id)
