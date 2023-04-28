@@ -43,7 +43,10 @@ Tips:
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
-### Example using HuggingFace Dataset:
+## Examples
+
+- Example using HuggingFace Dataset:
+
 ```python
 >>> from datasets import load_dataset
 >>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
@@ -64,12 +67,13 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
-### Example using Your own Audio:
+- Example using Your own Audio File:
+
 ```python
 >>> import librosa
 >>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
 
->>> raw_audio, sr = librosa.load("<your_audio_file_here>", sr=44100)
+>>> raw_audio, sr = librosa.load("<your_audio_file_here>", sr=44100) # feel free to change the sr to a suitable value.
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev").to("cuda")
 >>> model.eval()
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
