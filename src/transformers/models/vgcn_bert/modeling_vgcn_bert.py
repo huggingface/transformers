@@ -112,8 +112,7 @@ class VocabGraphConvolution(nn.Module):
         dropout_rate=0.1,
     ):
         super().__init__()
-        self._check_wgraphs(wgraphs)
-        self.wgraphs = nn.ParameterList(wgraphs)
+        self.wgraphs = self._prepare_wgraphs(wgraphs)
         self.gvoc_ordered_tokenizer_id_arrays, self.tokenizer_id_to_wgraph_id_arrays = self._prepare_inverted_arrays(
             wgraph_id_to_tokenizer_id_maps
         )
@@ -141,6 +140,21 @@ class VocabGraphConvolution(nn.Module):
         # nn.init.constant_(self.fc_hg.bias, 0.0)
         self.fc_hg.bias.data.zero_()
 
+    def _prepare_wgraphs(self, wgraphs: list) -> nn.ParameterList:
+        # def _zero_padding_graph(adj_matrix: torch.Tensor):
+        #     if adj_matrix.layout is not torch.sparse_coo:
+        #         adj_matrix=adj_matrix.to_sparse_coo()
+        #     indices=adj_matrix.indices()+1
+        #     padded_adj= torch.sparse_coo_tensor(indices=indices, values=adj_matrix.values(), size=(adj_matrix.shape[0]+1,adj_matrix.shape[1]+1))
+        #     return padded_adj.coalesce()
+        glist = nn.ParameterList()
+        for g in wgraphs:
+            assert g.layout is torch.sparse_coo
+            # g[0,:] and g[:,0] should be 0
+            assert 0 not in g.indices()
+            glist.append(nn.Parameter(g, requires_grad=False))
+        return glist
+
     def _prepare_inverted_arrays(self, wgraph_id_to_tokenizer_id_maps: List[dict]):
         wgraph_id_to_tokenizer_id_maps = [dict(sorted(m.items())) for m in wgraph_id_to_tokenizer_id_maps]
         assert all([list(m.keys())[-1] == len(m) - 1 for m in wgraph_id_to_tokenizer_id_maps])
@@ -165,19 +179,6 @@ class VocabGraphConvolution(nn.Module):
                 t[tok_id] = graph_id
 
         return gvoc_ordered_tokenizer_id_arrays, tokenizer_id_to_wgraph_id_arrays
-
-    def _check_wgraphs(self, wgraphs: list) -> bool:
-        for g in wgraphs:
-            assert g.layout is torch.sparse_coo
-            # g[0,:] and g[:,0] should be 0
-            assert 0 not in g.indices()
-
-    # def _zero_padding_graph(self, adj_matrix: torch.Tensor):
-    #     if adj_matrix.layout is not torch.sparse_coo:
-    #         adj_matrix=adj_matrix.to_sparse_coo()
-    #     indices=adj_matrix.indices()+1
-    #     padded_adj= torch.sparse_coo_tensor(indices=indices, values=adj_matrix.values(), size=(adj_matrix.shape[0]+1,adj_matrix.shape[1]+1))
-    #     return padded_adj.coalesce()
 
     def get_subgraphs(self, adj_matrix: torch.Tensor, gx_ids: torch.LongTensor):
         # assert adj_matrix.layout is torch.sparse_coo
@@ -216,9 +217,11 @@ class VocabGraphConvolution(nn.Module):
         gx_ids_list = []
         # positon_embeddings_in_gvocab_order_list=[]
         for m in self.tokenizer_id_to_wgraph_id_arrays:
+            # tmp_ids is still in sentence order, but value is graph id, e.g. [0, 5, 2, 2, 0, 10,0]
+            # 0 means no correspond graph id (like padding in graph), so we need to replace it with 0
             tmp_ids = input_ids.clone()
             tmp_ids[tmp_ids > len(m) - 1] = 0
-            tmp_ids = m[tmp_ids]  # still in sentence order, but value is graph id, e.g. [0, 5, 2, 2, 0, 10,0]
+            tmp_ids = m[tmp_ids]
 
             # # position in graph is meaningless and computationally expensive
             # if position_ids:

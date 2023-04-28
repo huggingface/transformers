@@ -168,7 +168,7 @@ class WordGraph:
             and further calculate the NPMI value, default is 20.
         `algorithm`:  Available only for statistics generation (rows is text samples) -- "npmi" or "pmi", default is "npmi".
         `edge_threshold`: Available only for statistics generation (rows is text samples). Graph edge value threshold, default is 0. Edge value is between -1 to 1.
-        `remove_stopwords`: Build word graph with the words that are not stopwords, default is True.
+        `remove_stopwords`: Build word graph with the words that are not stopwords, default is False.
         `min_freq_to_keep`: Available only for statistics generation (rows is text samples). Build word graph with the words that occurred at least n times in the corpus, default is 2.
 
     Properties:
@@ -185,7 +185,7 @@ class WordGraph:
         window_size=20,
         algorithm="npmi",
         edge_threshold=0.0,
-        remove_stopwords=True,
+        remove_stopwords=False,
         min_freq_to_keep=2,
     ):
         if type(rows[0]) == tuple:
@@ -235,7 +235,7 @@ def _build_pmi_graph(
     window_size=20,
     algorithm="npmi",
     edge_threshold=0.0,
-    remove_stopwords=True,
+    remove_stopwords=False,
     min_freq_to_keep=2,
 ) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
     """
@@ -356,7 +356,7 @@ def _build_pmi_graph(
 
 
 def _build_predefined_graph(
-    words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase, remove_stopwords: bool = True
+    words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase, remove_stopwords: bool = False
 ) -> Tuple[sp.csr_matrix, Dict[str, int], Dict[int, int]]:
     """
     Build pre-defined wgraph from a list of word pairs and their pre-defined relations (edge value).
