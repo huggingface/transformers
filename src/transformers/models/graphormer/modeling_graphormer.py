@@ -535,7 +535,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_bias: Optional[torch.Tensor] = None,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple(torch.Tensor, Optional[torch.Tensor]):
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
         Transformer implementation.
