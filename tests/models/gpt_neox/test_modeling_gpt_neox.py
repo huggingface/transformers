@@ -152,11 +152,10 @@ class GPTNeoXModelTester:
 
     def create_and_check_for_question_answering(self, config, input_ids, input_mask, token_labels):
         config.num_labels = self.num_labels
-        model = GPTNeoXForSequenceClassification(config)
+        model = GPTNeoXForQuestionAnswering(config)
         model.to(torch_device)
         model.eval()
-        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
