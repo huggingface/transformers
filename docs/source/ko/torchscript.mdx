@@ -14,80 +14,65 @@ specific language governing permissions and limitations under the License.
 
 <Tip>
 
-This is the very beginning of our experiments with TorchScript and we are still
-exploring its capabilities with variable-input-size models. It is a focus of interest to
-us and we will deepen our analysis in upcoming releases, with more code examples, a more
-flexible implementation, and benchmarks comparing Python-based codes with compiled
-TorchScript.
+TorchScript를 활용한 실험은 아직 초기 단계로, 가변적인 입력 크기 모델들을 통해 그 기능성을 계속 탐구하고 있습니다. 
+이 기능은 저희가 관심을 두고 있는 분야 중 하나이며, 
+앞으로 출시될 버전에서 더 많은 코드 예제, 더 유연한 구현, 그리고 Python 기반 코드와 컴파일된 TorchScript를 비교하는 벤치마크를 등을 통해 분석을 심화할 예정입니다.
 
 </Tip>
 
-According to the [TorchScript documentation](https://pytorch.org/docs/stable/jit.html):
+[TorchScript 문서](https://pytorch.org/docs/stable/jit.html)에 따르면,
 
-> TorchScript is a way to create serializable and optimizable models from PyTorch code.
+> TorchScript는 PyTorch 코드에서 직렬화 및 최적화 가능한 모델을 생성하는 방법입니다.
 
-There are two PyTorch modules, [JIT and
-TRACE](https://pytorch.org/docs/stable/jit.html), that allow developers to export their
-models to be reused in other programs like efficiency-oriented C++ programs.
+[JIT과 TRACE](https://pytorch.org/docs/stable/jit.html)는 개발자가 모델을 내보내서 효율지향적인 C++ 프로그램과 같은 다른 프로그램에서 재사용할 수 있도록 하는 PyTorch 모듈입니다.
 
-We provide an interface that allows you to export 🤗 Transformers models to TorchScript
-so they can be reused in a different environment than PyTorch-based Python programs.
-Here, we explain how to export and use our models using TorchScript.
+PyTorch 기반 Python 프로그램과 다른 환경에서 모델을 재사용할 수 있도록, 🤗 Transformers 모델을 TorchScript로 내보낼 수 있는 인터페이스를 제공합니다. 
+이 문서에서는 TorchScript를 사용하여 모델을 내보내고 사용하는 방법을 설명합니다.
 
-Exporting a model requires two things:
+모델을 내보내려면 두 가지가 필요합니다:
 
-- model instantiation with the `torchscript` flag
-- a forward pass with dummy inputs
+- `torchscript` 플래그로 모델 인스턴스화
+- 더미 입력을 사용한 순방향 패스(forward pass)
 
-These necessities imply several things developers should be careful about as detailed
-below.
+이러한 필수 사항은 아래에 자세히 설명된 대로 개발자들이 주의해야 할 몇 가지 사항을 담고 있습니다.
 
-## TorchScript 플래그와 묶인 가중치[[torchscript-flag-and-tied-weights]]
+## TorchScript 플래그와 묶인 가중치(tied weights)[[torchscript-flag-and-tied-weights]]
 
-The `torchscript` flag is necessary because most of the 🤗 Transformers language models
-have tied weights between their `Embedding` layer and their `Decoding` layer.
-TorchScript does not allow you to export models that have tied weights, so it is
-necessary to untie and clone the weights beforehand.
+`torchscript` 플래그가 필요한 이유는 대부분의 🤗 Transformers 언어 모델에서 `Embedding` 레이어와 `Decoding` 레이어 간의 묶인 가중치(tied weights)가 존재하기 때문입니다.
+TorchScript는 묶인 가중치를 가진 모델을 내보낼 수 없으므로, 미리 가중치를 풀고 복제해야 합니다.
 
-Models instantiated with the `torchscript` flag have their `Embedding` layer and
-`Decoding` layer separated, which means that they should not be trained down the line.
-Training would desynchronize the two layers, leading to unexpected results.
+`torchscript` 플래그로 인스턴스화된 모델은 `Embedding` 레이어와 `Decoding` 레이어가 분리되어 있으므로 이후에 훈련해서는 안 됩니다.
+훈련을 하게 되면 두 레이어 간 동기화가 해제되어 예상치 못한 결과가 발생할 수 있습니다.
 
-This is not the case for models that do not have a language model head, as those do not
-have tied weights. These models can be safely exported without the `torchscript` flag.
+언어 모델 헤드를 갖지 않은 모델은 가중치가 묶여 있지 않아서 이 문제가 발생하지 않습니다.
+이러한 모델들은 `torchscript` 플래그 없이 안전하게 내보낼 수 있습니다.
 
 ## 더미 입력과 표준 길이[[dummy-inputs-and-standard-lengths]]
 
-The dummy inputs are used for a models forward pass. While the inputs' values are
-propagated through the layers, PyTorch keeps track of the different operations executed
-on each tensor. These recorded operations are then used to create the *trace* of the
-model.
+더미 입력(dummy inputs)은 모델의 순방향 패스(forward pass)에 사용됩니다. 
+입력 값이 레이어를 통해 전파되는 동안, PyTorch는 각 텐서에서 실행된 다른 연산을 추적합니다. 
+이러한 기록된 연산은 모델의 *추적(trace)*을 생성하는 데 사용됩니다.
 
-The trace is created relative to the inputs' dimensions. It is therefore constrained by
-the dimensions of the dummy input, and will not work for any other sequence length or
-batch size. When trying with a different size, the following error is raised:
+추적은 입력의 차원을 기준으로 생성됩니다. 
+따라서 더미 입력의 차원에 제한되어, 다른 시퀀스 길이나 배치 크기에서는 작동하지 않습니다. 
+다른 크기로 시도할 경우 다음과 같은 오류가 발생합니다:
 
 ```
 `The expanded size of the tensor (3) must match the existing size (7) at non-singleton dimension 2`
 ```
+추론 중 모델에 공급될 가장 큰 입력만큼 큰 더미 입력 크기로 모델을 추적하는 것이 좋습니다. 
+패딩은 누락된 값을 채우는 데 도움이 될 수 있습니다.  
+그러나 모델이 더 큰 입력 크기로 추적되기 때문에, 행렬의 차원이 커지고 계산량이 많아집니다.
 
-We recommended you trace the model with a dummy input size at least as large as the
-largest input that will be fed to the model during inference. Padding can help fill the
-missing values. However, since the model is traced with a larger input size, the
-dimensions of the matrix will also be large, resulting in more calculations.
-
-Be careful of the total number of operations done on each input and follow the
-performance closely when exporting varying sequence-length models.
+다양한 시퀀스 길이 모델을 내보낼 때는 각 입력에 대해 수행되는 총 연산 횟수에 주의하고 성능을 주의 깊게 확인하세요.
 
 ## Python에서 TorchScript 사용하기[[using-torchscript-in-python]]
 
-This section demonstrates how to save and load models as well as how to use the trace
-for inference.
+이 섹션에서는 모델을 저장하고 가져오는 방법, 추적을 사용하여 추론하는 방법을 보여줍니다.
 
 ### 모델 저장하기[[saving-a-model]]
 
-To export a `BertModel` with TorchScript, instantiate `BertModel` from the `BertConfig`
-class and then save it to disk under the filename `traced_bert.pt`:
+`BertModel`을 TorchScript로 내보내려면 `BertConfig` 클래스에서 `BertModel`을 인스턴스화한 다음, `traced_bert.pt`라는 파일명으로 디스크에 저장하면 됩니다.
 
 ```python
 from transformers import BertModel, BertTokenizer, BertConfig
@@ -95,23 +80,23 @@ import torch
 
 enc = BertTokenizer.from_pretrained("bert-base-uncased")
 
-# Tokenizing input text
+# 입력 텍스트 토큰화하기
 text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
 tokenized_text = enc.tokenize(text)
 
-# Masking one of the input tokens
+# 입력 토큰 중 하나를 마스킹하기
 masked_index = 8
 tokenized_text[masked_index] = "[MASK]"
 indexed_tokens = enc.convert_tokens_to_ids(tokenized_text)
 segments_ids = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]
 
-# Creating a dummy input
+# 더미 입력 만들기
 tokens_tensor = torch.tensor([indexed_tokens])
 segments_tensors = torch.tensor([segments_ids])
 dummy_input = [tokens_tensor, segments_tensors]
 
-# Initializing the model with the torchscript flag
-# Flag set to True even though it is not necessary as this model does not have an LM Head.
+# torchscript 플래그로 모델 초기화하기
+# 이 모델은 LM 헤드가 없으므로 필요하지 않지만, 플래그를 True로 설정합니다.
 config = BertConfig(
     vocab_size_or_config_json_file=32000,
     hidden_size=768,
@@ -121,24 +106,23 @@ config = BertConfig(
     torchscript=True,
 )
 
-# Instantiating the model
+# 모델을 인스턴트화하기
 model = BertModel(config)
 
-# The model needs to be in evaluation mode
+# 모델을 평가 모드로 두어야 합니다.
 model.eval()
 
-# If you are instantiating the model with *from_pretrained* you can also easily set the TorchScript flag
+# 만약 *from_pretrained*를 사용하여 모델을 인스턴스화하는 경우, TorchScript 플래그를 쉽게 설정할 수 있습니다
 model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
 
-# Creating the trace
+# 추적 생성하기
 traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
 torch.jit.save(traced_model, "traced_bert.pt")
 ```
 
 ### 모델 가져오기[[loading-a-model]]
 
-Now you can load the previously saved `BertModel`, `traced_bert.pt`, from disk and use
-it on the previously initialised `dummy_input`:
+이제 이전에 저장한 `BertModel`, 즉 `traced_bert.pt`를 디스크에서 가져오고, 이전에 초기화한 `dummy_input`에서 사용할 수 있습니다.
 
 ```python
 loaded_model = torch.jit.load("traced_bert.pt")
@@ -149,7 +133,7 @@ all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 
 ### 추적된 모델을 사용하여 추론하기[[using-a-traced-model-for-inference]]
 
-Use the traced model for inference by using its `__call__` dunder method:
+`__call__` 이중 언더스코어(dunder) 메소드를 사용하여 추론에 추적된 모델을 사용하세요:
 
 ```python
 traced_model(tokens_tensor, segments_tensors)
@@ -157,53 +141,31 @@ traced_model(tokens_tensor, segments_tensors)
 
 ## Neuron SDK로 Hugging Face TorchScript 모델을 AWS에 배포하기[[deploy-hugging-face-torchscript-models-to-aws-with-the-neuron-sdk]]
 
-AWS introduced the [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/)
-instance family for low cost, high performance machine learning inference in the cloud.
-The Inf1 instances are powered by the AWS Inferentia chip, a custom-built hardware
-accelerator, specializing in deep learning inferencing workloads. [AWS
-Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) is the SDK for
-Inferentia that supports tracing and optimizing transformers models for deployment on
-Inf1. The Neuron SDK provides:
+AWS가 클라우드에서 저비용, 고성능 머신 러닝 추론을 위한 [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) 인스턴스 제품군을 출시했습니다. 
+Inf1 인스턴스는 딥러닝 추론 워크로드에 특화된 맞춤 하드웨어 가속기인 AWS Inferentia 칩으로 구동됩니다. 
+[AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#)은 Inferentia를 위한 SDK로, Inf1에 배포하기 위한 transformer 모델 추적 및 최적화를 지원합니다. 
+Neuron SDK는 다음과 같은 기능을 제공합니다:
 
-
-1. Easy-to-use API with one line of code change to trace and optimize a TorchScript
-   model for inference in the cloud.
-2. Out of the box performance optimizations for [improved
-   cost-performance](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/>).
-3. Support for Hugging Face transformers models built with either
-   [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html)
-   or
-   [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html).
+1. 코드 한 줄만 변경하면 클라우드 인퍼런스를 위해 TorchScript 모델을 추적하고 최적화할 수 있는 쉬운 API
+2. 즉시 사용 가능한 성능 최적화로 [비용 효율 향상](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/>)
+3. [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html) 또는 [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html)로 구축된 Hugging Face transformers 모델을 지원
 
 ### 시사점[[implications]]
 
-Transformers models based on the [BERT (Bidirectional Encoder Representations from
-Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
-architecture, or its variants such as
-[distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert) and
-[roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta) run best on
-Inf1 for non-generative tasks such as extractive question answering, sequence
-classification, and token classification. However, text generation tasks can still be
-adapted to run on Inf1 according to this [AWS Neuron MarianMT
-tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
-More information about models that can be converted out of the box on Inferentia can be
-found in the [Model Architecture
-Fit](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia)
-section of the Neuron documentation.
+[BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert) 아키텍처 또는 그 변형인 [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert) 및 [roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)를 기반으로 한 Transformers 모델은 추출 기반 질의응답, 시퀀스 분류 및 토큰 분류와 같은 비생성 작업 시 Inf1에서 최상의 성능을 보입니다. 
+그러나 텍스트 생성 작업도 [AWS Neuron MarianMT 튜토리얼](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html)을 따라 Inf1에서 실행되도록 조정할 수 있습니다.
+
+Inferentia에서 바로 변환할 수 있는 모델에 대한 자세한 정보는 Neuron 문서의 [Model Architecture Fit](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia) 섹션에서 확인할 수 있습니다.
 
 ### 종속성[[dependencies]]
 
-Using AWS Neuron to convert models requires a [Neuron SDK
-environment](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide)
-which comes preconfigured on [AWS Deep Learning
-AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html).
+AWS Neuron을 사용하여 모델을 변환하려면 [Neuron SDK 환경](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide)이 필요합니다.
+ 이는 [AWS Deep Learning AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html)에 미리 구성되어 있습니다.
 
 ### AWS Neuron으로 모델 변환하기[[converting-a-model-for-aws-neuron]]
 
-Convert a model for AWS NEURON using the same code from [Using TorchScript in
-Python](serialization#using-torchscript-in-python) to trace a `BertModel`. Import the
-`torch.neuron` framework extension to access the components of the Neuron SDK through a
-Python API:
+`BertModel`을 추적하려면, [Python에서 TorchScript 사용하기](serialization#using-torchscript-in-python)에서와 동일한 코드를 사용해서 AWS NEURON용 모델을 변환합니다. 
+`torch.neuron` 프레임워크 확장을 가져와 Python API를 통해 Neuron SDK의 구성 요소에 접근합니다:
 
 ```python
 from transformers import BertModel, BertTokenizer, BertConfig
@@ -211,15 +173,13 @@ import torch
 import torch.neuron
 ```
 
-You only need to modify the following line:
+다음 줄만 수정하면 됩니다:
 
 ```diff
 - torch.jit.trace(model, [tokens_tensor, segments_tensors])
 + torch.neuron.trace(model, [token_tensor, segments_tensors])
 ```
 
-This enables the Neuron SDK to trace the model and optimize it for Inf1 instances.
+이로써 Neuron SDK가 모델을 추적하고 Inf1 인스턴스에 최적화할 수 있게 됩니다.
 
-To learn more about AWS Neuron SDK features, tools, example tutorials and latest
-updates, please see the [AWS NeuronSDK
-documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html).
+AWS Neuron SDK의 기능, 도구, 예제 튜토리얼 및 최신 업데이트에 대해 자세히 알아보려면 [AWS NeuronSDK 문서](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html)를 참조하세요.
