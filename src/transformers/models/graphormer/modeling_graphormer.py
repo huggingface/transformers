@@ -16,7 +16,7 @@
 
 
 import math
-from typing import Optional, Tuple, Union, Iterable, Iterator
+from typing import List, Optional, Tuple, Union, Iterable, Iterator
 
 import torch
 import torch.nn as nn
@@ -535,7 +535,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_bias: Optional[torch.Tensor] = None,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple(torch.Tensor, Optional[torch.Tensor]):
         """
         nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
         Transformer implementation.
@@ -544,7 +544,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         if self.pre_layernorm:
             input_nodes = self.self_attn_layer_norm(input_nodes)
 
-        input_nodes, attn:Optional[torch.Tensor] = self.self_attn(
+        input_nodes, attn = self.self_attn(
             query=input_nodes,
             key=input_nodes,
             value=input_nodes,
@@ -573,7 +573,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
 
 
 class GraphormerGraphEncoder(nn.Module):
-    def __init__(self, config:GraphormerConfig):
+    def __init__(self, config: GraphormerConfig):
         super().__init__()
 
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
@@ -623,17 +623,17 @@ class GraphormerGraphEncoder(nn.Module):
     def forward(
         self,
         input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges:Union[torch.Tensor, torch.LongTensor],
-        attn_bias:torch.Tensor,
-        in_degree:Union[torch.Tensor, torch.LongTensor],
-        out_degree:Union[torch.Tensor, torch.LongTensor],
-        spatial_pos:Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type:Union[torch.Tensor, torch.LongTensor],
+        input_edges: Union[torch.Tensor, torch.LongTensor],
+        attn_bias: torch.Tensor,
+        in_degree: Union[torch.Tensor, torch.LongTensor],
+        out_degree: Union[torch.Tensor, torch.LongTensor],
+        spatial_pos: Union[torch.Tensor, torch.LongTensor],
+        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
         perturb=None,
         last_state_only: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[Union[torch.Tensor,list[Union[torch.Tensor,torch.LongTensor]]], torch.Tensor]:
+    ) -> Tuple[Union[torch.Tensor, List[Union[torch.Tensor, torch.LongTensor]]], torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
         data_x = input_nodes
         n_graph, n_node = data_x.size()[:2]
@@ -690,14 +690,14 @@ class GraphormerGraphEncoder(nn.Module):
 
 
 class GraphormerDecoderHead(nn.Module):
-    def __init__(self, embedding_dim:int, num_classes:int):
+    def __init__(self, embedding_dim: int, num_classes: int):
         super().__init__()
         """num_classes should be 1 for regression, or the number of classes for classification"""
         self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
         self.classifier = nn.Linear(embedding_dim, num_classes, bias=False)
         self.num_classes = num_classes
 
-    def forward(self, input_nodes:Union[torch.Tensor, torch.LongTensor], **unused)->torch.Tensor:
+    def forward(self, input_nodes: Union[torch.Tensor, torch.LongTensor], **unused) -> torch.Tensor:
         input_nodes = self.classifier(input_nodes)
         input_nodes = input_nodes + self.lm_output_learned_bias
         return input_nodes
@@ -716,12 +716,12 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"
 
-    def normal_(self, data:torch.Tensor):
+    def normal_(self, data: torch.Tensor):
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
         # so that the RNG is consistent with and without FSDP
         data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
 
-    def init_graphormer_params(self, module:nn.Linear):
+    def init_graphormer_params(self, module: nn.Linear):
         """
         Initialize the weights specific to the Graphormer Model.
         """
@@ -738,7 +738,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             self.normal_(module.k_proj.weight.data)
             self.normal_(module.v_proj.weight.data)
 
-    def _init_weights(self, module:Union[nn.Linear,nn.Conv2d]):
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]):
         """
         Initialize the weights
         """
@@ -780,7 +780,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
     this model with a downstream model of your choice, following the example in GraphormerForGraphClassification.
     """
 
-    def __init__(self, config:GraphormerConfig):
+    def __init__(self, config: GraphormerConfig):
         super().__init__(config)
         self.max_nodes = config.max_nodes
 
@@ -804,12 +804,12 @@ class GraphormerModel(GraphormerPreTrainedModel):
     def forward(
         self,
         input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges:Union[torch.Tensor, torch.LongTensor],
-        attn_bias:torch.Tensor,
-        in_degree:Union[torch.Tensor, torch.LongTensor],
-        out_degree:Union[torch.Tensor, torch.LongTensor],
-        spatial_pos:Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type:Union[torch.Tensor, torch.LongTensor],
+        input_edges: Union[torch.Tensor, torch.LongTensor],
+        attn_bias: torch.Tensor,
+        in_degree: Union[torch.Tensor, torch.LongTensor],
+        out_degree: Union[torch.Tensor, torch.LongTensor],
+        spatial_pos: Union[torch.Tensor, torch.LongTensor],
+        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
         perturb=None,
         masked_tokens=None,
         return_dict: Optional[bool] = None,
@@ -855,7 +855,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
       of integer labels for each graph.
     """
 
-    def __init__(self, config:GraphormerConfig):
+    def __init__(self, config: GraphormerConfig):
         super().__init__(config)
         self.encoder = GraphormerModel(config)
         self.embedding_dim = config.embedding_dim
@@ -869,12 +869,12 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     def forward(
         self,
         input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges:Union[torch.Tensor, torch.LongTensor],
-        attn_bias:torch.Tensor,
-        in_degree:Union[torch.Tensor, torch.LongTensor],
-        out_degree:Union[torch.Tensor, torch.LongTensor],
-        spatial_pos:Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type:Union[torch.Tensor, torch.LongTensor],
+        input_edges: Union[torch.Tensor, torch.LongTensor],
+        attn_bias: torch.Tensor,
+        in_degree: Union[torch.Tensor, torch.LongTensor],
+        out_degree: Union[torch.Tensor, torch.LongTensor],
+        spatial_pos: Union[torch.Tensor, torch.LongTensor],
+        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         **unused,
