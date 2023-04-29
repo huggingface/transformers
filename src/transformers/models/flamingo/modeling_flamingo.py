@@ -1,16 +1,16 @@
 import random
-from dataclasses import dataclass
-from typing import Optional, Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
-from ...modeling_utils import PreTrainedModel
-from ..auto import AutoModelForCausalLM, AutoTokenizer, AutoModel
-from ...modeling_outputs import CausalLMOutputWithPast
 from einops import rearrange, repeat
 from accelerate.hooks import add_hook_to_module, AlignDevicesHook
 
-from configuration_flamingo import FlamingoConfig
+from ...modeling_utils import PreTrainedModel
+from ..auto import AutoModelForCausalLM, AutoTokenizer
+from ..clip import CLIPVisionModel
+from ...modeling_outputs import CausalLMOutputWithPast
+from .configuration_flamingo import FlamingoConfig
 
 __KNOWN_DECODER_LAYERS_ATTR_NAMES = {
     "opt": "model.decoder.layers",
@@ -477,7 +477,7 @@ class FlamingoModel(FlamingoPreTrainedModel):
         super().__init__(config)
         lang_encoder = AutoModelForCausalLM.from_config(config.text_config)
         text_tokenizer = AutoTokenizer.from_pretrained(config.text_config._name_or_path)
-        vision_encoder = AutoModel.from_config(config.vision_config).vision_model
+        vision_encoder = CLIPVisionModel(config.vision_config)
 
         text_tokenizer.add_special_tokens({"additional_special_tokens": ["<|endofchunk|>", "<image>"]})
         if text_tokenizer.pad_token is None:
@@ -636,9 +636,9 @@ class FlamingoForConditionalGeneration(FlamingoPreTrainedModel):
         config: FlamingoConfig,
     ):
         super().__init__(config)
-        vision_encoder = AutoModel.from_config(config=config.vision_config).vision_model
+        vision_encoder = CLIPVisionModel(config.vision_config)
         lang_encoder = AutoModelForCausalLM.from_config(config=config.text_config)
-        text_tokenizer = AutoTokenizer.from_pretrained(config=config.text_config._name_or_path)
+        text_tokenizer = AutoTokenizer.from_pretrained(config.text_config._name_or_path)
 
         text_tokenizer.add_special_tokens({"additional_special_tokens": ["<|endofchunk|>", "<image>"]})
         if text_tokenizer.pad_token is None:
@@ -797,7 +797,7 @@ class FlamingoForConditionalGeneration(FlamingoPreTrainedModel):
         Generate text conditioned on vision and language inputs.
 
         Args:
-            vision_x (torch.Tensor): Vision input
+            vision_x (torch.Tensor): Vision ilang_encodeautonput
                 shape (B, T_img, F, C, H, W)
                 images in the same chunk are collated along T_img, and frames are collated along F
                 currently only F=1 is supported (single-frame videos)
@@ -824,7 +824,7 @@ class FlamingoForConditionalGeneration(FlamingoPreTrainedModel):
             lang_x,
             attention_mask=attention_mask,
             eos_token_id=self.eoc_token_id,
-            **kwargs,
+            **generate_kwargs,
         )
 
         self.lang_encoder.clear_conditioned_layers()

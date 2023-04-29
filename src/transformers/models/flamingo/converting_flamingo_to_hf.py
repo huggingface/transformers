@@ -4,18 +4,17 @@ import os
 
 import torch
 import torch.nn as nn
-from ...models import CLIPVisionModel, LlamaForCausalLM, LlamaTokenizer
 
-from modeling_flamingo import (
-    FlamingoConfig,
+from ...models.clip import CLIPVisionModel
+from ..auto import AutoModelForCausalLM, AutoTokenizer
+from .modeling_flamingo import (
     FlamingoPreTrainedModel,
     FlamingoLMMixin,
     extend_instance,
     _infer_decoder_layers_attr_name,
     FlamingoPerceiverResampler,
 )
-
-from configuration_flamingo import FlamingoConfig
+from .configuration_flamingo import FlamingoConfig
 
 
 class FlamingoModel(FlamingoPreTrainedModel):
@@ -26,8 +25,8 @@ class FlamingoModel(FlamingoPreTrainedModel):
         config: FlamingoConfig,
     ):
         super().__init__(config)
-        text_tokenizer = LlamaTokenizer.from_pretrained(config.text_config._name_or_path)
-        lang_encoder = LlamaForCausalLM.from_pretrained(config.text_config._name_or_path)
+        lang_encoder = AutoModelForCausalLM.from_pretrained(config.text_config._name_or_path)
+        text_tokenizer = AutoTokenizer.from_pretrained(config.text_config._name_or_path)
         vision_encoder = CLIPVisionModel.from_pretrained(config.vision_config._name_or_path)
 
         text_tokenizer.add_special_tokens({"additional_special_tokens": ["<|endofchunk|>", "<image>"]})
@@ -100,7 +99,7 @@ def rename_flamingo_checkpoint(old_ckpt: dict[str, torch.Tensor]) -> dict[str, t
 def dump_hf_model(old_ckpt_path: str, new_folder_path: str) -> None:
     os.makedirs(new_folder_path, exist_ok=True)
     old_ckpt = torch.load(old_ckpt_path, map_location="cpu")
-    config = FlamingoConfig.from_json_file("flamingo/config.json")
+    config = FlamingoConfig.from_json_file("transformers/src/transformers/models/flamingo/config.json")
     model = FlamingoModel(config)
     new_ckpt = rename_flamingo_checkpoint(old_ckpt)
     model.load_state_dict(new_ckpt, strict=False)
@@ -124,6 +123,4 @@ if __name__ == "__main__":
         help="Path to the HF folder",
     )
     args = parser.parse_args()
-    if not os.path.exists(os.path.dirname(args.new_hf_path)):
-        os.makedirs(os.path.dirname(args.new_hf_path))
     dump_hf_model(args.old_ckpt_path, args.new_hf_path)
