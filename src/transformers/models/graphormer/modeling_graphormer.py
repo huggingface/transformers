@@ -544,7 +544,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         if self.pre_layernorm:
             input_nodes = self.self_attn_layer_norm(input_nodes)
 
-        input_nodes, attn:Optional[torch.Tensor] = self.self_attn(
+        input_nodes, attn = self.self_attn(
             query=input_nodes,
             key=input_nodes,
             value=input_nodes,
