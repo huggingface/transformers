@@ -16,9 +16,10 @@ from transformers import PretrainedConfig
 
 
 class Beit3Config(PretrainedConfig):
-    def __init__(self, embed_dim=768,
-                 attention_heads=12,
-                 ffn_embed_dim=3072,
+    def __init__(self,
+                 embed_dim=768,
+                 num_attention_heads=12,
+                 hidden_size=3072,
                  layers=12,
                  normalize_before=True,
                  activation_fn="gelu",
@@ -37,14 +38,14 @@ class Beit3Config(PretrainedConfig):
                  patch_size=16,
                  in_chans=3,
                  num_labels=2,
+                 initializer_range=0.02,
                  **kwargs
                  ):
         super().__init__(**kwargs)
         
         self.embed_dim = embed_dim
-        self.attention_heads = attention_heads
-        self.attention_heads = attention_heads
-        self.ffn_embed_dim = ffn_embed_dim
+        self.num_attention_heads = num_attention_heads
+        self.hidden_size = hidden_size
         self.layers = layers
         self.normalize_before = normalize_before
         self.activation_fn = activation_fn
@@ -58,6 +59,7 @@ class Beit3Config(PretrainedConfig):
         self.multiway = multiway
         self.max_source_positions = max_source_positions
         self.layernorm_eps = layernorm_eps
+        self.initializer_range= initializer_range
         # Text
         self.vocab_size = vocab_size
         # Vision
