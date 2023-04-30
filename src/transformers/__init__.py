@@ -179,7 +179,7 @@ _import_structure = {
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
-    "models.beit_3": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
+    "models.beit_3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
