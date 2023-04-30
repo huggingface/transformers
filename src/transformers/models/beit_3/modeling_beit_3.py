@@ -5,8 +5,8 @@ from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
-from torch.autograd.grad_mode import F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from transformers import PreTrainedModel
