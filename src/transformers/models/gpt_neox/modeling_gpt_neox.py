@@ -971,7 +971,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.transformer = GPTNeoXModel(config)
+        self.gpt_neox = GPTNeoXModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
@@ -1010,7 +1010,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
