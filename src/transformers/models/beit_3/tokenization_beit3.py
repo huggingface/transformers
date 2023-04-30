@@ -31,18 +31,14 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
+PRETRAINED_VOCAB_FILES_MAP = {}
 
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
 
 
 class Beit3TextTokenizer(PreTrainedTokenizer):
     """
-    Copied from XLMRobertaTokenizer
-    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
+    Copied from XLMRobertaTokenizer Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to

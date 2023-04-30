@@ -16,34 +16,35 @@ from transformers import PretrainedConfig
 
 
 class Beit3Config(PretrainedConfig):
-    def __init__(self,
-                 embed_dim=768,
-                 num_attention_heads=12,
-                 hidden_size=3072,
-                 layers=12,
-                 normalize_before=True,
-                 activation_fn="gelu",
-                 dropout=0.0,
-                 drop_path_rate=0.0,
-                 attention_dropout=0.0,
-                 activation_dropout=0.0,
-                 deepnorm=False,
-                 subln=True,
-                 bert_init=False,
-                 multiway=True,
-                 max_source_positions=1024,
-                 layernorm_eps=1e-5,
-                 vocab_size=64010,
-                 img_size=224,
-                 patch_size=16,
-                 in_chans=3,
-                 num_labels=2,
-                 initializer_range=0.02,
-                 label_smoothing=0.1,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        embed_dim=768,
+        num_attention_heads=12,
+        hidden_size=3072,
+        layers=12,
+        normalize_before=True,
+        activation_fn="gelu",
+        dropout=0.0,
+        drop_path_rate=0.0,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        deepnorm=False,
+        subln=True,
+        bert_init=False,
+        multiway=True,
+        max_source_positions=1024,
+        layernorm_eps=1e-5,
+        vocab_size=64010,
+        img_size=224,
+        patch_size=16,
+        in_chans=3,
+        num_labels=2,
+        initializer_range=0.02,
+        label_smoothing=0.1,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        
+
         self.embed_dim = embed_dim
         self.num_attention_heads = num_attention_heads
         self.hidden_size = hidden_size
@@ -60,7 +61,7 @@ class Beit3Config(PretrainedConfig):
         self.multiway = multiway
         self.max_source_positions = max_source_positions
         self.layernorm_eps = layernorm_eps
-        self.initializer_range= initializer_range
+        self.initializer_range = initializer_range
         # Text
         self.vocab_size = vocab_size
         # Vision

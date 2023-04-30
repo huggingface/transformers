@@ -14,31 +14,31 @@
 # limitations under the License.
 """ Testing suite for the PyTorch VisualBERT model. """
 
-import copy
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import VisualBertConfig, is_torch_available
 from transformers.models.beit_3.configuration_beit_3 import Beit3Config
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,_config_zero_init
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-import numpy as np
+
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        BEiT3Model,
-        BEiT3ForVisualReasoning,
-        BEiT3ForImageClassification,
         BEiT3ForCaptioning,
-        BEiT3ForVisualQuestionAnswering,
+        BEiT3ForImageClassification,
         BEiT3ForImageTextRetrieval,
+        BEiT3ForVisualQuestionAnswering,
+        BEiT3ForVisualReasoning,
+        BEiT3Model,
     )
-    from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class Beit3ModelTester:
@@ -70,7 +70,6 @@ class Beit3ModelTester:
         use_labels=True,
         is_training=True,
     ):
-
         self.embed_dim = embed_dim
         self.attention_heads = attention_heads
         self.attention_heads = attention_heads
@@ -99,7 +98,7 @@ class Beit3ModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.use_labels = use_labels
-        self.is_training= is_training
+        self.is_training = is_training
 
     def get_config(self):
         return Beit3Config(
@@ -132,21 +131,21 @@ class Beit3ModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids":input_ids, "pixel_values":pixel_values,"padding_mask":padding_mask}
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_value1 = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        pixel_value2 = floats_tensor([self.batch_size, self.in_chans, self.img_size , self.img_size])
-        padding_mask = torch.zeros((self.batch_size,self.seq_length))
+        pixel_value2 = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        padding_mask = torch.zeros((self.batch_size, self.seq_length))
         config = self.get_config()
         model_input = {
             "input_ids": input_ids,
             "pixel_values1": pixel_value1,
             "pixel_values2": pixel_value2,
-            "padding_mask": padding_mask
+            "padding_mask": padding_mask,
         }
-        labels = ids_tensor([self.batch_size],self.num_labels)
+        labels = ids_tensor([self.batch_size], self.num_labels)
         if self.use_labels:
             model_input["labels"] = labels
 
@@ -155,47 +154,37 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_image_classification(self):
         pixel_value = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         config = self.seq_length
-        labels = torch.zeros(
-                    self.batch_size, dtype=torch.long, device=torch_device
-                )
+        labels = torch.zeros(self.batch_size, dtype=torch.long, device=torch_device)
         model_input = {"pixel_values": pixel_value}
         if self.use_labels:
-            model_input["labels"]= labels
+            model_input["labels"] = labels
         return config, model_input
 
     def prepare_config_and_inputs_for_captioning(self):
         language_masked_pos = torch.zeros((self.batch_size, self.seq_length))
-        to_fill = list(range(0,self.seq_length,3))
-        language_masked_pos[:,to_fill] = 1
+        to_fill = list(range(0, self.seq_length, 3))
+        language_masked_pos[:, to_fill] = 1
         config = self.get_config()
-        label = torch.tensor([20,5,2])
-        return config, {"language_masked_pos":language_masked_pos,"labels":label}
+        label = torch.tensor([20, 5, 2])
+        return config, {"language_masked_pos": language_masked_pos, "labels": label}
 
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-            "padding_mask":padding_mask
-        }
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
 
     def prepare_config_and_inputs_for_text_retrieval(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-            "padding_mask":padding_mask
-        }
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
 
     def create_and_check_model(self, config, input_dict):
         model = BEiT3Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(**input_dict)
+        model(**input_dict)
         # self.parent.assertEqual(
         #     result.last_hidden_state.shape,
         #     (self.batch_size, self.seq_length + self.visual_seq_length, self.hidden_size),
@@ -207,6 +196,7 @@ class Beit3ModelTester:
         model.eval()
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     #
     # def create_and_check_for_multiple_choice(self, config, input_dict):
     #     model = VisualBertForMultipleChoice(config=config)
@@ -344,13 +334,13 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict_to_return["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return['pixel_values1'] = inputs_dict["pixel_values"]
-            inputs_dict_to_return['pixel_values2'] = inputs_dict["pixel_values"]
-            inputs_dict_to_return['padding_mask'] = inputs_dict["padding_mask"]
-            inputs_dict_to_return['input_ids'] = inputs_dict["input_ids"]
+            inputs_dict_to_return["pixel_values1"] = inputs_dict["pixel_values"]
+            inputs_dict_to_return["pixel_values2"] = inputs_dict["pixel_values"]
+            inputs_dict_to_return["padding_mask"] = inputs_dict["padding_mask"]
+            inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
             return inputs_dict_to_return
         elif model_class.__name__ == "BEiT3ForImageClassification":
-            inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_image_classification()[1]
+            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_image_classification()[1]
             if return_labels:
                 inputs_dict_to_return["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -360,9 +350,9 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict_to_return["padding_mask"]
             return inputs_dict_to_return
         elif model_class.__name__ == "BEiT3ForImageTextRetrieval":
-            inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
+            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
         elif model_class.__name__ == "BEiT3ForVisualQuestionAnswering":
-            inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
+            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
             inputs_dict_to_return["labels"] = torch.ones(
                 (self.model_tester.batch_size, self.model_tester.num_labels),
                 dtype=torch.float,
@@ -418,7 +408,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
-            total_seq_length = ((self.model_tester.img_size // self.model_tester.patch_size)**2) + 1
+            total_seq_length = ((self.model_tester.img_size // self.model_tester.patch_size) ** 2) + 1
             if model_class.__name__ != "BEiT3ForImageClassification":
                 total_seq_length = total_seq_length + seq_length
             self.assertListEqual(
@@ -461,6 +451,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
 
 #     def test_attention_outputs(self):
 #         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -46,14 +46,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_beit_3 import (
+            BEiT3ForCaptioning,
+            BEiT3ForImageClassification,
+            BEiT3ForImageTextRetrieval,
+            BEiT3ForVisualQuestionAnswering,
+            BEiT3ForVisualReasoning,
             # VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BEiT3Model,
-            BEiT3ForVisualReasoning,
-            BEiT3ForImageClassification,
-            BEiT3ForCaptioning,
-            BEiT3ForVisualQuestionAnswering,
             Biet3ImageTextMatchingModelOutput,
-            BEiT3ForImageTextRetrieval,
         )
 
 
