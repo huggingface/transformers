@@ -40,14 +40,17 @@ class VGCNBertConfig(PretrainedConfig):
 
     Args:
         vgcn_graph_embedding_dim (`int`, *optional*, defaults to 16):
-            Dimensionality of the number of output embedding from VGCN model.
+            Dimensionality of the number of output embedding from VGCN graph embedding module.
         vgcn_hidden_dim (`int`, *optional*, defaults to 128):
-            Dimensionality of the VGCN model hidden layer.
+            Dimensionality of the graph convolutional hidden layer in VGCN.
         vgcn_activation (`str` or `Callable`, *optional*, defaults to `"None"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) for graph convolutional layer in VGCN.
+            If string, `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
         vgcn_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the graph convolutional network in the embeddings, encoder, and pooler.
+            The dropout probability for VGCN graph embedding module.
+        vgcn_weight_init_mode (`str`, defaults to `"transparent"`):
+            The weight initialization mode for VGCN graph embedding module, 
+            `"transparent"`, `"normal"`, `"uniform"` are supported.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the VGCN-BERT model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`VGCNBertModel`] or [`TFVGCNBertModel`].
@@ -104,8 +107,9 @@ class VGCNBertConfig(PretrainedConfig):
         self,
         vgcn_graph_embds_dim=16,
         vgcn_hidden_dim=128,
-        vgcn_activation="relu",
+        vgcn_activation=None,
         vgcn_dropout=0.1,
+        vgcn_weight_init_mode="transparent",
         vocab_size=30522,
         max_position_embeddings=512,
         sinusoidal_pos_embds=False,
@@ -126,6 +130,7 @@ class VGCNBertConfig(PretrainedConfig):
         self.vgcn_hidden_dim = vgcn_hidden_dim
         self.vgcn_activation = vgcn_activation
         self.vgcn_dropout = vgcn_dropout
+        self.vgcn_weight_init_mode = vgcn_weight_init_mode
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
