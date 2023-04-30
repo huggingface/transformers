@@ -46,9 +46,9 @@ pip install transformers datasets evaluate
 >>> notebook_login()
 ```
 
-## SWAG 데이터 세트 불러오기[[load-swag-dataset]]
+## SWAG 데이터 세트 가져오기[[load-swag-dataset]]
 
-먼저 🤗 Datasets  라이브러리에서 SWAG 데이터셋의 '일반' 구성을 불러옵니다:
+먼저 🤗 Datasets  라이브러리에서 SWAG 데이터셋의 '일반' 구성을 가져옵니다:
 
 ```py
 >>> from datasets import load_dataset
@@ -75,13 +75,13 @@ pip install transformers datasets evaluate
 
 여기에는 많은 필드가 있는 것처럼 보이지만 실제로는 매우 간단합니다:
 
-- `sent1` 및 `sent2`: 이 필드는 문장이 어떻게 시작되는지 보여주며, 이 두 필드를 합치면 `startphrase` 필드가 됩니다.
-- `어미(ending)`: 문장이 어떻게 끝날 수 있는지에 대한 가능한 어미를 제시하지만 그 중 하나만 정답입니다.
-- `레이블`: 올바른 문장 어미를 식별합니다.
+- `sent1` 및 `sent2`: 이 필드는 문장이 어떻게 시작되는지 보여주며, 이 두 필드를 합치면 `시작 구절(startphrase)` 필드가 됩니다.
+- `종료 구절(ending)`: 문장이 어떻게 끝날 수 있는지에 대한 가능한 종료 구절를 제시하지만 그 중 하나만 정답입니다.
+- `레이블(label)`: 올바른 문장 종료 구절을 식별합니다.
 
 ## 전처리[[preprocess]]
 
-다음 단계는 문장의 시작과 네 가지 가능한 어미를 처리하기 위해 BERT 토큰화기를 로드하는 것입니다:
+다음 단계는 문장의 시작과 네 가지 가능한 구절을 처리하기 위해 BERT 토크나이저를 불러옵니다:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -92,7 +92,7 @@ pip install transformers datasets evaluate
 생성하려는 전처리 함수는 다음과 같아야 합니다:
 
 1. `sent1` 필드를 네 개 복사한 다음 각각을 `sent2`와 결합하여 문장이 시작되는 방식을 재현합니다.
-2. `sent2`를 네 가지 가능한 문장 어미 각각과 결합합니다.
+2. `sent2`를 네 가지 가능한 문장 구절 각각과 결합합니다.
 3. 이 두 목록을 토큰화할 수 있도록 평탄화(flatten)하고, 각 예제에 해당하는 `input_ids`, `attention_mask` 및 `labels` 필드를 갖도록 다차원화(unflatten) 합니다.
 
 ```py
@@ -113,7 +113,7 @@ pip install transformers datasets evaluate
 ...     return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 ```
 
-전체 데이터 집합에 전처리 기능을 적용하려면 🤗 Datasets [`~datasets.Dataset.map`] 메서드를 사용합니다. `batched=True`를 설정하여 데이터 집합의 여러 요소를 한 번에 처리하면 `map` 함수의 속도를 높일 수 있습니다:
+전체 데이터 집합에 전처리 기능을 적용하려면 🤗 Datasets [`~datasets.Dataset.map`] 메소드를 사용합니다. `batched=True`를 설정하여 데이터 집합의 여러 요소를 한 번에 처리하면 `map` 함수의 속도를 높일 수 있습니다:
 
 ```py
 tokenized_swag = swag.map(preprocess_function, batched=True)
@@ -212,7 +212,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## 평가 하기[[evaluate]]
 
-훈련 중에 메트릭을 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다. 🤗[Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하여 평가 방법을 빠르게 불러올 수 있습니다. 이 작업에서는 [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) 지표를 로드합니다(🤗 Evaluate [빠른 둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하여 지표를 불러오고 계산하는 방법에 대해 자세히 알아보세요):
+훈련 중에 메트릭을 포함하면 모델의 성능을 평가하는 데 도움이 되는 경우가 많습니다. 🤗[Evaluate](https://huggingface.co/docs/evaluate/index) 라이브러리를 사용하여 평가 방법을 빠르게 가져올 수 있습니다. 이 작업에서는 [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) 지표를 가져옵니다(🤗 Evaluate [둘러보기](https://huggingface.co/docs/evaluate/a_quick_tour)를 참조하여 지표를 가져오고 계산하는 방법에 대해 자세히 알아보세요):
 
 ```py
 >>> import evaluate
@@ -232,7 +232,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...     return accuracy.compute(predictions=predictions, references=labels)
 ```
 
-이제 `compute_metrics` 함수를 사용할 준비가 되었으며,  훈련을 설정할 때 이 함수로 돌아가게 됩니다.
+이제 `compute_metrics` 함수를 사용할 준비가 되었으며, 훈련을 설정할 때 이 함수로 돌아가게 됩니다.
 
 ## 훈련 하기[[train]]
 
@@ -254,8 +254,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 이제 세 단계만 남았습니다:
 
-1. 훈련 하이퍼파라미터를 [`TrainingArguments`]에 정의합니다. 유일한 필수 파라미터는 모델을 저장할 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`를 설정하여 이 모델을 허브에 푸시합니다(모델을 업로드하려면 허깅 페이스에 로그인해야 합니다). 각 에포크가 끝날 때마다 [`Trainer`]가 정확도를 평가하고 훈련 체크포인트를 저장합니다.
-2. 모델, 데이터 세트, 토크나이저, 데이터 콜레이터, `compute_metrics` 함수와 함께 훈련 인수를 [`Trainer`]에 전달합니다.
+1. 훈련 하이퍼파라미터를 [`TrainingArguments`]에 정의합니다. 유일한 필수 매개변수는 모델을 저장할 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`를 설정하여 이 모델을 허브에 푸시합니다(모델을 업로드하려면 허깅 페이스에 로그인해야 합니다). 각 에폭이 끝날 때마다 [`Trainer`]가 정확도를 평가하고 훈련 체크포인트를 저장합니다.
+2. 모델, 데이터 세트, 토크나이저, 데이터 콜레이터, `compute_metrics` 함수와 함께 훈련 인자를 [`Trainer`]에 전달합니다.
 3. [`~Trainer.train`]을 사용하여 모델을 미세 조정합니다.
 
 ```py
@@ -294,7 +294,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 <tf>
 <Tip>
 
-Keras로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-a-tensorflow-model-with-keras)을 살펴보시기 바랍니다!
+Keras로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-a-tensorflow-model-with-keras)를 살펴보시기 바랍니다!
 
 </Tip>
 TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 스케쥴 및 몇 가지 학습 하이퍼파라미터를 설정하는 것부터 시작하세요:
@@ -308,7 +308,7 @@ TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 �
 >>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 
-그리고 [`TFAutoModelForMultipleChoice`]로 BERT를 로드할 수 있습니다:
+그리고 [`TFAutoModelForMultipleChoice`]로 BERT를 가져올 수 있습니다:
 
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
@@ -341,7 +341,7 @@ TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 �
 >>> model.compile(optimizer=optimizer)
 ```
 
-훈련을 시작하기 전에 설정해야 할 마지막 두 가지는 예측의 정확도를 계산하고 모델을 Hub로 푸시하는 방법을 제공하는 것입니다. 이 두 가지 작업은 모두 [Keras 콜백](../main_classes/keras_callbacks)을 사용하여 수행할 수 있습니다.
+훈련을 시작하기 전에 설정해야 할 마지막 두 가지는 예측의 정확도를 계산하고 모델을 허브로 푸시하는 방법을 제공하는 것입니다. 이 두 가지 작업은 모두 [Keras 콜백](../main_classes/keras_callbacks)을 사용하여 수행할 수 있습니다.
 
 `compute_metrics`함수를 [`~transformers.KerasMetricCallback`]에 전달하세요:
 
@@ -368,7 +368,7 @@ TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 �
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-이제 모델 훈련을 시작합니다! 훈련 및 검증 데이터 세트, 에포크 수, 콜백을 사용하여 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하고 모델을 미세 조정합니다:
+이제 모델 훈련을 시작합니다! 훈련 및 검증 데이터 세트, 에폭 수, 콜백을 사용하여 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하고 모델을 미세 조정합니다:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
