@@ -164,12 +164,12 @@ class Beit3ModelTester:
         return config, model_input
 
     def prepare_config_and_inputs_for_captioning(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        padding_mask = torch.zeros((self.batch_size, self.seq_length))
-
+        language_masked_pos = torch.zeros((self.batch_size, self.seq_length))
+        to_fill = list(range(0,self.seq_length,3))
+        language_masked_pos[:,to_fill] = 1
         config = self.get_config()
-        return config, {}
+        label = torch.tensor([20,5,2])
+        return config, {"language_masked_pos":language_masked_pos,"labels":label}
 
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -241,7 +241,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             BEiT3ForImageTextRetrieval,
             BEiT3ForVisualQuestionAnswering,
             BEiT3ForImageClassification,
-            # BEiT3ForCaptioning,
+            BEiT3ForCaptioning,
         )
         if is_torch_available()
         else ()
@@ -369,8 +369,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 device=torch_device,
             )
         elif model_class.__name__ == "BEiT3ForCaptioning":
-            inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_captioning()[1]
-
+            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
         inputs_dict_to_return.update(inputs_dict)
         return inputs_dict_to_return
 

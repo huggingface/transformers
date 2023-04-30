@@ -39,6 +39,7 @@ class Beit3Config(PretrainedConfig):
                  in_chans=3,
                  num_labels=2,
                  initializer_range=0.02,
+                 label_smoothing=0.1,
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -68,6 +69,7 @@ class Beit3Config(PretrainedConfig):
         self.in_chans = in_chans
 
         self.num_labels = num_labels
+        self.label_smoothing = label_smoothing
         if self.subln:
             self.normalize_before = True
             self.deepnorm = False

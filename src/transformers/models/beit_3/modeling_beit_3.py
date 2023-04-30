@@ -15,7 +15,7 @@ from transformers.activations import get_activation
 from transformers.models.beit_3.configuration_beit_3 import Beit3Config
 from transformers import  PreTrainedModel
 from transformers.modeling_outputs import ImageClassifierOutputWithNoAttention, \
-    SequenceClassifierOutput
+    SequenceClassifierOutput, CausalLMOutputWithPast
 from transformers.utils import logging, ModelOutput
 import torch.nn.functional as F
 
@@ -812,10 +812,26 @@ class BEiT3ForCaptioning(Beit3PreTrainedModel):
         super(BEiT3ForCaptioning, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = BEiT3Model(config)
-        self.mlm_head = nn.Linear(embed_dim, config.vocab_size)
-        self.mlm_head.apply(self._init_weights)
+        self.label_smoothing = config.label_smoothing
+        self.output = nn.Linear(embed_dim, config.vocab_size)
+        self.log_soft = nn.LogSoftmax(dim=1)
+        self.kl = nn.KLDivLoss(reduction='none')
+        self.post_init()
 
-    def forward(self, input_ids,pixel_values, padding_mask, language_masked_pos, text_len=None, incremental_state=None):
+    def forward(self,
+                input_ids,
+                pixel_values,
+                padding_mask,
+                language_masked_pos,
+                text_len=None,
+                incremental_state=None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                labels: Optional[torch.LongTensor] = None,
+                ):
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         text_len = text_len if text_len is not None else input_ids.size(1)
         image_len = self.beit3.vision_embed.num_position_embeddings()
         max_len = text_len + image_len
@@ -860,7 +876,28 @@ class BEiT3ForCaptioning(Beit3PreTrainedModel):
         if language_masked_pos is not None:
             text_feats = text_feats[language_masked_pos.bool()]
 
-        return self.mlm_head(text_feats), incremental_state
+        logits = self.output(text_feats)
+
+        loss = None
+        if labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            eps = self.label_smoothing
+            n_class = logits.size(1)
+            one_hot = torch.zeros_like(logits).scatter(1, labels.view(-1, 1), 1)
+            one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
+            log_prb = self.log_soft(logits)
+            loss = self.kl(log_prb, one_hot).sum(1)
+
+        if not return_dict:
+            output = (logits,)
+            output = output + (outputs["encoder_states"],) if output_hidden_states else output
+            return ((loss.mean(),) + output) if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss.mean(),
+            logits=logits,
+            hidden_states=outputs['encoder_states'],
+        )
 
 
 class Pooler(nn.Module):
@@ -930,6 +967,7 @@ class BEiT3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         if not return_dict:
             output = (reshaped_logits,) + (encoder_outputs["encoder_states"],) if output_hidden_states else (reshaped_logits,)
             return ((loss,) + output) if loss is not None else output
+
         return SequenceClassifierOutput(
             loss=loss,
             logits=reshaped_logits,
