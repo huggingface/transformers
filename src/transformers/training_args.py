@@ -1156,7 +1156,7 @@ class TrainingArguments:
 
         if self.xpu_backend is not None:
             warnings.warn(
-                "using `xpu_backend` is deprecated and will be removed in version 5"
+                "using `xpu_backend` is deprecated and will be removed in version 4.31"
                 " of 🤗 Transformers. Use `ddp_backend` instead",
                 FutureWarning,
             )
