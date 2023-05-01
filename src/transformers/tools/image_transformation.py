@@ -35,7 +35,7 @@ class ImageTransformationTool(Tool):
     default_controlnet_checkpoint = "lllyasviel/sd-controlnet-canny"
     description = IMAGE_TRANSFORMATION_DESCRIPTION
 
-    def __init__(self, device=None, controlnet=None, stable_diffusion=None) -> None:
+    def __init__(self, device=None, controlnet=None, stable_diffusion=None, **hub_kwargs) -> None:
         if not is_accelerate_available():
             raise ImportError("Accelerate should be installed in order to use tools.")
         if not is_diffusers_available():
@@ -56,6 +56,7 @@ class ImageTransformationTool(Tool):
         self.stable_diffusion_checkpoint = stable_diffusion
 
         self.device = device
+        self.hub_kwargs = hub_kwargs
 
     def setup(self):
         if self.device is None:
