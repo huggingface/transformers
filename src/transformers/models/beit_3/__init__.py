@@ -51,8 +51,8 @@ if TYPE_CHECKING:
             BEiT3ForImageTextRetrieval,
             BEiT3ForVisualQuestionAnswering,
             BEiT3ForVisualReasoning,
-            # VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BEiT3Model,
+            Beit3PreTrainedModel,
             Biet3ImageTextMatchingModelOutput,
         )
 

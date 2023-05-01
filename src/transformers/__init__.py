@@ -6312,6 +6312,8 @@ if TYPE_CHECKING:
             BEiT3ForVisualQuestionAnswering,
             BEiT3ForVisualReasoning,
             BEiT3Model,
+            Beit3PreTrainedModel,
+            Biet3ImageTextMatchingModelOutput,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
