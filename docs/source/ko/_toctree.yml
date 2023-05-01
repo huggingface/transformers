@@ -73,8 +73,8 @@
       title: (번역중) Automatic speech recognition
     title: (번역중) 오디오
   - sections:
-    - local: in_translation
-      title: (번역중) Image classification
+    - local: tasks/image_classification
+      title: 이미지 분류
     - local: in_translation
       title: (번역중) Semantic segmentation
     - local: in_translation
