@@ -787,8 +787,8 @@ class TFBeitPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         """
-        Args:
         Method used for serving the model.
+        Args:
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """

@@ -142,7 +142,7 @@ class TFBeitModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
-    def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels, pixel_labels):
         model = TFBeitForMaskedImageModeling(config=config)
         result = model(pixel_values, training=False)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
@@ -254,7 +254,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
