@@ -18,7 +18,7 @@ import copy
 import importlib
 from collections import OrderedDict
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Union, Tuple
+from typing import TYPE_CHECKING, Union, Tuple, Type
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
@@ -30,13 +30,13 @@ from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 _LazyAutoMappingValue = Tuple[
-    type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
-    type[Union[PreTrainedTokenizerFast, None]]
+    Type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
+    Type[Union[PreTrainedTokenizerFast, None]]
 ]
 
 # Support Python 3.8 and below
 if TYPE_CHECKING:
-    _LazyAutoMappingOrderedDict = OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue]
+    _LazyAutoMappingOrderedDict = OrderedDict[Type[PretrainedConfig], _LazyAutoMappingValue]
 else:
     _LazyAutoMappingOrderedDict = OrderedDict
 
@@ -608,7 +608,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
         common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
         return len(common_keys) + len(self._extra_content)
 
-    def __getitem__(self, key: type[PretrainedConfig]) -> _LazyAutoMappingValue:
+    def __getitem__(self, key: Type[PretrainedConfig]) -> _LazyAutoMappingValue:
         if key in self._extra_content:
             return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
@@ -630,7 +630,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattribute_from_module(self._modules[module_name], attr)
 
-    def keys(self) -> list[type[PretrainedConfig]]:
+    def keys(self) -> list[Type[PretrainedConfig]]:
         mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
@@ -638,7 +638,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
         ]
         return mapping_keys + list(self._extra_content.keys())
 
-    def get(self, key: type[PretrainedConfig], default: _LazyAutoMappingValue) -> _LazyAutoMappingValue:
+    def get(self, key: Type[PretrainedConfig], default: _LazyAutoMappingValue) -> _LazyAutoMappingValue:
         try:
             return self.__getitem__(key)
         except KeyError:
@@ -655,7 +655,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
         ]
         return mapping_values + list(self._extra_content.values())
 
-    def items(self) -> list[tuple[type[PretrainedConfig], _LazyAutoMappingValue]]:
+    def items(self) -> list[tuple[Type[PretrainedConfig], _LazyAutoMappingValue]]:
         mapping_items = [
             (
                 self._load_attr_from_module(key, self._config_mapping[key]),
@@ -666,7 +666,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
         ]
         return mapping_items + list(self._extra_content.items())
 
-    def __iter__(self) -> Iterator[type[PretrainedConfig]]:
+    def __iter__(self) -> Iterator[Type[PretrainedConfig]]:
         return iter(self.keys())
 
     def __contains__(self, item: object) -> bool:
@@ -677,7 +677,7 @@ class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
 
-    def register(self, key: type[PretrainedConfig], value: _LazyAutoMappingValue) -> None:
+    def register(self, key: Type[PretrainedConfig], value: _LazyAutoMappingValue) -> None:
         """
         Register a new model in this mapping.
         """

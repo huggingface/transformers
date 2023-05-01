@@ -20,7 +20,7 @@ import re
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, KeysView, List, TypeVar, Union, ValuesView
+from typing import TYPE_CHECKING, KeysView, List, TypeVar, Union, ValuesView, Type
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
@@ -29,7 +29,7 @@ from ...utils import CONFIG_NAME, logging
 # Support Python 3.8 and below
 if TYPE_CHECKING:
     _LazyLoadAllMappingsOrderedDict = OrderedDict[str, str]
-    _LazyConfigMappingOrderedDict = OrderedDict[str, type[PretrainedConfig]]
+    _LazyConfigMappingOrderedDict = OrderedDict[str, Type[PretrainedConfig]]
 else:
     _LazyLoadAllMappingsOrderedDict = OrderedDict
     _LazyConfigMappingOrderedDict = OrderedDict
@@ -657,7 +657,7 @@ class _LazyConfigMapping(_LazyConfigMappingOrderedDict):
         self._extra_content = {}
         self._modules = {}
 
-    def __getitem__(self, key: str) -> type[PretrainedConfig]:
+    def __getitem__(self, key: str) -> Type[PretrainedConfig]:
         if key in self._extra_content:
             return self._extra_content[key]
         if key not in self._mapping:
@@ -677,10 +677,10 @@ class _LazyConfigMapping(_LazyConfigMappingOrderedDict):
     def keys(self) -> list[str]:
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
-    def values(self) -> list[type[PretrainedConfig]]:
+    def values(self) -> list[Type[PretrainedConfig]]:
         return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
 
-    def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
+    def items(self) -> list[tuple[str, Type[PretrainedConfig]]]:
         return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
 
     def __iter__(self) -> Iterator[str]:
@@ -689,7 +689,7 @@ class _LazyConfigMapping(_LazyConfigMappingOrderedDict):
     def __contains__(self, item: object) -> bool:
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key: str, value: type[PretrainedConfig]) -> None:
+    def register(self, key: str, value: Type[PretrainedConfig]) -> None:
         """
         Register a new configuration in this mapping.
         """
