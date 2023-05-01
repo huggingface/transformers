@@ -91,16 +91,32 @@ def question_answerer(text, question):
     return f"This is the answer to {question} from {text}."
 
 
+@add_description(
+    "This is a tool that downloads the context of an url and returns the text inside. It takes an input named `url`, which is the url to download, and returns the text."
+)
+def text_downloader(url):
+    return f"This is the content of {url}."
+
+
+@add_description(
+    "This is a tool that summarizes texts. It takes an input named `text`, which should be the text to summarize, and returns the summary."
+)
+def summarizer(text):
+    return f"This is a summary of {text}."
+
+
 ALL_TOOLS = [
     classifier,
     translator,
     speaker,
+    summarizer,
     transcriber,
     image_generator,
     image_segmentor,
     image_captioner,
     image_transformer,
     question_answerer,
+    text_downloader,
 ]
 
 
@@ -167,6 +183,10 @@ class Problem:
 
         return task, result
 
+    def base_trial(self):
+        task = self.task[0] if isinstance(self.task, list) else self.task
+        return task, self.minimum_tools
+
 
 ### The list of problems the agent will be evaluated on.
 EVALUATION_TASKS = [
@@ -176,10 +196,10 @@ EVALUATION_TASKS = [
             "Is the text in the variable `text` (in French) positive or negative?",
         ],
         minimum_tools=[classifier, translator],
-        inputs={"text": "Ce text est positive."},
+        inputs={"text": "C'est une review positive."},
         answer=[
-            classifier(translator("Ce text est positive.")["translated_text"]),
-            classifier(translator("Ce text est positive.")["translated_text"])["label"],
+            classifier(translator("C'est une review positive.")["translated_text"]),
+            classifier(translator("C'est une review positive.")["translated_text"])["label"],
         ],
     ),
     Problem(
@@ -189,18 +209,102 @@ EVALUATION_TASKS = [
             "Determine what is in the pictured stored in `image` then read it out loud.",
         ],
         minimum_tools=[image_captioner, speaker],
-        inputs={"image": "Ceci est une image."},
-        answer=speaker(image_captioner("Ceci est une image.")),
+        inputs=["image"],
+        answer=speaker(image_captioner("<<image>>")),
     ),
     Problem(
         task=[
             "Generate an image from the text given in `text_input`. Then transform it according to the text in `prompt`.",
         ],
         minimum_tools=[image_generator, image_transformer],
-        inputs={"text_input": "initial text", "prompt": "transformation prompt"},
-        answer=image_transformer(image_generator("initial text"), "transformation prompt"),
+        inputs=["text_input", "prompt"],
+        answer=image_transformer(image_generator("<<text_input>>"), "<<prompt>>"),
+    ),
+    Problem(
+        task=[
+            "Download the content of `url` and summarize it to me.",
+            "Tell me what the web page at `url` talks about in a few words.",
+        ],
+        minimum_tools=[text_downloader, summarizer],
+        inputs=["url"],
+        answer=summarizer(text_downloader("<<url>>")),
     ),
 ]
+
+
+def get_score(problem, code, tools, verbose: bool = False):
+    if verbose:
+        print(code + "\n")
+    all_tools = {"print": print}
+    all_tools.update({f"tool_{i}": t for i, t in enumerate(tools)})
+    try:
+        if isinstance(problem.inputs, dict):
+            inputs = problem.inputs.copy()
+        else:
+            inputs = {inp: f"<<{inp}>>" for inp in problem.inputs}
+        agent_answer = evaluate(code, all_tools, inputs)
+    except InterpretorError as e:
+        # TODO see if we score errors differently.
+        if verbose:
+            print(e)
+        return 0
+    except Exception as e:
+        if verbose:
+            print(e)
+        return 0
+
+    if verbose:
+        print(agent_answer, problem.answer)
+    theoretical_answer = problem.answer if isinstance(problem.answer, list) else [problem.answer]
+
+    if agent_answer in theoretical_answer:
+        if verbose:
+            print("Perfect!")
+        return 1
+    elif isinstance(agent_answer, dict) and any(v in theoretical_answer for v in agent_answer.values()):
+        if verbose:
+            print("Almsot perfect, result in state!")
+        return 0.75
+    else:
+        if verbose:
+            print("Result is not the right one but code executed.")
+        return 0.3
+
+
+def base_evaluate_agent(agent, batch_size=8, verbose=False):
+    """
+    Mostly a consistency check that all problems can be solved by an agent. Will return the list
+
+    Example:
+
+    ```py
+    agent = OpenAiAgent(model="text-davinci-003", api_key=your_api_key)
+    bads = base_evaluate_agent(agent)
+    for bad in bads:
+        print(bad)
+    ```
+    """
+    bad_problems = []
+    for start_idx in range(0, len(EVALUATION_TASKS), batch_size):
+        end_idx = min(start_idx + batch_size, len(EVALUATION_TASKS))
+        base_tasks = [pb.base_trial() for pb in EVALUATION_TASKS[start_idx:end_idx]]
+        batch_tasks = [t[0] for t in base_tasks]
+        batch_tools = [t[1] for t in base_tasks]
+
+        results = agent.generate_code(batch_tasks, tools=batch_tools)
+
+        for idx, result in enumerate(results):
+            problem = EVALUATION_TASKS[start_idx + idx]
+            if verbose:
+                print(f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n")
+            code = agent.clean_code(result)[0]
+            score = get_score(problem, code, batch_tools[idx], verbose=verbose)
+
+            if score != 1.0:
+                summary = f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n\n{code}"
+                bad_problems.append(summary)
+
+    return bad_problems
 
 
 def evaluate_agent(agent, total_batches=1, batch_size=8, max_new_tools=4, verbose=False):
@@ -236,37 +340,6 @@ def evaluate_agent(agent, total_batches=1, batch_size=8, max_new_tools=4, verbos
             if verbose:
                 print(f"====Task {idx}====\n{batch_tasks[idx]}\n")
             code = agent.clean_code(result)[0]
-            if verbose:
-                print(code + "\n")
-            all_tools = {"print": print}
-            all_tools.update({f"tool_{i}": t for i, t in enumerate(batch_tools[idx])})
-            try:
-                agent_answer = evaluate(code, all_tools, problem.inputs.copy())
-            except InterpretorError as e:
-                # TODO see if we score errors differently.
-                if verbose:
-                    print(e)
-                continue
-            except Exception as e:
-                if verbose:
-                    print(e)
-                continue
-
-            if verbose:
-                print(agent_answer, problem.answer)
-            theoretical_answer = problem.answer if isinstance(problem.answer, list) else [problem.answer]
-
-            if agent_answer in theoretical_answer:
-                if verbose:
-                    print("Perfect!")
-                score += 1
-            elif isinstance(agent_answer, dict) and any(v in theoretical_answer for v in agent_answer.values()):
-                if verbose:
-                    print("Almsot perfect, result in state!")
-                score += 0.75
-            else:
-                if verbose:
-                    print("Result is not the right one but code executed.")
-                score += 0.3
+            score += get_score(problem, code, batch_tools[idx], verbose=verbose)
 
     return round(score * 100 / (batch_size * total_batches), 2)
