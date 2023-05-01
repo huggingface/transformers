@@ -32,7 +32,7 @@ else:
         "BEiT3ForVisualQuestionAnswering",
         "Biet3ImageTextMatchingModelOutput",
         "BEiT3ForImageTextRetrieval",
-        "Beit3PreTrainedModel"
+        "Beit3PreTrainedModel",
     ]
 
 

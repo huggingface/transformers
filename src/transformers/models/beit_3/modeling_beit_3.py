@@ -40,6 +40,7 @@ BEIT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 def set_split_position(position):
     def apply_fn(module):
         if hasattr(module, "split_position"):
@@ -575,6 +576,7 @@ class Beit3Encoder(nn.Module):
             "encoder_states": encoder_states,
         }
 
+
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
@@ -685,6 +687,7 @@ class BEiT3Model(Beit3PreTrainedModel):
 # def no_weight_decay(self):
 #     return {'pos_embed', 'cls_token', 'beit3.encoder.embed_positions.A.weight', 'beit3.vision_embed.cls_token', 'logit_scale'}
 
+
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
@@ -754,6 +757,7 @@ class BEiT3ForVisualReasoning(Beit3PreTrainedModel):
             hidden_states=outputs["encoder_states"],
         )
 
+
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
@@ -818,6 +822,7 @@ class BEiT3ForImageClassification(Beit3PreTrainedModel):
             logits=logits,
             hidden_states=encoder_outputs["encoder_states"],
         )
+
 
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
@@ -936,6 +941,7 @@ class Pooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
+
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
@@ -1036,6 +1042,7 @@ class Biet3ImageTextMatchingModelOutput(ModelOutput):
     loss: Optional[torch.Tensor] = None
     text_hidden: Optional[torch.FloatTensor] = None
     image_hidden: Optional[torch.FloatTensor] = None
+
 
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
