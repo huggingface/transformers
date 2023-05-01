@@ -31,7 +31,7 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 _LazyAutoMappingValue = Tuple[
     Type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
-    Type[Union[PreTrainedTokenizerFast, None]]
+    Type[Union[PreTrainedTokenizerFast, None]],
 ]
 
 # Support Python 3.8 and below

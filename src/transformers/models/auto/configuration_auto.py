@@ -34,7 +34,7 @@ else:
     _LazyLoadAllMappingsOrderedDict = OrderedDict
     _LazyConfigMappingOrderedDict = OrderedDict
 
-_T= TypeVar("_T")
+_T = TypeVar("_T")
 
 logger = logging.get_logger(__name__)
 
