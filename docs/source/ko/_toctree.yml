@@ -51,8 +51,8 @@
         title: 텍스트 분류
       - local: tasks/token_classification
         title: 토큰 분류
-      - local: in_translation
-        title: (번역중) Question answering
+      - local: tasks/question_answering
+        title: 질의 응답(Question Answering)
       - local: in_translation
         title: (번역중) Causal language modeling
       - local: tasks/masked_language_modeling
