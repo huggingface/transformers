@@ -46,7 +46,7 @@ def classifier(text):
 
 @add_description(translation_description)
 def translator(text):
-    return {"translated_text": f"This is the translation in English of {text}"}
+    return f"This is the translation in English of {text}."
 
 
 @add_description(text_to_speech_description)
