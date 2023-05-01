@@ -1105,7 +1105,7 @@ class GCViTModel(GCViTPreTrainedModel):
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
         self.embeddings = GCViTEmbeddings(config, use_mask_token=use_mask_token)
-        print(self.embeddings.shape)
+        print(self.embeddings)
         self.encoder = GCViTEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
