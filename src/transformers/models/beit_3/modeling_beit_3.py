@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import get_activation
 from transformers.modeling_outputs import (
     CausalLMOutputWithPast,
@@ -29,6 +29,16 @@ EVAL_CAPACITY_TOKEN_FRACTION = 0.25
 SAMPLE_FRACTION = 0.2
 logger = logging.get_logger(__name__)
 
+BEIT_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 def set_split_position(position):
     def apply_fn(module):
@@ -38,7 +48,7 @@ def set_split_position(position):
     return apply_fn
 
 
-class TwoLayerMLP(nn.Module):
+class Beit3TwoLayerMLP(nn.Module):
     def __init__(
         self,
         in_features,
@@ -105,7 +115,7 @@ class Beit3PreTrainedModel(PreTrainedModel):
             # module.vision_embed.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Encoder):
+        if isinstance(module, Beit3Encoder):
             module.gradient_checkpointing = value
 
     # def _init_weights(self, m):
@@ -155,11 +165,11 @@ class MutliwayEmbedding(MultiwayNetwork):
         self.split_position = -1
 
 
-class VisionEmbedding(Beit3PreTrainedModel):
+class VisionEmbedding(nn.Module):
     """Image to Patch Embedding"""
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         img_size = (config.img_size, config.img_size)
         patch_size = (config.patch_size, config.patch_size)
         num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
@@ -228,9 +238,9 @@ class PositionalEmbedding(nn.Embedding):
         )
 
 
-class FeedForwardNetwork(Beit3PreTrainedModel):
+class FeedForwardNetwork(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.embed_dim = config.embed_dim
         self.activation_fn = get_activation(config.activation_fn)
         self.activation_dropout_module = torch.nn.Dropout(config.activation_dropout)
@@ -259,7 +269,7 @@ class FeedForwardNetwork(Beit3PreTrainedModel):
         return x
 
 
-class MultiheadAttention(Beit3PreTrainedModel):
+class MultiheadAttention(nn.Module):
     def __init__(
         self,
         config,
@@ -267,7 +277,7 @@ class MultiheadAttention(Beit3PreTrainedModel):
         encoder_decoder_attention=False,
         subln=False,
     ):
-        super().__init__(config)
+        super().__init__()
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -369,7 +379,7 @@ class MultiheadAttention(Beit3PreTrainedModel):
         return attn, attn_weights
 
 
-class EncoderLayer(Beit3PreTrainedModel):
+class Beit3EncoderLayer(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_dim = config.embed_dim
@@ -461,7 +471,7 @@ def init_bert_params(module):
             normal_(module.v_proj.weight.data)
 
 
-class Encoder(nn.Module):
+class Beit3Encoder(nn.Module):
     def __init__(
         self,
         config,
@@ -478,7 +488,7 @@ class Encoder(nn.Module):
         self.layers = nn.ModuleList([])
 
         for i in range(config.layers):
-            self.layers.append(EncoderLayer(config))
+            self.layers.append(Beit3EncoderLayer(config))
         self.num_layers = len(self.layers)
         self.layer_norm = MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
 
@@ -565,7 +575,13 @@ class Encoder(nn.Module):
             "encoder_states": encoder_states,
         }
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3Model(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -583,7 +599,7 @@ class BEiT3Model(Beit3PreTrainedModel):
             ],
             dim=1,
         )
-        self.encoder = Encoder(
+        self.encoder = Beit3Encoder(
             config,
             embed_positions=embed_positions,
         )
@@ -669,28 +685,25 @@ class BEiT3Model(Beit3PreTrainedModel):
 # def no_weight_decay(self):
 #     return {'pos_embed', 'cls_token', 'beit3.encoder.embed_positions.A.weight', 'beit3.vision_embed.cls_token', 'logit_scale'}
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3ForVisualReasoning(Beit3PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForVisualReasoning, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = BEiT3Model(config)
-        self.head = TwoLayerMLP(
+        self.head = Beit3TwoLayerMLP(
             in_features=embed_dim * 4,
             hidden_features=embed_dim * 2,
             out_features=config.num_labels,
             norm_layer=nn.LayerNorm,
         )
         self.post_init()
-        # init_scale = 0.001
-        # self.head.apply(self._init_weights)
-        # if isinstance(self.head.dense1, nn.Linear):
-        #     self.head.dense1.weight.data.mul_(init_scale)
-        #     self.head.dense1.bias.data.mul_(init_scale)
-        #
-        # if isinstance(self.head.dense2, nn.Linear):
-        #     self.head.dense2.weight.data.mul_(init_scale)
-        #     self.head.dense2.bias.data.mul_(init_scale)
 
     def forward(
         self,
@@ -741,7 +754,13 @@ class BEiT3ForVisualReasoning(Beit3PreTrainedModel):
             hidden_states=outputs["encoder_states"],
         )
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3ForImageClassification(Beit3PreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -800,7 +819,13 @@ class BEiT3ForImageClassification(Beit3PreTrainedModel):
             hidden_states=encoder_outputs["encoder_states"],
         )
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3ForCaptioning(Beit3PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForCaptioning, self).__init__(config)
@@ -911,7 +936,13 @@ class Pooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3ForVisualQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForVisualQuestionAnswering, self).__init__(config)
@@ -1006,7 +1037,13 @@ class Biet3ImageTextMatchingModelOutput(ModelOutput):
     text_hidden: Optional[torch.FloatTensor] = None
     image_hidden: Optional[torch.FloatTensor] = None
 
-
+@add_start_docstrings(
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    BEIT_START_DOCSTRING,
+)
 class BEiT3ForImageTextRetrieval(Beit3PreTrainedModel):
     def __init__(self, config):
         super(BEiT3ForImageTextRetrieval, self).__init__(config)
