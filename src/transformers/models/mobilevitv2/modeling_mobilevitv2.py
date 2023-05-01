@@ -463,9 +463,7 @@ class MobileViTv2TransformerLayer(nn.Module):
         self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, ffn_dropout, dropout)
         
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        print("Shape before layernorm: ", hidden_states.shape)
         layernorm_1_out = self.layernorm_before(hidden_states)
-        print("Shape after layernorm: ", layernorm_1_out.shape)
         attention_output = self.attention(layernorm_1_out)
         hidden_states = attention_output + hidden_states
 
@@ -642,15 +640,11 @@ class MobileViTv2Layer(nn.Module):
 
         # convert feature map to patches
         patches, output_size = self.unfolding_pytorch(features, )
-
-        print("##### Before global_rep: ", patches.shape)
         
         # learn global representations
         patches = self.transformer(patches)
         patches = self.layernorm(patches)
         
-        print("##### After global_rep: ", patches.shape)
-
         # convert patches back to feature maps 
         # [B x Patch x Patches x C] --> [B x C x Patches x Patch]
         features = self.folding_pytorch(patches, output_size)
@@ -685,14 +679,7 @@ class MobileViTv2Encoder(nn.Module):
         layer_4_dim = int(make_divisible(384 * config.width_multiplier, divisor=8))
         layer_5_dim = int(make_divisible(512 * config.width_multiplier, divisor=8))
         ffn_multiplier = 2
-        
-        # print("layer_0_dim : ", layer_0_dim)
-        # print("layer_1_dim : ", layer_1_dim)
-        # print("layer_2_dim : ", layer_2_dim)
-        # print("layer_3_dim : ", layer_3_dim)
-        # print("layer_4_dim : ", layer_4_dim)
-        # print("layer_5_dim : ", layer_5_dim)
-        
+           
         # 1: layer_1
         layer_1 = MobileViTv2MobileNetLayer(
             config,
@@ -781,9 +768,7 @@ class MobileViTv2Encoder(nn.Module):
                     hidden_states,
                 )
             else:
-                print("______________ {}: layer_{} ______________".format(i+1, i+1))
                 hidden_states = layer_module(hidden_states)
-                print(hidden_states.shape)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -911,9 +896,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        print("______________ 0: conv_1 ______________")
         embedding_output = self.conv_stem(pixel_values)
-        print(embedding_output.shape)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -922,9 +905,7 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         )
 
         if self.expand_output:
-            print("______________ 6: conv_1x1_exp ______________")
             last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
-            print(last_hidden_state.shape)
 
             # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
@@ -1065,7 +1046,8 @@ class MobileViTv2ASPP(nn.Module):
     def __init__(self, config: MobileViTv2Config) -> None:
         super().__init__()
 
-        in_channels = config.neck_hidden_sizes[-2]
+        # in_channels = config.neck_hidden_sizes[-2] #TODO: put correct value
+        in_channels = 640
         out_channels = config.aspp_out_channels
 
         if len(config.atrous_rates) != 3:

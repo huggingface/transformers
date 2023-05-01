@@ -50,10 +50,6 @@ class MobileViTv2Config(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_sizes (`List[int]`, *optional*, defaults to `[144, 192, 240]`):
             Dimensionality (hidden size) of the Transformer encoders at each stage.
-        neck_hidden_sizes (`List[int]`, *optional*, defaults to `[16, 32, 64, 96, 128, 160, 640]`):
-            The number of channels for the feature maps of the backbone.
-        num_attention_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads for each attention layer in the Transformer encoder.
         mlp_ratio (`float`, *optional*, defaults to 2.0):
             The ratio of the number of channels in the output of the MLP to the number of channels in the input.
         expand_ratio (`float`, *optional*, defaults to 4.0):
@@ -64,18 +60,12 @@ class MobileViTv2Config(PretrainedConfig):
             The size of the convolutional kernel in the MobileViTv2 layer.
         output_stride (`int`, `optional`, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the Transformer encoder.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
         aspp_out_channels (`int`, `optional`, defaults to 256):
             Number of output channels used in the ASPP layer for semantic segmentation.
         atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
@@ -106,26 +96,18 @@ class MobileViTv2Config(PretrainedConfig):
         num_channels=3,
         image_size=256,
         patch_size=2,
-        num_attention_heads=4,
         mlp_ratio=2.0,
         expand_ratio=2.0,
         hidden_act="swish",
         conv_kernel_size=3,
         output_stride=32,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        qkv_bias=True,
         aspp_out_channels=256,
         atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
-        conv_init = 'kaiming_normal',
-        conv_init_std_dev= 0.02,
-        linear_init='trunc_normal',
-        linear_init_std_dev= 0.02,
-        
+        classifier_dropout_prob=0.1,
         ####
         width_multiplier=1.0,    # Width multiplier. Defaults to 1.0
         ffn_dropout=0.0,         # "Dropout between FFN layers. Defaults to 0.0",
@@ -138,17 +120,13 @@ class MobileViTv2Config(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.expand_ratio = expand_ratio
         self.hidden_act = hidden_act
         self.conv_kernel_size = conv_kernel_size
         self.output_stride = output_stride
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
 
         # decode head attributes for semantic segmentation
         self.aspp_out_channels = aspp_out_channels
@@ -160,11 +138,8 @@ class MobileViTv2Config(PretrainedConfig):
         self.width_multiplier = width_multiplier
         self.ffn_dropout = ffn_dropout
         self.attn_dropout = attn_dropout
+        self.classifier_dropout_prob=classifier_dropout_prob
         
-        self.conv_init = conv_init
-        self.conv_init_std_dev = conv_init_std_dev
-        self.linear_init=linear_init
-        self.linear_init_std_dev=linear_init_std_dev
 
 
 class MobileViTv2OnnxConfig(OnnxConfig):
