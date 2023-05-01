@@ -108,7 +108,6 @@ class GCViTConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         drop_path_rate=0.0,
         hidden_act="gelu",
-        use_absolute_embeddings=False,
         initializer_range=0.02,
         layer_scale=None,
         norm_layer="layernorm2d",
@@ -132,7 +131,6 @@ class GCViTConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.layer_scale = layer_scale

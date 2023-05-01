@@ -277,44 +277,22 @@ class GCViTDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->GCViT
+
 class GCViTEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config, use_mask_token=False):
+    def __init__(self, config):
         super().__init__()
 
         self.patch_embeddings = GCViTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.patch_grid = self.patch_embeddings.grid_size
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
-
-        if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
-        else:
-            self.position_embeddings = None
-
-        self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
-    ) -> Tuple[torch.Tensor]:
+        self, pixel_values: Optional[torch.FloatTensor]) -> torch.Tensor:
+
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
-        embeddings = self.norm(embeddings)
-        batch_size, seq_len, _ = embeddings.size()
-
-        if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-        if self.position_embeddings is not None:
-            embeddings = embeddings + self.position_embeddings
-
         embeddings = self.dropout(embeddings)
 
         return embeddings, output_dimensions
@@ -398,28 +376,14 @@ class GCViTPatchEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        image_size, patch_size= config.image_size, config.patch_size
+        image_size =  config.image_size, 
         num_channels, hidden_size = config.num_channels, config.embed_dim
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_patches = num_patches
-        self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=2)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=3, stride=2)
         self.conv_down = ReduceSize(dim = hidden_size, keep_dim=True)
-
-    def maybe_pad(self, pixel_values, height, width):
-        if width % self.patch_size[1] != 0:
-            pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
-            pixel_values = nn.functional.pad(pixel_values, pad_values)
-        if height % self.patch_size[0] != 0:
-            pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
-            pixel_values = nn.functional.pad(pixel_values, pad_values)
-        return pixel_values
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
@@ -427,13 +391,13 @@ class GCViTPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        # pad the input to be divisible by self.patch_size, if needed
-        pixel_values = self.maybe_pad(pixel_values, height, width)
+
         embeddings = self.projection(pixel_values)
-        embeddings = embeddings.transpose(1, 2)
+        # embeddings = embeddings.transpose(1, 2)
         embeddings = self.conv_down(embeddings)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
+        # Check if we really need to flatten it
         embeddings = embeddings.flatten(2)
         return embeddings, output_dimensions
 
@@ -922,7 +886,7 @@ class GCViTStage(nn.Module):
         return stage_outputs
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Encoder with Swinv2->GCViT
+
 class GCViTEncoder(nn.Module):
     def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
         super().__init__()
@@ -949,7 +913,7 @@ class GCViTEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.forward with SwinEncoderOutput->GCViTEncoderOutput
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1096,16 +1060,15 @@ GCVIT_INPUTS_DOCSTRING = r"""
     "The bare GCViT Model transformer outputting raw hidden-states without any specific head on top.",
     GCVIT_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->GCVIT,Swin->GCViT
+
 class GCViTModel(GCViTPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
-        self.embeddings = GCViTEmbeddings(config, use_mask_token=use_mask_token)
-        print(self.embeddings)
+        self.embeddings = GCViTEmbeddings(config)
         self.encoder = GCViTEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
