@@ -18,7 +18,7 @@ import copy
 import importlib
 from collections import OrderedDict
 from collections.abc import Iterator
-from typing import Union
+from typing import TYPE_CHECKING, Union, Tuple
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
@@ -28,6 +28,17 @@ from ...utils.dummy_sentencepiece_objects import T5Tokenizer, FNetTokenizer, Peg
 from ..rag.tokenization_rag import RagTokenizer
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
+
+_LazyAutoMappingValue = Tuple[
+    type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
+    type[Union[PreTrainedTokenizerFast, None]]
+]
+
+# Support Python 3.8 and below
+if TYPE_CHECKING:
+    _LazyAutoMappingOrderedDict = OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue]
+else:
+    _LazyAutoMappingOrderedDict = OrderedDict
 
 
 logger = logging.get_logger(__name__)
@@ -576,12 +587,8 @@ def getattribute_from_module(module, attr):
     else:
         raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
-_LazyAutoMappingValue = tuple[
-    type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
-    type[Union[PreTrainedTokenizerFast, None]]
-]
 
-class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue]):
+class _LazyAutoMapping(_LazyAutoMappingOrderedDict):
     """
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 

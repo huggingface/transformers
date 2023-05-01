@@ -20,11 +20,19 @@ import re
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from typing import KeysView, List, TypeVar, Union, ValuesView
+from typing import TYPE_CHECKING, KeysView, List, TypeVar, Union, ValuesView
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...utils import CONFIG_NAME, logging
+
+# Support Python 3.8 and below
+if TYPE_CHECKING:
+    _LazyLoadAllMappingsOrderedDict = OrderedDict[str, str]
+    _LazyConfigMappingOrderedDict = OrderedDict[str, type[PretrainedConfig]]
+else:
+    _LazyLoadAllMappingsOrderedDict = OrderedDict
+    _LazyConfigMappingOrderedDict = OrderedDict
 
 _T= TypeVar("_T")
 
@@ -639,7 +647,7 @@ def config_class_to_model_type(config):
     return None
 
 
-class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
+class _LazyConfigMapping(_LazyConfigMappingOrderedDict):
     """
     A dictionary that lazily load its values when they are requested.
     """
@@ -693,7 +701,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
 
-class _LazyLoadAllMappings(OrderedDict[str, str]):
+class _LazyLoadAllMappings(_LazyLoadAllMappingsOrderedDict):
     """
     A mapping that will load all pairs of key values at the first access (either by indexing, requestions keys, values,
     etc.)
