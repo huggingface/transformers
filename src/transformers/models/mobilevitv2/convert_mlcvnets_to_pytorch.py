@@ -26,163 +26,723 @@ from PIL import Image
 
 from transformers import (
     MobileViTv2Config,
-    MobileViTv2FeatureExtractor,
+    MobileViTv2ImageProcessor,
     MobileViTv2ForImageClassification,
     MobileViTv2ForSemanticSegmentation,
 )
 from transformers.utils import logging
 
+import collections
+import yaml
+import copy
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_mobilevitv2_config(mobilevitv2_name):
+def load_orig_config_file(orig_cfg_file):
+    print("Loading config file...")
+    
+    def flatten_yaml_as_dict(d, parent_key="", sep="."):
+        items = []
+        for k, v in d.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, collections.abc.MutableMapping):
+                items.extend(flatten_yaml_as_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
+
+    config = argparse.Namespace()
+    with open(orig_cfg_file, "r") as yaml_file:
+        try:
+            cfg = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+            flat_cfg = flatten_yaml_as_dict(cfg)
+            for k, v in flat_cfg.items():
+                    setattr(config, k, v)
+        except yaml.YAMLError as exc:
+            logger.error(
+                "Error while loading config file: {}. Error message: {}".format(
+                    orig_cfg_file, str(exc)
+                )
+            )
+    return (config)
+
+
+def get_mobilevitv2_config(task_name, orig_cfg_file):
     config = MobileViTv2Config()
 
-    # size of the architecture
-    if "mobilevitv2_s" in mobilevitv2_name:
-        config.hidden_sizes = [144, 192, 240]
-        config.neck_hidden_sizes = [16, 32, 64, 96, 128, 160, 640]
-    elif "mobilevitv2_xs" in mobilevitv2_name:
-        config.hidden_sizes = [96, 120, 144]
-        config.neck_hidden_sizes = [16, 32, 48, 64, 80, 96, 384]
-    elif "mobilevitv2_xxs" in mobilevitv2_name:
-        config.hidden_sizes = [64, 80, 96]
-        config.neck_hidden_sizes = [16, 16, 24, 48, 64, 80, 320]
-        config.hidden_dropout_prob = 0.05
-        config.expand_ratio = 2.0
-
-    if mobilevitv2_name.startswith("deeplabv3_"):
-        config.image_size = 512
-        config.output_stride = 16
-        config.num_labels = 21
-        filename = "pascal-voc-id2label.json"
-    else:
+    # dataset
+    if task_name.startswith('imagenet1k_'):
         config.num_labels = 1000
+        if int(task_name.strip().split('_')[-1])==384:
+            config.image_size = 384
+        else:
+            config.image_size = 256
         filename = "imagenet-1k-id2label.json"
-
+    elif task_name.startswith('imagenet21k_to_1k_'):
+        config.num_labels = 21000
+        if int(task_name.strip().split('_')[-1])==384:
+            config.image_size = 384
+        else:
+            config.image_size = 256
+        filename = "imagenet-22k-id2label.json"
+    elif task_name.startswith('coco_'):
+        config.num_labels = 91
+        config.image_size = 320
+        filename = "coco-detection-id2label.json"
+    elif task_name.startswith('ade20k_'):
+        config.num_labels = 151
+        config.image_size = 512
+        filename = "ade20k-id2label.json"
+    elif task_name.startswith('voc_'):
+        config.num_labels = 21
+        config.image_size = 512
+        filename = "pascal-voc-id2label.json"
+    
+    
+    # orig_config
+    orig_config = load_orig_config_file(orig_cfg_file)
+    assert getattr(orig_config, 'model.classification.name', -1)=='mobilevit_v2', "Invalid model"
+    config.width_multiplier = getattr(orig_config, 'model.classification.mitv2.width_multiplier', 1.0)
+    assert getattr(orig_config, 'model.classification.mitv2.attn_norm_layer', -1)=='layer_norm_2d', "Norm layers other than layer_norm_2d is not supported"
+    config.hidden_act = getattr(orig_config, 'model.classification.activation.name', 'swish')
+    config.conv_init = getattr(orig_config, 'model.layer.conv_init', 'kaiming_normal')
+    config.conv_init_std_dev = getattr(orig_config, 'model.layer.conv_init_std_dev', 0.02)
+    config.linear_init = getattr(orig_config, 'model.layer.linear_init', 'trunc_normal')
+    config.linear_init_std_dev =getattr(orig_config, 'model.layer.linear_init_std_dev', 0.02)
+    # config.image_size == getattr(orig_config,  'sampler.bs.crop_size_width', 256)
+    
+    # id2label
     repo_id = "huggingface/label-files"
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
-
+    
     return config
 
 
-def rename_key(name, base_model=False):
-    for i in range(1, 6):
-        if f"layer_{i}." in name:
-            name = name.replace(f"layer_{i}.", f"encoder.layer.{i - 1}.")
+new_keys_list = [
+"{model_prefix}.conv_stem.convolution.weight",
+"{model_prefix}.conv_stem.normalization.weight",
+"{model_prefix}.conv_stem.normalization.bias",
+"{model_prefix}.conv_stem.normalization.running_mean",
+"{model_prefix}.conv_stem.normalization.running_var",
+"{model_prefix}.conv_stem.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.0.layer.0.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.0.layer.0.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.0.layer.0.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.0.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.0.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.0.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.1.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.1.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.1.layer.1.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.2.downsampling_layer.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.2.downsampling_layer.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.2.downsampling_layer.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.2.conv_kxk.convolution.weight",
+"{model_prefix}.encoder.layer.2.conv_kxk.normalization.weight",
+"{model_prefix}.encoder.layer.2.conv_kxk.normalization.bias",
+"{model_prefix}.encoder.layer.2.conv_kxk.normalization.running_mean",
+"{model_prefix}.encoder.layer.2.conv_kxk.normalization.running_var",
+"{model_prefix}.encoder.layer.2.conv_kxk.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.layernorm_before.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.layernorm_before.bias",
+"{model_prefix}.encoder.layer.2.conv_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.layernorm_after.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.layernorm_after.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.0.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.layernorm_before.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.layernorm_before.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.layernorm_after.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.layernorm_after.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.2.transformer.layer.1.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.2.layernorm.weight",
+"{model_prefix}.encoder.layer.2.layernorm.bias",
+"{model_prefix}.encoder.layer.2.conv_projection.convolution.weight",
+"{model_prefix}.encoder.layer.2.conv_projection.normalization.weight",
+"{model_prefix}.encoder.layer.2.conv_projection.normalization.bias",
+"{model_prefix}.encoder.layer.2.conv_projection.normalization.running_mean",
+"{model_prefix}.encoder.layer.2.conv_projection.normalization.running_var",
+"{model_prefix}.encoder.layer.2.conv_projection.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.3.downsampling_layer.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.3.downsampling_layer.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.3.downsampling_layer.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.3.conv_kxk.convolution.weight",
+"{model_prefix}.encoder.layer.3.conv_kxk.normalization.weight",
+"{model_prefix}.encoder.layer.3.conv_kxk.normalization.bias",
+"{model_prefix}.encoder.layer.3.conv_kxk.normalization.running_mean",
+"{model_prefix}.encoder.layer.3.conv_kxk.normalization.running_var",
+"{model_prefix}.encoder.layer.3.conv_kxk.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.3.conv_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.layernorm_before.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.layernorm_before.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.layernorm_after.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.layernorm_after.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.0.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.layernorm_before.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.layernorm_before.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.layernorm_after.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.layernorm_after.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.1.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.layernorm_before.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.layernorm_before.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.layernorm_after.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.layernorm_after.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.2.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.layernorm_before.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.layernorm_before.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.layernorm_after.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.layernorm_after.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.3.transformer.layer.3.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.3.layernorm.weight",
+"{model_prefix}.encoder.layer.3.layernorm.bias",
+"{model_prefix}.encoder.layer.3.conv_projection.convolution.weight",
+"{model_prefix}.encoder.layer.3.conv_projection.normalization.weight",
+"{model_prefix}.encoder.layer.3.conv_projection.normalization.bias",
+"{model_prefix}.encoder.layer.3.conv_projection.normalization.running_mean",
+"{model_prefix}.encoder.layer.3.conv_projection.normalization.running_var",
+"{model_prefix}.encoder.layer.3.conv_projection.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.4.downsampling_layer.expand_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.convolution.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.normalization.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.normalization.bias",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.normalization.running_mean",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.normalization.running_var",
+"{model_prefix}.encoder.layer.4.downsampling_layer.conv_3x3.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.normalization.weight",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.normalization.bias",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.normalization.running_mean",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.normalization.running_var",
+"{model_prefix}.encoder.layer.4.downsampling_layer.reduce_1x1.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.4.conv_kxk.convolution.weight",
+"{model_prefix}.encoder.layer.4.conv_kxk.normalization.weight",
+"{model_prefix}.encoder.layer.4.conv_kxk.normalization.bias",
+"{model_prefix}.encoder.layer.4.conv_kxk.normalization.running_mean",
+"{model_prefix}.encoder.layer.4.conv_kxk.normalization.running_var",
+"{model_prefix}.encoder.layer.4.conv_kxk.normalization.num_batches_tracked",
+"{model_prefix}.encoder.layer.4.conv_1x1.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.layernorm_before.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.layernorm_before.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.layernorm_after.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.layernorm_after.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.0.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.layernorm_before.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.layernorm_before.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.layernorm_after.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.layernorm_after.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.1.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.layernorm_before.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.layernorm_before.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.attention.qkv_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.attention.qkv_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.attention.out_proj.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.attention.out_proj.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.layernorm_after.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.layernorm_after.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.ffn.conv1.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.ffn.conv1.convolution.bias",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.ffn.conv2.convolution.weight",
+"{model_prefix}.encoder.layer.4.transformer.layer.2.ffn.conv2.convolution.bias",
+"{model_prefix}.encoder.layer.4.layernorm.weight",
+"{model_prefix}.encoder.layer.4.layernorm.bias",
+"{model_prefix}.encoder.layer.4.conv_projection.convolution.weight",
+"{model_prefix}.encoder.layer.4.conv_projection.normalization.weight",
+"{model_prefix}.encoder.layer.4.conv_projection.normalization.bias",
+"{model_prefix}.encoder.layer.4.conv_projection.normalization.running_mean",
+"{model_prefix}.encoder.layer.4.conv_projection.normalization.running_var",
+"{model_prefix}.encoder.layer.4.conv_projection.normalization.num_batches_tracked",
+"classifier.weight",
+"classifier.bias",
+]
 
-    if "conv_1." in name:
-        name = name.replace("conv_1.", "conv_stem.")
-    if ".block." in name:
-        name = name.replace(".block.", ".")
+orig_keys_list = [
+"conv_1.block.conv.weight",
+"conv_1.block.norm.weight",
+"conv_1.block.norm.bias",
+"conv_1.block.norm.running_mean",
+"conv_1.block.norm.running_var",
+"conv_1.block.norm.num_batches_tracked",
+"layer_1.0.block.exp_1x1.block.conv.weight",
+"layer_1.0.block.exp_1x1.block.norm.weight",
+"layer_1.0.block.exp_1x1.block.norm.bias",
+"layer_1.0.block.exp_1x1.block.norm.running_mean",
+"layer_1.0.block.exp_1x1.block.norm.running_var",
+"layer_1.0.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_1.0.block.conv_3x3.block.conv.weight",
+"layer_1.0.block.conv_3x3.block.norm.weight",
+"layer_1.0.block.conv_3x3.block.norm.bias",
+"layer_1.0.block.conv_3x3.block.norm.running_mean",
+"layer_1.0.block.conv_3x3.block.norm.running_var",
+"layer_1.0.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_1.0.block.red_1x1.block.conv.weight",
+"layer_1.0.block.red_1x1.block.norm.weight",
+"layer_1.0.block.red_1x1.block.norm.bias",
+"layer_1.0.block.red_1x1.block.norm.running_mean",
+"layer_1.0.block.red_1x1.block.norm.running_var",
+"layer_1.0.block.red_1x1.block.norm.num_batches_tracked",
+"layer_2.0.block.exp_1x1.block.conv.weight",
+"layer_2.0.block.exp_1x1.block.norm.weight",
+"layer_2.0.block.exp_1x1.block.norm.bias",
+"layer_2.0.block.exp_1x1.block.norm.running_mean",
+"layer_2.0.block.exp_1x1.block.norm.running_var",
+"layer_2.0.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_2.0.block.conv_3x3.block.conv.weight",
+"layer_2.0.block.conv_3x3.block.norm.weight",
+"layer_2.0.block.conv_3x3.block.norm.bias",
+"layer_2.0.block.conv_3x3.block.norm.running_mean",
+"layer_2.0.block.conv_3x3.block.norm.running_var",
+"layer_2.0.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_2.0.block.red_1x1.block.conv.weight",
+"layer_2.0.block.red_1x1.block.norm.weight",
+"layer_2.0.block.red_1x1.block.norm.bias",
+"layer_2.0.block.red_1x1.block.norm.running_mean",
+"layer_2.0.block.red_1x1.block.norm.running_var",
+"layer_2.0.block.red_1x1.block.norm.num_batches_tracked",
+"layer_2.1.block.exp_1x1.block.conv.weight",
+"layer_2.1.block.exp_1x1.block.norm.weight",
+"layer_2.1.block.exp_1x1.block.norm.bias",
+"layer_2.1.block.exp_1x1.block.norm.running_mean",
+"layer_2.1.block.exp_1x1.block.norm.running_var",
+"layer_2.1.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_2.1.block.conv_3x3.block.conv.weight",
+"layer_2.1.block.conv_3x3.block.norm.weight",
+"layer_2.1.block.conv_3x3.block.norm.bias",
+"layer_2.1.block.conv_3x3.block.norm.running_mean",
+"layer_2.1.block.conv_3x3.block.norm.running_var",
+"layer_2.1.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_2.1.block.red_1x1.block.conv.weight",
+"layer_2.1.block.red_1x1.block.norm.weight",
+"layer_2.1.block.red_1x1.block.norm.bias",
+"layer_2.1.block.red_1x1.block.norm.running_mean",
+"layer_2.1.block.red_1x1.block.norm.running_var",
+"layer_2.1.block.red_1x1.block.norm.num_batches_tracked",
+"layer_3.0.block.exp_1x1.block.conv.weight",
+"layer_3.0.block.exp_1x1.block.norm.weight",
+"layer_3.0.block.exp_1x1.block.norm.bias",
+"layer_3.0.block.exp_1x1.block.norm.running_mean",
+"layer_3.0.block.exp_1x1.block.norm.running_var",
+"layer_3.0.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_3.0.block.conv_3x3.block.conv.weight",
+"layer_3.0.block.conv_3x3.block.norm.weight",
+"layer_3.0.block.conv_3x3.block.norm.bias",
+"layer_3.0.block.conv_3x3.block.norm.running_mean",
+"layer_3.0.block.conv_3x3.block.norm.running_var",
+"layer_3.0.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_3.0.block.red_1x1.block.conv.weight",
+"layer_3.0.block.red_1x1.block.norm.weight",
+"layer_3.0.block.red_1x1.block.norm.bias",
+"layer_3.0.block.red_1x1.block.norm.running_mean",
+"layer_3.0.block.red_1x1.block.norm.running_var",
+"layer_3.0.block.red_1x1.block.norm.num_batches_tracked",
+"layer_3.1.local_rep.0.block.conv.weight",
+"layer_3.1.local_rep.0.block.norm.weight",
+"layer_3.1.local_rep.0.block.norm.bias",
+"layer_3.1.local_rep.0.block.norm.running_mean",
+"layer_3.1.local_rep.0.block.norm.running_var",
+"layer_3.1.local_rep.0.block.norm.num_batches_tracked",
+"layer_3.1.local_rep.1.block.conv.weight",
+"layer_3.1.global_rep.0.pre_norm_attn.0.weight",
+"layer_3.1.global_rep.0.pre_norm_attn.0.bias",
+"layer_3.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_3.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_3.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_3.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_3.1.global_rep.0.pre_norm_ffn.0.weight",
+"layer_3.1.global_rep.0.pre_norm_ffn.0.bias",
+"layer_3.1.global_rep.0.pre_norm_ffn.1.block.conv.weight",
+"layer_3.1.global_rep.0.pre_norm_ffn.1.block.conv.bias",
+"layer_3.1.global_rep.0.pre_norm_ffn.3.block.conv.weight",
+"layer_3.1.global_rep.0.pre_norm_ffn.3.block.conv.bias",
+"layer_3.1.global_rep.1.pre_norm_attn.0.weight",
+"layer_3.1.global_rep.1.pre_norm_attn.0.bias",
+"layer_3.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_3.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_3.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_3.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_3.1.global_rep.1.pre_norm_ffn.0.weight",
+"layer_3.1.global_rep.1.pre_norm_ffn.0.bias",
+"layer_3.1.global_rep.1.pre_norm_ffn.1.block.conv.weight",
+"layer_3.1.global_rep.1.pre_norm_ffn.1.block.conv.bias",
+"layer_3.1.global_rep.1.pre_norm_ffn.3.block.conv.weight",
+"layer_3.1.global_rep.1.pre_norm_ffn.3.block.conv.bias",
+"layer_3.1.global_rep.2.weight",
+"layer_3.1.global_rep.2.bias",
+"layer_3.1.conv_proj.block.conv.weight",
+"layer_3.1.conv_proj.block.norm.weight",
+"layer_3.1.conv_proj.block.norm.bias",
+"layer_3.1.conv_proj.block.norm.running_mean",
+"layer_3.1.conv_proj.block.norm.running_var",
+"layer_3.1.conv_proj.block.norm.num_batches_tracked",
+"layer_4.0.block.exp_1x1.block.conv.weight",
+"layer_4.0.block.exp_1x1.block.norm.weight",
+"layer_4.0.block.exp_1x1.block.norm.bias",
+"layer_4.0.block.exp_1x1.block.norm.running_mean",
+"layer_4.0.block.exp_1x1.block.norm.running_var",
+"layer_4.0.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_4.0.block.conv_3x3.block.conv.weight",
+"layer_4.0.block.conv_3x3.block.norm.weight",
+"layer_4.0.block.conv_3x3.block.norm.bias",
+"layer_4.0.block.conv_3x3.block.norm.running_mean",
+"layer_4.0.block.conv_3x3.block.norm.running_var",
+"layer_4.0.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_4.0.block.red_1x1.block.conv.weight",
+"layer_4.0.block.red_1x1.block.norm.weight",
+"layer_4.0.block.red_1x1.block.norm.bias",
+"layer_4.0.block.red_1x1.block.norm.running_mean",
+"layer_4.0.block.red_1x1.block.norm.running_var",
+"layer_4.0.block.red_1x1.block.norm.num_batches_tracked",
+"layer_4.1.local_rep.0.block.conv.weight",
+"layer_4.1.local_rep.0.block.norm.weight",
+"layer_4.1.local_rep.0.block.norm.bias",
+"layer_4.1.local_rep.0.block.norm.running_mean",
+"layer_4.1.local_rep.0.block.norm.running_var",
+"layer_4.1.local_rep.0.block.norm.num_batches_tracked",
+"layer_4.1.local_rep.1.block.conv.weight",
+"layer_4.1.global_rep.0.pre_norm_attn.0.weight",
+"layer_4.1.global_rep.0.pre_norm_attn.0.bias",
+"layer_4.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_4.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_4.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_4.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_4.1.global_rep.0.pre_norm_ffn.0.weight",
+"layer_4.1.global_rep.0.pre_norm_ffn.0.bias",
+"layer_4.1.global_rep.0.pre_norm_ffn.1.block.conv.weight",
+"layer_4.1.global_rep.0.pre_norm_ffn.1.block.conv.bias",
+"layer_4.1.global_rep.0.pre_norm_ffn.3.block.conv.weight",
+"layer_4.1.global_rep.0.pre_norm_ffn.3.block.conv.bias",
+"layer_4.1.global_rep.1.pre_norm_attn.0.weight",
+"layer_4.1.global_rep.1.pre_norm_attn.0.bias",
+"layer_4.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_4.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_4.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_4.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_4.1.global_rep.1.pre_norm_ffn.0.weight",
+"layer_4.1.global_rep.1.pre_norm_ffn.0.bias",
+"layer_4.1.global_rep.1.pre_norm_ffn.1.block.conv.weight",
+"layer_4.1.global_rep.1.pre_norm_ffn.1.block.conv.bias",
+"layer_4.1.global_rep.1.pre_norm_ffn.3.block.conv.weight",
+"layer_4.1.global_rep.1.pre_norm_ffn.3.block.conv.bias",
+"layer_4.1.global_rep.2.pre_norm_attn.0.weight",
+"layer_4.1.global_rep.2.pre_norm_attn.0.bias",
+"layer_4.1.global_rep.2.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_4.1.global_rep.2.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_4.1.global_rep.2.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_4.1.global_rep.2.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_4.1.global_rep.2.pre_norm_ffn.0.weight",
+"layer_4.1.global_rep.2.pre_norm_ffn.0.bias",
+"layer_4.1.global_rep.2.pre_norm_ffn.1.block.conv.weight",
+"layer_4.1.global_rep.2.pre_norm_ffn.1.block.conv.bias",
+"layer_4.1.global_rep.2.pre_norm_ffn.3.block.conv.weight",
+"layer_4.1.global_rep.2.pre_norm_ffn.3.block.conv.bias",
+"layer_4.1.global_rep.3.pre_norm_attn.0.weight",
+"layer_4.1.global_rep.3.pre_norm_attn.0.bias",
+"layer_4.1.global_rep.3.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_4.1.global_rep.3.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_4.1.global_rep.3.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_4.1.global_rep.3.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_4.1.global_rep.3.pre_norm_ffn.0.weight",
+"layer_4.1.global_rep.3.pre_norm_ffn.0.bias",
+"layer_4.1.global_rep.3.pre_norm_ffn.1.block.conv.weight",
+"layer_4.1.global_rep.3.pre_norm_ffn.1.block.conv.bias",
+"layer_4.1.global_rep.3.pre_norm_ffn.3.block.conv.weight",
+"layer_4.1.global_rep.3.pre_norm_ffn.3.block.conv.bias",
+"layer_4.1.global_rep.4.weight",
+"layer_4.1.global_rep.4.bias",
+"layer_4.1.conv_proj.block.conv.weight",
+"layer_4.1.conv_proj.block.norm.weight",
+"layer_4.1.conv_proj.block.norm.bias",
+"layer_4.1.conv_proj.block.norm.running_mean",
+"layer_4.1.conv_proj.block.norm.running_var",
+"layer_4.1.conv_proj.block.norm.num_batches_tracked",
+"layer_5.0.block.exp_1x1.block.conv.weight",
+"layer_5.0.block.exp_1x1.block.norm.weight",
+"layer_5.0.block.exp_1x1.block.norm.bias",
+"layer_5.0.block.exp_1x1.block.norm.running_mean",
+"layer_5.0.block.exp_1x1.block.norm.running_var",
+"layer_5.0.block.exp_1x1.block.norm.num_batches_tracked",
+"layer_5.0.block.conv_3x3.block.conv.weight",
+"layer_5.0.block.conv_3x3.block.norm.weight",
+"layer_5.0.block.conv_3x3.block.norm.bias",
+"layer_5.0.block.conv_3x3.block.norm.running_mean",
+"layer_5.0.block.conv_3x3.block.norm.running_var",
+"layer_5.0.block.conv_3x3.block.norm.num_batches_tracked",
+"layer_5.0.block.red_1x1.block.conv.weight",
+"layer_5.0.block.red_1x1.block.norm.weight",
+"layer_5.0.block.red_1x1.block.norm.bias",
+"layer_5.0.block.red_1x1.block.norm.running_mean",
+"layer_5.0.block.red_1x1.block.norm.running_var",
+"layer_5.0.block.red_1x1.block.norm.num_batches_tracked",
+"layer_5.1.local_rep.0.block.conv.weight",
+"layer_5.1.local_rep.0.block.norm.weight",
+"layer_5.1.local_rep.0.block.norm.bias",
+"layer_5.1.local_rep.0.block.norm.running_mean",
+"layer_5.1.local_rep.0.block.norm.running_var",
+"layer_5.1.local_rep.0.block.norm.num_batches_tracked",
+"layer_5.1.local_rep.1.block.conv.weight",
+"layer_5.1.global_rep.0.pre_norm_attn.0.weight",
+"layer_5.1.global_rep.0.pre_norm_attn.0.bias",
+"layer_5.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_5.1.global_rep.0.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_5.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_5.1.global_rep.0.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_5.1.global_rep.0.pre_norm_ffn.0.weight",
+"layer_5.1.global_rep.0.pre_norm_ffn.0.bias",
+"layer_5.1.global_rep.0.pre_norm_ffn.1.block.conv.weight",
+"layer_5.1.global_rep.0.pre_norm_ffn.1.block.conv.bias",
+"layer_5.1.global_rep.0.pre_norm_ffn.3.block.conv.weight",
+"layer_5.1.global_rep.0.pre_norm_ffn.3.block.conv.bias",
+"layer_5.1.global_rep.1.pre_norm_attn.0.weight",
+"layer_5.1.global_rep.1.pre_norm_attn.0.bias",
+"layer_5.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_5.1.global_rep.1.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_5.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_5.1.global_rep.1.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_5.1.global_rep.1.pre_norm_ffn.0.weight",
+"layer_5.1.global_rep.1.pre_norm_ffn.0.bias",
+"layer_5.1.global_rep.1.pre_norm_ffn.1.block.conv.weight",
+"layer_5.1.global_rep.1.pre_norm_ffn.1.block.conv.bias",
+"layer_5.1.global_rep.1.pre_norm_ffn.3.block.conv.weight",
+"layer_5.1.global_rep.1.pre_norm_ffn.3.block.conv.bias",
+"layer_5.1.global_rep.2.pre_norm_attn.0.weight",
+"layer_5.1.global_rep.2.pre_norm_attn.0.bias",
+"layer_5.1.global_rep.2.pre_norm_attn.1.qkv_proj.block.conv.weight",
+"layer_5.1.global_rep.2.pre_norm_attn.1.qkv_proj.block.conv.bias",
+"layer_5.1.global_rep.2.pre_norm_attn.1.out_proj.block.conv.weight",
+"layer_5.1.global_rep.2.pre_norm_attn.1.out_proj.block.conv.bias",
+"layer_5.1.global_rep.2.pre_norm_ffn.0.weight",
+"layer_5.1.global_rep.2.pre_norm_ffn.0.bias",
+"layer_5.1.global_rep.2.pre_norm_ffn.1.block.conv.weight",
+"layer_5.1.global_rep.2.pre_norm_ffn.1.block.conv.bias",
+"layer_5.1.global_rep.2.pre_norm_ffn.3.block.conv.weight",
+"layer_5.1.global_rep.2.pre_norm_ffn.3.block.conv.bias",
+"layer_5.1.global_rep.3.weight",
+"layer_5.1.global_rep.3.bias",
+"layer_5.1.conv_proj.block.conv.weight",
+"layer_5.1.conv_proj.block.norm.weight",
+"layer_5.1.conv_proj.block.norm.bias",
+"layer_5.1.conv_proj.block.norm.running_mean",
+"layer_5.1.conv_proj.block.norm.running_var",
+"layer_5.1.conv_proj.block.norm.num_batches_tracked",
+"classifier.1.weight",
+"classifier.1.bias",
+]
 
-    if "exp_1x1" in name:
-        name = name.replace("exp_1x1", "expand_1x1")
-    if "red_1x1" in name:
-        name = name.replace("red_1x1", "reduce_1x1")
-    if ".local_rep.conv_3x3." in name:
-        name = name.replace(".local_rep.conv_3x3.", ".conv_kxk.")
-    if ".local_rep.conv_1x1." in name:
-        name = name.replace(".local_rep.conv_1x1.", ".conv_1x1.")
-    if ".norm." in name:
-        name = name.replace(".norm.", ".normalization.")
-    if ".conv." in name:
-        name = name.replace(".conv.", ".convolution.")
-    if ".conv_proj." in name:
-        name = name.replace(".conv_proj.", ".conv_projection.")
 
-    for i in range(0, 2):
-        for j in range(0, 4):
-            if f".{i}.{j}." in name:
-                name = name.replace(f".{i}.{j}.", f".{i}.layer.{j}.")
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
 
-    for i in range(2, 6):
-        for j in range(0, 4):
-            if f".{i}.{j}." in name:
-                name = name.replace(f".{i}.{j}.", f".{i}.")
-                if "expand_1x1" in name:
-                    name = name.replace("expand_1x1", "downsampling_layer.expand_1x1")
-                if "conv_3x3" in name:
-                    name = name.replace("conv_3x3", "downsampling_layer.conv_3x3")
-                if "reduce_1x1" in name:
-                    name = name.replace("reduce_1x1", "downsampling_layer.reduce_1x1")
-
-    for i in range(2, 5):
-        if f".global_rep.{i}.weight" in name:
-            name = name.replace(f".global_rep.{i}.weight", ".layernorm.weight")
-        if f".global_rep.{i}.bias" in name:
-            name = name.replace(f".global_rep.{i}.bias", ".layernorm.bias")
-
-    if ".global_rep." in name:
-        name = name.replace(".global_rep.", ".transformer.")
-    if ".pre_norm_mha.0." in name:
-        name = name.replace(".pre_norm_mha.0.", ".layernorm_before.")
-    if ".pre_norm_mha.1.out_proj." in name:
-        name = name.replace(".pre_norm_mha.1.out_proj.", ".attention.output.dense.")
-    if ".pre_norm_ffn.0." in name:
-        name = name.replace(".pre_norm_ffn.0.", ".layernorm_after.")
-    if ".pre_norm_ffn.1." in name:
-        name = name.replace(".pre_norm_ffn.1.", ".intermediate.dense.")
-    if ".pre_norm_ffn.4." in name:
-        name = name.replace(".pre_norm_ffn.4.", ".output.dense.")
-    if ".transformer." in name:
-        name = name.replace(".transformer.", ".transformer.layer.")
-
-    if ".aspp_layer." in name:
-        name = name.replace(".aspp_layer.", ".")
-    if ".aspp_pool." in name:
-        name = name.replace(".aspp_pool.", ".")
-    if "seg_head." in name:
-        name = name.replace("seg_head.", "segmentation_head.")
-    if "segmentation_head.classifier.classifier." in name:
-        name = name.replace("segmentation_head.classifier.classifier.", "segmentation_head.classifier.")
-
-    if "classifier.fc." in name:
-        name = name.replace("classifier.fc.", "classifier.")
-    elif (not base_model) and ("segmentation_head." not in name):
-        name = "mobilevitv2." + name
-
-    return name
-
-
-def convert_state_dict(orig_state_dict, model, base_model=False):
+def create_rename_keys(state_dict, base_model=False):
+    
     if base_model:
         model_prefix = ""
     else:
         model_prefix = "mobilevitv2."
-
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
-
-        if key[:8] == "encoder.":
-            key = key[8:]
-
-        if "qkv" in key:
-            key_split = key.split(".")
-            layer_num = int(key_split[0][6:]) - 1
-            transformer_num = int(key_split[3])
-            layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}")
-            dim = layer.transformer.layer[transformer_num].attention.attention.all_head_size
-            prefix = (
-                f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
-            )
-            if "weight" in key:
-                orig_state_dict[prefix + "query.weight"] = val[:dim, :]
-                orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]
-                orig_state_dict[prefix + "value.weight"] = val[-dim:, :]
-            else:
-                orig_state_dict[prefix + "query.bias"] = val[:dim]
-                orig_state_dict[prefix + "key.bias"] = val[dim : dim * 2]
-                orig_state_dict[prefix + "value.bias"] = val[-dim:]
-        else:
-            orig_state_dict[rename_key(key, base_model)] = val
-
-    return orig_state_dict
+    
+    rename_keys = []
+    for k in state_dict.keys():
+        k_new = k
+        
+        if ".block." in k:
+            k_new = k_new.replace(".block.", ".")
+        if ".conv." in k:
+            k_new = k_new.replace(".conv.", ".convolution.")
+        if ".norm." in k:
+            k_new = k_new.replace(".norm.", ".normalization.")
+                        
+        if "conv_1." in k:
+            k_new = k_new.replace("conv_1.", f"{model_prefix}conv_stem.")
+        for i in [1,2]:
+            if f"layer_{i}." in k:
+                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i-1}.layer.")
+        if ".exp_1x1." in k:
+            k_new = k_new.replace(".exp_1x1.", ".expand_1x1.")
+        if ".red_1x1." in k:
+            k_new = k_new.replace(".red_1x1.", ".reduce_1x1.")
+            
+        for i in [3,4,5]:
+            if f"layer_{i}.0." in k:
+                k_new = k_new.replace(f"layer_{i}.0." , f"{model_prefix}encoder.layer.{i-1}.downsampling_layer.")
+            if f"layer_{i}.1.local_rep.0." in k:
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.0." , f"{model_prefix}encoder.layer.{i-1}.conv_kxk.")
+            if f"layer_{i}.1.local_rep.1." in k:
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.1." , f"{model_prefix}encoder.layer.{i-1}.conv_1x1.")
+                
+        for i in [3,4,5]:
+            if i==3:
+                j_in = [0,1]
+            elif i==4:
+                j_in = [0,1,2,3]
+            elif i==5:
+                j_in = [0,1,2]
+                
+            for j in j_in:
+                if f"layer_{i}.1.global_rep.{j}." in k:
+                    k_new = k_new.replace(f"layer_{i}.1.global_rep.{j}." , f"{model_prefix}encoder.layer.{i-1}.transformer.layer.{j}.")
+            if f"layer_{i}.1.global_rep.{j+1}." in k:
+                    k_new = k_new.replace(f"layer_{i}.1.global_rep.{j+1}." , f"{model_prefix}encoder.layer.{i-1}.layernorm.")
+                    
+            if f"layer_{i}.1.conv_proj." in k:
+                k_new = k_new.replace(f"layer_{i}.1.conv_proj." , f"{model_prefix}encoder.layer.{i-1}.conv_projection.")
+                
+        if "pre_norm_attn.0." in k:
+            k_new = k_new.replace("pre_norm_attn.0.", "layernorm_before.")
+        if "pre_norm_attn.1." in k:
+            k_new = k_new.replace("pre_norm_attn.1.", "attention.")
+        if "pre_norm_ffn.0." in k:
+            k_new = k_new.replace("pre_norm_ffn.0.", "layernorm_after.")
+        if "pre_norm_ffn.1." in k:
+            k_new = k_new.replace("pre_norm_ffn.1.", "ffn.conv1.")
+        if "pre_norm_ffn.3." in k:
+            k_new = k_new.replace("pre_norm_ffn.3.", "ffn.conv2.")
+            
+        if "classifier.1." in k:
+            k_new = k_new.replace("classifier.1.", "classifier.")
+        
+        
+        rename_keys.append((k, k_new))
+    return rename_keys
 
 
 # We will verify our results on an image of cute cats
@@ -193,111 +753,97 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_movilevit_checkpoint(mobilevitv2_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our MobileViTv2 structure.
     """
-    config = get_mobilevitv2_config(mobilevitv2_name)
+    config = get_mobilevitv2_config(task_name, orig_config_path)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
-    # load 🤗 model
-    if mobilevitv2_name.startswith("deeplabv3_"):
+    # load huggingface model
+    if task_name.startswith("ade20k_") or task_name.startswith("voc_"):
         model = MobileViTv2ForSemanticSegmentation(config).eval()
+        base_model = False
     else:
         model = MobileViTv2ForImageClassification(config).eval()
-
-    new_state_dict = convert_state_dict(state_dict, model)
-    model.load_state_dict(new_state_dict)
+        base_model = False
+    # TODO - add support for object detection model   
+    
+    
+    # remove and rename some keys of load the original model
+    state_dict = checkpoint
+    rename_keys = create_rename_keys(state_dict, base_model=base_model)
+    for rename_key_src, rename_key_dest in rename_keys:
+        rename_key(state_dict, rename_key_src, rename_key_dest)
+    
+    # load modified state_dict
+    model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by MobileViTv2FeatureExtractor
-    feature_extractor = MobileViTv2FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
+    feature_extractor = MobileViTv2ImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
 
-    if mobilevitv2_name.startswith("deeplabv3_"):
-        assert logits.shape == (1, 21, 32, 32)
-
-        if mobilevitv2_name == "deeplabv3_mobilevitv2_s":
-            expected_logits = torch.tensor(
-                [
-                    [[6.2065, 6.1292, 6.2070], [6.1079, 6.1254, 6.1747], [6.0042, 6.1071, 6.1034]],
-                    [[-6.9253, -6.8653, -7.0398], [-7.3218, -7.3983, -7.3670], [-7.1961, -7.2482, -7.1569]],
-                    [[-4.4723, -4.4348, -4.3769], [-5.3629, -5.4632, -5.4598], [-5.1587, -5.3402, -5.5059]],
-                ]
-            )
-        elif mobilevitv2_name == "deeplabv3_mobilevitv2_xs":
-            expected_logits = torch.tensor(
-                [
-                    [[5.4449, 5.5733, 5.6314], [5.1815, 5.3930, 5.5963], [5.1656, 5.4333, 5.4853]],
-                    [[-9.4423, -9.7766, -9.6714], [-9.1581, -9.5720, -9.5519], [-9.1006, -9.6458, -9.5703]],
-                    [[-7.7721, -7.3716, -7.1583], [-8.4599, -8.0624, -7.7944], [-8.4172, -7.8366, -7.5025]],
-                ]
-            )
-        elif mobilevitv2_name == "deeplabv3_mobilevitv2_xxs":
-            expected_logits = torch.tensor(
-                [
-                    [[6.9811, 6.9743, 7.3123], [7.1777, 7.1931, 7.3938], [7.5633, 7.8050, 7.8901]],
-                    [[-10.5536, -10.2332, -10.2924], [-10.2336, -9.8624, -9.5964], [-10.8840, -10.8158, -10.6659]],
-                    [[-3.4938, -3.0631, -2.8620], [-3.4205, -2.8135, -2.6875], [-3.4179, -2.7945, -2.8750]],
-                ]
-            )
-        else:
-            raise ValueError(f"Unknown mobilevitv2_name: {mobilevitv2_name}")
-
-        assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-4)
-    else:
-        assert logits.shape == (1, 1000)
-
-        if mobilevitv2_name == "mobilevitv2_s":
-            expected_logits = torch.tensor([-0.9866, 0.2392, -1.1241])
-        elif mobilevitv2_name == "mobilevitv2_xs":
-            expected_logits = torch.tensor([-2.4761, -0.9399, -1.9587])
-        elif mobilevitv2_name == "mobilevitv2_xxs":
-            expected_logits = torch.tensor([-1.9364, -1.2327, -0.4653])
-        else:
-            raise ValueError(f"Unknown mobilevitv2_name: {mobilevitv2_name}")
-
-        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
+    # TODO :
+    # assert torch.allclose()
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {mobilevitv2_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model {task_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    if push_to_hub:
-        model_mapping = {
-            "mobilevitv2_s": "mobilevitv2-small",
-            "mobilevitv2_xs": "mobilevitv2-x-small",
-            "mobilevitv2_xxs": "mobilevitv2-xx-small",
-            "deeplabv3_mobilevitv2_s": "deeplabv3-mobilevitv2-small",
-            "deeplabv3_mobilevitv2_xs": "deeplabv3-mobilevitv2-x-small",
-            "deeplabv3_mobilevitv2_xxs": "deeplabv3-mobilevitv2-xx-small",
-        }
+    if push_to_hub: 
+        # model_mapping = {
+        #     "mobilevitv2_s": "mobilevitv2-small",
+        #     "mobilevitv2_xs": "mobilevitv2-x-small",
+        #     "mobilevitv2_xxs": "mobilevitv2-xx-small",
+        #     "deeplabv3_mobilevitv2_s": "deeplabv3-mobilevitv2-small",
+        #     "deeplabv3_mobilevitv2_xs": "deeplabv3-mobilevitv2-x-small",
+        #     "deeplabv3_mobilevitv2_xxs": "deeplabv3-mobilevitv2-xx-small",
+        # }#TODO
 
-        print("Pushing to the hub...")
-        model_name = model_mapping[mobilevitv2_name]
-        feature_extractor.push_to_hub(model_name, organization="apple")
-        model.push_to_hub(model_name, organization="apple")
+        # print("Pushing to the hub...")
+        # model_name = model_mapping[mobilevitv2_name]
+        # feature_extractor.push_to_hub(model_name, organization="apple")
+        # model.push_to_hub(model_name, organization="apple")
+        pass
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--mobilevitv2_name",
-        default="mobilevitv2_s",
+        "--task",
+        default="imagenet1k_256",
         type=str,
         help=(
-            "Name of the MobileViTv2 model you'd like to convert. Should be one of 'mobilevitv2_s', 'mobilevitv2_xs',"
-            " 'mobilevitv2_xxs', 'deeplabv3_mobilevitv2_s', 'deeplabv3_mobilevitv2_xs', 'deeplabv3_mobilevitv2_xxs'."
+            "Name of the task for which the MobileViTv2 model you'd like to convert is trained on . "
+            '''
+                Classification (ImageNet-1k)
+                    MobileViTv2 (256x256)                                     : imagenet1k_256
+                    MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384
+                    MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) : imagenet21k_to_1k_256
+                    MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on ImageNet-1k 384x384) : imagenet21k_to_1k_384
+                Object Detection (MS-COCO)
+                    SSD MobileViTv2 : coco_ssd
+                Segmentation
+                    ADE20K Dataset : ade20k_pspnet, ade20k_deeplabv3
+                    Pascal VOC 2012 Dataset: voc_pspnet, voc_deeplabv3
+            '''
         ),
+        choices=['imagenet1k_256', 'imagenet1k_384', 'imagenet21k_to_1k_256', 'imagenet21k_to_1k_384',
+                 'coco_ssd', 'ade20k_pspnet', 'ade20k_deeplabv3', 'voc_pspnet', 'voc_deeplabv3']
+    )
+    
+    parser.add_argument(
+        "--orig_checkpoint_path", required=True, type=str, help="Path to the original state dict (.pt file)."
     )
     parser.add_argument(
-        "--checkpoint_path", required=True, type=str, help="Path to the original state dict (.pt file)."
+        "--orig_config_path", required=True, type=str, help="Path to the original config file."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
@@ -307,6 +853,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_movilevit_checkpoint(
-        args.mobilevitv2_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+    convert_mobilevitv2_checkpoint(
+        args.task,
+        args.orig_checkpoint_path, args.orig_config_path, 
+        args.pytorch_dump_folder_path, args.push_to_hub
     )

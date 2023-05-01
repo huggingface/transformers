@@ -18,7 +18,7 @@
 
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Dict, Optional, Set, Tuple, Union, Sequence
 
 import torch
 import torch.utils.checkpoint
@@ -51,16 +51,16 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MobileViTv2Config"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "apple/mobilevitv2-0.5"
+_CHECKPOINT_FOR_DOC = "apple/mobilevitv2-1.0"
 _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-0.5"
+_IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-0.5",
+    "apple/mobilevitv2-1.0",
     # See all MobileViTv2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
@@ -79,6 +79,43 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
         new_value += divisor
     return int(new_value)
 
+def bound_fn(
+    min_val: Union[float, int], max_val: Union[float, int], value: Union[float, int]
+) -> Union[float, int]:
+    return max(min_val, min(max_val, value))
+
+class MobileViTv2LayerNorm2D(nn.GroupNorm):
+    """
+    Applies `Layer Normalization <https://arxiv.org/abs/1607.06450>`_ over a 4D input tensor
+
+    Args:
+        num_features (int): :math:`C` from an expected input of size :math:`(N, C, H, W)`
+        eps (Optional, float): Value added to the denominator for numerical stability. Default: 1e-5
+        elementwise_affine (bool): If ``True``, use learnable affine parameters. Default: ``True``
+
+    Shape:
+        - Input: :math:`(N, C, H, W)` where :math:`N` is the batch size, :math:`C` is the number of input channels,
+        :math:`H` is the input height, and :math:`W` is the input width
+        - Output: same shape as the input
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        eps: Optional[float] = 1e-5,
+        elementwise_affine: Optional[bool] = True,
+        *args,
+        **kwargs
+    ) -> None:
+        super().__init__(
+            num_channels=num_features, eps=eps, affine=elementwise_affine, num_groups=1
+        )
+        self.num_channels = num_features
+
+    def __repr__(self):
+        return "{}(num_channels={}, eps={}, affine={})".format(
+            self.__class__.__name__, self.num_channels, self.eps, self.affine
+        )
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTConvLayer with MobileViT->MobileViTv2
 class MobileViTv2ConvLayer(nn.Module):
@@ -218,164 +255,263 @@ class MobileViTv2MobileNetLayer(nn.Module):
         return features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTSelfAttention with MobileViT->MobileViTv2
-class MobileViTv2SelfAttention(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int) -> None:
+class MobileViTv2LinearSelfAttention(nn.Module):
+    '''LinearSelfAttention'''
+    """
+    This layer applies a self-attention with linear complexity, as described in `MobileViTv2 <https://arxiv.org/abs/2206.02680>`_ paper.
+    This layer can be used for self- as well as cross-attention.
+
+    Args:
+        config: MobileVitv2Config 
+        embed_dim (int): :math:`C` from an expected input of size :math:`(N, C, H, W)`
+        attn_dropout (Optional[float]): Dropout value for context scores. Default: 0.0
+        bias (Optional[bool]): Use bias in learnable layers. Default: True
+
+    Shape:
+        - Input: :math:`(N, C, P, N)` where :math:`N` is the batch size, :math:`C` is the input channels,
+        :math:`P` is the number of pixels in the patch, and :math:`N` is the number of patches
+        - Output: same as the input
+
+    .. note::
+        For MobileViTv2, we unfold the feature map [B, C, H, W] into [B, C, P, N] where P is the number of pixels
+        in a patch and N is the number of patches. Because channel is the first dimension in this unfolded tensor,
+        we use point-wise convolution (instead of a linear layer). This avoids a transpose operation (which may be
+        expensive on resource-constrained devices) that may be required to convert the unfolded tensor from
+        channel-first to channel-last format in case of a linear layer.
+    """
+
+    def __init__(
+        self,
+        config:MobileViTv2Config,
+        embed_dim: int,
+        attn_dropout: Optional[float] = 0.0,
+        bias: Optional[bool] = True,
+        *args,
+        **kwargs
+    ) -> None:
         super().__init__()
 
-        if hidden_size % config.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-        return context_layer
-
-
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTSelfOutput with MobileViT->MobileViTv2
-class MobileViTv2SelfOutput(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int) -> None:
-        super().__init__()
-        self.dense = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTAttention with MobileViT->MobileViTv2
-class MobileViTv2Attention(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int) -> None:
-        super().__init__()
-        self.attention = MobileViTv2SelfAttention(config, hidden_size)
-        self.output = MobileViTv2SelfOutput(config, hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+        self.qkv_proj = MobileViTv2ConvLayer(
+            config=config,
+            in_channels=embed_dim,
+            out_channels=1 + (2 * embed_dim),
+            bias=bias,
+            kernel_size=1,
+            use_normalization=False,
+            use_activation=False,
         )
 
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+        self.attn_dropout = nn.Dropout(p=attn_dropout)
+        self.out_proj = MobileViTv2ConvLayer(
+            config=config,
+            in_channels=embed_dim,
+            out_channels=embed_dim,
+            bias=bias,
+            kernel_size=1,
+            use_normalization=False,
+            use_activation=False,
+        )
+        self.embed_dim = embed_dim
 
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+    def __repr__(self):
+        return "{}(embed_dim={}, attn_dropout={})".format(
+            self.__class__.__name__, self.embed_dim, self.attn_dropout.p
+        )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_outputs = self.attention(hidden_states)
-        attention_output = self.output(self_outputs)
-        return attention_output
+    def _forward_self_attn(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        # [B, C, P, N] --> [B, h + 2d, P, N]
+        qkv = self.qkv_proj(x)
 
+        # Project x into query, key and value
+        # Query --> [B, 1, P, N]
+        # value, key --> [B, d, P, N]
+        query, key, value = torch.split(
+            qkv, split_size_or_sections=[1, self.embed_dim, self.embed_dim], dim=1
+        )
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTIntermediate with MobileViT->MobileViTv2
-class MobileViTv2Intermediate(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int, intermediate_size: int) -> None:
-        super().__init__()
-        self.dense = nn.Linear(hidden_size, intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        # apply softmax along N dimension
+        context_scores = torch.nn.functional.softmax(query, dim=-1)
+        # Uncomment below line to visualize context scores
+        # self.visualize_context_scores(context_scores=context_scores)
+        context_scores = self.attn_dropout(context_scores)
+
+        # Compute context vector
+        # [B, d, P, N] x [B, 1, P, N] -> [B, d, P, N]
+        context_vector = key * context_scores
+        # [B, d, P, N] --> [B, d, P, 1]
+        context_vector = torch.sum(context_vector, dim=-1, keepdim=True)
+
+        # combine context vector with values
+        # [B, d, P, N] * [B, d, P, 1] --> [B, d, P, N]
+        out = torch.nn.functional.relu(value) * context_vector.expand_as(value)
+        out = self.out_proj(out)
+        return out
+
+    def _forward_cross_attn(
+        self, x: torch.Tensor, x_prev: Optional[torch.Tensor] = None, *args, **kwargs
+    ) -> torch.Tensor:
+        # x --> [B, C, P, N]
+        # x_prev = [B, C, P, M]
+
+        batch_size, in_dim, kv_patch_area, kv_num_patches = x.shape
+
+        q_patch_area, q_num_patches = x.shape[-2:]
+
+        assert (
+            kv_patch_area == q_patch_area
+        ), "The number of pixels in a patch for query and key_value should be the same"
+
+        # compute query, key, and value
+        # [B, C, P, M] --> [B, 1 + d, P, M]
+        qk = torch.nn.functional.conv2d(
+            x_prev,
+            weight=self.qkv_proj.block.conv.weight[: self.embed_dim + 1, ...],
+            bias=self.qkv_proj.block.conv.bias[: self.embed_dim + 1, ...],
+        )
+        # [B, 1 + d, P, M] --> [B, 1, P, M], [B, d, P, M]
+        query, key = torch.split(qk, split_size_or_sections=[1, self.embed_dim], dim=1)
+        # [B, C, P, N] --> [B, d, P, N]
+        value = torch.nn.functional.conv2d(
+            x,
+            weight=self.qkv_proj.block.conv.weight[self.embed_dim + 1 :, ...],
+            bias=self.qkv_proj.block.conv.bias[self.embed_dim + 1 :, ...],
+        )
+
+        # apply softmax along M dimension
+        context_scores = torch.nn.functional.softmax(query, dim=-1)
+        context_scores = self.attn_dropout(context_scores)
+
+        # compute context vector
+        # [B, d, P, M] * [B, 1, P, M] -> [B, d, P, M]
+        context_vector = key * context_scores
+        # [B, d, P, M] --> [B, d, P, 1]
+        context_vector = torch.sum(context_vector, dim=-1, keepdim=True)
+
+        # combine context vector with values
+        # [B, d, P, N] * [B, d, P, 1] --> [B, d, P, N]
+        out = torch.nn.functional.relu(value) * context_vector.expand_as(value)
+        out = self.out_proj(out)
+        return out
+
+    def forward(
+        self, x: torch.Tensor, x_prev: Optional[torch.Tensor] = None, *args, **kwargs
+    ) -> torch.Tensor:
+        if x_prev is None:
+            return self._forward_self_attn(x, *args, **kwargs)
         else:
-            self.intermediate_act_fn = config.hidden_act
+            return self._forward_cross_attn(x, x_prev=x_prev, *args, **kwargs)
+
+
+
+class MobileViTv2FFN(nn.Module):
+    def __init__(self, 
+                    config: MobileViTv2Config, 
+                    embed_dim: int,
+                    ffn_latent_dim: int,
+                    ffn_dropout: float = 0.0,
+                    dropout: float = 0.0
+                 ) -> None:
+        super().__init__()
+        self.conv1 = MobileViTv2ConvLayer(
+                config=config,
+                in_channels=embed_dim,
+                out_channels=ffn_latent_dim,
+                kernel_size=1,
+                stride=1,
+                bias=True,
+                use_normalization=False,
+                use_activation=True,
+            )
+        self.dropout1 = nn.Dropout(ffn_dropout)
+        
+        self.conv2 = MobileViTv2ConvLayer(
+                config=config,
+                in_channels=ffn_latent_dim,
+                out_channels=embed_dim,
+                kernel_size=1,
+                stride=1,
+                bias=True,
+                use_normalization=False,
+                use_activation=False,
+            )
+        self.dropout2 = nn.Dropout(p=dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.dropout1(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.dropout2(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTOutput with MobileViT->MobileViTv2
-class MobileViTv2Output(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int, intermediate_size: int) -> None:
-        super().__init__()
-        self.dense = nn.Linear(intermediate_size, hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
-        return hidden_states
-
-
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTTransformerLayer with MobileViT->MobileViTv2
 class MobileViTv2TransformerLayer(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int, intermediate_size: int) -> None:
+    '''LinearAttnFFN'''
+    def __init__(self, config: MobileViTv2Config, 
+                embed_dim: int,
+                ffn_latent_dim: int,
+                ffn_dropout: float = 0.0,
+                dropout: float = 0.0,
+                attn_dropout: float = 0.0,
+                ) -> None:
         super().__init__()
-        self.attention = MobileViTv2Attention(config, hidden_size)
-        self.intermediate = MobileViTv2Intermediate(config, hidden_size, intermediate_size)
-        self.output = MobileViTv2Output(config, hidden_size, intermediate_size)
-        self.layernorm_before = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-
+        # pre_norm_attn
+        self.layernorm_before = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim, attn_dropout=attn_dropout, bias=True)
+        self.dropout1 = nn.Dropout(p=dropout)
+        # pre_norm_ffn
+        self.layernorm_after = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
+        self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, ffn_dropout, dropout)
+        
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        attention_output = self.attention(self.layernorm_before(hidden_states))
+        print("Shape before layernorm: ", hidden_states.shape)
+        layernorm_1_out = self.layernorm_before(hidden_states)
+        print("Shape after layernorm: ", layernorm_1_out.shape)
+        attention_output = self.attention(layernorm_1_out)
         hidden_states = attention_output + hidden_states
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-        layer_output = self.output(layer_output, hidden_states)
+        layer_output = self.ffn(layer_output)
+        
+        layer_output = layer_output + hidden_states
         return layer_output
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTTransformer with MobileViT->MobileViTv2
+
 class MobileViTv2Transformer(nn.Module):
-    def __init__(self, config: MobileViTv2Config, hidden_size: int, num_stages: int) -> None:
+    def __init__(self, 
+            config: MobileViTv2Config, 
+            n_layers: int,
+            d_model: int,
+            ffn_multiplier: Union[Sequence, int, float],
+            attn_dropout: float,
+            dropout: float,
+            ffn_dropout: float,            
+            ) -> None:
         super().__init__()
+        
+        if isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 2:
+            ffn_dims = (
+                torch.linspace(ffn_multiplier[0], ffn_multiplier[1], n_layers, dtype=float) * d_model
+            )
+        elif isinstance(ffn_multiplier, Sequence) and len(ffn_multiplier) == 1:
+            ffn_dims = [ffn_multiplier[0] * d_model] * n_layers
+        elif isinstance(ffn_multiplier, (int, float)):
+            ffn_dims = [ffn_multiplier * d_model] * n_layers
+        else:
+            raise NotImplementedError
+
+        # ensure that dims are multiple of 16
+        ffn_dims = [int((d // 16) * 16) for d in ffn_dims]
 
         self.layer = nn.ModuleList()
-        for _ in range(num_stages):
+        for block_idx in range(n_layers):
             transformer_layer = MobileViTv2TransformerLayer(
                 config,
-                hidden_size=hidden_size,
-                intermediate_size=int(hidden_size * config.mlp_ratio),
+                embed_dim=d_model,
+                ffn_latent_dim=ffn_dims[block_idx],
+                attn_dropout=attn_dropout,
+                dropout=dropout,
+                ffn_dropout=ffn_dropout,
             )
             self.layer.append(transformer_layer)
 
@@ -385,10 +521,9 @@ class MobileViTv2Transformer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTLayer with MobileViT->MobileViTv2
 class MobileViTv2Layer(nn.Module):
     """
-    MobileViTv2 block: https://arxiv.org/abs/2110.02178
+    MobileViTv2 block: https://arxiv.org/abs/2206.02680 
     """
 
     def __init__(
@@ -396,14 +531,22 @@ class MobileViTv2Layer(nn.Module):
         config: MobileViTv2Config,
         in_channels: int,
         out_channels: int,
+        attn_unit_dim: int,
         stride: int,
-        hidden_size: int,
-        num_stages: int,
+        n_attn_blocks: Optional[int] = 2,
+        ffn_multiplier: Optional[Union[Sequence[Union[int, float]], int, float]] = 2.0,
+        attn_dropout: Optional[float] = 0.0,
+        dropout: Optional[float] = 0.0,
+        ffn_dropout: Optional[float] = 0.0,
         dilation: int = 1,
+        patch_size: Optional[int] = 2,
+        
     ) -> None:
         super().__init__()
         self.patch_width = config.patch_size
         self.patch_height = config.patch_size
+        
+        cnn_out_dim = attn_unit_dim
 
         if stride == 2:
             self.downsampling_layer = MobileViTv2InvertedResidual(
@@ -417,137 +560,105 @@ class MobileViTv2Layer(nn.Module):
         else:
             self.downsampling_layer = None
 
+        # Local representations
         self.conv_kxk = MobileViTv2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=config.conv_kernel_size,
+            groups=in_channels
         )
-
         self.conv_1x1 = MobileViTv2ConvLayer(
             config,
             in_channels=in_channels,
-            out_channels=hidden_size,
+            out_channels=cnn_out_dim,
             kernel_size=1,
             use_normalization=False,
             use_activation=False,
         )
 
+        # Global representations
         self.transformer = MobileViTv2Transformer(
             config,
-            hidden_size=hidden_size,
-            num_stages=num_stages,
+            d_model=attn_unit_dim,
+            ffn_multiplier = ffn_multiplier,
+            n_layers=n_attn_blocks,
+            attn_dropout=attn_dropout,
+            dropout=dropout,
+            ffn_dropout=ffn_dropout,
         )
+        # self.transformer = nn.Identity() #TODO
+        
+        self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
 
-        self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-
+        # Fusion
         self.conv_projection = MobileViTv2ConvLayer(
-            config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1
+            config, in_channels=cnn_out_dim, out_channels=in_channels, kernel_size=1, 
+            use_normalization=True, use_activation=False
+        )
+        
+        self.patch_h = patch_size
+        self.patch_w = patch_size
+
+    def unfolding_pytorch(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+
+        batch_size, in_channels, img_h, img_w = feature_map.shape
+
+        # [B, C, H, W] --> [B, C, P, N]
+        patches = nn.functional.unfold(
+            feature_map,
+            kernel_size=(self.patch_h, self.patch_w),
+            stride=(self.patch_h, self.patch_w),
+        )
+        patches = patches.reshape(
+            batch_size, in_channels, self.patch_h * self.patch_w, -1
         )
 
-        self.fusion = MobileViTv2ConvLayer(
-            config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
+        return patches, (img_h, img_w)
+
+    def folding_pytorch(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+        batch_size, in_dim, patch_size, n_patches = patches.shape
+
+        # [B, C, P, N]
+        patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
+
+        feature_map = nn.functional.fold(
+            patches,
+            output_size=output_size,
+            kernel_size=(self.patch_h, self.patch_w),
+            stride=(self.patch_h, self.patch_w),
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
-        patch_width, patch_height = self.patch_width, self.patch_height
-        patch_area = int(patch_width * patch_height)
-
-        batch_size, channels, orig_height, orig_width = features.shape
-
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
-
-        interpolate = False
-        if new_width != orig_width or new_height != orig_height:
-            # Note: Padding can be done, but then it needs to be handled in attention function.
-            features = nn.functional.interpolate(
-                features, size=(new_height, new_width), mode="bilinear", align_corners=False
-            )
-            interpolate = True
-
-        # number of patches along width and height
-        num_patch_width = new_width // patch_width
-        num_patch_height = new_height // patch_height
-        num_patches = num_patch_height * num_patch_width
-
-        # convert from shape (batch_size, channels, orig_height, orig_width)
-        # to the shape (batch_size * patch_area, num_patches, channels)
-        patches = features.reshape(
-            batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width
-        )
-        patches = patches.transpose(1, 2)
-        patches = patches.reshape(batch_size, channels, num_patches, patch_area)
-        patches = patches.transpose(1, 3)
-        patches = patches.reshape(batch_size * patch_area, num_patches, -1)
-
-        info_dict = {
-            "orig_size": (orig_height, orig_width),
-            "batch_size": batch_size,
-            "channels": channels,
-            "interpolate": interpolate,
-            "num_patches": num_patches,
-            "num_patches_width": num_patch_width,
-            "num_patches_height": num_patch_height,
-        }
-        return patches, info_dict
-
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
-        patch_width, patch_height = self.patch_width, self.patch_height
-        patch_area = int(patch_width * patch_height)
-
-        batch_size = info_dict["batch_size"]
-        channels = info_dict["channels"]
-        num_patches = info_dict["num_patches"]
-        num_patch_height = info_dict["num_patches_height"]
-        num_patch_width = info_dict["num_patches_width"]
-
-        # convert from shape (batch_size * patch_area, num_patches, channels)
-        # back to shape (batch_size, channels, orig_height, orig_width)
-        features = patches.contiguous().view(batch_size, patch_area, num_patches, -1)
-        features = features.transpose(1, 3)
-        features = features.reshape(
-            batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width
-        )
-        features = features.transpose(1, 2)
-        features = features.reshape(
-            batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width
-        )
-
-        if info_dict["interpolate"]:
-            features = nn.functional.interpolate(
-                features, size=info_dict["orig_size"], mode="bilinear", align_corners=False
-            )
-
-        return features
-
+        return feature_map
+    
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         # reduce spatial dimensions if needed
         if self.downsampling_layer:
             features = self.downsampling_layer(features)
-
-        residual = features
 
         # local representation
         features = self.conv_kxk(features)
         features = self.conv_1x1(features)
 
         # convert feature map to patches
-        patches, info_dict = self.unfolding(features)
+        patches, output_size = self.unfolding_pytorch(features, )
 
+        print("##### Before global_rep: ", patches.shape)
+        
         # learn global representations
         patches = self.transformer(patches)
         patches = self.layernorm(patches)
+        
+        print("##### After global_rep: ", patches.shape)
 
-        # convert patches back to feature maps
-        features = self.folding(patches, info_dict)
+        # convert patches back to feature maps 
+        # [B x Patch x Patches x C] --> [B x C x Patches x Patch]
+        features = self.folding_pytorch(patches, output_size)
 
         features = self.conv_projection(features)
-        features = self.fusion(torch.cat((residual, features), dim=1))
         return features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTEncoder with MobileViT->MobileViTv2
 class MobileViTv2Encoder(nn.Module):
     def __init__(self, config: MobileViTv2Config) -> None:
         super().__init__()
@@ -567,59 +678,84 @@ class MobileViTv2Encoder(nn.Module):
 
         dilation = 1
 
+        layer_0_dim = int(make_divisible(bound_fn(min_val=16, max_val=64, value=32 * config.width_multiplier), divisor=8, min_value=16))
+        layer_1_dim = int(make_divisible(64 * config.width_multiplier, divisor=16))
+        layer_2_dim = int(make_divisible(128 * config.width_multiplier, divisor=8))
+        layer_3_dim = int(make_divisible(256 * config.width_multiplier, divisor=8))
+        layer_4_dim = int(make_divisible(384 * config.width_multiplier, divisor=8))
+        layer_5_dim = int(make_divisible(512 * config.width_multiplier, divisor=8))
+        ffn_multiplier = 2
+        
+        # print("layer_0_dim : ", layer_0_dim)
+        # print("layer_1_dim : ", layer_1_dim)
+        # print("layer_2_dim : ", layer_2_dim)
+        # print("layer_3_dim : ", layer_3_dim)
+        # print("layer_4_dim : ", layer_4_dim)
+        # print("layer_5_dim : ", layer_5_dim)
+        
+        # 1: layer_1
         layer_1 = MobileViTv2MobileNetLayer(
             config,
-            in_channels=config.neck_hidden_sizes[0],
-            out_channels=config.neck_hidden_sizes[1],
+            in_channels=layer_0_dim,
+            out_channels=layer_1_dim,
             stride=1,
             num_stages=1,
         )
         self.layer.append(layer_1)
 
+        # 2: layer_2
         layer_2 = MobileViTv2MobileNetLayer(
             config,
-            in_channels=config.neck_hidden_sizes[1],
-            out_channels=config.neck_hidden_sizes[2],
+            in_channels=layer_1_dim,
+            out_channels=layer_2_dim,
             stride=2,
-            num_stages=3,
+            num_stages=2,
         )
         self.layer.append(layer_2)
 
+        # 3: layer_3
         layer_3 = MobileViTv2Layer(
             config,
-            in_channels=config.neck_hidden_sizes[2],
-            out_channels=config.neck_hidden_sizes[3],
+            in_channels=layer_2_dim,
+            out_channels=layer_3_dim,
+            attn_unit_dim=int(make_divisible(128 * config.width_multiplier, divisor=8)),
             stride=2,
-            hidden_size=config.hidden_sizes[0],
-            num_stages=2,
+            ffn_multiplier=ffn_multiplier,
+            n_attn_blocks=2,
         )
         self.layer.append(layer_3)
 
         if dilate_layer_4:
             dilation *= 2
 
+        # 4: layer_4
         layer_4 = MobileViTv2Layer(
             config,
-            in_channels=config.neck_hidden_sizes[3],
-            out_channels=config.neck_hidden_sizes[4],
+            in_channels=layer_3_dim,
+            out_channels=layer_4_dim,
+            attn_unit_dim=int(make_divisible(192 * config.width_multiplier, divisor=8)),
             stride=2,
-            hidden_size=config.hidden_sizes[1],
-            num_stages=4,
+            ffn_multiplier=ffn_multiplier,
+            n_attn_blocks=4,
             dilation=dilation,
+            patch_size=config.patch_size
         )
         self.layer.append(layer_4)
 
         if dilate_layer_5:
             dilation *= 2
 
+        # 5: layer_5 
         layer_5 = MobileViTv2Layer(
             config,
-            in_channels=config.neck_hidden_sizes[4],
-            out_channels=config.neck_hidden_sizes[5],
+            in_channels=layer_4_dim,
+            out_channels=layer_5_dim,
+            attn_unit_dim=int(make_divisible(256 * config.width_multiplier, divisor=8)),
             stride=2,
-            hidden_size=config.hidden_sizes[2],
-            num_stages=3,
+            ffn_multiplier=ffn_multiplier,
+            n_attn_blocks=3,
             dilation=dilation,
+            patch_size=config.patch_size
         )
         self.layer.append(layer_5)
 
@@ -645,7 +781,9 @@ class MobileViTv2Encoder(nn.Module):
                     hidden_states,
                 )
             else:
+                print("______________ {}: layer_{} ______________".format(i+1, i+1))
                 hidden_states = layer_module(hidden_states)
+                print(hidden_states.shape)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -713,30 +851,30 @@ MOBILEVITV2_INPUTS_DOCSTRING = r"""
     "The bare MobileViTv2 model outputting raw hidden-states without any specific head on top.",
     MOBILEVITV2_START_DOCSTRING,
 )
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTModel with MOBILEVIT->MOBILEVITV2,MobileViT->MobileViTv2,mobilevit->mobilevitv2
 class MobileViTv2Model(MobileViTv2PreTrainedModel):
     def __init__(self, config: MobileViTv2Config, expand_output: bool = True):
         super().__init__(config)
         self.config = config
         self.expand_output = expand_output
 
+        layer_0_dim = int(make_divisible(bound_fn(min_val=16, max_val=64, value=32 * config.width_multiplier), divisor=8, min_value=16))
+        
+        # 0: conv_1
         self.conv_stem = MobileViTv2ConvLayer(
             config,
             in_channels=config.num_channels,
-            out_channels=config.neck_hidden_sizes[0],
+            out_channels=layer_0_dim,
             kernel_size=3,
             stride=2,
+            use_normalization=True,
+            use_activation=True
         )
 
+        # 1: layer_1, 2: layer_2, 3: layer_3, 4: layer_4, 5: layer_5 
         self.encoder = MobileViTv2Encoder(config)
 
-        if self.expand_output:
-            self.conv_1x1_exp = MobileViTv2ConvLayer(
-                config,
-                in_channels=config.neck_hidden_sizes[5],
-                out_channels=config.neck_hidden_sizes[6],
-                kernel_size=1,
-            )
+        # 6: conv_1x1_exp
+        self.conv_1x1_exp = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -773,7 +911,9 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        print("______________ 0: conv_1 ______________")
         embedding_output = self.conv_stem(pixel_values)
+        print(embedding_output.shape)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -782,7 +922,9 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
         )
 
         if self.expand_output:
+            print("______________ 6: conv_1x1_exp ______________")
             last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
+            print(last_hidden_state.shape)
 
             # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
@@ -816,10 +958,12 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilevitv2 = MobileViTv2Model(config)
 
+        out_channels = int(make_divisible(512 * config.width_multiplier, divisor=8)) # layer 5 output dimension
         # Classifier head
-        self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
         self.classifier = (
-            nn.Linear(config.neck_hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(in_features = out_channels,
+                      out_features = config.num_labels) 
+            if config.num_labels > 0 else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -851,7 +995,7 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(self.dropout(pooled_output))
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:

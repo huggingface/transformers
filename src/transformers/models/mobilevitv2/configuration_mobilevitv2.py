@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "apple/mobilevitv2-0.5": "https://huggingface.co/apple/mobilevitv2-0.5/resolve/main/config.json",
+    "apple/mobilevitv2-1.0": "https://huggingface.co/apple/mobilevitv2-1.0/resolve/main/config.json",
 }
 
 
@@ -36,7 +36,7 @@ class MobileViTv2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MobileViTv2Model`]. It is used to instantiate a
     MobileViTv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileViTv2
-    [apple/mobilevitv2-0.5](https://huggingface.co/apple/mobilevitv2-0.5) architecture.
+    [apple/mobilevitv2-1.0](https://huggingface.co/apple/mobilevitv2-1.0) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -106,17 +106,14 @@ class MobileViTv2Config(PretrainedConfig):
         num_channels=3,
         image_size=256,
         patch_size=2,
-        hidden_sizes=[144, 192, 240],
-        neck_hidden_sizes=[16, 32, 64, 96, 128, 160, 640],
         num_attention_heads=4,
         mlp_ratio=2.0,
-        expand_ratio=4.0,
-        hidden_act="silu",
+        expand_ratio=2.0,
+        hidden_act="swish",
         conv_kernel_size=3,
         output_stride=32,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.0,
-        classifier_dropout_prob=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         qkv_bias=True,
@@ -124,6 +121,16 @@ class MobileViTv2Config(PretrainedConfig):
         atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
+        conv_init = 'kaiming_normal',
+        conv_init_std_dev= 0.02,
+        linear_init='trunc_normal',
+        linear_init_std_dev= 0.02,
+        
+        ####
+        width_multiplier=1.0,    # Width multiplier. Defaults to 1.0
+        ffn_dropout=0.0,         # "Dropout between FFN layers. Defaults to 0.0",
+        attn_dropout=0.0,        # Dropout in attention layer. Defaults to 0.0
+        
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -131,8 +138,6 @@ class MobileViTv2Config(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.hidden_sizes = hidden_sizes
-        self.neck_hidden_sizes = neck_hidden_sizes
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.expand_ratio = expand_ratio
@@ -141,7 +146,6 @@ class MobileViTv2Config(PretrainedConfig):
         self.output_stride = output_stride
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.classifier_dropout_prob = classifier_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
@@ -151,6 +155,16 @@ class MobileViTv2Config(PretrainedConfig):
         self.atrous_rates = atrous_rates
         self.aspp_dropout_prob = aspp_dropout_prob
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        
+        ####
+        self.width_multiplier = width_multiplier
+        self.ffn_dropout = ffn_dropout
+        self.attn_dropout = attn_dropout
+        
+        self.conv_init = conv_init
+        self.conv_init_std_dev = conv_init_std_dev
+        self.linear_init=linear_init
+        self.linear_init_std_dev=linear_init_std_dev
 
 
 class MobileViTv2OnnxConfig(OnnxConfig):
