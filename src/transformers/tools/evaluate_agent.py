@@ -106,6 +106,45 @@ def summarizer(text):
     return f"This is a summary of {text}."
 
 
+@add_description("This is a tool that performs a calculation between two numbers. It takes an input named `operation`, as well as two strings `a` and `b` representing the two numbers. The `operation` can take four values: -, +, /, *. It returns the result of that operation when applied to the two numbers.")
+def calculator(operation, a, b):
+    return f"This is the solution of ({a} {operation} {b})."
+
+
+@add_description("This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches.")
+def search_engine(query):
+    return f'This is result of the search of "{query}" on a search engine.'
+
+_db = {}
+
+@add_description("This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.")
+def database_reader(key):
+    global _db
+    return f"db_read({_db[key]})"
+
+
+@add_description("This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.")
+def database_writer(key, value):
+    global _db
+    _db[key] = value
+    return '200'
+
+
+@add_description("This is a tool that uses a Large Language Model with some prompt engineering. Given a prompt, it will return the LLM generation. It takes an input `prompt` and returns the generated text.")
+def prompt_engineer(prompt):
+    return f"({prompt} ... [generation])"
+
+
+@add_description("This is a tool that generates an image of cats. It takes no input.")
+def cat_generator():
+    return "An image of cats"
+
+
+@add_description("This is a tool that generates an image of dogs. It takes no input.")
+def dog_generator():
+    return "An image of dogs."
+
+
 ALL_TOOLS = [
     classifier,
     translator,
@@ -118,6 +157,13 @@ ALL_TOOLS = [
     image_transformer,
     question_answerer,
     text_downloader,
+    calculator,
+    search_engine,
+    database_reader,
+    database_writer,
+    prompt_engineer,
+    cat_generator,
+    dog_generator
 ]
 
 
@@ -158,9 +204,10 @@ class Problem:
             The theoretical answer (or list of possible answers) to the problem.
     """
 
-    def __init__(self, task, minimum_tools, inputs, answer):
+    def __init__(self, task, minimum_tools, inputs, answer, excluded_tools=[]):
         self.task = task
         self.minimum_tools = minimum_tools
+        self.excluded_tools = excluded_tools
         self.inputs = inputs
         self.answer = answer
 
@@ -169,9 +216,10 @@ class Problem:
         Generates a random variation of this problem by selecting one of the phrasings of the task and adding new tools
         randomly.
         """
+        all_tools = [tool for tool in ALL_TOOLS if tool not in self.excluded_tools]
         num_new_tools = sample_num_tools(max_new_tools)
-        num_new_tools = min(num_new_tools, len(ALL_TOOLS) - len(self.minimum_tools))
-        new_tools = list(set(ALL_TOOLS) - set(self.minimum_tools))
+        num_new_tools = min(num_new_tools, len(all_tools) - len(self.minimum_tools))
+        new_tools = list(set(all_tools) - set(self.minimum_tools))
         random.shuffle(new_tools)
         result = self.minimum_tools.copy() + new_tools[:num_new_tools]
         random.shuffle(result)
@@ -247,6 +295,50 @@ EVALUATION_TASKS = [
         minimum_tools=[summarizer, text_downloader, speaker],
         inputs=["url"],
         answer=speaker(summarizer(text_downloader("<<url>>"))),
+    ),
+    Problem(
+        task=[
+            "What is the price of a Redbull can in America, converted to Korean won using last week's rate?",
+        ],
+        minimum_tools=[search_engine, calculator],
+        inputs=[],
+        answer=[
+            calculator('*', search_engine("Redbull can price in America"), search_engine("Last week's USD to KRW rate")),
+        ],
+    ),
+    Problem(
+        task=[
+            "What is the postal code of L'Arc de Triomphe multiplied by 3?",
+        ],
+        minimum_tools=[search_engine, calculator],
+        inputs=[],
+        answer=[
+            calculator('*', search_engine("Postal code L'Arc de Triomphe"), '3'),
+        ],
+    ),
+    Problem(
+        task=[
+            "Generate an image from the text given in `text_input`, and write it into the database using the original text as key. Show me the value of the written record once this is done.",
+        ],
+        minimum_tools=[database_writer, database_reader, image_generator],
+        inputs=['text_input'],
+        answer=f"db_read({image_generator('<<text_input>>')})"
+    ),
+    Problem(
+        task=[
+            "Use a large language model to generate a full rap song about transformers and tokenizers. Summarize it to me, then classify it as a positive or negative song by analyzing the summary.",
+        ],
+        minimum_tools=[prompt_engineer, summarizer, classifier],
+        inputs=[],
+        answer=[{'label': 'positive', 'score': 0.5}]
+    ),
+    Problem(
+        task=[
+            "Create an image of dolphins."
+        ],
+        minimum_tools=[dog_generator, cat_generator],
+        inputs=[],
+        answer=['There is no tool available that can generate dolphins.']
     ),
 ]
 
@@ -337,7 +429,7 @@ def evaluate_agent(agent, total_batches=1, batch_size=8, max_new_tools=4, verbos
 
     ```py
     agent = OpenAiAgent(model="text-davinci-003", api_key=your_api_key)
-    evaluate_agent(agent, total_batches=5)
+    score = evaluate_agent(agent, total_batches=5)
     ```
     """
     score = 0
