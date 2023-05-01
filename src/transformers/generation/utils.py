@@ -2643,12 +2643,7 @@ class GenerationMixin:
 
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
-            # workaround for https://github.com/pytorch/pytorch/issues/48841 (multinomial being able to select entries
-            # with 0 probability, or -inf logits): sample 5 tokens, keep the first valid one
-            sampled_tokens = torch.multinomial(probs, num_samples=5)
-            sampled_logits = torch.gather(next_token_scores, -1, sampled_tokens)
-            valid_samples = (sampled_logits > float('-inf')).to(torch.int)
-            next_tokens = torch.gather(sampled_tokens, -1, valid_samples.argmax(1, keepdim=True)).squeeze(1)
+            next_tokens = self._multinomial_sample(probs, next_token_scores)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -4351,7 +4346,7 @@ class GenerationMixin:
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
                 probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
-                selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                selected_tokens = self._multinomial_sample(probs[0, :, :], new_logits[0, :, :])[None, :]
             else:
                 selected_tokens = new_logits[:, -candidate_length - 1 :, :].argmax(dim=-1)
 
@@ -4485,6 +4480,20 @@ class GenerationMixin:
                 )
         else:
             return input_ids
+
+    @staticmethod
+    def _multinomial_sample(probs, next_token_scores):
+        """
+        workaround for https://github.com/pytorch/pytorch/issues/48841 (multinomial being able to select entries with 0
+        probability, or -inf logits): sample 5 tokens, keep the first valid one.
+
+        Equivalent to calling `torch.multinomial(probs, num_samples=1).squeeze(1)`
+        """
+        sampled_tokens = torch.multinomial(probs, num_samples=5)
+        sampled_logits = torch.gather(next_token_scores, -1, sampled_tokens)
+        valid_samples = (sampled_logits > float("-inf")).to(torch.int)
+        next_tokens = torch.gather(sampled_tokens, -1, valid_samples.argmax(1, keepdim=True)).squeeze(1)
+        return next_tokens
 
 
 def _crop_past_key_values(model, past_key_values, maximum_length):
