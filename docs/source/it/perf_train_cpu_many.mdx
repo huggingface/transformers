@@ -76,7 +76,7 @@ Il seguente "Utilizzo in Trainer" prende come esempio mpirun nella libreria Inte
 
 ## Utilizzo in Trainer
 
-Per abilitare l'addestramento distribuito multi CPU nel Trainer con il ccl backend, gli utenti devono aggiungere **`--xpu_backend ccl`** negli argomenti del comando.
+Per abilitare l'addestramento distribuito multi CPU nel Trainer con il ccl backend, gli utenti devono aggiungere **`--ddp_backend ccl`** negli argomenti del comando.
 
 Vediamo un esempio per il [question-answering example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
 
@@ -98,7 +98,7 @@ Il seguente comando abilita due processi sul nodo Xeon, con un processo in esecu
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
- --xpu_backend ccl \
+ --ddp_backend ccl \
  --use_ipex
 ```
 
@@ -131,7 +131,7 @@ A questo punto, esegui il seguente comando nel nodo0 e **4DDP** sarà abilitato 
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
- --xpu_backend ccl \
+ --ddp_backend ccl \
  --use_ipex \
  --bf16
 ```
