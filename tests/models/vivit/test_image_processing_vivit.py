@@ -109,6 +109,7 @@ class VivitImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
+    @unittest.skip()
     def test_batch_feature(self):
         pass
 
