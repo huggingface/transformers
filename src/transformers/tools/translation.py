@@ -4,8 +4,7 @@ from .base import PipelineTool
 
 TRANSLATION_DESCRIPTION = (
     "This is a tool that translates text from {src_lang} to {tgt_lang}. It takes an input named `text` which "
-    "should be the text in {src_lang} and returns a dictionary with a single key `'translated_text'` that "
-    "contains the translation in {tgt_lang}."
+    "should be the text in {src_lang} and returns a the text translated in {tgt_lang}."
 )
 
 
@@ -65,4 +64,4 @@ class TranslationTool(PipelineTool):
         return self.model.generate(**inputs)
 
     def decode(self, outputs):
-        return {"translated_text": self.post_processor.decode(outputs[0].tolist())}
+        return self.post_processor.decode(outputs[0].tolist())

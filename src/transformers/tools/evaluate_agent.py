@@ -199,8 +199,8 @@ EVALUATION_TASKS = [
         minimum_tools=[classifier, translator],
         inputs={"text": "C'est une review positive."},
         answer=[
-            classifier(translator("C'est une review positive.")["translated_text"]),
-            classifier(translator("C'est une review positive.")["translated_text"])["label"],
+            classifier(translator("C'est une review positive.")),
+            classifier(translator("C'est une review positive."))["label"],
         ],
     ),
     Problem(
@@ -237,7 +237,7 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[translator, image_transformer],
         inputs=["text", "image"],
-        answer=image_transformer("<<image>>", translator("<<text>>")["translated_text"]),
+        answer=image_transformer("<<image>>", translator("<<text>>")),
     ),
     Problem(
         task=[
