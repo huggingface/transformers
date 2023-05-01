@@ -39,7 +39,12 @@ if is_datasets_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, TFWhisperForAudioClassification, set_seed
+    from transformers import (
+        TFWhisperForAudioClassification,
+        TFWhisperForConditionalGeneration,
+        TFWhisperModel,
+        set_seed,
+    )
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
 
 
@@ -803,6 +808,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
     out_queue.put(results, timeout=timeout)
     out_queue.join()
 
+
 @require_tf
 class TFWhisperEncoderModelTester:
     def __init__(
@@ -922,8 +928,9 @@ def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
         head_mask = tf.ones([config.encoder_layers, config.encoder_attention_heads])
     return {"input_features": input_features, "head_mask": head_mask}
 
+
 @require_tf
-class TFWhisperEncoderModelTest(TFModelTesterMixin, TFGenerationTesterMixin, unittest.TestCase):
+class TFWhisperEncoderModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFWhisperForAudioClassification,) if is_tf_available() else ()
     is_encoder_decoder = False
     fx_compatible = False
@@ -962,22 +969,15 @@ class TFWhisperEncoderModelTest(TFModelTesterMixin, TFGenerationTesterMixin, uni
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            with tf.stop_gradient(inputs):
-                outputs = model(**inputs)[0]
-
+            outputs = model(**inputs)[0]
             input_ids = inputs["input_features"]
             del inputs["input_features"]
 
             encoder = model.encoder
-
-            with tf.stop_gradient(inputs):
-                inputs["encoder_outputs"] = encoder(input_ids)
-                outputs_embeds = model(**inputs)[0]
+            inputs["encoder_outputs"] = encoder(input_ids)
+            outputs_embeds = model(**inputs)[0]
 
             self.assertTrue((outputs_embeds == outputs).all())
 

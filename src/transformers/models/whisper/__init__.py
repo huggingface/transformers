@@ -63,7 +63,7 @@ else:
         "TFWhisperForConditionalGeneration",
         "TFWhisperModel",
         "TFWhisperPreTrainedModel",
-        "TFWhisperForAudioClassification"
+        "TFWhisperForAudioClassification",
     ]
 
 try:

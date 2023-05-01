@@ -28,7 +28,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
-    TFSequenceClassifierOutput
+    TFSequenceClassifierOutput,
 )
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
@@ -1388,18 +1388,20 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             "decoder_position_ids": decoder_position_ids,
         }
 
+
 class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        
+
         self.encoder = TFWhisperEncoder(config)
         num_layers = config.num_hidden_layers + 1
         if config.use_weighted_layer_sum:
             self.layer_weights = tf.Variable(tf.ones(shape=(num_layers,)) / num_layers)
         self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, input_shape=(config.hidden_size,))
-        self.classifier = tf.keras.layers.Dense(units=config.num_labels, input_shape=(config.classifier_proj_size,), 
-                                                activation=None)
-    
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels, input_shape=(config.classifier_proj_size,), activation=None
+        )
+
     @unpack_inputs
     def call(
         self,
@@ -1409,7 +1411,7 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         labels: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
@@ -1432,13 +1434,13 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         pooled_output = tf.reduce_mean(hidden_states, axis=1)
 
         logits = self.classifier(pooled_output)
-        
+
         loss = None
-        
+
         if labels is not None:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             loss = loss_fn(tf.reshape(labels, [-1]), tf.reshape(logits, [-1, self.config.num_labels]))
-        
+
         if not return_dict:
             output = (logits,) + encoder_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1449,6 +1451,3 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
-
-    
