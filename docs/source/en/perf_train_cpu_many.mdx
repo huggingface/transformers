@@ -73,7 +73,7 @@ The following "Usage in Trainer" takes mpirun in Intel® MPI library as an examp
 
 
 ## Usage in Trainer
-To enable multi CPU distributed training in the Trainer with the ccl backend, users should add **`--xpu_backend ccl`** in the command arguments.
+To enable multi CPU distributed training in the Trainer with the ccl backend, users should add **`--ddp_backend ccl`** in the command arguments.
 
 Let's see an example with the [question-answering example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
 
@@ -95,7 +95,7 @@ The following command enables training with 2 processes on one Xeon node, with o
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
- --xpu_backend ccl \
+ --ddp_backend ccl \
  --use_ipex
 ```
 The following command enables training with a total of four processes on two Xeons (node0 and node1, taking node0 as the main process), ppn (processes per node) is set to 2, with one process running per one socket. The variables OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
@@ -124,7 +124,7 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
- --xpu_backend ccl \
+ --ddp_backend ccl \
  --use_ipex \
  --bf16
 ```
