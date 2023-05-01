@@ -601,7 +601,6 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        interpolate_pos_encoding=None,
         return_dict=None,
     ):
         r"""
