@@ -2643,7 +2643,12 @@ class GenerationMixin:
 
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            # workaround for https://github.com/pytorch/pytorch/issues/48841 (multinomial being able to select entries
+            # with 0 probability, or -inf logits): sample 5 tokens, keep the first valid one
+            sampled_tokens = torch.multinomial(probs, num_samples=5)
+            sampled_logits = torch.gather(next_token_scores, -1, sampled_tokens)
+            valid_samples = (sampled_logits > float('-inf')).to(torch.int)
+            next_tokens = torch.gather(sampled_tokens, -1, valid_samples.argmax(1, keepdim=True)).squeeze(1)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
