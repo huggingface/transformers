@@ -19,7 +19,7 @@ class TextToImageTool(Tool):
     default_checkpoint = "runwayml/stable-diffusion-v1-5"
     description = TEXT_TO_IMAGE_DESCRIPTION
 
-    def __init__(self, device=None) -> None:
+    def __init__(self, device=None, **hub_kwargs) -> None:
         if not is_accelerate_available():
             raise ImportError("Accelerate should be installed in order to use tools.")
         if not is_diffusers_available():
@@ -29,6 +29,7 @@ class TextToImageTool(Tool):
 
         self.device = device
         self.pipeline = None
+        self.hub_kwargs = hub_kwargs
 
     def setup(self):
         if self.device is None:

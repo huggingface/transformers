@@ -106,31 +106,43 @@ def summarizer(text):
     return f"This is a summary of {text}."
 
 
-@add_description("This is a tool that performs a calculation between two numbers. It takes an input named `operation`, as well as two strings `a` and `b` representing the two numbers. The `operation` can take four values: -, +, /, *. It returns the result of that operation when applied to the two numbers.")
+@add_description(
+    "This is a tool that performs a calculation between two numbers. It takes an input named `operation`, as well as two strings `a` and `b` representing the two numbers. The `operation` can take four values: -, +, /, *. It returns the result of that operation when applied to the two numbers."
+)
 def calculator(operation, a, b):
     return f"This is the solution of ({a} {operation} {b})."
 
 
-@add_description("This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches.")
+@add_description(
+    "This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches."
+)
 def search_engine(query):
     return f'This is result of the search of "{query}" on a search engine.'
 
+
 _db = {}
 
-@add_description("This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.")
+
+@add_description(
+    "This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database."
+)
 def database_reader(key):
     global _db
     return f"db_read({_db[key]})"
 
 
-@add_description("This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.")
+@add_description(
+    "This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation."
+)
 def database_writer(key, value):
     global _db
     _db[key] = value
-    return '200'
+    return "200"
 
 
-@add_description("This is a tool that uses a Large Language Model with some prompt engineering. Given a prompt, it will return the LLM generation. It takes an input `prompt` and returns the generated text.")
+@add_description(
+    "This is a tool that uses a Large Language Model with some prompt engineering. Given a prompt, it will return the LLM generation. It takes an input `prompt` and returns the generated text."
+)
 def prompt_engineer(prompt):
     return f"({prompt} ... [generation])"
 
@@ -163,7 +175,7 @@ ALL_TOOLS = [
     database_writer,
     prompt_engineer,
     cat_generator,
-    dog_generator
+    dog_generator,
 ]
 
 
@@ -303,7 +315,9 @@ EVALUATION_TASKS = [
         minimum_tools=[search_engine, calculator],
         inputs=[],
         answer=[
-            calculator('*', search_engine("Redbull can price in America"), search_engine("Last week's USD to KRW rate")),
+            calculator(
+                "*", search_engine("Redbull can price in America"), search_engine("Last week's USD to KRW rate")
+            ),
         ],
     ),
     Problem(
@@ -313,7 +327,7 @@ EVALUATION_TASKS = [
         minimum_tools=[search_engine, calculator],
         inputs=[],
         answer=[
-            calculator('*', search_engine("Postal code L'Arc de Triomphe"), '3'),
+            calculator("*", search_engine("Postal code L'Arc de Triomphe"), "3"),
         ],
     ),
     Problem(
@@ -321,8 +335,8 @@ EVALUATION_TASKS = [
             "Generate an image from the text given in `text_input`, and write it into the database using the original text as key. Show me the value of the written record once this is done.",
         ],
         minimum_tools=[database_writer, database_reader, image_generator],
-        inputs=['text_input'],
-        answer=f"db_read({image_generator('<<text_input>>')})"
+        inputs=["text_input"],
+        answer=f"db_read({image_generator('<<text_input>>')})",
     ),
     Problem(
         task=[
@@ -330,15 +344,13 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[prompt_engineer, summarizer, classifier],
         inputs=[],
-        answer=[{'label': 'positive', 'score': 0.5}]
+        answer=[{"label": "positive", "score": 0.5}],
     ),
     Problem(
-        task=[
-            "Create an image of dolphins."
-        ],
+        task=["Create an image of dolphins."],
         minimum_tools=[dog_generator, cat_generator],
         inputs=[],
-        answer=['There is no tool available that can generate dolphins.']
+        answer=["There is no tool available that can generate dolphins."],
     ),
 ]
 
