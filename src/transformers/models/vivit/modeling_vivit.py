@@ -251,7 +251,6 @@ class VivitIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states):
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -507,6 +506,8 @@ class VivitModel(VivitPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
+
+
         >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.
@@ -641,6 +642,8 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
+
+
         >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.

@@ -81,7 +81,6 @@ class VivitImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class VivitImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
     def setUp(self):
