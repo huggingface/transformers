@@ -35,33 +35,26 @@ def get_gcvit_config(gcvit_name):
     
     print(model_size)
     if model_size == "xxtiny":
-        embed_dim = 64
         depths = (2, 2, 6, 2)
         num_heads = (2, 4, 8, 16)
-        mlp_ratio = 3.0
-        layer_norm_eps = None
     elif model_size == "xtiny":
-        print(f"detected model size = {model_size}")
-        embed_dim = 64
         depths = (3, 4, 6, 5)
         num_heads = (2, 4, 8, 16)
-        mlp_ratio = 3.0
-        layer_norm_eps = None
+    elif model_size == "tiny":
+        depths = (3, 4, 19, 5)
+        num_heads = (2, 4, 8, 16)
     elif model_size == "small":
         embed_dim = 96
-        depths = (2, 2, 18, 2)
+        depths = (3, 4, 19, 5)
         num_heads = (3, 6, 12, 24)
-    elif model_size == "base":
-        embed_dim = 128
-        depths = (2, 2, 18, 2)
-        num_heads = (4, 8, 16, 32)
+        mlp_ratio = 2
+        layer_scale = 1e-5
     else:
-        embed_dim = 192
-        depths = (2, 2, 18, 2)
-        num_heads = (6, 12, 24, 48)
-
-    # if "to" in gcvit_name:
-    #     config.pretrained_window_sizes = (12, 12, 12, 6)
+        embed_dim = 128
+        depths = (3, 4, 19, 5)
+        num_heads = (4, 8, 16, 32)
+        mlp_ratio = 2
+        layer_scale = 1e-5
 
     if ("22k" in gcvit_name) and ("to" not in gcvit_name):
         num_classes = 21841
@@ -87,8 +80,7 @@ def get_gcvit_config(gcvit_name):
     config.depths = depths
     config.num_heads = num_heads
     config.mlp_ratio = mlp_ratio
-    config.layer_norm_eps = layer_norm_eps
-    # config.window_size = window_size
+    config.layer_scale = layer_scale
 
     return config
 

@@ -96,12 +96,12 @@ class GCViTConfig(PretrainedConfig):
     def __init__(
         self,
         image_size=224, 
-        patch_size=3,
         num_channels=3, 
         embed_dim=64, 
-        depths=[3, 4, 6, 5], 
+        depths=[3, 4, 19, 5], 
         num_heads=[2, 4, 8, 16], 
-        window_size=7,
+        window_size=None,
+        window_ratio=[32, 32, 16, 32],
         mlp_ratio=3.0, 
         qkv_bias=True, 
         hidden_dropout_prob=0.0, 
@@ -110,20 +110,22 @@ class GCViTConfig(PretrainedConfig):
         hidden_act="gelu",
         use_absolute_embeddings=False,
         initializer_range=0.02,
-        layer_norm_eps=None,
-        # encoder_stride=32,
+        layer_scale=None,
+        norm_layer="layernorm2d",
+        norm_layer_cl="layernorm",
+        layer_norm_eps=1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.depths = depths
         self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
+        self.window_ratio = window_ratio
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -133,7 +135,9 @@ class GCViTConfig(PretrainedConfig):
         self.use_absolute_embeddings = use_absolute_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        # self.encoder_stride = encoder_stride
+        self.layer_scale = layer_scale
+        self.norm_layer = norm_layer
+        self.norm_layer_cl = norm_layer_cl
         # we set the hidden_size attribute in order to make GCViT work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
