@@ -500,11 +500,32 @@ class VivitModel(VivitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import numpy as np
 
         >>> from transformers import VivitImageProcessor, VivitModel
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
@@ -520,11 +541,10 @@ class VivitModel(VivitPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
         >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
@@ -614,14 +634,32 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
-        >>> import torch
+        >>> import av
         >>> import numpy as np
 
-        >>> from transformers import VivitImageProcessor, VivitForVideoClassification
+        >>> from transformers import VivitImageProcessor, VivitModel
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
@@ -637,11 +675,10 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
         >>> feature_extractor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
