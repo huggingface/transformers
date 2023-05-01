@@ -192,9 +192,9 @@ def get_default_device():
 
 TASK_MAPPING = {
     "generative-qa": "GenerativeQuestionAnsweringTool",
-    "image-alteration": "ControlNetTool",
+    "image-transformation": "ImageTransformationTool",
     "image-captioning": "ImageCaptioningTool",
-    "image-generation": "StableDiffusionTool",
+    "image-generation": "TextToImageTool",
     "image-segmentation": "ImageSegmentationTool",
     "language-identification": "LanguageIdenticationTool",
     "speech-to-text": "SpeechToTextTool",
