@@ -47,7 +47,7 @@ class VivitModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         num_labels=10,
