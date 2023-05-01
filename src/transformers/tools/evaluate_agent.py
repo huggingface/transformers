@@ -1,5 +1,6 @@
 import random
 
+from .agents import BASE_PYTHON_TOOLS
 from .generative_question_answering import (
     GENERATIVE_QUESTION_ANSWERING_DESCRIPTION as generative_question_answering_description,
 )
@@ -192,8 +193,8 @@ class Problem:
 EVALUATION_TASKS = [
     Problem(
         task=[
-            "Is the following `text` (in French) positive or negative?",
-            "Is the text in the variable `text` (in French) positive or negative?",
+            "Is the following `text` (in Spanish) positive or negative?",
+            "Is the text in the variable `text` (in Spanish) positive or negative?",
         ],
         minimum_tools=[classifier, translator],
         inputs={"text": "C'est une review positive."},
@@ -222,12 +223,30 @@ EVALUATION_TASKS = [
     ),
     Problem(
         task=[
-            "Download the content of `url` and summarize it to me.",
-            "Tell me what the web page at `url` talks about in a few words.",
+            "Download the content of `url`, summarize it then generate an image from its content.",
+            "Use a summary of the web page at `url` as a prompt to generate an image.",
         ],
-        minimum_tools=[text_downloader, summarizer],
+        minimum_tools=[summarizer, text_downloader, image_generator],
         inputs=["url"],
-        answer=summarizer(text_downloader("<<url>>")),
+        answer=image_generator(summarizer(text_downloader("<<url>>"))),
+    ),
+    Problem(
+        task=[
+            "Transform the following `image` using the prompt in `text. The prompt is in Spanish.",
+            "Use the text prompt in `text` (in Spanish) to transform the following `image`.",
+        ],
+        minimum_tools=[translator, image_transformer],
+        inputs=["text", "image"],
+        answer=image_transformer("<<image>>", translator("<<text>>")["translated_text"]),
+    ),
+    Problem(
+        task=[
+            "Download the content of `url`, summarize it then read it out loud to me.",
+            "Read me a summary of the web page at `url`.",
+        ],
+        minimum_tools=[summarizer, text_downloader, speaker],
+        inputs=["url"],
+        answer=speaker(summarizer(text_downloader("<<url>>"))),
     ),
 ]
 
@@ -235,7 +254,7 @@ EVALUATION_TASKS = [
 def get_score(problem, code, tools, verbose: bool = False):
     if verbose:
         print(code + "\n")
-    all_tools = {"print": print}
+    all_tools = BASE_PYTHON_TOOLS.copy()
     all_tools.update({f"tool_{i}": t for i, t in enumerate(tools)})
     try:
         if isinstance(problem.inputs, dict):
