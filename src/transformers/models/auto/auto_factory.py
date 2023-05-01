@@ -14,20 +14,22 @@
 # limitations under the License.
 """Factory function to build auto-model classes."""
 from __future__ import annotations
+
 import copy
 import importlib
 from collections import OrderedDict
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Union, Tuple, Type
+from typing import TYPE_CHECKING, Tuple, Type, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...utils import copy_func, logging
-from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
-from ...utils.dummy_sentencepiece_objects import T5Tokenizer, FNetTokenizer, PegasusTokenizer
-from ..rag.tokenization_rag import RagTokenizer
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import copy_func, logging
+from ...utils.dummy_sentencepiece_objects import FNetTokenizer, PegasusTokenizer, T5Tokenizer
+from ..rag.tokenization_rag import RagTokenizer
+from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+
 
 _LazyAutoMappingValue = Tuple[
     Type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],

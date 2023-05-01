@@ -14,17 +14,19 @@
 # limitations under the License.
 """ Auto Config class."""
 from __future__ import annotations
+
 import importlib
 import os
 import re
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, KeysView, List, TypeVar, Union, ValuesView, Type
+from typing import TYPE_CHECKING, KeysView, List, Type, TypeVar, Union, ValuesView
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...utils import CONFIG_NAME, logging
+
 
 # Support Python 3.8 and below
 if TYPE_CHECKING:
