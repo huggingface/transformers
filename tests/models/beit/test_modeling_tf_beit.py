@@ -374,11 +374,11 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Overriding this method since the base method won't be compatible with Data2VecVision.
+    # Overriding this method since the base method won't be compatible with BEiT.
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            # Since `TFData2VecVisionModel` cannot operate with the default `fit()` method.
+            # Since `TFBeitModel` cannot operate with the default `fit()` method.
             if model_class.__name__ != "TFBeitModel":
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
@@ -418,11 +418,11 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
         # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
         super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
-    # Overriding this method since the base method won't be compatible with Data2VecVision.
+    # Overriding this method since the base method won't be compatible with BEiT.
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            # Since `TFData2VecVisionModel` won't have labels against which we
+            # Since `TFBeitModel` won't have labels against which we
             # could compute loss.
             if model_class.__name__ != "TFBeitModel":
                 model = model_class(config)

@@ -848,7 +848,7 @@ BEIT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
             in eager mode, in graph mode the value will always be set to True.
-        training (`bool`, *optional*, defaults to `False``):
+        training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -1180,15 +1180,15 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
 
     def call(self, inputs):
-        # Rearrange from NHWC -> NCHW
+        # Rearrange from batch_size, height, width, channels -> batch_size, channels, height, width
         inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
         # Perform W-pooling
         inputs = self.w_pool(inputs)
-        # Rearrange NCHW -> NCWH
+        # Rearrange batch_size, channels, height, width -> batch_size, channels, width, height
         inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
         # Perform H-pooling
         inputs = self.h_pool(inputs)
-        # Rearrange from NCWH -> NHWC
+        # Rearrange from batch_size, channels, width, height -> batch_size, height, width, channels
         inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
         return inputs
 
@@ -1200,11 +1200,12 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
 
 class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
     """
-    Args:
     Pyramid Pooling Module (PPM) used in PSPNet.
-        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
-            Module.
-        channels (int): Channels after modules, before conv_seg.
+    Args:    
+        pool_scales (tuple[int]):
+            Pooling scales used in Pooling Pyramid Module.
+        channels (int): 
+            Channels after modules, before conv_seg.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1307,11 +1308,16 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 
 class TFBeitFCNHead(tf.keras.layers.Layer):
     """
-    Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-        config (BeitConfig): Configuration. kernel_size (int): The kernel size for convs in the head. Default: 3.
-        dilation (int): The dilation rate for convs in the head. Default: 1.
+
+    Args:
+        config (BeitConfig): 
+            Configuration.
+        kernel_size (int): 
+            The kernel size for convs in the head. Default: 3.
+        dilation (int): 
+            The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1388,7 +1394,7 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         # FPNs
         self.fpn1 = [
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
-            tf.keras.layers.BatchNormalization(name="fpn1.1"),
+            tf.keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.Activation("gelu"),
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
@@ -1449,15 +1455,15 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         Returns:
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFBeitForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, TFBeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
         >>> model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
