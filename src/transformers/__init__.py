@@ -1148,6 +1148,7 @@ else:
         [
             "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BioGptForCausalLM",
+            "BioGptForSequenceClassification",
             "BioGptForTokenClassification",
             "BioGptModel",
             "BioGptPreTrainedModel",
@@ -4807,6 +4808,7 @@ if TYPE_CHECKING:
         from .models.biogpt import (
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BioGptForCausalLM,
+            BioGptForSequenceClassification,
             BioGptForTokenClassification,
             BioGptModel,
             BioGptPreTrainedModel,
