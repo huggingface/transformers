@@ -1006,8 +1006,5 @@ class FlaxGenerationMixin:
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
-        # take best beam for each batch
-        sequences = sequences[:, 0]
-        scores = scores[:, 0]
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
