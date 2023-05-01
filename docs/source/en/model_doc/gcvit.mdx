@@ -1,0 +1,49 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# GCViT
+
+## Overview
+
+The GCViT model was proposed in [Global Context Vision Transformers](https://arxiv.org/pdf/2206.09959) by Ali Hatamizadeh, Hongxu Yin, Jan Kautz, Pavlo Molchanov.
+A similar architecture proposed for ViT but joining global context self-attention modules, as an alternative to complex operations such as an attention masks or local windows shifting.
+
+The abstract from the paper is the following:
+
+*We propose global context vision transformer (GC ViT), a novel architecture that enhances parameter and compute utilization for computer vision tasks. The core of the novel model are global context self-attention modules, joint with standard local self-attention, to effectively yet efficiently model both long and short-range spatial interactions, as an alternative to complex operations such as an attention masks or local windows shifting. While the local self-attention modules are responsible for modeling short-range information, the global query tokens are shared across all global self-attention modules to interact with local key and values. In addition, we address the lack of inductive bias in ViTs and improve the modeling of inter-channel dependencies by proposing a novel downsampler which leverages a parameter-efficient fused inverted residual block. The proposed GC ViT achieves new state-of-the-art performance across image classification, object detection and semantic segmentation tasks. On ImageNet-1K dataset for classification, GC ViT models with 51M, 90M and 201M parameters achieve 84.3%, 84.9% and 85.6% Top-1 accuracy, respectively, surpassing comparably-sized prior art such as CNN-based ConvNeXt and ViT-based Swin Transformer. Pre-trained GC ViT backbones in downstream tasks of object detection, instance segmentation, and semantic segmentation on MS COCO and ADE20K datasets outperform prior work consistently, sometimes by large margins.*
+
+Tips:
+
+<INSERT TIPS ABOUT MODEL HERE>
+
+This model was contributed by [JorgeAV](https://huggingface.co/JorgeAV).
+The original code can be found [here](https://github.com/NVlabs/GCVit).
+
+
+## GCViTConfig
+
+[[autodoc]] GCViTConfig
+
+## GCViTModel
+
+[[autodoc]] GCViTModel
+    - forward
+
+## GCViTForMaskedImageModeling
+
+[[autodoc]] GCViTForMaskedImageModeling
+    - forward
+
+## GCViTForImageClassification
+
+[[autodoc]] transformers.GCViTForImageClassification
+    - forward
