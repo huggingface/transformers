@@ -29,13 +29,13 @@ You should only use the tools necessary to perform the task.
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
 Tools:
-- tool_0: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns a dictionary with a single key `'translation_text'` that contains the translation in Enlish.
+- tool_0: This is a tool that translates text from French to English. It takes an input named `text` which should be the text in French and returns the text translated in Enlish.
 - tool_1: This is a tool that generates speech from a given text in English. It takes an input named `text` which should be the text in English and returns the path to a filename containing an audio of this text read.
 - tool_2: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
 
 Answer:
 ```py
-translated_question = tool_0(text=question)['translation_text']
+translated_question = tool_0(text=question)
 print(f"The translated question is {translated_question}.")
 result = tool_2(text=translated_question, image=image)
 print(f"The answer is {result}")
