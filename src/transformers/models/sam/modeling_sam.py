@@ -491,6 +491,7 @@ class SamMaskDecoder(nn.Module):
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
+        # TODO: can we get rid of the if statement?
         if sparse_prompt_embeddings.sum().item() != 0:
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         else:
@@ -708,7 +709,7 @@ class SamPromptEncoder(nn.Module):
             )
 
         if sparse_embeddings is None:
-            sparse_embeddings = torch.empty((batch_size, 0, 1, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.empty((batch_size, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
@@ -758,22 +759,18 @@ class SamVisionAttention(nn.Module):
             Extracted positional embeddings according to relative positions.
         """
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
-        # Interpolate rel pos if needed.
-        if True: # rel_pos.shape[0] != max_rel_dist:
-            # Interpolate rel pos.
-            rel_pos_resized = F.interpolate(
-                rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
-                size=max_rel_dist,
-                mode="linear",
-            )
-            rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
-        else:
-            rel_pos_resized = rel_pos
+        # Interpolate rel pos.
+        rel_pos_resized = F.interpolate(
+            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            size=max_rel_dist,
+            mode="linear",
+        )
+        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
 
         # Scale the coords with short length if shapes for q and k are different.
-        q_coords = torch.arange(q_size)[:, None] * k_size / q_size
-        k_coords = torch.arange(k_size)[None, :] * q_size / k_size
-        relative_coords = (q_coords - k_coords) + (k_size - 1) * q_size / k_size
+        q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+        k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
 
         return rel_pos_resized[relative_coords.long()]
 
@@ -881,9 +878,7 @@ class SamVisionLayer(nn.Module):
 
         pad_h = (window_size - height % window_size) % window_size
         pad_w = (window_size - width % window_size) % window_size
-        # TODO: the if statement can be removed.
-        if True: # pad_h > 0 or pad_w > 0:
-            hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
+        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
         pad_height, pad_width = height + pad_h, width + pad_w
 
         hidden_states = hidden_states.reshape(
@@ -919,8 +914,7 @@ class SamVisionLayer(nn.Module):
             hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
         )
 
-        if True: # pad_height > height or pad_width > width:
-            hidden_states = hidden_states[:, :height, :width, :].contiguous()
+        hidden_states = hidden_states[:, :height, :width, :].contiguous()
         return hidden_states
 
     def forward(
