@@ -28,7 +28,8 @@ class Beit3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the BEiT
-    [microsoft/beit3-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit3-base-patch16-224-pt22k) architecture.
+    [microsoft/beit3-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit3-base-patch16-224-pt22k)
+    architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):
@@ -106,6 +107,7 @@ class Beit3Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "beit"
+
     def __init__(
         self,
         embed_dim=768,
@@ -138,7 +140,6 @@ class Beit3Config(PretrainedConfig):
         self.normalize_before = normalize_before
         self.activation_fn = activation_fn
         self.dropout = dropout
-        self.drop_path_rate = drop_path_rate
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.subln = subln
