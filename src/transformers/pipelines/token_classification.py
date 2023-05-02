@@ -573,22 +573,28 @@ class TokenClassificationPipeline(ChunkPipeline):
 
 class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
     """
-    The SlidingWindowTokenClassificationPipeline inherits from TokenClassificationPipeline. If users wish to perfrom tasks using
-    any `ModelForClassification`, but the input tokens are longer than `model_max_length`, they could instead use this class so that
-    the input tokens will be separated using a sliding window method with a given stride number. And the output is returned by averaging
-    the logits of duplicated tokens. 
-    
-    NOTE: the difference between this class and 
-    the existing logic in `TokenClassificationPipeline` is in how they handle tokens that are covered by multiple overlapping window.
-    This class will averages the logits across all windows for every token, then extracts entities using those averaged logits. 
-    (`TokenClassificationPipeline` extracts a separate entity for each window that a token appears in, then selects the entity with a higher
-    score, in case of an overlap.)
+    The SlidingWindowTokenClassificationPipeline inherits from TokenClassificationPipeline. If users wish to perfrom
+    tasks using any `ModelForClassification`, but the input tokens are longer than `model_max_length`, they could
+    instead use this class so that the input tokens will be separated using a sliding window method with a given stride
+    number. And the output is returned by averaging the logits of duplicated tokens.
+
+    NOTE: the difference between this class and the existing logic in `TokenClassificationPipeline` is in how they
+    handle tokens that are covered by multiple overlapping window. This class will averages the logits across all
+    windows for every token, then extracts entities using those averaged logits. (`TokenClassificationPipeline`
+    extracts a separate entity for each window that a token appears in, then selects the entity with a higher score, in
+    case of an overlap.)
 
     Example:
-    
+
     ```python
     >>> from transformers import pipeline
-    >>> token_classifier = pipeline("token-classification-sliding-window", model="dslim/bert-base-NER", aggregation_strategy="FIRST", stride=256)
+
+    >>> token_classifier = pipeline(
+    ...     "token-classification-sliding-window",
+    ...     model="dslim/bert-base-NER",
+    ...     aggregation_strategy="FIRST",
+    ...     stride=256,
+    ... )
     >>> sentence = 2000 * "Hello, world. " + "David Smith went to London Hospital on January 8, 1956"
     >>> entities = token_classifier(sentence)
     >>> entities
@@ -611,9 +617,13 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
 
         all_window_logits = np.concatenate([window_outputs["logits"].numpy() for window_outputs in all_outputs])
         all_window_input_ids = np.concatenate([window_outputs["input_ids"].numpy() for window_outputs in all_outputs])
-        all_window_special_tokens_mask = np.concatenate([window_outputs["special_tokens_mask"].numpy() for window_outputs in all_outputs])
+        all_window_special_tokens_mask = np.concatenate(
+            [window_outputs["special_tokens_mask"].numpy() for window_outputs in all_outputs]
+        )
         all_window_offset_mapping = (
-            np.concatenate([window_outputs["offset_mapping"].numpy() for window_outputs in all_outputs]) if all_outputs[0]["offset_mapping"] is not None else None
+            np.concatenate([window_outputs["offset_mapping"].numpy() for window_outputs in all_outputs])
+            if all_outputs[0]["offset_mapping"] is not None
+            else None
         )
 
         num_tokens = len(self.tokenizer.tokenize(sentence))
