@@ -22,10 +22,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
-CLS_ID = 101
-SEP_ID = 102
-
-
 class TokenClassificationArgumentHandler(ArgumentHandler):
     """
     Handles arguments for token classification.
