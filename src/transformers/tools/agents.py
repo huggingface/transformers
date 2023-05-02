@@ -1,9 +1,11 @@
 import importlib.util
 import os
 import time
+import warnings
 
 import requests
 
+from .base import supports_remote, tool
 from .python_interpreter import evaluate
 
 
@@ -251,59 +253,34 @@ class OpenAiAgent(Agent):
         return [answer["text"] for answer in result["choices"]]
 
 
-NEW_PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform
-the task. To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and
-has a description explaining the task it performs, the inputs it expects and the outputs it returns. You should first
-explain which tool you will use to perform the task and for what reason, then write the code in Python. Each
-instruction in Python should be a simple assignement. You can print intermediate results if it makes sense to do so.
-The final result should be stored in a variable named `result`. You can also print the result if it makes sense to do
-so.
+# docstyle-ignore
+NEW_PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
+To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
+You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
+Each instruction in Python should be a simple assignement. You can print intermediate results if it makes sense to do so.
+The final result should be stored in a variable named `result`. You can also print the result if it makes sense to do so.
 
 Tools:
-- text_qa: This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the
-  text where to find the answer, and `question`, which is the question, and returns the answer to the question.
-- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which
-  should be the image to caption, and returns a text that contains the description in English.
-- image_transformer: This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which
-  should be the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the
-  modified image.
-- text_downloader: This is a tool that downloads the context of an url and returns the text inside. It takes an input
-  named `url`, which is the url to download, and returns the text.
-- transcriber: This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the
-  transcribed text.
-- table_qa: This is a tool that reads a table and answers a question related to the table. It takes an input named
-  `table` which should be the table containing the date, as well as a `question` to be asked relative to the table. It
-  returns the answer in text.
-- image_generator: This is a tool that creates an image according to a text description. It takes an input named `text`
-  which contains the image description and outputs an image.
-- text_reader: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain
-  the text to read (in English) and returns a waveform object containing the sound.
-- text_classifier: This is a tool that classifies an English text using provided labels. It takes two inputs: `text`,
-  which should be the text to classify, and `labels`, which should be the list of labels to use for classification. It
-  returns the most likely label in the list of provided `labels` for the input text.
-- translator: This is a tool that translates text from a language to another. It takes three inputs: `text`, which
-  should be the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`,
-  which should be the language for the desired ouput language. It returns the text translated in `tgt_lang`.
-- summarizer: This is a tool that summarizes texts. It takes an input named `text`, which should be the text to
-  summarize, and returns the summary.
-- search_engine: This is a tool that performs a search on a search engine. It takes an input `query` and returns the
-  first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments
-  location, among many other searches.
-- database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the
-  value in the database.
-- database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the
-  location in the database, as well as an input `value` which will populate the database. It returns the HTTP code
-  indicating success or failure of the write operation.
-- image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the
-  question in English and an input `image` which should be an image, and outputs a text that is the answer to the
-  question.
+- text_qa: This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the text where to find the answer, and `question`, which is the question, and returns the answer to the question.
+- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
+- image_transformer: This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which should be the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the modified image.
+- text_downloader: This is a tool that downloads the context of an url and returns the text inside. It takes an input named `url`, which is the url to download, and returns the text.
+- transcriber: This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the transcribed text.
+- table_qa: This is a tool that reads a table and answers a question related to the table. It takes an input named `table` which should be the table containing the date, as well as a `question` to be asked relative to the table. It returns the answer in text.
+- image_generator: This is a tool that creates an image according to a text description. It takes an input named `text` which contains the image description and outputs an image.
+- text_reader: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the text to read (in English) and returns a waveform object containing the sound.
+- text_classifier: This is a tool that classifies an English text using provided labels. It takes two inputs: `text`, which should be the text to classify, and `labels`, which should be the list of labels to use for classification. It returns the most likely label in the list of provided `labels` for the input text.
+- translator: This is a tool that translates text from a language to another. It takes three inputs: `text`, which should be the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`, which should be the language for the desired ouput language. It returns the text translated in `tgt_lang`.
+- summarizer: This is a tool that summarizes texts. It takes an input named `text`, which should be the text to summarize, and returns the summary.
+- search_engine: This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches.
+- database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.
+- database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.
+- image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
 
 
-Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is
-in French."
+Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
-I will use the following tools: `translator` to translate the question in English and then `image_qa` to answer the
-question on the input image.
+I will use the following tools: `translator` to translate the question in English and then `image_qa` to answer the question on the input image.
 
 Answer:
 ```py
@@ -315,8 +292,7 @@ print(f"The answer is {result}")
 
 Task: "Identify the oldest person in the `table` and create an image showcasing the result as a banner."
 
-I wil use the following tools: `table_qa` to find the oldest person in the table, then `image_generator` to generate an
-image according to the answer.
+I wil use the following tools: `table_qa` to find the oldest person in the table, then `image_generator` to generate an image according to the answer.
 
 Answer:
 ```py
@@ -336,8 +312,7 @@ result = image_generator(text=caption)
 
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
-I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out
-loud.
+I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
 
 Answer:
 ```py
@@ -346,11 +321,9 @@ print(f"Summary: {summarized text}")
 result = text_reader(text=summarized_text)
 ```
 
-Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate
-an image."
+Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
-I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according
-to the answer.
+I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
 
 Answer:
 ```py
@@ -386,10 +359,35 @@ OUR_TOOLS = {
     "text_qa": "generative-qa",
     "image_captioner": "image-captioning",
     "image_transformer": "image-transformation",
+    "text_downloader": None,
     "transcriber": "speech-to-text",
+    "table_qa": None,
     "image_generator": "image-generation",
     "text_reader": "text-to-speech",
+    "text_classifier": "text-classification",
+    "translator": "translation",
+    "summarizer": None,
+    "search_engine": None,
+    "database_reader": None,
+    "database_writer": None,
+    "image_qa": None,
 }
+
+
+def resolve_tools(code, remote=False):
+    resolved_tools = BASE_PYTHON_TOOLS.copy()
+    for name, task_name in OUR_TOOLS.items():
+        if name not in code:
+            continue
+        if task_name is None:
+            raise NotImplementedError(f"The tool {name} has not been implemented yet.")
+
+        tool_has_remote = supports_remote(task_name)
+        if remote and not tool_has_remote:
+            warnings.warn(f"Loading `tool({task_name})` locally as it does not support `remote=True` yet.")
+        resolved_tools[name] = tool(task_name, remote=(remote and tool_has_remote))
+
+    return resolved_tools
 
 
 class NewOpenAiAgent(Agent):
@@ -464,9 +462,17 @@ class NewOpenAiAgent(Agent):
         explanation, code = code.split("Answer:")
         explanation = explanation.strip()
         code = code.strip()
+
+        code_lines = code.split("\n")
+        if code_lines[0] in ["```", "```py"]:
+            code_lines = code_lines[1:]
+        if code_lines[-1] == "```":
+            code_lines = code_lines[:-1]
+        code = "\n".join(code_lines)
+
         return explanation, code
 
-    def run(self, task, return_code=True, **kwargs):
+    def run(self, task, return_code=False, remote=False, **kwargs):
         code = self.generate_code(task)
         explanation, clean_code = self.clean_code(code)
 
@@ -478,7 +484,7 @@ class NewOpenAiAgent(Agent):
         print(f"\n\n==Code generated by the agent==\n{clean_code}")
         if not return_code:
             print("\n\n==Result==")
-            return evaluate(clean_code, all_tools, kwargs)
+            resolved_tools = resolve_tools(clean_code, remote=remote)
+            return evaluate(clean_code, resolved_tools, kwargs)
         else:
-            raise NotImplementedError("It's coming soon!")
             return clean_code

@@ -5,9 +5,9 @@ from .base import PipelineTool, RemoteTool
 
 
 TEXT_CLASSIFIER_DESCRIPTION = (
-    "This is a tool that classifies an English text using the following {n_labels} labels: {labels}. It takes an "
-    "input named `text` which should be in English and returns a dictionary with two keys named 'label' (the "
-    "predicted label) and 'score' (the probability associated to it)."
+    "This is a tool that classifies an English text using provided labels. It takes two inputs: `text`, which should "
+    "be the text to classify, and `labels`, which should be the list of labels to use for classification. It returns "
+    "the most likely label in the list of provided `labels` for the input text."
 )
 
 
@@ -18,12 +18,12 @@ class TextClassificationTool(PipelineTool):
     ```py
     from transformers.tools import TextClassificationTool
 
-    classifier = TextClassificationTool("distilbert-base-uncased-finetuned-sst-2-english")
-    classifier("This is a super nice API!")
+    classifier = TextClassificationTool()
+    classifier("This is a super nice API!", labels=["positive", "negative"])
     ```
     """
 
-    default_checkpoint = "distilbert-base-uncased-finetuned-sst-2-english"  # Needs to be updated
+    default_checkpoint = "facebook/bart-large-mnli"
     description = TEXT_CLASSIFIER_DESCRIPTION
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
@@ -34,27 +34,26 @@ class TextClassificationTool(PipelineTool):
         else:
             config = self.model.config
 
-        num_labels = config.num_labels
-        labels = list(config.label2id.keys())
+        self.entailment_id = -1
+        for idx, label in config.id2label.items():
+            if label.lower().startswith("entail"):
+                self.entailment_id = int(idx)
+        if self.entailment_id == -1:
+            raise ValueError("Could not determine the entailment ID from the model config, please pass it at init.")
 
-        if len(labels) > 1:
-            labels = [f"'{label}'" for label in labels]
-            labels_string = ", ".join(labels[:-1])
-            labels_string += f", and {labels[-1]}"
-        else:
-            raise ValueError("Not enough labels.")
-
-        self.description = self.description.replace("{n_labels}", str(num_labels)).replace("{labels}", labels_string)
-
-    def encode(self, text):
-        return self.pre_processor(text, return_tensors="pt")
+    def encode(self, text, labels):
+        self._labels = labels
+        return self.pre_processor(
+            [text] * len(labels),
+            [f"This example is {label}" for label in labels],
+            return_tensors="pt",
+            padding="max_length",
+        )
 
     def decode(self, outputs):
         logits = outputs.logits
-        scores = torch.nn.functional.softmax(logits, dim=-1)
-        label_id = torch.argmax(logits[0]).item()
-        label = self.model.config.id2label[label_id]
-        return {"label": label, "score": scores[0][label_id].item()}
+        label_id = torch.argmax(logits[:, 2]).item()
+        return self._labels[label_id]
 
 
 class RemoteTextClassificationTool(RemoteTool):
@@ -64,36 +63,23 @@ class RemoteTextClassificationTool(RemoteTool):
     ```py
     from transformers.tools import RemoteTextClassificationTool
 
-    classifier = RemoteTextClassificationTool("distilbert-base-uncased-finetuned-sst-2-english")
-    classifier("This is a super nice API!")
+    classifier = RemoteTextClassificationTool()
+    classifier("This is a super nice API!", labels=["positive", "negative"])
     ```
     """
 
-    default_checkpoint = "distilbert-base-uncased-finetuned-sst-2-english"  # Needs to be updated
+    default_checkpoint = "facebook/bart-large-mnli"
     description = TEXT_CLASSIFIER_DESCRIPTION
 
-    def post_init(self):
-        config = AutoConfig.from_pretrained(self.repo_id)
-        num_labels = config.num_labels
-        labels = list(config.label2id.keys())
-
-        if len(labels) > 1:
-            labels = [f"'{label}'" for label in labels]
-            labels_string = ", ".join(labels[:-1])
-            labels_string += f", and {labels[-1]}"
-        else:
-            raise ValueError("Not enough labels.")
-
-        self.description = self.description.replace("{n_labels}", str(num_labels)).replace("{labels}", labels_string)
+    def prepare_inputs(self, text, labels):
+        return {"inputs": text, "params": {"candidate_labels": labels}}
 
     def extract_outputs(self, outputs):
         label = None
         max_score = 0
-        for result in outputs:
-            lbl = result["label"]
-            score = float(result["score"])
+        for lbl, score in zip(outputs["labels"], outputs["scores"]):
             if score > max_score:
                 label = lbl
                 max_score = score
 
-        return {"label": label, "score": max_score}
+        return label
