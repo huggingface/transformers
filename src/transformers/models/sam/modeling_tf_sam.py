@@ -612,15 +612,9 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.mask_input_channels = config.mask_input_channels // 4
         self.activation = ACT2FN[config.hidden_act]
-        self.conv1 = tf.keras.layers.Conv2D(
-            self.mask_input_channels, kernel_size=2, strides=2, name="conv1"
-        )
-        self.conv2 = tf.keras.layers.Conv2D(
-            self.mask_input_channels, kernel_size=2, strides=2, name="conv2"
-        )
-        self.conv3 = tf.keras.layers.Conv2D(
-            config.hidden_size, kernel_size=1, name="conv3"
-        )
+        self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
+        self.conv2 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv2")
+        self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
         self.layer_norm1 = TFSamLayerNorm(self.mask_input_channels, config.layer_norm_eps, name="layer_norm1")
         self.layer_norm2 = TFSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps, name="layer_norm2")
 
@@ -1002,7 +996,10 @@ class TFSamVisionNeck(tf.keras.layers.Layer):
         self.config = config
 
         self.conv1 = tf.keras.layers.Conv2D(
-            config.output_channels, kernel_size=1, use_bias=False, name="conv1",
+            config.output_channels,
+            kernel_size=1,
+            use_bias=False,
+            name="conv1",
         )
         self.layer_norm1 = TFSamLayerNorm(config.output_channels, name="layer_norm1")
         self.conv2 = tf.keras.layers.Conv2D(
