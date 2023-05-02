@@ -428,12 +428,8 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = TFSamModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
-
-    @unittest.skip(reason="Temporary skip while we resolve other issues - do not merge until this is removed!")
-    def test_saved_model_creation(self):
-        pass
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True, tol=5e-4):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True, tol=tol)
 
 
 def prepare_image():

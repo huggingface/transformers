@@ -613,7 +613,7 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         self.mask_input_channels = config.mask_input_channels // 4
         self.activation = ACT2FN[config.hidden_act]
         self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
-        self.conv2 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv2")
+        self.conv2 = tf.keras.layers.Conv2D(config.mask_input_channels, kernel_size=2, strides=2, name="conv2")
         self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
         self.layer_norm1 = TFSamLayerNorm(self.mask_input_channels, config.layer_norm_eps, name="layer_norm1")
         self.layer_norm2 = TFSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps, name="layer_norm2")
@@ -628,8 +628,27 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.activation(hidden_states)
         dense_embeddings = self.conv3(hidden_states)
-        masks = tf.transpose(masks, perm=(0, 3, 1, 2))  # Convert back to channels-first
+        dense_embeddings = tf.transpose(dense_embeddings, perm=(0, 3, 1, 2))  # Convert back to channels-first
         return dense_embeddings
+
+    def build(self, input_shape):
+        # This class needs an explicit build method because it isn't called with the standard dummy inputs
+        conv1_shape = [None, None, None, 1]
+        conv2_shape = [None, None, None, self.mask_input_channels]
+        conv3_shape = [None, None, None, self.mask_input_channels * 4]
+        layer_norm1_shape = [None, None, None, self.mask_input_channels]
+        layer_norm2_shape = [None, None, None, self.mask_input_channels * 4]
+        with tf.name_scope("conv1"):
+            self.conv1.build(conv1_shape)
+        with tf.name_scope("conv2"):
+            self.conv2.build(conv2_shape)
+        with tf.name_scope("conv3"):
+            self.conv3.build(conv3_shape)
+        with tf.name_scope("layer_norm1"):
+            self.layer_norm1.build(layer_norm1_shape)
+        with tf.name_scope("layer_norm2"):
+            self.layer_norm2.build(layer_norm2_shape)
+        super().build(input_shape)
 
 
 class TFSamPromptEncoder(tf.keras.layers.Layer):
@@ -669,6 +688,11 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
             initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
             trainable=True,
         )
+        with tf.name_scope("mask_embed"):
+            # We must explicitly build the mask embed because it isn't touched by the standard dummy inputs
+            self.mask_embed.build(
+                (None, self.config.mask_input_channels, self.config.image_size, self.config.image_size)
+            )
         super().build(input_shape)
 
     def _embed_points(self, points: tf.Tensor, labels: tf.Tensor, pad: bool) -> tf.Tensor:
@@ -1256,6 +1280,7 @@ class TFSamModel(TFSamPreTrainedModel):
             config.prompt_encoder_config, self.shared_image_embedding, name="prompt_encoder"
         )
         self.mask_decoder = TFSamMaskDecoder(config.mask_decoder_config, name="mask_decoder")
+        self.config = config
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -1380,6 +1405,9 @@ class TFSamModel(TFSamPreTrainedModel):
                         point_batch_size, box_batch_size
                     )
                 )
+        if pixel_values is not None:
+            # Ensures that later checks pass even with an all-None shape from the serving signature
+            pixel_values = tf.ensure_shape(pixel_values, [None, self.config.vision_config.num_channels, None, None])
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
         batch_size = shape_list(pixel_values)[0] if pixel_values is not None else shape_list(image_embeddings)[0]
