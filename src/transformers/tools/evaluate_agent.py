@@ -158,7 +158,7 @@ def dog_generator():
 
 
 ALL_TOOLS = {
-    "text-classifier": classifier,
+    "text_classifier": classifier,
     "translator": translator,
     "text_reader": speaker,
     "summarizer": summarizer,
