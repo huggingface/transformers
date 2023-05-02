@@ -1518,8 +1518,8 @@ class GenerationTesterMixin:
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_assisted_decoding_sample(self):
-        # Seeded assisted decoding will not match sample for the same seed, as the forward pass does not return the
-        # exact same logits (the forward pass of the main model, now with several tokens at once, has causal masking).
+        # Seeded assisted decoding will not match sample for the same seed, as there are >1 sampling steps per output
+        # token. As such, this test only checks that the output format is correct.
 
         for model_class in self.all_generative_model_classes:
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
