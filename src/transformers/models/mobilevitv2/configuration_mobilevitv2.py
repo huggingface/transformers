@@ -103,17 +103,14 @@ class MobileViTv2Config(PretrainedConfig):
         output_stride=32,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        
         aspp_out_channels=512,
         atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
         classifier_dropout_prob=0.1,
-        ####
-        width_multiplier=1.0,    # Width multiplier. Defaults to 1.0
-        ffn_dropout=0.0,         # "Dropout between FFN layers. Defaults to 0.0",
-        attn_dropout=0.0,        # Dropout in attention layer. Defaults to 0.0
-        
+        width_multiplier=1.0,  # Width multiplier. Defaults to 1.0
+        ffn_dropout=0.0,  # "Dropout between FFN layers. Defaults to 0.0",
+        attn_dropout=0.0,  # Dropout in attention layer. Defaults to 0.0
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -134,12 +131,12 @@ class MobileViTv2Config(PretrainedConfig):
         self.atrous_rates = atrous_rates
         self.aspp_dropout_prob = aspp_dropout_prob
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        
+
         ####
         self.width_multiplier = width_multiplier
         self.ffn_dropout = ffn_dropout
         self.attn_dropout = attn_dropout
-        self.classifier_dropout_prob=classifier_dropout_prob        
+        self.classifier_dropout_prob = classifier_dropout_prob
 
 
 class MobileViTv2OnnxConfig(OnnxConfig):

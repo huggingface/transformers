@@ -66,14 +66,14 @@ class MobileViTv2ModelTester:
         width_multiplier=1.0,
         ffn_dropout=0.0,
         attn_dropout=0.0,
-        last_hidden_size=512
+        last_hidden_size=512,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.last_hidden_size = last_hidden_size #int(make_divisible(512 * width_multiplier, divisor=8))
+        self.last_hidden_size = last_hidden_size  # int(make_divisible(512 * width_multiplier, divisor=8))
 
         self.hidden_act = hidden_act
         self.conv_kernel_size = conv_kernel_size
@@ -84,9 +84,9 @@ class MobileViTv2ModelTester:
         self.num_labels = num_labels
         self.initializer_range = initializer_range
         self.scope = scope
-        self.width_multiplier=width_multiplier
-        self.ffn_dropout_prob=ffn_dropout
-        self.attn_dropout_prob=attn_dropout
+        self.width_multiplier = width_multiplier
+        self.ffn_dropout_prob = ffn_dropout
+        self.attn_dropout_prob = attn_dropout
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -113,7 +113,7 @@ class MobileViTv2ModelTester:
             initializer_range=self.initializer_range,
             width_multiplier=self.width_multiplier,
             ffn_dropout=self.ffn_dropout_prob,
-            attn_dropout=self.attn_dropout_prob
+            attn_dropout=self.attn_dropout_prob,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -184,12 +184,15 @@ class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_torch_available()
         else ()
     )
-    
+
     pipeline_model_mapping = (
-        {"feature-extraction": MobileViTv2Model,  
-         "image-classification": MobileViTv2ForImageClassification,
-         "image-segmentation":MobileViTv2ForSemanticSegmentation
-         } if is_torch_available() else {}
+        {
+            "feature-extraction": MobileViTv2Model,
+            "image-classification": MobileViTv2ForImageClassification,
+            "image-segmentation": MobileViTv2ForSemanticSegmentation,
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -304,7 +307,9 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTv2ForImageClassification.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256").to(torch_device)
+        model = MobileViTv2ForImageClassification.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -318,7 +323,7 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.6336e+00, -7.3204e-02, -5.1883e-01]).to(torch_device)
+        expected_slice = torch.tensor([-1.6336e00, -7.3204e-02, -5.1883e-01]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
@@ -342,17 +347,10 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[ 7.0863,  7.1525,  6.8201],
-                [ 6.6931,  6.8770,  6.8933],
-                [ 6.2978,  7.0366,  6.9636]],
-             
-                [[-3.7134, -3.6712, -3.6675],
-                [-3.5825, -3.3549, -3.4777],
-                [-3.3435, -3.3979, -3.2857]],
-
-                [[-2.9329, -2.8003, -2.7369],
-                [-3.0564, -2.4780, -2.0207],
-                [-2.6889, -1.9298, -1.7640]]
+            [
+                [[7.0863, 7.1525, 6.8201], [6.6931, 6.8770, 6.8933], [6.2978, 7.0366, 6.9636]],
+                [[-3.7134, -3.6712, -3.6675], [-3.5825, -3.3549, -3.4777], [-3.3435, -3.3979, -3.2857]],
+                [[-2.9329, -2.8003, -2.7369], [-3.0564, -2.4780, -2.0207], [-2.6889, -1.9298, -1.7640]],
             ],
             device=torch_device,
         )
