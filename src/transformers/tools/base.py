@@ -204,6 +204,13 @@ TASK_MAPPING = {
 }
 
 
+def supports_remote(task_name):
+    main_module = importlib.import_module("transformers")
+    tools_module = main_module.tools
+    tool_class = TASK_MAPPING[task_name]
+    return hasattr(tools_module, f"Remote{tool_class}")
+
+
 def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs):
     # Make sure to keep this list updated with the doc of tool_kwargs (when it exists lol)
     hub_kwargs_names = ["cache_dir", "force_download", "resume_download", "proxies", "revision", "local_files_only"]
@@ -212,17 +219,15 @@ def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs)
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         if remote:
-            tool_class_name = f"Remote{tool_class_name}"
-        try:
-            main_module = importlib.import_module("transformers")
-            tools_module = main_module.tools
-            tool_class = getattr(tools_module, tool_class_name)
-        except ImportError:
-            if remote:
+            if not supports_remote(task_or_repo_id):
                 raise NotImplementedError(
                     f"{task_or_repo_id} does not support the inference API or inference endpoints yet."
                 )
-            raise
+            tool_class_name = f"Remote{tool_class_name}"
+
+        main_module = importlib.import_module("transformers")
+        tools_module = main_module.tools
+        tool_class = getattr(tools_module, tool_class_name)
     else:
         if repo_id is None:
             repo_id = task_or_repo_id

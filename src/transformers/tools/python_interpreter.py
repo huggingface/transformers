@@ -84,6 +84,11 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Constant):
         # Constant -> just return the value
         return expression.value
+    elif isinstance(expression, ast.Dict):
+        # Dict -> evaluate all keys and values
+        keys = [evaluate_ast(k, state, tools) for k in expression.keys]
+        values = [evaluate_ast(v, state, tools) for v in expression.values]
+        return dict(zip(keys, values))
     elif isinstance(expression, ast.Expr):
         # Expression -> evaluate the content
         return evaluate_ast(expression.value, state, tools)
@@ -95,6 +100,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         evaluate_if(expression, state, tools)
     elif isinstance(expression, ast.JoinedStr):
         return "".join([str(evaluate_ast(v, state, tools)) for v in expression.values])
+    elif isinstance(expression, ast.List):
+        # List -> evaluate all elements
+        return [evaluate_ast(elt, state, tools) for elt in expression.elts]
     elif isinstance(expression, ast.Name):
         # Name -> pick up the value in the state
         return evaluate_name(expression, state, tools)
