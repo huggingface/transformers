@@ -576,6 +576,12 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
     window approach to fit long texts into the limited position embeddings of a transformer.
     """
 
+    def __init__(self, stride: int = None, *args, **kwargs):
+        if stride is None:
+            stride = 0
+        super().__init__(*args, **kwargs, stride=stride)
+        self.stride = stride
+
     def postprocess(self, all_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
         if ignore_labels is None:
             ignore_labels = ["O"]
@@ -608,7 +614,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
 
             input_ids[idx:end_idx] = all_window_input_ids[window_idx, is_real_token]
             offset_mapping[idx:end_idx] = all_window_offset_mapping[window_idx, is_real_token, :]
-            idx += self.tokenizer.model_max_length - self._preprocess_params['tokenizer_params']['stride'] - all_window_special_tokens_mask[window_idx].sum()
+            idx += self.tokenizer.model_max_length - self.stride - all_window_special_tokens_mask[window_idx].sum()
 
         # Average the logits across all window passes
         logits = logit_sums / logit_writes[:, np.newaxis]
