@@ -277,6 +277,7 @@ Tools:
 - database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.
 - database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.
 - image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
+- video_generator: This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object.
 
 
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
@@ -372,6 +373,7 @@ OUR_TOOLS = {
     "database_reader": None,
     "database_writer": None,
     "image_qa": None,
+    "video_generator": None,
 }
 
 
