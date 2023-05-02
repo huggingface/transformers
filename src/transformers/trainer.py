@@ -337,6 +337,9 @@ class Trainer:
         self.deepspeed = None
         self.is_in_train = False
         self.accelerator = self.args.accelerator
+        self.args.accelerator = None  # delete from args to avoid pickling issues
+        self.accelerator.print(f"{self.accelerator=}")
+        self.accelerator.print(f"{self.accelerator.state=}")
         self.is_accelerate_deepspeed_enabled = os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true"
         self.is_accelerate_fsdp_enabled = os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
 
@@ -1569,7 +1572,11 @@ class Trainer:
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
             )
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+        elif (
+            self.args.parallel_mode == ParallelMode.DISTRIBUTED
+            and not self.is_accelerate_deepspeed_enabled
+            and not self.is_accelerate_fsdp_enabled
+        ):
             kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
                 kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
@@ -1781,6 +1788,7 @@ class Trainer:
         model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
             self.model, self.optimizer, self.lr_scheduler
         )
+        self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
 
         if self.is_accelerate_fsdp_enabled:
             self.model = model
@@ -1790,7 +1798,8 @@ class Trainer:
             self.model_wrapped = model
 
         # Check if saved optimizer or scheduler states exist
-        self.accelerator.load_state(resume_from_checkpoint)
+        if resume_from_checkpoint is not None:
+            self.accelerator.load_state(resume_from_checkpoint)
 
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
             self._load_optimizer_and_scheduler(resume_from_checkpoint)

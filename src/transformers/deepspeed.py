@@ -338,7 +338,7 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     model = trainer.model
     args = trainer.args
 
-    hf_deepspeed_config = args.accelerator.state.deepspeed_plugin.hf_ds_config
+    hf_deepspeed_config = trainer.accelerator.state.deepspeed_plugin.hf_ds_config
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)

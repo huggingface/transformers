@@ -1446,7 +1446,7 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ["FSDP_SHARDING_STRATEGY"] = FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
+                    os.environ["FSDP_SHARDING_STRATEGY"] = str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -1454,12 +1454,12 @@ class TrainingArguments:
                         os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
                         os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
                     elif self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
-                        os.environ["FSDP_TRANSFORMER_LAYER_CLS_TO_WRAP"] = ",".join(
+                        os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ",".join(
                             self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
                         )
                         os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
-            os.environ["FSDP_BACKWARD_PREFETCH"] = FSDP_BACKWARD_PREFETCH.index(prefetch_policy.upper()) + 1
+            os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
 
             # unset `self.fsdp` to avoid conflict with Accelerate
             self.fsdp = []
