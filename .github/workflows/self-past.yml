@@ -126,6 +126,12 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Install
+        if: inputs.framework == 'pytorch'
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: Environment
         working-directory: /transformers
         run: |
@@ -192,6 +198,12 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Install
+        if: inputs.framework == 'pytorch'
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: Environment
         working-directory: /transformers
         run: |
@@ -242,6 +254,11 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Install
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/

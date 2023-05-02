@@ -1565,12 +1565,13 @@ class Trainer:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
             if is_torch_neuroncore_available():
                 return model
-            model = nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
-                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
-                **kwargs,
-            )
+            if any(p.requires_grad for p in model.parameters()):
+                model = nn.parallel.DistributedDataParallel(
+                    model,
+                    device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                    output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
+                    **kwargs,
+                )
 
         # torch.compile() needs to be called after wrapping the model with FSDP or DDP
         # to ensure that it accounts for the graph breaks required by those wrappers
@@ -1920,6 +1921,7 @@ class Trainer:
                     (total_batched_samples % args.gradient_accumulation_steps != 0)
                     and args.parallel_mode == ParallelMode.DISTRIBUTED
                     and args._no_sync_in_gradient_accumulation
+                    and hasattr(model, "no_sync")
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
@@ -1995,7 +1997,9 @@ class Trainer:
                         self.optimizer.step()
 
                     if optimizer_was_run and not self.deepspeed:
-                        self.lr_scheduler.step()
+                        # Delay optimizer scheduling until metrics are generated
+                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                            self.lr_scheduler.step()
 
                     model.zero_grad()
                     self.state.global_step += 1
@@ -2286,6 +2290,10 @@ class Trainer:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
+            # Run delayed LR scheduler now that metrics are populated
+            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.lr_scheduler.step(metrics[self.args.metric_for_best_model])
+
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
@@ -2319,10 +2327,10 @@ class Trainer:
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
         if torch.cuda.is_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
+                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
             else:
                 try:
-                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+                    torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
                 except Exception as e:
                     logger.info(
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
@@ -3182,8 +3190,6 @@ class Trainer:
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self._pad_across_processes(inputs_decode)
                 inputs_decode = self._nested_gather(inputs_decode)
@@ -3194,10 +3200,13 @@ class Trainer:
                 )
             if logits is not None:
                 logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
+                logits = self._nested_gather(logits)
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+            if labels is not None:
+                labels = self._nested_gather(labels)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.

@@ -1218,8 +1218,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         if labels is not None and decoder_input_ids is None:
             # get decoder inputs from shifting lm labels to the right - this is used in training mode
             decoder_input_ids = self._shift_right(labels)
-            # replace possible -100 values in labels by `pad_token_id`
-            labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
