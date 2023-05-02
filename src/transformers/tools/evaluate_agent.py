@@ -157,26 +157,28 @@ def dog_generator():
     return "An image of dogs."
 
 
-ALL_TOOLS = [
-    classifier,
-    translator,
-    speaker,
-    summarizer,
-    transcriber,
-    image_generator,
-    image_segmentor,
-    image_captioner,
-    image_transformer,
-    question_answerer,
-    text_downloader,
-    calculator,
-    search_engine,
-    database_reader,
-    database_writer,
-    prompt_engineer,
-    cat_generator,
-    dog_generator,
-]
+ALL_TOOLS = {
+    "text-classifier": classifier,
+    "translator": translator,
+    "text_reader": speaker,
+    "summarizer": summarizer,
+    "transcriber": transcriber,
+    "image_generator": image_generator,
+    "image_segmentor": image_segmentor,
+    "image_captioner": image_captioner,
+    "image_transformer": image_transformer,
+    "test_qa": question_answerer,
+    "text_downloader": text_downloader,
+    "calculator": calculator,
+    "search_engine": search_engine,
+    "database_reader": database_reader,
+    "database_writer": database_writer,
+    "prompt_engineer": prompt_engineer,
+    "cat_generator": cat_generator,
+    "dog_generator": dog_generator,
+    "table_qa": None,
+    "image_qa": None,
+}
 
 
 def sample_num_tools(max_n):
@@ -228,7 +230,7 @@ class Problem:
         Generates a random variation of this problem by selecting one of the phrasings of the task and adding new tools
         randomly.
         """
-        all_tools = [tool for tool in ALL_TOOLS if tool not in self.excluded_tools]
+        all_tools = [tool for tool in ALL_TOOLS.values() if tool not in self.excluded_tools and tool is not None]
         num_new_tools = sample_num_tools(max_new_tools)
         num_new_tools = min(num_new_tools, len(all_tools) - len(self.minimum_tools))
         new_tools = list(set(all_tools) - set(self.minimum_tools))
