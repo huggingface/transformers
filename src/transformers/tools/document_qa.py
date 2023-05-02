@@ -36,15 +36,17 @@ class DocumentQuestionAnsweringTool(PipelineTool):
     def encode(self, image: "Image", query: str):
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
         prompt = task_prompt.replace("{user_input}", query)
-        decoder_input_ids = self.pre_processor.tokenizer(prompt, add_special_tokens=False, return_tensors="pt").input_ids
+        decoder_input_ids = self.pre_processor.tokenizer(
+            prompt, add_special_tokens=False, return_tensors="pt"
+        ).input_ids
         pixel_values = self.pre_processor(image, return_tensors="pt").pixel_values
 
-        return {'decoder_input_ids': decoder_input_ids, 'pixel_values': pixel_values}
+        return {"decoder_input_ids": decoder_input_ids, "pixel_values": pixel_values}
 
     def forward(self, inputs):
         return self.model.generate(
-            inputs['pixel_values'].to(self.device),
-            decoder_input_ids=inputs['decoder_input_ids'].to(self.device),
+            inputs["pixel_values"].to(self.device),
+            decoder_input_ids=inputs["decoder_input_ids"].to(self.device),
             max_length=self.model.decoder.config.max_position_embeddings,
             early_stopping=True,
             pad_token_id=self.pre_processor.tokenizer.pad_token_id,
@@ -57,9 +59,10 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
     def decode(self, outputs):
         sequence = self.pre_processor.batch_decode(outputs)[0]
-        sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "").replace(self.pre_processor.tokenizer.pad_token, "")
+        sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "").replace(
+            self.pre_processor.tokenizer.pad_token, ""
+        )
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
         sequence = self.pre_processor.token2json(sequence)
 
-        return sequence['answer']
-
+        return sequence["answer"]

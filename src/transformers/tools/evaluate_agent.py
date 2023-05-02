@@ -23,8 +23,8 @@ def transcriber(audio):
     return f"This is the transcribed text from {audio}."
 
 
-def image_generator(text):
-    return f"This is actually an image representing {text}."
+def image_generator(prompt):
+    return f"This is actually an image representing {prompt}."
 
 
 def image_segmentor(image):
@@ -47,6 +47,12 @@ def image_transformer(image, prompt):
 
 def question_answerer(text, question):
     return f"This is the answer to {question} from {text}."
+
+
+def image_qa(image, question):
+    if "image" not in image:
+        raise ValueError(f"`image` ({image}) is not an image.")
+    return f"This is the answer to {question} from {image}."
 
 
 def text_downloader(url):
@@ -75,7 +81,7 @@ def database_writer(key, value):
     return "200"
 
 
-def video_generator(prompt):
+def video_generator(prompt, seconds=2):
     return f"A video of {prompt}"
 
 
@@ -95,7 +101,7 @@ ALL_TOOLS = {
     "database_reader": database_reader,
     "database_writer": database_writer,
     "table_qa": None,
-    "image_qa": None,
+    "image_qa": image_qa,
     "video_generator": video_generator,
 }
 
@@ -193,7 +199,10 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[image_captioner, speaker],
         inputs=["image"],
-        answer=speaker(image_captioner("<<image>>")),
+        answer=[
+            speaker(image_captioner("<<image>>")),
+            speaker(image_qa("<<image>>", question="What is in the image?")),
+        ],
     ),
     Problem(
         task=[

@@ -9,8 +9,8 @@ if is_vision_available():
 
 IMAGE_QUESTION_ANSWERING_DESCRIPTION = (
     "This is a tool that answers a question about an image. It takes an input named `image` which should be the "
-    "image containing the information, as well as a `query` that is the question about the image. It returns a text "
-    "that contains the answer to the question."
+    "image containing the information, as well as a `question` which should be the question in English. It returns a "
+    "text that is the answer to the question."
 )
 
 
@@ -29,12 +29,11 @@ class ImageQuestionAnsweringTool(PipelineTool):
 
         super().__init__(*args, **kwargs)
 
-    def encode(self, image: "Image", query: str):
-        return self.pre_processor(image, query, return_tensors="pt")
+    def encode(self, image: "Image", question: str):
+        return self.pre_processor(image, question, return_tensors="pt")
 
     def forward(self, inputs):
         return self.model(**inputs)
 
     def decode(self, outputs):
         return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
-
