@@ -476,6 +476,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["VideoMAEEncoder"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -654,6 +655,10 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        if pixel_values.dtype != expected_dtype:
+            pixel_values = pixel_values.to(dtype=expected_dtype)
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 

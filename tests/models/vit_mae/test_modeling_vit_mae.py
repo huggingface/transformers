@@ -23,7 +23,14 @@ import unittest
 import numpy as np
 
 from transformers import ViTMAEConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -42,7 +49,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class ViTMAEModelTester:
@@ -302,8 +309,8 @@ def prepare_img():
 @require_vision
 class ViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
 
     @slow
     def test_inference_for_pretraining(self):
@@ -312,9 +319,9 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
         model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # prepare a noise vector that will be also used for testing the TF model
         # (this way we can ensure that the PT and TF models operate on the same inputs)
@@ -335,3 +342,20 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))
+
+    @slow
+    @require_accelerate
+    @require_torch_gpu
+    def test_inference_fp16(self):
+        r"""
+        A small test to make sure that inference works in half precision
+        """
+        model = ViTMAEModel.from_pretrained("facebook/vit-mae-base", torch_dtype=torch.float16, device_map="auto")
+        image_processor = self.default_image_processor
+
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt")
+        pixel_values = inputs["pixel_values"].to(torch_device)
+
+        with torch.no_grad():
+            _ = model(pixel_values)

@@ -24,7 +24,14 @@ from huggingface_hub import hf_hub_download
 
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -215,6 +222,18 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Does not work on the tiny model as modules too large to place on GPU 0.")
+    def test_cpu_offload(self):
+        super().test_cpu_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as modules too large to place on GPU 0.")
+    def test_disk_offload(self):
+        super().test_disk_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as modules too large to place on GPU 0.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -359,7 +378,7 @@ def prepare_video():
 @require_vision
 class VideoMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
             VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
@@ -373,9 +392,9 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = image_processor(video, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -393,9 +412,9 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_for_pretraining(self):
         model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = image_processor(video, return_tensors="pt").to(torch_device)
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
@@ -427,3 +446,22 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+
+    @slow
+    @require_accelerate
+    @require_torch_gpu
+    def test_inference_fp16(self):
+        r"""
+        A small test to make sure that inference works in half precision
+        """
+        model = VideoMAEModel.from_pretrained(
+            "MCG-NJU/videomae-small-finetuned-ssv2", torch_dtype=torch.float16, device_map="auto"
+        )
+        image_processor = self.default_image_processor
+
+        video = prepare_video()
+        inputs = image_processor(video, return_tensors="pt")
+        pixel_values = inputs["pixel_values"].to(torch_device)
+
+        with torch.no_grad():
+            _ = model(pixel_values)
