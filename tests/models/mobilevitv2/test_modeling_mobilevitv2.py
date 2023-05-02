@@ -43,9 +43,6 @@ if is_vision_available():
 class MobileViTv2ConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
-        # self.parent.assertTrue(hasattr(config, "hidden_sizes"))
-        # self.parent.assertTrue(hasattr(config, "neck_hidden_sizes"))
-        # self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "width_multiplier"))
 
 
@@ -143,31 +140,30 @@ class MobileViTv2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
-        # config.num_labels = self.num_labels
-        # model = MobileViTv2ForSemanticSegmentation(config)
-        # model.to(torch_device)
-        # model.eval()
-        # result = model(pixel_values)
-        # self.parent.assertEqual(
-        #     result.logits.shape,
-        #     (
-        #         self.batch_size,
-        #         self.num_labels,
-        #         self.image_size // self.output_stride,
-        #         self.image_size // self.output_stride,
-        #     ),
-        # )
-        # result = model(pixel_values, labels=pixel_labels)
-        # self.parent.assertEqual(
-        #     result.logits.shape,
-        #     (
-        #         self.batch_size,
-        #         self.num_labels,
-        #         self.image_size // self.output_stride,
-        #         self.image_size // self.output_stride,
-        #     ),
-        # )
-        pass #TODO - uncomment
+        config.num_labels = self.num_labels
+        model = MobileViTv2ForSemanticSegmentation(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size // self.output_stride,
+                self.image_size // self.output_stride,
+            ),
+        )
+        result = model(pixel_values, labels=pixel_labels)
+        self.parent.assertEqual(
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size // self.output_stride,
+                self.image_size // self.output_stride,
+            ),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -184,17 +180,15 @@ class MobileViTv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     """
 
     all_model_classes = (
-        (MobileViTv2Model, MobileViTv2ForImageClassification, 
-        #  MobileViTv2ForSemanticSegmentation #TODO - add segmentation
-         )
+        (MobileViTv2Model, MobileViTv2ForImageClassification, MobileViTv2ForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
     
     pipeline_model_mapping = (
         {"feature-extraction": MobileViTv2Model,  
-         "image-classification": MobileViTv2ForImageClassification
-        #  TODO - add segmentation pipeline
+         "image-classification": MobileViTv2ForImageClassification,
+         "image-segmentation":MobileViTv2ForSemanticSegmentation
          } if is_torch_available() else {}
     )
 
@@ -303,14 +297,14 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            MobileViTv2FeatureExtractor.from_pretrained("apple/mobilevitv2-xx-small")
+            MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTv2ForImageClassification.from_pretrained("apple/mobilevitv2-xx-small").to(torch_device)
+        model = MobileViTv2ForImageClassification.from_pretrained("shehan97/mobilevitv2-1.0-imagenet1k-256").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -324,63 +318,67 @@ class MobileViTv2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.9364, -1.2327, -0.4653]).to(torch_device)
+        expected_slice = torch.tensor([-1.6336e+00, -7.3204e-02, -5.1883e-01]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_semantic_segmentation(self):
-        # model = MobileViTv2ForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevitv2-xx-small")
-        # model = model.to(torch_device)
+        model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = model.to(torch_device)
 
-        # feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("apple/deeplabv3-mobilevitv2-xx-small")
+        feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
-        # image = prepare_img()
-        # inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
-        # # forward pass
-        # with torch.no_grad():
-        #     outputs = model(**inputs)
-        # logits = outputs.logits
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+        logits = outputs.logits
 
-        # # verify the logits
-        # expected_shape = torch.Size((1, 21, 32, 32))
-        # self.assertEqual(logits.shape, expected_shape)
+        # verify the logits
+        expected_shape = torch.Size((1, 21, 32, 32))
+        self.assertEqual(logits.shape, expected_shape)
 
-        # expected_slice = torch.tensor(
-        #     [
-        #         [[6.9713, 6.9786, 7.2422], [7.2893, 7.2825, 7.4446], [7.6580, 7.8797, 7.9420]],
-        #         [[-10.6869, -10.3250, -10.3471], [-10.4228, -9.9868, -9.7132], [-11.0405, -11.0221, -10.7318]],
-        #         [[-3.3089, -2.8539, -2.6740], [-3.2706, -2.5621, -2.5108], [-3.2534, -2.6615, -2.6651]],
-        #     ],
-        #     device=torch_device,
-        # )
+        expected_slice = torch.tensor(
+            [[[ 7.0863,  7.1525,  6.8201],
+                [ 6.6931,  6.8770,  6.8933],
+                [ 6.2978,  7.0366,  6.9636]],
+             
+                [[-3.7134, -3.6712, -3.6675],
+                [-3.5825, -3.3549, -3.4777],
+                [-3.3435, -3.3979, -3.2857]],
 
-        # self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
-        pass
-        #TODO - uncomment
+                [[-2.9329, -2.8003, -2.7369],
+                [-3.0564, -2.4780, -2.0207],
+                [-2.6889, -1.9298, -1.7640]]
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        # model = MobileViTv2ForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevitv2-xx-small")
-        # model = model.to(torch_device)
+        model = MobileViTv2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = model.to(torch_device)
 
-        # feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("apple/deeplabv3-mobilevitv2-xx-small")
+        feature_extractor = MobileViTv2FeatureExtractor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
-        # image = prepare_img()
-        # inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
-        # # forward pass
-        # with torch.no_grad():
-        #     outputs = model(**inputs)
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
 
-        # outputs.logits = outputs.logits.detach().cpu()
+        outputs.logits = outputs.logits.detach().cpu()
 
-        # segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
-        # expected_shape = torch.Size((50, 60))
-        # self.assertEqual(segmentation[0].shape, expected_shape)
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
+        expected_shape = torch.Size((50, 60))
+        self.assertEqual(segmentation[0].shape, expected_shape)
 
-        # segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
-        # expected_shape = torch.Size((32, 32))
-        # self.assertEqual(segmentation[0].shape, expected_shape)
-        pass #TODO - uncomment
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
+        expected_shape = torch.Size((32, 32))
+        self.assertEqual(segmentation[0].shape, expected_shape)

@@ -51,16 +51,16 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MobileViTv2Config"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "apple/mobilevitv2-1.0"
-_EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
+_CHECKPOINT_FOR_DOC = "apple/mobilevitv2-1.0-imagenet1k-256"
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 8, 8]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0"
+_IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-1.0",
+    "apple/mobilevitv2-1.0-imagenet1k-256"
     # See all MobileViTv2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
@@ -585,7 +585,6 @@ class MobileViTv2Layer(nn.Module):
             dropout=dropout,
             ffn_dropout=ffn_dropout,
         )
-        # self.transformer = nn.Identity() #TODO
         
         self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
 
@@ -1037,7 +1036,6 @@ class MobileViTv2ASPPPooling(nn.Module):
         return features
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTASPP with MobileViT->MobileViTv2
 class MobileViTv2ASPP(nn.Module):
     """
     ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
@@ -1046,8 +1044,8 @@ class MobileViTv2ASPP(nn.Module):
     def __init__(self, config: MobileViTv2Config) -> None:
         super().__init__()
 
-        # in_channels = config.neck_hidden_sizes[-2] #TODO: put correct value
-        in_channels = 640
+        encoder_out_channels = int(make_divisible(512 * config.width_multiplier, divisor=8)) # layer 5 output dimension
+        in_channels = encoder_out_channels
         out_channels = config.aspp_out_channels
 
         if len(config.atrous_rates) != 3:
