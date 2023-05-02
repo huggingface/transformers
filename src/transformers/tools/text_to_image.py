@@ -10,7 +10,7 @@ if is_diffusers_available():
 
 
 TEXT_TO_IMAGE_DESCRIPTION = (
-    "This is a tool that creates an image according to a text description. It takes an input named `text` which "
+    "This is a tool that creates an image according to a prompt, which is a text description. It takes an input named `prompt` which "
     "contains the image description and outputs an image."
 )
 
@@ -40,8 +40,8 @@ class TextToImageTool(Tool):
 
         self.is_initialized = True
 
-    def __call__(self, text):
+    def __call__(self, prompt):
         if not self.is_initialized:
             self.setup()
 
-        return self.pipeline(text).images[0]
+        return self.pipeline(prompt).images[0]
