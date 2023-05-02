@@ -26,6 +26,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
         RwkvForCausalLM,
@@ -40,7 +42,7 @@ class RwkvModelTester:
         batch_size=14,
         seq_length=7,
         is_training=True,
-        use_token_type_ids=True,
+        use_token_type_ids=False,
         use_input_mask=True,
         use_labels=True,
         use_mc_token_ids=True,
@@ -121,13 +123,11 @@ class RwkvModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
+            None,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -140,10 +140,9 @@ class RwkvModelTester:
     ):
         return RwkvConfig(
             vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            n_inner=self.intermediate_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            intermediate_size=self.intermediate_size,
             activation_function=self.hidden_act,
             resid_pdrop=self.hidden_dropout_prob,
             attn_pdrop=self.attention_probs_dropout_prob,
@@ -198,21 +197,36 @@ class RwkvModelTester:
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
-        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+        self.parent.assertEqual(len(result.hidden_states), config.n_layer)
 
     def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = RwkvForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
+        result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        model = RwkvModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        outputs = model(input_ids)
+        output_whole = outputs.last_hidden_state
+
+        outputs = model(input_ids[:, :2])
+        output_one = outputs.last_hidden_state
+
+        # Using the state computed on the first inputs, we will get the same output
+        outputs = model(input_ids[:, 2:], state=outputs.state)
+        output_two = outputs.last_hidden_state
+
+        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
@@ -222,7 +236,7 @@ class RwkvModelTester:
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
 
-        result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
+        result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
@@ -244,8 +258,6 @@ class RwkvModelTester:
 
         inputs_dict = {
             "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -254,14 +266,26 @@ class RwkvModelTester:
 @require_torch
 class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RwkvModel,
+            "text-generation": RwkvForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     # all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = True
+    test_model_parallel = False
+    test_pruning = False
+    test_head_masking = False  # Rwkv does not support head masking
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RwkvConfig, n_embd=37)
+        self.config_tester = ConfigTester(
+            self, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -273,6 +297,10 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_rwkv_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causl_lm(*config_and_inputs)
+
+    def test_state_equivalency(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

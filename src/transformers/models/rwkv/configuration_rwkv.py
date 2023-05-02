@@ -100,8 +100,8 @@ class RwkvConfig(PretrainedConfig):
         self.context_length = context_length
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.attention_hidden_size = attention_hidden_size
-        self.intermediate_size = intermediate_size
+        self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else 4 * hidden_size
         self.layer_norm_epsilon = layer_norm_epsilon
         self.rescale_every = rescale_every
         self.use_cache = use_cache
