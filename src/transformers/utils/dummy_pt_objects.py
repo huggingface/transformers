@@ -475,6 +475,9 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_MASK_GENERATION_MAPPING = None
+
+
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
 
 
@@ -630,6 +633,13 @@ class AutoModelForMaskedImageModeling(metaclass=DummyObject):
 
 
 class AutoModelForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForMaskGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1087,6 +1097,13 @@ BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class BioGptForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BioGptForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1835,6 +1852,30 @@ class ConvNextV2Model(metaclass=DummyObject):
 
 
 class ConvNextV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CpmAntForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CpmAntPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2958,6 +2999,37 @@ class FNetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FocalNetForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FocalNetForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FocalNetModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FocalNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FSMTForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3208,6 +3280,13 @@ class GPTNeoForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3237,6 +3316,13 @@ class GPTNeoXForCausalLM(metaclass=DummyObject):
 
 
 class GPTNeoXForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4955,6 +5041,34 @@ class OneFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OpenLlamaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5961,6 +6075,23 @@ class RoFormerPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
+
+
+SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SamModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SamPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None

@@ -274,6 +274,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _decord_availale = False
 
+_jieba_available = importlib.util.find_spec("jieba") is not None
+try:
+    _jieba_version = importlib_metadata.version("jieba")
+    logger.debug(f"Successfully imported jieba version {_jieba_version}")
+except importlib_metadata.PackageNotFoundError:
+    _jieba_available = False
+
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
@@ -398,6 +405,10 @@ if _torch_available:
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_peft_available():
+    return importlib.util.find_spec("peft") is not None
 
 
 def is_bs4_available():
@@ -568,12 +579,23 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available():
-    return importlib.util.find_spec("accelerate") is not None
+def is_accelerate_available(check_partial_state=False):
+    accelerate_available = importlib.util.find_spec("accelerate") is not None
+    if accelerate_available:
+        if check_partial_state:
+            return version.parse(importlib_metadata.version("accelerate")) >= version.parse("0.17.0")
+        else:
+            return True
+    else:
+        return False
 
 
 def is_optimum_available():
     return importlib.util.find_spec("optimum") is not None
+
+
+def is_optimum_neuron_available():
+    return importlib.util.find_spec("optimum.neuron") is not None
 
 
 def is_safetensors_available():
@@ -738,6 +760,10 @@ def is_jumanpp_available():
 
 def is_cython_available():
     return importlib.util.find_spec("pyximport") is not None
+
+
+def is_jieba_available():
+    return _jieba_available
 
 
 # docstyle-ignore
@@ -997,6 +1023,11 @@ CYTHON_IMPORT_ERROR = """
 Cython`. Please note that you may need to restart your runtime after installation.
 """
 
+JIEBA_IMPORT_ERROR = """
+{0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
+jieba`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1029,6 +1060,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
+        ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
     ]
 )
 

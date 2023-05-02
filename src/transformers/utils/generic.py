@@ -166,6 +166,23 @@ def is_tf_tensor(x):
     return False if not is_tf_available() else _is_tensorflow(x)
 
 
+def _is_tf_symbolic_tensor(x):
+    import tensorflow as tf
+
+    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
+    if hasattr(tf, "is_symbolic_tensor"):
+        return tf.is_symbolic_tensor(x)
+    return type(x) == tf.Tensor
+
+
+def is_tf_symbolic_tensor(x):
+    """
+    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
+    installed.
+    """
+    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
+
+
 def _is_jax(x):
     import jax.numpy as jnp  # noqa: F811
 
@@ -535,3 +552,16 @@ def tensor_size(array):
         return array.size
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def add_model_info_to_auto_map(auto_map, repo_id):
+    """
+    Adds the information of the repo_id to a given auto map.
+    """
+    for key, value in auto_map.items():
+        if isinstance(value, (tuple, list)):
+            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+        elif value is not None and "--" not in value:
+            auto_map[key] = f"{repo_id}--{value}"
+
+    return auto_map

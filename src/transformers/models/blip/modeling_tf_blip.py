@@ -1020,7 +1020,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         )
 
         pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        text_features = self.blip.text_projection(pooled_output)
 
         return text_features
 
@@ -1057,7 +1057,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
         vision_outputs = self.blip.vision_model(pixel_values=pixel_values, return_dict=return_dict)
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.blip.visual_projection(pooled_output)
 
         return image_features
 
@@ -1238,7 +1238,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         >>> outputs = model.generate(**inputs)
         >>> print(processor.decode(outputs[0], skip_special_tokens=True))
-        two cats are laying on a couch
+        two cats sleeping on a couch
         ```
         """
 
@@ -1410,7 +1410,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
-        >>> loss.backward()
 
         >>> # inference
         >>> text = "How many cats are in the picture?"
@@ -1453,8 +1452,6 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         if labels is not None and decoder_input_ids is None:
             # get decoder inputs from shifting lm labels to the right - this is used in training mode
             decoder_input_ids = self._shift_right(labels)
-            # replace possible -100 values in labels by `pad_token_id`
-            labels = tf.where(labels == self.decoder_pad_token_id, -100, labels)
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
