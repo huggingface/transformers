@@ -93,7 +93,7 @@
       title: (번역중) Export to TorchScript
     - local: in_translation
       title: (번역중) Benchmarks
-    - local: notebooks
+    - local: in_translation
       title: (번역중) 🤗 Transformers Notebooks
     - local: in_translation
       title: (번역중) Community resources
@@ -612,8 +612,8 @@
         title: (번역중) Perceiver
       - local: in_translation
         title: (번역중) Pix2Struct
-      - local: (번역중) in_translation
-        title: Segment Anything
+      - local: in_translation
+        title: (번역중) Segment Anything
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation
