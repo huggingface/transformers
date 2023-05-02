@@ -95,7 +95,7 @@ Let's begin by defining the model checkpoint to use and loading the appropriate 
 >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 ```
 
-### Clean up the text 
+### Text cleanup for SpeechT5 tokenization 
 
 Start by cleaning up the text data. You'll need the tokenizer part of the processor to process the text:
 
@@ -103,14 +103,15 @@ Start by cleaning up the text data. You'll need the tokenizer part of the proces
 >>> tokenizer = processor.tokenizer
 ```
 
-The dataset examples have both `raw_text` and `normalized_text` features. The SpeechT5 tokenizer doesn't have any tokens 
-for numbers, and in `normalized_text` the numbers are written out as text. For that reason, use `normalized_text` as 
-input text.
+The dataset examples contain `raw_text` and `normalized_text` features. When deciding which feature to use as the text input, 
+consider that the SpeechT5 tokenizer doesn't have any tokens for numbers. In `normalized_text` the numbers are written 
+out as text. Thus, it is a better fit, and we recommend using    `normalized_text` as input text.
 
-Given that SpeechT5 was trained on English language, the Dutch dataset may contain characters that are not in the 
-SpeechT5 tokenizer vocabulary. If left as is, those will be converted to `<unk>` tokens. 
-However, in Dutch a character such as **à** is used to stress syllables, so we can simply replace it with a without changing 
-its meaning. To identify unsupported tokens, extract all unique characters in the dataset using the `SpeechT5Tokenizer` which 
+Because SpeechT5 was trained on the English language, it may not recognize certain characters in the Dutch dataset. If 
+left as is, these characters will be converted to `<unk>` tokens. However, in Dutch, certain characters like `à` are 
+used to stress syllables. In order to preserve the meaning of the text, we can replace this character with a regular `a`.
+
+To identify unsupported tokens, extract all unique characters in the dataset using the `SpeechT5Tokenizer` which 
 works with characters as tokens. To do this, write the `extract_all_chars` mapping function that concatenates 
 the transcriptions from all examples into one string and converts it to a set of characters. 
 Make sure to set `batched=True` and `batch_size=-1` in `dataset.map()` so that all transcriptions are available at once for 
@@ -134,16 +135,17 @@ the mapping function.
 >>> tokenizer_vocab = {k for k,_ in tokenizer.get_vocab().items()}
 ```
 
-Now you have two sets of characters, one with the vocabulary from the dataset and one with the vocabulary from the tokenizer. 
-By taking the difference between these sets, you can find the characters that are in the dataset but not in the tokenizer.
+Now you have two sets of characters: one with the vocabulary from the dataset and one with the vocabulary from the tokenizer. 
+To identify any unsupported characters in the dataset, you can take the difference between these two sets. The resulting 
+set will contain the characters that are in the dataset but not in the tokenizer.
 
 ```py
 >>> dataset_vocab - tokenizer_vocab
 {' ', 'à', 'ç', 'è', 'ë', 'í', 'ï', 'ö', 'ü'}
 ```
 
-Next, you can define a function to map these characters to valid tokens and then run it on the dataset. You don't need to handle 
-space, that's already replaced by `▁` in the tokenizer.
+To handle the unsupported characters identified in the previous step, define a function that maps these characters to 
+valid tokens. Note that spaces are already replaced by `▁` in the tokenizer and don't need to be handled separately.
 
 ```py
 >>> replacements = [
@@ -165,12 +167,14 @@ space, that's already replaced by `▁` in the tokenizer.
 >>> dataset = dataset.map(cleanup_text)
 ```
 
-Now that you have dealt with special characters in the text, it's time to move on to the audio.
+Now that you have dealt with special characters in the text, it's time to shift focus to the audio data.
 
 ### Speakers
 
-VoxPopuli is a multi-speaker dataset. There are 20968 examples in the dataset, but how many speakers are there? Let's 
-count unique speakers and how many examples they represent.
+The VoxPopuli dataset includes speech from multiple speakers, but how many speakers are represented in the dataset? To 
+determine this, we can count the number of unique speakers and the number of examples each speaker contributes to the dataset. 
+With a total of 20,968 examples in the dataset, this information will give us a better understanding of the distribution of 
+speakers and examples in the data.
 
 ```py
 >>> from collections import defaultdict
@@ -194,9 +198,9 @@ By plotting a histogram you can get a sense of how much data there is for each s
 
 TODO: image
 
-Around one-third of speakers has fewer than 100 examples. Approximately ten or so speakers have more than 500 examples. 
-To speed up training, let's limit the data to speakers that have between 100 and 400 examples. This also makes the 
-dataset more balanced.
+The histogram reveals that approximately one-third of the speakers in the dataset have fewer than 100 examples, while 
+around ten speakers have more than 500 examples. To improve training efficiency and balance the dataset, we can limit 
+the data to speakers with between 100 and 400 examples. 
 
 ```py
 >>> def select_speaker(speaker_id):
@@ -219,18 +223,19 @@ Let's see how many examples are left:
 9973
 ```
 
-Just under 10k examples and ~40 unique speakers, which should be plenty.
+You are left with just under 10,000 examples from approximately 40 unique speakers, which should be sufficient.
 
-Note: The speakers with few examples may potentially have plenty of audio available if the examples are long. However, 
-scanning through the entire dataset to obtain this information is time-consuming as it requires loading and decoding 
-each audio file. Here we skip this step.
+Note that some speakers with few examples may actually have more audio available if the examples are long. However, 
+determining the total amount of audio for each speaker requires scanning through the entire dataset, which is a 
+time-consuming process that involves loading and decoding each audio file. As such, we have chosen to skip this step here.
 
 ### Speaker embeddings
 
-To allow the TTS model to distinguish between multiple speakers, you'll need to create a speaker embedding for each example. 
+To enable the TTS model to differentiate between multiple speakers, you'll need to create a speaker embedding for each example. 
 The speaker embedding is an additional input into the model that captures a particular speaker's voice characteristics.
-To create the speaker embeddings, use the [spkrec-xvect-voxceleb](https://huggingface.co/speechbrain/spkrec-xvect-voxceleb) 
+To generate these speaker embeddings, use the pre-trained [spkrec-xvect-voxceleb](https://huggingface.co/speechbrain/spkrec-xvect-voxceleb) 
 model from SpeechBrain. 
+
 Create a function `create_speaker_embedding()` that takes an input audio waveform and outputs a 512-element vector 
 containing the corresponding speaker embedding.
 
@@ -256,9 +261,12 @@ containing the corresponding speaker embedding.
 ...     return speaker_embeddings 
 ```
 
-Note: the `speechbrain/spkrec-xvect-voxceleb` model was trained on English speech from the VoxCeleb dataset, while the
-training examples in this guide are in Dutch. We're assuming here that this model will still make reasonable speaker embeddings, but 
-this may not be true. For better results, you may want to train an X-vector model on the target speech first.
+It's important to note that the `speechbrain/spkrec-xvect-voxceleb` model was trained on English speech from the VoxCeleb 
+dataset, whereas the training examples in this guide are in Dutch. While we believe that this model will still generate 
+reasonable speaker embeddings for our Dutch dataset, this assumption may not hold true in all cases.
+
+For optimal results, we recommend training an X-vector model on the target speech first. This will ensure that the model 
+is better able to capture the unique voice characteristics present in the Dutch language.
 
 ### Processing the dataset
 
@@ -339,9 +347,9 @@ Next, create a basic train/test split:
 
 ### Data collator
 
-Define a custom collator to combine multiple examples into a batch. This will pad shorter sequences with padding 
-tokens. For the spectrogram labels, the padded portions are replaced with the special value `-100`. This special value 
-tells the model to ignore that part of the spectrogram when calculating the spectrogram loss.
+In order to combine multiple examples into a batch, you need to define a custom data collator. This collator will pad shorter sequences with padding 
+tokens, ensuring that all examples have the same length. For the spectrogram labels, the padded portions are replaced with the special value `-100`. This special value 
+instructs the model to ignore that part of the spectrogram when calculating the spectrogram loss.
 
 ```py
 >>> from dataclasses import dataclass
@@ -521,15 +529,15 @@ Finally, use the vocoder to turn the spectrogram into sound.
 >>> Audio(speech.numpy(), rate=16000)
 ```
 
-In our experience, it can be difficult to get good results out of this model. The results can be rather noisy and 
-sometimes what the model outputs doesn't even sound like speech. A lot of this appears to be related to the speaker 
-embeddings. Since SpeechT5 was pre-trained with English x-vectors, it gives the best results using those English speaker 
-embeddings. So if the generated speech sounds bad, try using a different speaker embedding.
+In our experience, obtaining satisfactory results from this model can be challenging. The quality of the speaker 
+embeddings appears to be a significant factor. Since SpeechT5 was pre-trained with English x-vectors, it performs best 
+when using English speaker embeddings. If the synthesized speech sounds poor, try using a different speaker embedding.
 
-Training for longer should also improve the results. Even so, the speech clearly is Dutch instead of English, and it does 
+Increasing the training duration is also likely to enhance the quality of the results. Even so, the speech clearly is Dutch instead of English, and it does 
 capture the voice characteristics of the speaker (compare to the original audio in the example).
 Another thing to experiment with is the model's configuration. For example, try using `config.reduction_factor = 1` to 
 see if this improves the results.
 
-A final note on ethical concerns: while TTS technology has many beneficial uses, it can also be used for nefarious 
-purposes such as imitating someone's voice without their permission. Please use TTS wisely and responsibly!
+Finally, it is essential to consider ethical considerations. Although TTS technology has numerous useful applications, it 
+may also be used for malicious purposes, such as impersonating someone's voice without their knowledge or consent. Please 
+use TTS judiciously and responsibly.
