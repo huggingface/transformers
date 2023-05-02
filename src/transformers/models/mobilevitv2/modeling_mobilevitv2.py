@@ -401,7 +401,6 @@ class MobileViTv2FFN(nn.Module):
         embed_dim: int,
         ffn_latent_dim: int,
         ffn_dropout: float = 0.0,
-        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.conv1 = MobileViTv2ConvLayer(
@@ -426,7 +425,7 @@ class MobileViTv2FFN(nn.Module):
             use_normalization=False,
             use_activation=False,
         )
-        self.dropout2 = nn.Dropout(p=dropout)
+        self.dropout2 = nn.Dropout(ffn_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -444,18 +443,16 @@ class MobileViTv2TransformerLayer(nn.Module):
         config: MobileViTv2Config,
         embed_dim: int,
         ffn_latent_dim: int,
-        ffn_dropout: float = 0.0,
         dropout: float = 0.0,
-        attn_dropout: float = 0.0,
     ) -> None:
         super().__init__()
         # pre_norm_attn
         self.layernorm_before = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
-        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim, attn_dropout=attn_dropout, bias=True)
+        self.attention = MobileViTv2LinearSelfAttention(config, embed_dim, attn_dropout=config.attn_dropout, bias=True)
         self.dropout1 = nn.Dropout(p=dropout)
         # pre_norm_ffn
         self.layernorm_after = MobileViTv2LayerNorm2D(embed_dim, eps=config.layer_norm_eps)
-        self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, ffn_dropout, dropout)
+        self.ffn = MobileViTv2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         layernorm_1_out = self.layernorm_before(hidden_states)
@@ -471,14 +468,7 @@ class MobileViTv2TransformerLayer(nn.Module):
 
 class MobileViTv2Transformer(nn.Module):
     def __init__(
-        self,
-        config: MobileViTv2Config,
-        n_layers: int,
-        d_model: int,
-        ffn_multiplier: Union[Sequence, int, float],
-        attn_dropout: float,
-        dropout: float,
-        ffn_dropout: float,
+        self, config: MobileViTv2Config, n_layers: int, d_model: int, ffn_multiplier: Union[Sequence, int, float]
     ) -> None:
         super().__init__()
 
@@ -497,12 +487,7 @@ class MobileViTv2Transformer(nn.Module):
         self.layer = nn.ModuleList()
         for block_idx in range(n_layers):
             transformer_layer = MobileViTv2TransformerLayer(
-                config,
-                embed_dim=d_model,
-                ffn_latent_dim=ffn_dims[block_idx],
-                attn_dropout=attn_dropout,
-                dropout=dropout,
-                ffn_dropout=ffn_dropout,
+                config, embed_dim=d_model, ffn_latent_dim=ffn_dims[block_idx]
             )
             self.layer.append(transformer_layer)
 
@@ -526,9 +511,6 @@ class MobileViTv2Layer(nn.Module):
         stride: int,
         n_attn_blocks: Optional[int] = 2,
         ffn_multiplier: Optional[Union[Sequence[Union[int, float]], int, float]] = 2.0,
-        attn_dropout: Optional[float] = 0.0,
-        dropout: Optional[float] = 0.0,
-        ffn_dropout: Optional[float] = 0.0,
         dilation: int = 1,
         patch_size: Optional[int] = 2,
     ) -> None:
@@ -569,13 +551,7 @@ class MobileViTv2Layer(nn.Module):
 
         # Global representations
         self.transformer = MobileViTv2Transformer(
-            config,
-            d_model=attn_unit_dim,
-            ffn_multiplier=ffn_multiplier,
-            n_layers=n_attn_blocks,
-            attn_dropout=attn_dropout,
-            dropout=dropout,
-            ffn_dropout=ffn_dropout,
+            config, d_model=attn_unit_dim, ffn_multiplier=ffn_multiplier, n_layers=n_attn_blocks
         )
 
         self.layernorm = MobileViTv2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)

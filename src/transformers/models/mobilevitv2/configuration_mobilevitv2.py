@@ -50,8 +50,6 @@ class MobileViTv2Config(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_sizes (`List[int]`, *optional*, defaults to `[144, 192, 240]`):
             Dimensionality (hidden size) of the Transformer encoders at each stage.
-        mlp_ratio (`float`, *optional*, defaults to 2.0):
-            The ratio of the number of channels in the output of the MLP to the number of channels in the input.
         expand_ratio (`float`, *optional*, defaults to 4.0):
             Expansion factor for the MobileNetv2 layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -96,7 +94,6 @@ class MobileViTv2Config(PretrainedConfig):
         num_channels=3,
         image_size=256,
         patch_size=2,
-        mlp_ratio=2.0,
         expand_ratio=2.0,
         hidden_act="swish",
         conv_kernel_size=3,
@@ -118,7 +115,6 @@ class MobileViTv2Config(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.mlp_ratio = mlp_ratio
         self.expand_ratio = expand_ratio
         self.hidden_act = hidden_act
         self.conv_kernel_size = conv_kernel_size
