@@ -463,8 +463,8 @@ class FlaxGenerationMixin:
                 logits_processor=logits_processor,
                 trace=trace,
                 params=params,
-                num_return_sequences = generation_config.num_return_sequences,
-                model_kwargs=model_kwargs
+                num_return_sequences=generation_config.num_return_sequences,
+                model_kwargs=model_kwargs,
             )
         else:
             raise NotImplementedError("`Beam sampling is currently not implemented.")
@@ -1004,6 +1004,5 @@ class FlaxGenerationMixin:
         # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
-
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
