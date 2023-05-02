@@ -685,7 +685,7 @@ class SamPromptEncoder(nn.Module):
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
-            sparse_embeddings = torch.empty((batch_size, point_batch_size, 0, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.zeros((batch_size, point_batch_size, 1, self.hidden_size), device=target_device)
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=2)
         if input_boxes is not None:
             batch_size = input_boxes.shape[0]
@@ -702,7 +702,7 @@ class SamPromptEncoder(nn.Module):
             )
 
         if sparse_embeddings is None:
-            sparse_embeddings = torch.empty((batch_size, 1, 1, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.zeros((batch_size, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
