@@ -84,16 +84,16 @@ def bound_fn(min_val: Union[float, int], max_val: Union[float, int], value: Unio
 
 class MobileViTv2LayerNorm2D(nn.GroupNorm):
     """
-    Applies `Layer Normalization <https://arxiv.org/abs/1607.06450>`_ over a 4D input tensor
+    Applies [Layer Normalization](https://arxiv.org/abs/1607.06450) over a 4D input tensor
 
     Args:
-        num_features (int): :math:`C` from an expected input of size :math:`(N, C, H, W)`
+        num_features (int): \\(C\\) from an expected input of size \\((N, C, H, W)\\)
         eps (Optional, float): Value added to the denominator for numerical stability. Default: 1e-5
-        elementwise_affine (bool): If ``True``, use learnable affine parameters. Default: ``True``
+        elementwise_affine (bool): If `True`, use learnable affine parameters. Default: `True`
 
     Shape:
-        - Input: :math:`(N, C, H, W)` where :math:`N` is the batch size, :math:`C` is the number of input channels,
-        :math:`H` is the input height, and :math:`W` is the input width
+        - Input: \\((N, C, H, W)\\) where \\(N\\) is the batch size, \\(C\\) is the number of input channels,
+        \\(H\\) is the input height, and \\(W\\) is the input width
         - Output: same shape as the input
     """
 
@@ -933,7 +933,6 @@ class MobileViTv2Model(MobileViTv2PreTrainedModel):
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTForImageClassification with MOBILEVIT->MOBILEVITV2,MobileViT->MobileViTv2,mobilevit->mobilevitv2
 class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
     def __init__(self, config: MobileViTv2Config) -> None:
         super().__init__(config)
@@ -941,10 +940,12 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilevitv2 = MobileViTv2Model(config)
 
+        out_channels = int(make_divisible(512 * config.width_multiplier, divisor=8))  # layer 5 output dimension
         # Classifier head
-        self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
         self.classifier = (
-            nn.Linear(config.neck_hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(in_features=out_channels, out_features=config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -976,7 +977,7 @@ class MobileViTv2ForImageClassification(MobileViTv2PreTrainedModel):
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(self.dropout(pooled_output))
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
