@@ -34,8 +34,8 @@
       title: (번역중) Converting from TensorFlow checkpoints
     - local: serialization
       title: ONNX로 내보내기
-    - local: in_translation
-      title: (번역중) Export to TorchScript
+    - local: torchscript
+      title: TorchScript로 내보내기
     - local: in_translation
       title: (번역중) Troubleshoot
     title: (번역중) 일반적인 사용방법
