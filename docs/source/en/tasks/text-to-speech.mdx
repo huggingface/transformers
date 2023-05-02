@@ -123,16 +123,17 @@ the mapping function.
 ...     vocab = list(set(all_text))
 ...     return {"vocab": [vocab], "all_text": [all_text]}
 
+
 >>> vocabs = dataset.map(
-...     extract_all_chars, 
-...     batched=True, 
-...     batch_size=-1, 
-...     keep_in_memory=True, 
+...     extract_all_chars,
+...     batched=True,
+...     batch_size=-1,
+...     keep_in_memory=True,
 ...     remove_columns=dataset.column_names,
 ... )
 
 >>> dataset_vocab = set(vocabs["vocab"][0])
->>> tokenizer_vocab = {k for k,_ in tokenizer.get_vocab().items()}
+>>> tokenizer_vocab = {k for k, _ in tokenizer.get_vocab().items()}
 ```
 
 Now you have two sets of characters: one with the vocabulary from the dataset and one with the vocabulary from the tokenizer. 
@@ -149,20 +150,22 @@ valid tokens. Note that spaces are already replaced by `▁` in the tokenizer an
 
 ```py
 >>> replacements = [
-...     ('à', 'a'),
-...     ('ç', 'c'),
-...     ('è', 'e'),
-...     ('ë', 'e'),
-...     ('í', 'i'),
-...     ('ï', 'i'),
-...     ('ö', 'o'),
-...     ('ü', 'u'),
+...     ("à", "a"),
+...     ("ç", "c"),
+...     ("è", "e"),
+...     ("ë", "e"),
+...     ("í", "i"),
+...     ("ï", "i"),
+...     ("ö", "o"),
+...     ("ü", "u"),
 ... ]
+
 
 >>> def cleanup_text(inputs):
 ...     for src, dst in replacements:
 ...         inputs["normalized_text"] = inputs["normalized_text"].replace(src, dst)
 ...     return inputs
+
 
 >>> dataset = dataset.map(cleanup_text)
 ```
@@ -178,6 +181,7 @@ speakers and examples in the data.
 
 ```py
 >>> from collections import defaultdict
+
 >>> speaker_counts = defaultdict(int)
 
 >>> for speaker_id in dataset["speaker_id"]:
@@ -207,6 +211,7 @@ the data to speakers with between 100 and 400 examples.
 ```py
 >>> def select_speaker(speaker_id):
 ...     return 100 <= speaker_counts[speaker_id] <= 400
+
 
 >>> dataset = dataset.filter(select_speaker, input_columns=["speaker_id"])
 ```
@@ -250,17 +255,18 @@ containing the corresponding speaker embedding.
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> speaker_model = EncoderClassifier.from_hparams(
-...     source=spk_model_name, 
-...     run_opts={"device": device}, 
+...     source=spk_model_name,
+...     run_opts={"device": device},
 ...     savedir=os.path.join("/tmp", spk_model_name),
 ... )
+
 
 >>> def create_speaker_embedding(waveform):
 ...     with torch.no_grad():
 ...         speaker_embeddings = speaker_model.encode_batch(torch.tensor(waveform))
 ...         speaker_embeddings = torch.nn.functional.normalize(speaker_embeddings, dim=2)
 ...         speaker_embeddings = speaker_embeddings.squeeze().cpu().numpy()
-...     return speaker_embeddings 
+...     return speaker_embeddings
 ```
 
 It's important to note that the `speechbrain/spkrec-xvect-voxceleb` model was trained on English speech from the VoxCeleb 
@@ -282,7 +288,7 @@ It should also add the speaker embeddings as an additional input.
 
 ...     example = processor(
 ...         text=example["normalized_text"],
-...         audio_target=audio["array"], 
+...         audio_target=audio["array"],
 ...         sampling_rate=audio["sampling_rate"],
 ...         return_attention_mask=False,
 ...     )
@@ -299,7 +305,7 @@ It should also add the speaker embeddings as an additional input.
 Verify the processing is correct by looking at a single example:
 
 ```py
->>> processed_example = prepare_dataset(dataset[0]) 
+>>> processed_example = prepare_dataset(dataset[0])
 >>> list(processed_example.keys())
 ['input_ids', 'labels', 'stop_labels', 'speaker_embeddings']
 ```
@@ -315,9 +321,10 @@ The labels should be a log-mel spectrogram with 80 mel bins.
 
 ```py
 >>> import matplotlib.pyplot as plt
+
 >>> plt.figure()
 >>> plt.imshow(processed_example["labels"].T)
->>> plt.show() 
+>>> plt.show()
 ```
 
 <div class="flex justify-center">
@@ -338,6 +345,7 @@ Remove those examples from the dataset. Here we go even further and to allow for
 ...     input_length = len(input_ids)
 ...     return input_length < 200
 
+
 >>> dataset = dataset.filter(is_not_too_long, input_columns=["input_ids"])
 >>> len(dataset)
 8259
@@ -346,7 +354,7 @@ Remove those examples from the dataset. Here we go even further and to allow for
 Next, create a basic train/test split: 
 
 ```py
->>> dataset = dataset.train_test_split(test_size=0.1) 
+>>> dataset = dataset.train_test_split(test_size=0.1)
 ```
 
 ### Data collator
@@ -359,42 +367,38 @@ instructs the model to ignore that part of the spectrogram when calculating the 
 >>> from dataclasses import dataclass
 >>> from typing import Any, Dict, List, Union
 
+
 >>> @dataclass
->>> class TTSDataCollatorWithPadding:
+... class TTSDataCollatorWithPadding:
 ...     processor: Any
 
 ...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-
 ...         input_ids = [{"input_ids": feature["input_ids"]} for feature in features]
 ...         label_features = [{"input_values": feature["labels"]} for feature in features]
 ...         speaker_features = [feature["speaker_embeddings"] for feature in features]
 
 ...         # collate the inputs and targets into a batch
-...         batch = processor.pad(input_ids=input_ids, labels=label_features, return_tensors="pt")        
+...         batch = processor.pad(input_ids=input_ids, labels=label_features, return_tensors="pt")
 
 ...         # replace padding with -100 to ignore loss correctly
-...         batch["labels"] = batch["labels"].masked_fill(
-...             batch.decoder_attention_mask.unsqueeze(-1).ne(1), -100
-...         )
+...         batch["labels"] = batch["labels"].masked_fill(batch.decoder_attention_mask.unsqueeze(-1).ne(1), -100)
 
 ...         # not used during fine-tuning
 ...         del batch["decoder_attention_mask"]
 
 ...         # round down target lengths to multiple of reduction factor
 ...         if model.config.reduction_factor > 1:
-...             target_lengths = torch.tensor([
-...                 len(feature["input_values"]) for feature in label_features
-...             ])
-...             target_lengths = target_lengths.new([
-...                 length - length % model.config.reduction_factor for length in target_lengths
-...             ])
+...             target_lengths = torch.tensor([len(feature["input_values"]) for feature in label_features])
+...             target_lengths = target_lengths.new(
+...                 [length - length % model.config.reduction_factor for length in target_lengths]
+...             )
 ...             max_length = max(target_lengths)
 ...             batch["labels"] = batch["labels"][:, :max_length]
 
 ...         # also add in the speaker embeddings
 ...         batch["speaker_embeddings"] = torch.tensor(speaker_features)
 
-...         return batch 
+...         return batch
 ```
 
 In SpeechT5, the input to the decoder part of the model is reduced by a factor 2. In other words, it throws away every 
@@ -413,7 +417,7 @@ Load the pre-trained model from the same checkpoint as you used for loading the 
 ```py
 >>> from transformers import SpeechT5ForTextToSpeech
 
->>> model = SpeechT5ForTextToSpeech.from_pretrained(checkpoint) 
+>>> model = SpeechT5ForTextToSpeech.from_pretrained(checkpoint)
 ```
 
 The `use_cache=True` option is incompatible with gradient checkpointing. Disable it for training.
@@ -462,7 +466,7 @@ Instantiate the `Trainer` object  and pass the model, dataset, and data collator
 ...     eval_dataset=dataset["test"],
 ...     data_collator=data_collator,
 ...     tokenizer=processor.tokenizer,
-... ) 
+... )
 ```
 
 And with that, you're ready to start training! Training will take several hours. Depending on your GPU, 
@@ -470,7 +474,7 @@ it is possible that you will encounter a CUDA "out-of-memory" error when you sta
 the `per_device_train_batch_size` incrementally by factors of 2 and increase `gradient_accumulation_steps` by 2x to compensate.
 
 ```py
->>> trainer.train() 
+>>> trainer.train()
 ```
 
 Push the final model to the 🤗 Hub:
@@ -485,7 +489,7 @@ Great, now that you've fine-tuned a model, you can use it for inference!
 Load the model from the 🤗 Hub: 
 
 ```py
->>> model = SpeechT5ForTextToSpeech.from_pretrained("MariaK/speecht5_finetuned_voxpopuli_nl") 
+>>> model = SpeechT5ForTextToSpeech.from_pretrained("MariaK/speecht5_finetuned_voxpopuli_nl")
 ```
 
 Pick an example, here we'll take one from the test dataset. Obtain a speaker embedding. 
@@ -504,13 +508,13 @@ Define some input text and tokenize it.
 Preprocess the input text: 
 
 ```py
->>> inputs = processor(text=text, return_tensors="pt") 
+>>> inputs = processor(text=text, return_tensors="pt")
 ```
 
 Create a spectrogram with your model: 
 
 ```py
->>> spectrogram = model.generate_speech(inputs["input_ids"], speaker_embeddings) 
+>>> spectrogram = model.generate_speech(inputs["input_ids"], speaker_embeddings)
 ```
 
 Visualize the spectrogram, if you'd like to: 
@@ -518,7 +522,7 @@ Visualize the spectrogram, if you'd like to:
 ```py
 >>> plt.figure()
 >>> plt.imshow(spectrogram.T)
->>> plt.show() 
+>>> plt.show()
 ```
 
 <div class="flex justify-center">
@@ -532,6 +536,7 @@ Finally, use the vocoder to turn the spectrogram into sound.
 ...     speech = vocoder(spectrogram)
 
 >>> from IPython.display import Audio
+
 >>> Audio(speech.numpy(), rate=16000)
 ```
 
