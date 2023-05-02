@@ -277,3 +277,15 @@ def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs)
         tool_class = get_class_from_dynamic_module(custom_tools[task], repo_id, use_auth_token=token, **hub_kwargs)
 
     return tool_class(repo_id, token=token, **tool_kwargs)
+
+
+def add_description(description):
+    """
+    A decorator that adds a description to a function.
+    """
+
+    def inner(func):
+        func.description = description
+        return func
+
+    return inner
