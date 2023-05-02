@@ -201,6 +201,11 @@ TASK_MAPPING = {
     "text-classification": "TextClassificationTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
+    "text-download": "TextDownloadTool",
+    "summarizer": "TextSummarizationTool",
+    "image-question-answering": "ImageQuestionAnsweringTool",
+    "document-question-answering": "DocumentQuestionAnsweringTool",
+    "text-to-video": "TextToVideoTool",
 }
 
 
