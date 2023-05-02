@@ -458,7 +458,9 @@ class Trainer:
                 self.fsdp = ShardingStrategy.NO_SHARD
 
             self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
-            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
+            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" in self.args.fsdp_config.get(
+                "backward_prefetch", []
+            ):
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forward_prefetch = False
