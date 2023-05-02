@@ -30,11 +30,7 @@ def add_description(description):
 ### Fake tools for test
 @add_description(text_classifier_description)
 def classifier(text, labels):
-    for label in labels:
-        if label in text:
-            return {"label": label, "score": 0.99}
-
-    return {"label": labels[0], "score": 0.5}
+    return f"This is the classification of {text} along {labels}."
 
 
 @add_description(translation_description)
@@ -100,13 +96,6 @@ def summarizer(text):
 
 
 @add_description(
-    "This is a tool that performs a calculation between two numbers. It takes an input named `operation`, as well as two strings `a` and `b` representing the two numbers. The `operation` can take four values: -, +, /, *. It returns the result of that operation when applied to the two numbers."
-)
-def calculator(operation, a, b):
-    return f"This is the solution of ({a} {operation} {b})."
-
-
-@add_description(
     "This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches."
 )
 def search_engine(query):
@@ -132,21 +121,12 @@ def database_writer(key, value):
     _db[key] = value
     return "200"
 
+
 @add_description(
     "This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object."
 )
 def video_generator(prompt):
     return f"A video of {prompt}"
-
-
-@add_description("This is a tool that generates an image of cats. It takes no input.")
-def cat_generator():
-    return "An image of cats"
-
-
-@add_description("This is a tool that generates an image of dogs. It takes no input.")
-def dog_generator():
-    return "An image of dogs."
 
 
 ALL_TOOLS = {
@@ -161,7 +141,6 @@ ALL_TOOLS = {
     "image_transformer": image_transformer,
     "test_qa": question_answerer,
     "text_downloader": text_downloader,
-    "calculator": calculator,
     "search_engine": search_engine,
     "database_reader": database_reader,
     "database_writer": database_writer,
@@ -169,6 +148,7 @@ ALL_TOOLS = {
     "image_qa": None,
     "video_generator": video_generator,
 }
+
 
 def sample_num_tools(max_n):
     """
@@ -249,10 +229,10 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[classifier, translator],
         inputs={"text": "C'est une review positive."},
-        answer=[
-            classifier(translator("C'est une review positive.", src_lang='Spanish', tgt_lang='English'), labels=['positive', 'negative']),
-            classifier(translator("C'est une review positive.", src_lang='Spanish', tgt_lang='English'), labels=['positive', 'negative'])["label"],
-        ],
+        answer=classifier(
+            translator("C'est une review positive.", src_lang="Spanish", tgt_lang="English"),
+            labels=["positive", "negative"],
+        ),
     ),
     Problem(
         task=[
@@ -288,7 +268,7 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[translator, image_transformer],
         inputs=["text", "image"],
-        answer=image_transformer("<<image>>", translator("<<text>>", src_lang='Spanish', tgt_lang='English')),
+        answer=image_transformer("<<image>>", translator("<<text>>", src_lang="Spanish", tgt_lang="English")),
     ),
     Problem(
         task=[
@@ -299,28 +279,28 @@ EVALUATION_TASKS = [
         inputs=["url"],
         answer=speaker(summarizer(text_downloader("<<url>>"))),
     ),
-    Problem(
-        task=[
-            "What is the price of a Redbull can in America, converted to Korean won using last week's rate?",
-        ],
-        minimum_tools=[search_engine, calculator],
-        inputs=[],
-        answer=[
-            calculator(
-                "*", search_engine("Redbull can price in America"), search_engine("Last week's USD to KRW rate")
-            ),
-        ],
-    ),
-    Problem(
-        task=[
-            "What is the postal code of L'Arc de Triomphe multiplied by 3?",
-        ],
-        minimum_tools=[search_engine, calculator],
-        inputs=[],
-        answer=[
-            calculator("*", search_engine("Postal code L'Arc de Triomphe"), "3"),
-        ],
-    ),
+    # Problem(
+    #    task=[
+    #        "What is the price of a Redbull can in America, converted to Korean won using last week's rate?",
+    #    ],
+    #    minimum_tools=[search_engine, calculator],
+    #    inputs=[],
+    #    answer=[
+    #        calculator(
+    #            "*", search_engine("Redbull can price in America"), search_engine("Last week's USD to KRW rate")
+    #        ),
+    #    ],
+    # ),
+    # Problem(
+    #    task=[
+    #        "What is the postal code of L'Arc de Triomphe multiplied by 3?",
+    #    ],
+    #    minimum_tools=[search_engine, calculator],
+    #    inputs=[],
+    #    answer=[
+    #        calculator("*", search_engine("Postal code L'Arc de Triomphe"), "3"),
+    #    ],
+    # ),
     Problem(
         task=[
             "Generate an image from the text given in `text_input`, and write it into the database using the original text as key. Show me the value of the written record once this is done.",
@@ -336,8 +316,8 @@ EVALUATION_TASKS = [
             "Showcase the `prompt` in the `image`.",
         ],
         minimum_tools=[image_transformer],
-        inputs={"image": '<image object>', 'prompt': "capybara"},
-        answer=image_transformer('<image object>', 'capybara')
+        inputs={"image": "<image object>", "prompt": "capybara"},
+        answer=image_transformer("<image object>", "capybara"),
     ),
     Problem(
         task=[
@@ -345,16 +325,13 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[summarizer, speaker, transcriber, translator],
         inputs={"text": "I'm a text"},
-        answer=translator(transcriber(speaker(summarizer("I'm a text"))), src_lang="English", tgt_lang="French")
+        answer=translator(transcriber(speaker(summarizer("I'm a text"))), src_lang="English", tgt_lang="French"),
     ),
     Problem(
-        task=[
-            "Generate a video of the `prompt`",
-            "Animate a `prompt`"
-        ],
+        task=["Generate a video of the `prompt`", "Animate a `prompt`"],
         minimum_tools=[video_generator],
         inputs={"prompt": "A lobster swimming"},
-        answer=video_generator('A lobster swimming')
+        answer=video_generator("A lobster swimming"),
     ),
     Problem(
         task=[
@@ -363,7 +340,7 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[text_downloader, summarizer, video_generator],
         inputs={"url": "url"},
-        answer=video_generator(summarizer(text_downloader("url")))
+        answer=video_generator(summarizer(text_downloader("url"))),
     ),
 ]
 
