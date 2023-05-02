@@ -1281,9 +1281,8 @@ class Trainer:
 
         if self.is_accelerate_deepspeed_enabled:
             # Rebuild the deepspeed config to reflect the updated training parameters
-            from accelerate.utils import DeepSpeedPlugin
-
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
+            from accelerate.utils import DeepSpeedPlugin
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
@@ -1668,7 +1667,7 @@ class Trainer:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         # if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
-        #     self._load_from_checkpoint(resume_from_checkpoint)
+        # self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1746,19 +1745,21 @@ class Trainer:
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
-            or self.is_accelerate_deepspeed_enabled
             or self.is_accelerate_fsdp_enabled
         )
-        if args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            self.optimizer = optimizer
-            self.lr_scheduler = lr_scheduler
-        elif not delay_optimizer_creation:
+        if self.is_accelerate_deepspeed_enabled:
+            self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
+        # if args.deepspeed:
+        #     deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
+        #         self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+        #     )
+        #     self.model = deepspeed_engine.module
+        #     self.model_wrapped = deepspeed_engine
+        #     self.deepspeed = deepspeed_engine
+        #     self.optimizer = optimizer
+        #     self.lr_scheduler = lr_scheduler
+
+        if not delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         self.state = TrainerState()
@@ -1773,15 +1774,26 @@ class Trainer:
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
+        if delay_optimizer_creation:
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        # prepare using `accelerator` prepare
+        model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+            self.model, self.optimizer, self.lr_scheduler
+        )
+
+        if self.is_accelerate_fsdp_enabled:
+            self.model = model
+
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
 
-        if delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
-
         # Check if saved optimizer or scheduler states exist
-        self._load_optimizer_and_scheduler(resume_from_checkpoint)
+        self.accelerator.load_state(resume_from_checkpoint)
+
+        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+            self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
@@ -1992,10 +2004,15 @@ class Trainer:
                         elif hasattr(model, "clip_grad_norm_"):
                             # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
                             model.clip_grad_norm_(args.max_grad_norm)
-                        else:
+                        elif self.use_apex:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             nn.utils.clip_grad_norm_(
-                                amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
+                                amp.master_params(self.optimizer),
+                                args.max_grad_norm,
+                            )
+                        else:
+                            self.accelerator.clip_grad_norm_(
+                                model.parameters(),
                                 args.max_grad_norm,
                             )
 
@@ -2132,7 +2149,7 @@ class Trainer:
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
         if not any(
-            os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]
+            [os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2737,7 +2754,7 @@ class Trainer:
             # loss gets scaled under gradient_accumulation_steps in deepspeed
             loss = self.deepspeed.backward(loss)
         else:
-            loss.backward()
+            self.accelerator.backward(loss)
 
         return loss.detach()
 
