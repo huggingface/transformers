@@ -514,7 +514,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
-        ("mobilevitv2", "MobileViTv2v2"),
+        ("mobilevitv2", "MobileViTv2"),
         ("mpnet", "MPNet"),
         ("mt5", "MT5"),
         ("mvp", "MVP"),
