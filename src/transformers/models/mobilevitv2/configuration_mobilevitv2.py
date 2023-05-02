@@ -73,7 +73,7 @@ class MobileViTv2Config(PretrainedConfig):
         width_multiplier (`float`, *optional*, defaults to 1.0)
             The width multiplier for MobileViTv2.
         attn_dropout (`float`, *optional*, defaults to 0.0)
-            The dropout in the attention layer. 
+            The dropout in the attention layer.
         ffn_dropout (`float`, *optional*, defaults to 0.0)
             The dropout between FFN layers.
 
@@ -125,7 +125,7 @@ class MobileViTv2Config(PretrainedConfig):
         self.output_stride = output_stride
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        
+
         self.width_multiplier = width_multiplier
         self.ffn_dropout = ffn_dropout
         self.attn_dropout = attn_dropout
@@ -136,7 +136,6 @@ class MobileViTv2Config(PretrainedConfig):
         self.atrous_rates = atrous_rates
         self.aspp_dropout_prob = aspp_dropout_prob
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-
 
 
 class MobileViTv2OnnxConfig(OnnxConfig):
