@@ -89,8 +89,8 @@ class RwkvConfig(PretrainedConfig):
         attention_hidden_size=None,
         intermediate_size=None,
         layer_norm_epsilon=1e-5,
-        # bos_token_id=50256,
-        # eos_token_id=50256,
+        bos_token_id=0,
+        eos_token_id=2,
         rescale_every=6,
         tie_word_embeddings=False,
         use_cache=True,
@@ -105,5 +105,8 @@ class RwkvConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.rescale_every = rescale_every
         self.use_cache = use_cache
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
