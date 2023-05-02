@@ -23,23 +23,26 @@ from typing import TYPE_CHECKING, Tuple, Type, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import copy_func, logging
-from ...utils.dummy_sentencepiece_objects import FNetTokenizer, PegasusTokenizer, T5Tokenizer
-from ..rag.tokenization_rag import RagTokenizer
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
-_LazyAutoMappingValue = Tuple[
-    Type[Union[PreTrainedTokenizer, T5Tokenizer, FNetTokenizer, PegasusTokenizer, RagTokenizer, None]],
-    Type[Union[PreTrainedTokenizerFast, None]],
-]
-
-# Support Python 3.8 and below
 if TYPE_CHECKING:
+    # Avoid runtime dependency on other modules for typing needs
+    from ...tokenization_utils import PreTrainedTokenizer
+    from ...tokenization_utils_fast import PreTrainedTokenizerFast
+    from ...utils.dummy_sentencepiece_objects import FNetTokenizer, PegasusTokenizer, T5Tokenizer
+    from ..rag.tokenization_rag import RagTokenizer
+
+    _LazyAutoMappingValue = Tuple[
+        Type[Union[PreTrainedTokenizer, FNetTokenizer, PegasusTokenizer, T5Tokenizer, RagTokenizer, None]],
+        Type[Union[PreTrainedTokenizerFast, None]],
+    ]
+
+    # Support Python 3.8 and below
     _LazyAutoMappingOrderedDict = OrderedDict[Type[PretrainedConfig], _LazyAutoMappingValue]
 else:
+    _LazyAutoMappingValue = Tuple[type, type]
     _LazyAutoMappingOrderedDict = OrderedDict
 
 
