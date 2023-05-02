@@ -223,9 +223,7 @@ class SamAttention(nn.Module):
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
         batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(
-            batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head
-        )
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
         # Input projections
@@ -635,15 +633,15 @@ class SamPromptEncoder(nn.Module):
         )
 
         point_embedding = torch.where(
-                (labels == 0)[:, :, :, None],
-                point_embedding + self.point_embed[0].weight[None, None, :, :],
-                point_embedding
+            (labels == 0)[:, :, :, None],
+            point_embedding + self.point_embed[0].weight[None, None, :, :],
+            point_embedding,
         )
 
         point_embedding = torch.where(
-                (labels == 1)[:, :, :, None],
-                point_embedding + self.point_embed[1].weight[None, None, :, :],
-                point_embedding
+            (labels == 1)[:, :, :, None],
+            point_embedding + self.point_embed[1].weight[None, None, :, :],
+            point_embedding,
         )
 
         return point_embedding
@@ -685,8 +683,7 @@ class SamPromptEncoder(nn.Module):
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
-            sparse_embeddings = torch.zeros((batch_size, point_batch_size, 1, self.hidden_size), device=target_device)
-            sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=2)
+            sparse_embeddings = point_embeddings
         if input_boxes is not None:
             batch_size = input_boxes.shape[0]
             box_embeddings = self._embed_boxes(input_boxes)
