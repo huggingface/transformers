@@ -32,7 +32,7 @@ PyTorch 기반 Python 프로그램과 다른 환경에서 모델을 재사용할
 모델을 내보내려면 두 가지가 필요합니다:
 
 - `torchscript` 플래그로 모델 인스턴스화
-- 더미 입력을 사용한 순방향 패스(forward pass)
+- 더미 입력을 사용한 순전파(forward pass)
 
 이 필수 조건들은 아래에 자세히 설명된 것처럼 개발자들이 주의해야 할 여러 사항들을 의미합니다.
 
@@ -49,7 +49,7 @@ TorchScript는 묶인 가중치를 가진 모델을 내보낼 수 없으므로, 
 
 ## 더미 입력과 표준 길이[[dummy-inputs-and-standard-lengths]]
 
-더미 입력(dummy inputs)은 모델의 순방향 패스(forward pass)에 사용됩니다. 
+더미 입력(dummy inputs)은 모델의 순전파(forward pass)에 사용됩니다. 
 입력 값이 레이어를 통해 전파되는 동안, PyTorch는 각 텐서에서 실행된 다른 연산을 추적합니다. 
 이러한 기록된 연산은 모델의 *추적(trace)*을 생성하는 데 사용됩니다.
 
