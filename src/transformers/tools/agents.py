@@ -6,7 +6,7 @@ import warnings
 import requests
 from huggingface_hub import HfFolder
 
-from .base import supports_remote, tool
+from .base import TASK_MAPPING, supports_remote, tool
 from .python_interpreter import evaluate
 
 
@@ -27,22 +27,7 @@ Each instruction in Python should be a simple assignement. You can print interme
 The final result should be stored in a variable named `result`. You can also print the result if it makes sense to do so.
 
 Tools:
-- text_qa: This is a tool that answers questions related to a text. It takes two arguments named `text`, which is the text where to find the answer, and `question`, which is the question, and returns the answer to the question.
-- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
-- image_transformer: This is a tool that transforms an image according to a prompt. It takes two inputs: `image`, which should be the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the modified image.
-- text_downloader: This is a tool that downloads the context of an url and returns the text inside. It takes an input named `url`, which is the url to download, and returns the text.
-- transcriber: This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the transcribed text.
-- table_qa: This is a tool that reads a table and answers a question related to the table. It takes an input named `table` which should be the table containing the date, as well as a `question` to be asked relative to the table. It returns the answer in text.
-- image_generator: This is a tool that creates an image according to a text description. It takes an input named `text` which contains the image description and outputs an image.
-- text_reader: This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the text to read (in English) and returns a waveform object containing the sound.
-- text_classifier: This is a tool that classifies an English text using provided labels. It takes two inputs: `text`, which should be the text to classify, and `labels`, which should be the list of labels to use for classification. It returns the most likely label in the list of provided `labels` for the input text.
-- translator: This is a tool that translates text from a language to another. It takes three inputs: `text`, which should be the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`, which should be the language for the desired ouput language. It returns the text translated in `tgt_lang`.
-- summarizer: This is a tool that summarizes texts. It takes an input named `text`, which should be the text to summarize, and returns the summary.
-- search_engine: This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches.
-- database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.
-- database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.
-- image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
-- video_generator: This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object.
+<<all_tools>>
 
 
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
@@ -53,7 +38,7 @@ Answer:
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
 print(f"The translated question is {translated_question}.")
-result = image_qa(text=translated_question, image=image)
+result = image_qa(image=image, question=translated_question)
 print(f"The answer is {result}")
 ```
 
@@ -65,7 +50,7 @@ Answer:
 ```py
 answer = table_qa(table=table, question="What is the oldest person?")
 print(f"The answer is {answer}.")
-result = image_generator(prompt="A banner showing " + answer)
+result = image_generator("A banner showing " + answer)
 ```
 
 Task: "Generate an image using the text given in the variable `caption`."
@@ -85,7 +70,7 @@ Answer:
 ```py
 summarized_text = summarizer(text)
 print(f"Summary: {summarized text}")
-result = text_reader(text=summarized_text)
+result = text_reader(summarized_text)
 ```
 
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
@@ -96,7 +81,7 @@ Answer:
 ```py
 answer = text_qa(text=text, question=question)
 print(f"The answer is {answer}.")
-result = image_generator(text=answer)
+result = image_generator(answer)
 ```
 
 Task: "Caption the following `image`."
@@ -143,6 +128,33 @@ OUR_TOOLS = {
 }
 
 
+# This is a temporary workaround for tools that aren't implemented yet.
+# docstyle-ignore
+MISSING_TOOLS = """
+- database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.
+- database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.
+- image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
+- video_generator: This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object.
+"""
+
+
+def get_all_tools_descriptions():
+    main_module = importlib.import_module("transformers")
+    tools_module = main_module.tools
+
+    lines = []
+    for tool_name, task_name in OUR_TOOLS.items():
+        if task_name is None:
+            continue
+        tool_class_name = TASK_MAPPING.get(task_name)
+        description = getattr(tools_module, tool_class_name).description
+        lines.append(f"- {tool_name}: {description}")
+
+    # force-add missing tools descriptions for now
+    lines.append(MISSING_TOOLS.strip())
+    return "\n".join(lines)
+
+
 def resolve_tools(code, remote=False):
     resolved_tools = BASE_PYTHON_TOOLS.copy()
     for name, task_name in OUR_TOOLS.items():
@@ -163,7 +175,10 @@ class Agent:
     prompt_template = PROMPT_TEMPLATE
 
     def format_prompt(self, task):
-        return self.prompt_template.replace("<<prompt>>", task)
+        if getattr(self, "default_tools", None) is None:
+            self.default_tools = get_all_tools_descriptions()
+        prompt = self.prompt_template.replace("<<all_tools>>", self.default_tools)
+        return prompt.replace("<<prompt>>", task)
 
     def clean_code(self, code):
         code = f"I will use the following {code}"

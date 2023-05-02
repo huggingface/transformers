@@ -38,7 +38,9 @@ class TextToVideoTool(Tool):
         if self.device is None:
             self.device = PartialState().default_device
 
-        self.pipeline = DiffusionPipeline.from_pretrained(self.default_checkpoint, torch_dtype=torch.float16, variant="fp16")
+        self.pipeline = DiffusionPipeline.from_pretrained(
+            self.default_checkpoint, torch_dtype=torch.float16, variant="fp16"
+        )
         self.pipeline.to(self.device)
 
         self.is_initialized = True
@@ -47,4 +49,4 @@ class TextToVideoTool(Tool):
         if not self.is_initialized:
             self.setup()
 
-        return self.pipeline(prompt, num_frames=8*seconds).frames
+        return self.pipeline(prompt, num_frames=8 * seconds).frames
