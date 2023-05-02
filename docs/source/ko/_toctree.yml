@@ -51,8 +51,8 @@
         title: 텍스트 분류
       - local: tasks/token_classification
         title: 토큰 분류
-      - local: in_translation
-        title: (번역중) Question answering
+      - local: tasks/question_answering
+        title: 질의 응답(Question Answering)
       - local: in_translation
         title: (번역중) Causal language modeling
       - local: tasks/masked_language_modeling
@@ -73,8 +73,8 @@
       title: (번역중) Automatic speech recognition
     title: (번역중) 오디오
   - sections:
-    - local: in_translation
-      title: (번역중) Image classification
+    - local: tasks/image_classification
+      title: 이미지 분류
     - local: in_translation
       title: (번역중) Semantic segmentation
     - local: in_translation
@@ -83,8 +83,8 @@
       title: (번역중) Object detection
     - local: in_translation
       title: (번역중) Zero-shot object detection
-    - local: in_translation
-      title: (번역중) Zero-shot image classification
+    - local: tasks/zero_shot_image_classification
+      title: 제로샷(zero-shot) 이미지 분류
     - local: in_translation
       title: (번역중) Depth estimation
     title: (번역중) 컴퓨터 비전
