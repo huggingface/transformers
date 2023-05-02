@@ -85,11 +85,6 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
         else:
             config.image_size = 256
         filename = "imagenet-22k-id2label.json"
-    elif task_name.startswith("coco_"):
-        config.num_labels = 91
-        config.image_size = 320
-        config.output_stride = None  # TODO: check
-        filename = "coco-detection-id2label.json"
     elif task_name.startswith("ade20k_"):
         config.num_labels = 151
         config.image_size = 512
@@ -296,14 +291,13 @@ if __name__ == "__main__":
             "Name of the task for which the MobileViTv2 model you'd like to convert is trained on . "
             """
                 Classification (ImageNet-1k)
-                    MobileViTv2 (256x256) : imagenet1k_256 MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) :
-                    imagenet1k_384 MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) :
-                    imagenet21k_to_1k_256 MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and
-                    Finetuned on ImageNet-1k 384x384) : imagenet21k_to_1k_384
-                Object Detection (MS-COCO)
-                    SSD MobileViTv2 : coco_ssd
+                    - MobileViTv2 (256x256) : imagenet1k_256 
+                    - MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384 
+                    - MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) : imagenet21k_to_1k_256 
+                    - MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on ImageNet-1k 384x384) : imagenet21k_to_1k_384
                 Segmentation
-                    ADE20K Dataset : ade20k_pspnet, ade20k_deeplabv3 Pascal VOC 2012 Dataset: voc_pspnet, voc_deeplabv3
+                    - ADE20K Dataset : ade20k_deeplabv3 
+                    - Pascal VOC 2012 Dataset: voc_deeplabv3
             """
         ),
         choices=[
@@ -311,10 +305,7 @@ if __name__ == "__main__":
             "imagenet1k_384",
             "imagenet21k_to_1k_256",
             "imagenet21k_to_1k_384",
-            "coco_ssd",
-            "ade20k_pspnet",
             "ade20k_deeplabv3",
-            "voc_pspnet",
             "voc_deeplabv3",
         ],
     )
