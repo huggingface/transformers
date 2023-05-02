@@ -8,20 +8,20 @@
   title: 시작하기
 - sections:
   - local: pipeline_tutorial
-    title: 추론을 위한 Pipeline
+    title: Pipeline으로 추론하기
   - local: autoclass_tutorial
-    title: 자동 클래스로 사전 학습된 인스턴스 로드하기
+    title: AutoClass로 사전 학습된 인스턴스 로드하기
   - local: preprocessing
-    title: 전처리
+    title: 데이터 전처리하기
   - local: training
     title: 사전 학습된 모델 미세 조정하기
   - local: run_scripts
     title: 스크립트로 학습하기
   - local: accelerate
-    title: 🤗 Accelerate를 활용한 분산 학습
+    title: 🤗 Accelerate로 분산 학습 구성하기
   - local: model_sharing
-    title: 모델 공유하기
-  title: (번역중) 튜토리얼
+    title: 만든 모델 공유하기
+  title: 튜토리얼
 - sections:
   - sections:
       - local: tasks/sequence_classification
@@ -39,14 +39,14 @@
       - local: tasks/summarization
         title: 요약
       - local: in_translation
-        title: (번역중) Multiple choice
-    title: (번역중) 자연어처리
+        title: (번역중) Multiple Choice
+    title: 자연어처리
     isExpanded: false
   - sections:
-    - local: in_translation
-      title: (번역중) Audio classification
-    - local: in_translation
-      title: (번역중) Automatic speech recognition
+      - local: in_translation
+        title: (번역중) Audio classification
+      - local: in_translation
+        title: (번역중) Automatic speech recognition
     title: (번역중) 오디오
     isExpanded: false
   - sections:
@@ -73,34 +73,34 @@
         title: (번역중) Document Question Answering
     title: (번역중) 멀티모달
     isExpanded: false
-  title: (번역중) 태스크별 가이드
+  title: 태스크 가이드
 - sections:
     - local: in_translation
-      title: (번역중) Use tokenizers from 🤗 Tokenizers
+      title: (번역중) Use fast tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: 다국어 모델 추론하기
     - local: in_translation
-      title: (번역중) Text generation strategies
+      title: (번역중) Customize text generation strategy
     - local: create_a_model
-      title: 맞춤형 아키텍처 만들기
+      title: 모델별 API 사용하기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
     - local: sagemaker
       title: Amazon SageMaker에서 학습 실행하기
     - local: serialization
       title: ONNX로 내보내기
-    - local: in_translation
-      title: (번역중) Export to TorchScript
+    - local: torchscript
+      title: TorchScript로 내보내기
     - local: in_translation
       title: (번역중) Benchmarks
     - local: in_translation
-      title: (번역중) 🤗 Transformers Notebooks
+      title: (번역중) Notebooks with examples
     - local: in_translation
       title: (번역중) Community resources
     - local: in_translation
       title: (번역중) Troubleshoot
-    title: (번역중) 개발자 가이드
-  - sections:
+  title: (번역중) 개발자 가이드
+- sections:
     - local: in_translation
       title: (번역중) Overview
     - local: in_translation
@@ -135,8 +135,8 @@
       title: (번역중) Hyperparameter Search using Trainer API
     - local: in_translation
       title: (번역중) XLA Integration for TensorFlow Models
-    title: (번역중) 성능 및 확장성
-  - sections:
+  title: (번역중) 성능 및 확장성
+- sections:
     - local: in_translation
       title: (번역중) How to contribute to transformers?
     - local: in_translation
@@ -149,7 +149,7 @@
       title: (번역중) Testing
     - local: in_translation
       title: (번역중) Checks on a Pull Request
-    title: (번역중) 기여하기
+  title: (번역중) 기여하기
 
 - sections:
   - local: in_translation
