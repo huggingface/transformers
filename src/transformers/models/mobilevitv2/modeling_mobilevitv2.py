@@ -436,8 +436,6 @@ class MobileViTv2FFN(nn.Module):
 
 
 class MobileViTv2TransformerLayer(nn.Module):
-    """LinearAttnFFN"""
-
     def __init__(
         self,
         config: MobileViTv2Config,
