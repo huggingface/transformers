@@ -10,6 +10,6 @@ TEXT_DOWNLOAD_DESCRIPTION = (
 )
 
 
-class TextDownload(Tool):
+class TextDownloadTool(Tool):
     def __call__(self, url):
         return BeautifulSoup(requests.get(url).text, features="html.parser").get_text()
