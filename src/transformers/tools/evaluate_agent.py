@@ -1,103 +1,62 @@
 import random
 
-from .agents import BASE_PYTHON_TOOLS
-from .generative_question_answering import (
-    GENERATIVE_QUESTION_ANSWERING_DESCRIPTION as generative_question_answering_description,
-)
-from .image_captioning import IMAGE_CAPTIONING_DESCRIPTION as image_captioning_description
-from .image_segmentation import IMAGE_SEGMENTATION_DESCRIPTION as image_segmentation_description
-from .image_transformation import IMAGE_TRANSFORMATION_DESCRIPTION as image_transformation_description
-from .python_interpreter import InterpretorError, evaluate
-from .speech_to_text import SPEECH_TO_TEXT_DESCRIPTION as speech_to_text_description
-from .text_classification import TEXT_CLASSIFIER_DESCRIPTION as text_classifier_description
-from .text_to_image import TEXT_TO_IMAGE_DESCRIPTION as text_to_image_description
-from .text_to_speech import TEXT_TO_SPEECH_DESCRIPTION as text_to_speech_description
-from .translation import TRANSLATION_DESCRIPTION as translation_description
-
-
-def add_description(description):
-    """
-    A decorator that adds a description to a function.
-    """
-
-    def inner(func):
-        func.description = description
-        return func
-
-    return inner
+from .agents import BASE_PYTHON_TOOLS, OUR_TOOLS
+from .python_interpreter import evaluate
 
 
 ### Fake tools for test
-@add_description(text_classifier_description)
 def classifier(text, labels):
     return f"This is the classification of {text} along {labels}."
 
 
-@add_description(translation_description)
 def translator(text, src_lang, tgt_lang):
     return f"This is the translation of {text} from {src_lang} to {tgt_lang}."
 
 
-@add_description(text_to_speech_description)
 def speaker(text):
     return f"This is actually a sound reading {text}."
 
 
-@add_description(speech_to_text_description)
 def transcriber(audio):
     if "sound" not in audio:
         raise ValueError(f"`audio` ({audio}) is not a sound.")
     return f"This is the transcribed text from {audio}."
 
 
-@add_description(text_to_image_description)
 def image_generator(text):
     return f"This is actually an image representing {text}."
 
 
-@add_description(image_segmentation_description)
 def image_segmentor(image):
     if "image" not in image:
         raise ValueError(f"`image` ({image}) is not an image.")
     return f"This is the segmentation mask of {image}."
 
 
-@add_description(image_captioning_description)
 def image_captioner(image):
     if "image" not in image:
         raise ValueError(f"`image` ({image}) is not an image.")
     return f"This is a description of {image}."
 
 
-@add_description(image_transformation_description)
 def image_transformer(image, prompt):
     if "image" not in image:
         raise ValueError(f"`image` ({image}) is not an image.")
     return f"This is a transformation of {image} according to {prompt}."
 
 
-@add_description(generative_question_answering_description)
 def question_answerer(text, question):
     return f"This is the answer to {question} from {text}."
 
 
-@add_description(
-    "This is a tool that downloads the context of an url and returns the text inside. It takes an input named `url`, which is the url to download, and returns the text."
-)
 def text_downloader(url):
     return f"This is the content of {url}."
 
 
-@add_description(
-    "This is a tool that summarizes texts. It takes an input named `text`, which should be the text to summarize, and returns the summary."
-)
 def summarizer(text):
     return f"This is a summary of {text}."
 
 
-@add_description(
-    "This is a tool that performs a search on a search engine. It takes an input `query` and returns the first result of the search. It can be used for many searches, ranging from item prices, conversion rates to monuments location, among many other searches."
-)
 def search_engine(query):
     return f'This is result of the search of "{query}" on a search engine.'
 
@@ -105,26 +64,17 @@ def search_engine(query):
 _db = {}
 
 
-@add_description(
-    "This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database."
-)
 def database_reader(key):
     global _db
     return f"db_read({_db[key]})"
 
 
-@add_description(
-    "This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation."
-)
 def database_writer(key, value):
     global _db
     _db[key] = value
     return "200"
 
 
-@add_description(
-    "This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object."
-)
 def video_generator(prompt):
     return f"A video of {prompt}"
 
@@ -226,6 +176,7 @@ EVALUATION_TASKS = [
         task=[
             "Is the following `text` (in Spanish) positive or negative?",
             "Is the text in the variable `text` (in Spanish) positive or negative?",
+            "Translate the following `text` from Spanish to English then tell me if its positive or negative.",
         ],
         minimum_tools=[classifier, translator],
         inputs={"text": "C'est une review positive."},
@@ -247,6 +198,7 @@ EVALUATION_TASKS = [
     Problem(
         task=[
             "Generate an image from the text given in `text_input`. Then transform it according to the text in `prompt`.",
+            "Use the following `text_input` to generate an image, then transform it by using the text in `prompt`.",
         ],
         minimum_tools=[image_generator, image_transformer],
         inputs=["text_input", "prompt"],
@@ -255,7 +207,8 @@ EVALUATION_TASKS = [
     Problem(
         task=[
             "Download the content of `url`, summarize it then generate an image from its content.",
-            "Use a summary of the web page at `url` as a prompt to generate an image.",
+            "Use a summary of the web page at `url` to generate an image.",
+            "Summarize the content of the web page at `url`, and use the result to generate an image.",
         ],
         minimum_tools=[summarizer, text_downloader, image_generator],
         inputs=["url"],
@@ -263,8 +216,9 @@ EVALUATION_TASKS = [
     ),
     Problem(
         task=[
-            "Transform the following `image` using the prompt in `text. The prompt is in Spanish.",
+            "Transform the following `image` using the prompt in `text`. The prompt is in Spanish.",
             "Use the text prompt in `text` (in Spanish) to transform the following `image`.",
+            "Translate the `text` from Spanish to English then use it to transform the picture in `image`.",
         ],
         minimum_tools=[translator, image_transformer],
         inputs=["text", "image"],
@@ -313,7 +267,7 @@ EVALUATION_TASKS = [
         task=[
             "Replace the beaver in the `image` by the `prompt`.",
             "Transform the `image` so that it contains the `prompt`.",
-            "Showcase the `prompt` in the `image`.",
+            "Use `prompt` to transform this `image`.",
         ],
         minimum_tools=[image_transformer],
         inputs={"image": "<image object>", "prompt": "capybara"},
@@ -322,13 +276,15 @@ EVALUATION_TASKS = [
     Problem(
         task=[
             "Provide me the summary of the `text`, then read it to me before transcribing it and translating it in French.",
+            "Summarize `text`, read it out loud then transcribe the audio and translate it in French.",
+            "Read me a summary of the the `text` out loud. Transcribe this and translate it in French.",
         ],
         minimum_tools=[summarizer, speaker, transcriber, translator],
         inputs={"text": "I'm a text"},
         answer=translator(transcriber(speaker(summarizer("I'm a text"))), src_lang="English", tgt_lang="French"),
     ),
     Problem(
-        task=["Generate a video of the `prompt`", "Animate a `prompt`"],
+        task=["Generate a video of the `prompt`", "Animate a `prompt`", "Make me a short video using `prompt`."],
         minimum_tools=[video_generator],
         inputs={"prompt": "A lobster swimming"},
         answer=video_generator("A lobster swimming"),
@@ -345,30 +301,29 @@ EVALUATION_TASKS = [
 ]
 
 
-def get_score(problem, code, tools, verbose: bool = False):
-    if verbose:
-        print(code + "\n")
-    all_tools = BASE_PYTHON_TOOLS.copy()
-    all_tools.update({f"tool_{i}": t for i, t in enumerate(tools)})
+def evaluate_code(code, inputs, verbose=False):
+    tools = BASE_PYTHON_TOOLS.copy()
+    for name, tool in ALL_TOOLS.items():
+        if name not in code:
+            continue
+        tools[name] = tool
+
     try:
-        if isinstance(problem.inputs, dict):
-            inputs = problem.inputs.copy()
+        if isinstance(inputs, dict):
+            inputs = inputs.copy()
         else:
-            inputs = {inp: f"<<{inp}>>" for inp in problem.inputs}
-        agent_answer = evaluate(code, all_tools, inputs)
-    except InterpretorError as e:
-        # TODO see if we score errors differently.
-        if verbose:
-            print(e)
-        return 0
+            inputs = {inp: f"<<{inp}>>" for inp in inputs}
+        return evaluate(code, tools, inputs)
     except Exception as e:
         if verbose:
             print(e)
-        return 0
+        return None
 
+
+def get_score(agent_answer, theoretical_answer, verbose: bool = False):
     if verbose:
-        print(agent_answer, problem.answer)
-    theoretical_answer = problem.answer if isinstance(problem.answer, list) else [problem.answer]
+        print(agent_answer, theoretical_answer)
+    theoretical_answer = theoretical_answer if isinstance(theoretical_answer, list) else [theoretical_answer]
 
     if agent_answer in theoretical_answer:
         if verbose:
@@ -384,76 +339,94 @@ def get_score(problem, code, tools, verbose: bool = False):
         return 0.3
 
 
-def base_evaluate_agent(agent, batch_size=8, verbose=False):
+def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
     """
-    Mostly a consistency check that all problems can be solved by an agent. Will return the list
+    Evaluates a new agent on all `EVALUATION_TASKS`.
 
     Example:
 
     ```py
-    agent = OpenAiAgent(model="text-davinci-003", api_key=your_api_key)
-    bads = base_evaluate_agent(agent)
+    agent = NewOpenAiAgent(model="text-davinci-003", api_key=your_api_key)
+    bads = new_evaluate_agent(agent)
     for bad in bads:
         print(bad)
     ```
     """
-    bad_problems = []
-    for start_idx in range(0, len(EVALUATION_TASKS), batch_size):
-        end_idx = min(start_idx + batch_size, len(EVALUATION_TASKS))
-        base_tasks = [pb.base_trial() for pb in EVALUATION_TASKS[start_idx:end_idx]]
-        batch_tasks = [t[0] for t in base_tasks]
-        batch_tools = [t[1] for t in base_tasks]
+    eval_tasks = []
+    eval_idx = []
+    for idx, pb in enumerate(EVALUATION_TASKS):
+        if isinstance(pb.task, list):
+            eval_tasks.extend(pb.task)
+            eval_idx.extend([idx] * len(pb.task))
+        else:
+            eval_tasks.append(pb.task)
+            eval_idx.append(idx)
 
-        results = agent.generate_code(batch_tasks, tools=batch_tools)
+    tool_selection_score = 0
+    tool_used_score = 0
+    code_score = 0
+
+    if return_errors:
+        tool_selection_errors = {}
+        tool_used_errors = {}
+        code_errors = {}
+
+    for start_idx in range(0, len(eval_tasks), batch_size):
+        end_idx = min(start_idx + batch_size, len(eval_tasks))
+        batch_tasks = eval_tasks[start_idx:end_idx]
+
+        results = agent.generate_code(batch_tasks)
 
         for idx, result in enumerate(results):
-            problem = EVALUATION_TASKS[start_idx + idx]
+            problem = EVALUATION_TASKS[eval_idx[start_idx + idx]]
             if verbose:
                 print(f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n")
-            code = agent.clean_code(result)[0]
-            score = get_score(problem, code, batch_tools[idx], verbose=verbose)
+            explanation, code = agent.clean_code(result)
 
-            if score != 1.0:
-                summary = f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n\n{code}"
-                bad_problems.append(summary)
+            tools_in_explanation = {name for name in OUR_TOOLS if f"`{name}`" in explanation}
+            minimum_tools = {name for name, tool in ALL_TOOLS.items() if tool in problem.minimum_tools}
+            if tools_in_explanation == minimum_tools:
+                tool_selection_score += 1.0
+            else:
+                missing_tools = len(minimum_tools - tools_in_explanation)
+                unexpected_tools = len(tools_in_explanation - minimum_tools)
+                tool_selection_score += max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
+                if return_errors:
+                    tool_selection_errors[batch_tasks[idx]] = {
+                        "selected_tools": tools_in_explanation,
+                        "theoretical_tools": minimum_tools,
+                    }
 
-    return bad_problems
+            tools_in_code = {name for name in OUR_TOOLS if name in code}
+            if tools_in_code == minimum_tools:
+                tool_used_score += 1.0
+            else:
+                missing_tools = len(minimum_tools - tools_in_code)
+                unexpected_tools = len(tools_in_code - minimum_tools)
+                tool_used_score += max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
+                if return_errors:
+                    tool_used_errors[batch_tasks[idx]] = {
+                        "selected_tools": tools_in_code,
+                        "theoretical_tools": minimum_tools,
+                    }
 
+            agent_answer = evaluate_code(code, problem.inputs, verbose=verbose)
+            score = get_score(agent_answer, problem.answer, verbose=verbose)
+            if return_errors and score < 1.0:
+                code_errors[batch_tasks[idx]] = {
+                    "code_produced": code,
+                    "evaluation": agent_answer,
+                    "theoretical_answer": problem.answer,
+                }
+            code_score += score
 
-def evaluate_agent(agent, total_batches=1, batch_size=8, max_new_tools=4, verbose=False):
-    """
-    Evaluates an agent on random variations of the problems in `EVALUATION_TASKS`. Will generate `total_batches x
-    batch_size` variations for the evaluation.
+    scores = {
+        "tool selection score": 100 * (tool_selection_score / len(eval_tasks)),
+        "tool used score": 100 * (tool_used_score / len(eval_tasks)),
+        "code score": 100 * (code_score / len(eval_tasks)),
+    }
 
-    Returns a score between 0 and 100 (100 being a perfect score).
-
-    Example:
-
-    ```py
-    agent = OpenAiAgent(model="text-davinci-003", api_key=your_api_key)
-    score = evaluate_agent(agent, total_batches=5)
-    ```
-    """
-    score = 0
-    for _ in range(total_batches):
-        batch_tasks = []
-        batch_tools = []
-        batch_idx = []
-        for _ in range(batch_size):
-            random_idx = random.randint(0, len(EVALUATION_TASKS) - 1)
-            task, tool = EVALUATION_TASKS[random_idx].random_trial(max_new_tools=max_new_tools)
-            batch_tasks.append(task)
-            batch_tools.append(tool)
-            batch_idx.append(random_idx)
-
-        results = agent.generate_code(batch_tasks, tools=batch_tools)
-
-        for idx, result in enumerate(results):
-            print(f"Running with tools: {[tool.__name__ for tool in batch_tools[idx]]}")
-            problem = EVALUATION_TASKS[batch_idx[idx]]
-            if verbose:
-                print(f"====Task {idx}====\n{batch_tasks[idx]}\n")
-            code = agent.clean_code(result)[0]
-            score += get_score(problem, code, batch_tools[idx], verbose=verbose)
-
-    return round(score * 100 / (batch_size * total_batches), 2)
+    if return_errors:
+        return scores, tool_selection_errors, tool_used_errors, code_errors
+    else:
+        return scores

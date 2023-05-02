@@ -1,12 +1,8 @@
-
-
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
 from .base import PipelineTool, RemoteTool
 
 
-TEXT_SUMMARIZATION_CESCRIPTION = (
-    "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, and returns a summary of the text."
-)
+TEXT_SUMMARIZATION_CESCRIPTION = "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, and returns a summary of the text."
 
 
 class TextSummarizationTool(PipelineTool):
@@ -27,7 +23,7 @@ class TextSummarizationTool(PipelineTool):
     model_class = AutoModelForSeq2SeqLM
 
     def encode(self, raw_inputs):
-        return self.pre_processor(raw_inputs, return_tensors='pt', truncation=True)
+        return self.pre_processor(raw_inputs, return_tensors="pt", truncation=True)
 
     def forward(self, inputs):
         return self.model.generate(**inputs)[0]
@@ -55,4 +51,4 @@ class RemoteTextSummarizationTool(RemoteTool):
         return {"inputs": text}
 
     def extract_outputs(self, outputs):
-        return outputs[0]['summary_text']
+        return outputs[0]["summary_text"]
