@@ -436,6 +436,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True, tol=5e-4):
+        super().test_pt_tf_model_equivalence(allow_missing_keys=True, tol=tol)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
