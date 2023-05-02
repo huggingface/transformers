@@ -291,12 +291,14 @@ if __name__ == "__main__":
             "Name of the task for which the MobileViTv2 model you'd like to convert is trained on . "
             """
                 Classification (ImageNet-1k)
-                    - MobileViTv2 (256x256) : imagenet1k_256 
-                    - MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384 
-                    - MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) : imagenet21k_to_1k_256 
-                    - MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on ImageNet-1k 384x384) : imagenet21k_to_1k_384
+                    - MobileViTv2 (256x256) : imagenet1k_256
+                    - MobileViTv2 (Trained on 256x256 and Finetuned on 384x384) : imagenet1k_384
+                    - MobileViTv2 (Trained on ImageNet-21k and Finetuned on ImageNet-1k 256x256) :
+                      imagenet21k_to_1k_256
+                    - MobileViTv2 (Trained on ImageNet-21k, Finetuned on ImageNet-1k 256x256, and Finetuned on
+                      ImageNet-1k 384x384) : imagenet21k_to_1k_384
                 Segmentation
-                    - ADE20K Dataset : ade20k_deeplabv3 
+                    - ADE20K Dataset : ade20k_deeplabv3
                     - Pascal VOC 2012 Dataset: voc_deeplabv3
             """
         ),
