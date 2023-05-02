@@ -223,9 +223,6 @@ class SamAttention(nn.Module):
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
         batch, n_heads, n_tokens, c_per_head = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2)
-        # return hidden_states.reshape(
-        #     batch // max(1, point_batch_size), point_batch_size, n_tokens, n_heads * c_per_head
-        # )
         return hidden_states.reshape(
             batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head
         )
@@ -485,7 +482,6 @@ class SamMaskDecoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
-        # point_batch_size = max(1, sparse_prompt_embeddings.shape[1])
         point_batch_size = sparse_prompt_embeddings.shape[1]
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
@@ -651,8 +647,6 @@ class SamPromptEncoder(nn.Module):
                 point_embedding
         )
 
-        # point_embedding[labels == 0] += self.point_embed[0].weight
-        # point_embedding[labels == 1] += self.point_embed[1].weight
         return point_embedding
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
