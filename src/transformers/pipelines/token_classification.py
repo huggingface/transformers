@@ -576,51 +576,17 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
     window approach to fit long texts into the limited position embeddings of a transformer.
     """
 
-    def __init__(self, window_length: Optional[int] = None, stride: Optional[int] = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.window_length = window_length or self.tokenizer.model_max_length
-        if stride is None:
-            self.stride = self.window_length // 2
-        elif stride == 0:
-            self.stride = self.window_length
-        elif 0 < stride <= self.window_length:
-            self.stride = stride
-        else:
-            raise ValueError("`stride` must be a positive integer no greater " "than `window_length`")
-
-    def preprocess(self, sentence, offset_mapping=None):
-        model_inputs = self.tokenizer(
-            sentence,
-            return_tensors=self.framework,
-            truncation=True,
-            return_special_tokens_mask=True,
-            return_offsets_mapping=self.tokenizer.is_fast,
-            add_special_tokens=True,
-            padding=True,
-            max_length=self.window_length,
-            stride=self.stride,
-            return_overflowing_tokens=True,
-        )
-        model_inputs.pop("overflow_to_sample_mapping")
-
-        if offset_mapping:
-            model_inputs["offset_mapping"] = offset_mapping
-
-        model_inputs["sentence"] = sentence
-
-        return model_inputs
-
-    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
+    def postprocess(self, all_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
         if ignore_labels is None:
             ignore_labels = ["O"]
 
-        sentence: str = model_outputs["sentence"]
+        sentence: str = all_outputs[0]["sentence"]
 
-        all_window_logits = model_outputs["logits"].numpy()
-        all_window_input_ids = model_outputs["input_ids"].numpy()
-        all_window_special_tokens_mask = model_outputs["special_tokens_mask"].numpy()
+        all_window_logits = np.concatenate([window_outputs["logits"].numpy() for window_outputs in all_outputs])
+        all_window_input_ids = np.concatenate([window_outputs["input_ids"].numpy() for window_outputs in all_outputs])
+        all_window_special_tokens_mask = np.concatenate([window_outputs["special_tokens_mask"].numpy() for window_outputs in all_outputs])
         all_window_offset_mapping = (
-            model_outputs["offset_mapping"].numpy() if model_outputs["offset_mapping"] is not None else None
+            np.concatenate([window_outputs["offset_mapping"].numpy() for window_outputs in all_outputs]) if all_outputs[0]["offset_mapping"] is not None else None
         )
 
         num_tokens = len(self.tokenizer.tokenize(sentence))
@@ -628,8 +594,8 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
         logit_sums = np.zeros((num_tokens, num_categories))
         logit_writes = np.zeros((num_tokens,))
 
-        input_ids = np.zeros((num_tokens,), dtype=np.int)
-        offset_mapping = np.zeros((num_tokens, 2), dtype=np.int)
+        input_ids = np.zeros((num_tokens,), dtype=np.int64)
+        offset_mapping = np.zeros((num_tokens, 2), dtype=np.int64)
 
         num_windows = all_window_logits.shape[0]
         idx = 0
@@ -642,7 +608,7 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
 
             input_ids[idx:end_idx] = all_window_input_ids[window_idx, is_real_token]
             offset_mapping[idx:end_idx] = all_window_offset_mapping[window_idx, is_real_token, :]
-            idx += self.window_length - self.stride - all_window_special_tokens_mask[window_idx].sum()
+            idx += self.tokenizer.model_max_length - self._preprocess_params['tokenizer_params']['stride'] - all_window_special_tokens_mask[window_idx].sum()
 
         # Average the logits across all window passes
         logits = logit_sums / logit_writes[:, np.newaxis]
