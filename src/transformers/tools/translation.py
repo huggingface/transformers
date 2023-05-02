@@ -5,7 +5,8 @@ from .base import PipelineTool
 TRANSLATION_DESCRIPTION = (
     "This is a tool that translates text from a language to another. It takes three inputs: `text`, which should be "
     "the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`, which "
-    "should be the language for the desired ouput language. It returns the text translated in `tgt_lang`."
+    "should be the language for the desired ouput language. Both `src_lang` and `tgt_lang` are written in plain "
+    "English, such as 'Romanian', or 'Albanian'. It returns the text translated in `tgt_lang`."
 )
 
 
