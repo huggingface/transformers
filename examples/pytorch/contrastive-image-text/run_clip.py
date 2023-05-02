@@ -510,6 +510,8 @@ def main():
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
+        tokenizer.save_pretrained(training_args.output_dir)
+        image_processor.save_pretrained(training_args.output_dir)
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
