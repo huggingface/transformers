@@ -9,16 +9,11 @@ from .image_segmentation import IMAGE_SEGMENTATION_DESCRIPTION as image_segmenta
 from .image_transformation import IMAGE_TRANSFORMATION_DESCRIPTION as image_transformation_description
 from .python_interpreter import InterpretorError, evaluate
 from .speech_to_text import SPEECH_TO_TEXT_DESCRIPTION as speech_to_text_description
-from .text_classification import TEXT_CLASSIFIER_DESCRIPTION
+from .text_classification import TEXT_CLASSIFIER_DESCRIPTION as text_classifier_description
 from .text_to_image import TEXT_TO_IMAGE_DESCRIPTION as text_to_image_description
 from .text_to_speech import TEXT_TO_SPEECH_DESCRIPTION as text_to_speech_description
-from .translation import TRANSLATION_DESCRIPTION
+from .translation import TRANSLATION_DESCRIPTION as translation_description
 
-
-text_classifier_description = TEXT_CLASSIFIER_DESCRIPTION.replace("{n_labels}", "2").replace(
-    "{labels}", "'positive', and 'negative'"
-)
-translation_description = TRANSLATION_DESCRIPTION.replace("{src_lang}", "Spanish").replace("{tgt_lang}", "English")
 
 
 def add_description(description):
@@ -35,18 +30,17 @@ def add_description(description):
 
 ### Fake tools for test
 @add_description(text_classifier_description)
-def classifier(text):
-    if "positive" in text:
-        return {"label": "positive", "score": 0.99}
-    elif "negative" in text:
-        return {"label": "negative", "score": 0.99}
-    else:
-        return {"label": "positive", "score": 0.5}
+def classifier(text, labels):
+    for label in labels:
+        if label in text:
+            return {"label": label, "score": 0.99}
+    
+    return {"label": labels[0], "score": 0.5}
 
 
 @add_description(translation_description)
-def translator(text):
-    return f"This is the translation in English of {text}."
+def translator(text, src_lang, tgt_lang):
+    return f"This is the translation of {text} from {src_lang} to {tgt_lang}."
 
 
 @add_description(text_to_speech_description)
@@ -139,22 +133,11 @@ def database_writer(key, value):
     _db[key] = value
     return "200"
 
-
 @add_description(
-    "This is a tool that uses a Large Language Model with some prompt engineering. Given a prompt, it will return the LLM generation. It takes an input `prompt` and returns the generated text."
+    "This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object."
 )
-def prompt_engineer(prompt):
-    return f"({prompt} ... [generation])"
-
-
-@add_description("This is a tool that generates an image of cats. It takes no input.")
-def cat_generator():
-    return "An image of cats"
-
-
-@add_description("This is a tool that generates an image of dogs. It takes no input.")
-def dog_generator():
-    return "An image of dogs."
+def video_generator(prompt):
+    return f"A video of {prompt}"
 
 
 ALL_TOOLS = [
@@ -173,9 +156,7 @@ ALL_TOOLS = [
     search_engine,
     database_reader,
     database_writer,
-    prompt_engineer,
-    cat_generator,
-    dog_generator,
+    video_generator,
 ]
 
 
@@ -259,8 +240,8 @@ EVALUATION_TASKS = [
         minimum_tools=[classifier, translator],
         inputs={"text": "C'est une review positive."},
         answer=[
-            classifier(translator("C'est une review positive.")),
-            classifier(translator("C'est une review positive."))["label"],
+            classifier(translator("C'est une review positive.", src_lang='Spanish', tgt_lang='English'), labels=['positive', 'negative']),
+            classifier(translator("C'est une review positive.", src_lang='Spanish', tgt_lang='English'), labels=['positive', 'negative'])["label"],
         ],
     ),
     Problem(
@@ -297,7 +278,7 @@ EVALUATION_TASKS = [
         ],
         minimum_tools=[translator, image_transformer],
         inputs=["text", "image"],
-        answer=image_transformer("<<image>>", translator("<<text>>")),
+        answer=image_transformer("<<image>>", translator("<<text>>", src_lang='Spanish', tgt_lang='English')),
     ),
     Problem(
         task=[
@@ -340,17 +321,39 @@ EVALUATION_TASKS = [
     ),
     Problem(
         task=[
-            "Use a large language model to generate a full rap song about transformers and tokenizers. Summarize it to me, then classify it as a positive or negative song by analyzing the summary.",
+            "Replace the beaver in the `image` by the `prompt`.",
+            "Transform the `image` so that it contains the `prompt`.",
+            "Showcase the `prompt` in the `image`.",
         ],
-        minimum_tools=[prompt_engineer, summarizer, classifier],
-        inputs=[],
-        answer=[{"label": "positive", "score": 0.5}],
+        minimum_tools=[image_transformer],
+        inputs={"image": '<image object>', 'prompt': "capybara"},
+        answer=image_transformer('<image object>', 'capybara')
     ),
     Problem(
-        task=["Create an image of dolphins."],
-        minimum_tools=[dog_generator, cat_generator],
-        inputs=[],
-        answer=["There is no tool available that can generate dolphins."],
+        task=[
+            "Provide me the summary of the `text`, then read it to me before transcribing it and translating it in French.",
+        ],
+        minimum_tools=[summarizer, speaker, transcriber, translator],
+        inputs={"text": "I'm a text"},
+        answer=translator(transcriber(speaker(summarizer("I'm a text"))), src_lang="English", tgt_lang="French")
+    ),
+    Problem(
+        task=[
+            "Generate a video of the `prompt`",
+            "Animate a `prompt`"
+        ],
+        minimum_tools=[video_generator],
+        inputs={"prompt": "A lobster swimming"},
+        answer=video_generator('A lobster swimming')
+    ),
+    Problem(
+        task=[
+            "Download the following file `url`, summarize it in a few words and generate a video from it."
+            "Fetch the file at this `url`, summarize it, and create an animation out of it."
+        ],
+        minimum_tools=[text_downloader, summarizer, video_generator],
+        inputs={"url": "url"},
+        answer=video_generator(summarizer(text_downloader("url")))
     ),
 ]
 
@@ -459,6 +462,7 @@ def evaluate_agent(agent, total_batches=1, batch_size=8, max_new_tools=4, verbos
         results = agent.generate_code(batch_tasks, tools=batch_tools)
 
         for idx, result in enumerate(results):
+            print(f"Running with tools: {[tool.__name__ for tool in batch_tools[idx]]}")
             problem = EVALUATION_TASKS[batch_idx[idx]]
             if verbose:
                 print(f"====Task {idx}====\n{batch_tasks[idx]}\n")
