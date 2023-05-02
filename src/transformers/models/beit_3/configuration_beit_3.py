@@ -115,13 +115,9 @@ class Beit3Config(PretrainedConfig):
         normalize_before=True,
         activation_fn="gelu",
         dropout=0.0,
-        drop_path_rate=0.0,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        deepnorm=False,
         subln=True,
-        bert_init=False,
-        multiway=True,
         max_source_positions=1024,
         layernorm_eps=1e-5,
         vocab_size=64010,
@@ -145,10 +141,7 @@ class Beit3Config(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.deepnorm = deepnorm
         self.subln = subln
-        self.bert_init = bert_init
-        self.multiway = multiway
         self.max_source_positions = max_source_positions
         self.layernorm_eps = layernorm_eps
         self.initializer_range = initializer_range
