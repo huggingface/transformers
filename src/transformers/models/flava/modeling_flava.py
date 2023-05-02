@@ -1693,7 +1693,8 @@ class FlavaGlobalContrastiveHead(nn.Module):
             world_size = torch.distributed.get_world_size()
 
             if self.global_backprop_contrastive:
-                # `torch.distributed.nn.functional.all_gather` does backprop whereas `torch.distributed.all_gather` does not.
+                # `torch.distributed.nn.functional.all_gather` does backprop on all active workers
+                # whereas `torch.distributed.all_gather` does only backpropagates on the current worker.
                 image_embeddings_all = torch.distributed.nn.functional.all_gather(image_embeddings)
                 text_embeddings_all = torch.distributed.nn.functional.all_gather(text_embeddings)
             else:
