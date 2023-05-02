@@ -1207,6 +1207,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
+    tracer: HFTracer = None,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.
@@ -1218,6 +1219,8 @@ def symbolic_trace(
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
+        tracer ([`HFTracer`], *optional*):
+            The tracer to use. If unset, HFTracer() is used instead.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -1240,7 +1243,8 @@ def symbolic_trace(
         check_if_model_is_supported(model)
 
     # Tracing.
-    tracer = HFTracer()
+    if tracer is None:
+        tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
