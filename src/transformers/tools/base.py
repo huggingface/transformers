@@ -325,7 +325,9 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
                 tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
                 raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
 
-        tool_class = get_class_from_dynamic_module(custom_tools[task], repo_id, use_auth_token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(
+            custom_tools[task]["tool_class"], repo_id, use_auth_token=token, **hub_kwargs
+        )
         if model_repo_id is not None:
             repo_id = model_repo_id
         elif hub_kwargs["repo_type"] == "space":
