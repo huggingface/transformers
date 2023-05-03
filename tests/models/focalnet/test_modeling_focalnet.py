@@ -54,6 +54,7 @@ class FocalNetModelTester:
         patch_size=2,
         num_channels=3,
         embed_dim=16,
+        hidden_sizes=[32, 64, 128],
         depths=[1, 2, 1],
         num_heads=[2, 2, 4],
         window_size=2,
@@ -81,6 +82,7 @@ class FocalNetModelTester:
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.embed_dim = embed_dim
+        self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -119,6 +121,7 @@ class FocalNetModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             embed_dim=self.embed_dim,
+            hidden_sizes=self.hidden_sizes,
             depths=self.depths,
             num_heads=self.num_heads,
             window_size=self.window_size,
@@ -158,6 +161,10 @@ class FocalNetModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.image_size, 8, 8])
 
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[:-1])
+
         # verify backbone works with out_features=None
         config.out_features = None
         model = FocalNetBackbone(config=config)
@@ -167,8 +174,11 @@ class FocalNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        print(result.feature_maps[0].shape)
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.image_size * 2, 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
         model = FocalNetForMaskedImageModeling(config=config)
@@ -279,14 +289,10 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="FocalNet does not use an attention mechanism")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:-1]:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
@@ -295,7 +301,7 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:-1]:
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic

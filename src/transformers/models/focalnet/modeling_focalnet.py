@@ -986,6 +986,7 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
         self.focalnet = FocalNetModel(config)
 
+        self.num_features = [config.embed_dim] + config.hidden_sizes
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         if config.out_indices is not None:
             self.out_indices = config.out_indices
