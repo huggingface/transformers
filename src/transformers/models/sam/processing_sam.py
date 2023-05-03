@@ -260,8 +260,4 @@ class SamProcessor(ProcessorMixin):
         return list(dict.fromkeys(image_processor_input_names))
 
     def post_process_masks(self, *args, **kwargs):
-        return_tensors = kwargs.pop("return_tensors", "pt")
-        if return_tensors == "pt":
-            return self.image_processor.post_process_masks(*args, **kwargs)
-        elif return_tensors == "tf":
-            return self.image_processor.post_process_masks_tf(*args, **kwargs)
+        return self.image_processor.post_process_masks(*args, **kwargs)
