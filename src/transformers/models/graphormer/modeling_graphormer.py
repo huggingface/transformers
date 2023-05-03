@@ -196,10 +196,10 @@ class GraphormerGraphNodeFeature(nn.Module):
 
     def forward(
         self,
-        input_nodes: Union[torch.Tensor, torch.LongTensor],
-        in_degree: Union[torch.Tensor, torch.LongTensor],
-        out_degree: Union[torch.Tensor, torch.LongTensor],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_nodes: torch.LongTensor,
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+    ) -> torch.Tensor:
         n_graph, n_node = input_nodes.size()[:2]
 
         node_feature = (  # node feature + graph token
@@ -242,12 +242,12 @@ class GraphormerGraphAttnBias(nn.Module):
 
     def forward(
         self,
-        input_nodes: Union[torch.Tensor, torch.LongTensor],
+        input_nodes: torch.LongTensor,
         attn_bias: torch.Tensor,
-        spatial_pos: Union[torch.Tensor, torch.LongTensor],
-        input_edges: Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        spatial_pos: torch.LongTensor,
+        input_edges: torch.LongTensor,
+        attn_edge_type: torch.LongTensor,
+    ) -> torch.Tensor:
         n_graph, n_node = input_nodes.size()[:2]
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
@@ -366,7 +366,7 @@ class GraphormerMultiheadAttention(nn.Module):
 
     def forward(
         self,
-        query: Union[torch.Tensor, torch.LongTensor],
+        query: torch.LongTensor,
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
         attn_bias: Optional[torch.Tensor],
@@ -624,18 +624,18 @@ class GraphormerGraphEncoder(nn.Module):
 
     def forward(
         self,
-        input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges: Union[torch.Tensor, torch.LongTensor],
+        input_nodes: torch.LongTensor,
+        input_edges: torch.LongTensor,
         attn_bias: torch.Tensor,
-        in_degree: Union[torch.Tensor, torch.LongTensor],
-        out_degree: Union[torch.Tensor, torch.LongTensor],
-        spatial_pos: Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+        spatial_pos: torch.LongTensor,
+        attn_edge_type: torch.LongTensor,
         perturb=None,
         last_state_only: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[Union[torch.Tensor, List[Union[torch.Tensor, torch.LongTensor]]], torch.Tensor]:
+    ) -> Tuple[Union[torch.Tensor, List[torch.LongTensor]], torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
         data_x = input_nodes
         n_graph, n_node = data_x.size()[:2]
@@ -699,7 +699,7 @@ class GraphormerDecoderHead(nn.Module):
         self.classifier = nn.Linear(embedding_dim, num_classes, bias=False)
         self.num_classes = num_classes
 
-    def forward(self, input_nodes: Union[torch.Tensor, torch.LongTensor], **unused) -> torch.Tensor:
+    def forward(self, input_nodes: torch.Tensor, **unused) -> torch.Tensor:
         input_nodes = self.classifier(input_nodes)
         input_nodes = input_nodes + self.lm_output_learned_bias
         return input_nodes
@@ -810,18 +810,18 @@ class GraphormerModel(GraphormerPreTrainedModel):
 
     def forward(
         self,
-        input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges: Union[torch.Tensor, torch.LongTensor],
+        input_nodes: torch.LongTensor,
+        input_edges: torch.LongTensor,
         attn_bias: torch.Tensor,
-        in_degree: Union[torch.Tensor, torch.LongTensor],
-        out_degree: Union[torch.Tensor, torch.LongTensor],
-        spatial_pos: Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+        spatial_pos: torch.LongTensor,
+        attn_edge_type: torch.LongTensor,
         perturb=None,
         masked_tokens=None,
         return_dict: Optional[bool] = None,
         **unused,
-    ) -> Union[Tuple[Union[torch.Tensor, torch.LongTensor]], BaseModelOutputWithNoAttention]:
+    ) -> Union[Tuple[torch.LongTensor], BaseModelOutputWithNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inner_states, graph_rep = self.graph_encoder(
@@ -875,13 +875,13 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
 
     def forward(
         self,
-        input_nodes: Union[torch.Tensor, torch.LongTensor],
-        input_edges: Union[torch.Tensor, torch.LongTensor],
+        input_nodes: torch.LongTensor,
+        input_edges: torch.LongTensor,
         attn_bias: torch.Tensor,
-        in_degree: Union[torch.Tensor, torch.LongTensor],
-        out_degree: Union[torch.Tensor, torch.LongTensor],
-        spatial_pos: Union[torch.Tensor, torch.LongTensor],
-        attn_edge_type: Union[torch.Tensor, torch.LongTensor],
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+        spatial_pos: torch.LongTensor,
+        attn_edge_type: torch.LongTensor,
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         **unused,
