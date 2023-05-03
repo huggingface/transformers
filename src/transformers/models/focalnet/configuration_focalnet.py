@@ -47,6 +47,8 @@ class FocalNetConfig(PretrainedConfig):
         use_conv_embed (`bool`, *optional*, defaults to `False`):
             Whether to use convolutional embedding. The authors noted that using convolutional embedding usually
             improve the performance, but it's not used by default.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[192, 384, 768, 768]`):
+            Dimensionality (hidden size) at each stage.
         depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth (number of layers) of each stage in the encoder.
         focal_levels (`list(int)`, *optional*, defaults to `[2, 2, 2, 2]`):
@@ -78,6 +80,14 @@ class FocalNetConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -102,6 +112,7 @@ class FocalNetConfig(PretrainedConfig):
         num_channels=3,
         embed_dim=96,
         use_conv_embed=False,
+        hidden_sizes=[192, 384, 768, 768],
         depths=[2, 2, 6, 2],
         focal_levels=[2, 2, 2, 2],
         focal_windows=[3, 3, 3, 3],
@@ -117,6 +128,8 @@ class FocalNetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,6 +139,7 @@ class FocalNetConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.use_conv_embed = use_conv_embed
+        self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
@@ -141,3 +155,36 @@ class FocalNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.encoder_stride = encoder_stride
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+
+        if out_features is not None and out_indices is not None:
+            if len(out_features) != len(out_indices):
+                raise ValueError("out_features and out_indices should have the same length if both are set")
+            elif out_features != [self.stage_names[idx] for idx in out_indices]:
+                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
+
+        if out_features is None and out_indices is not None:
+            out_features = [self.stage_names[idx] for idx in out_indices]
+        elif out_features is not None and out_indices is None:
+            out_indices = [self.stage_names.index(feature) for feature in out_features]
+        elif out_features is None and out_indices is None:
+            out_features = [self.stage_names[-1]]
+            out_indices = [len(self.stage_names) - 1]
+
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
+        if out_indices is not None:
+            if not isinstance(out_indices, (list, tuple)):
+                raise ValueError("out_indices should be a list or tuple")
+            for idx in out_indices:
+                if idx >= len(self.stage_names):
+                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
+
+        self.out_features = out_features
+        self.out_indices = out_indices

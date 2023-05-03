@@ -3002,6 +3002,13 @@ class FNetPreTrainedModel(metaclass=DummyObject):
 FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class FocalNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FocalNetForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
