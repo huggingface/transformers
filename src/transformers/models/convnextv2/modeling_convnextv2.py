@@ -100,14 +100,14 @@ class ConvNextV2GRN(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
-        self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
-        self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
-        hidden_states = self.gamma * (hidden_states * norm_features) + self.beta + hidden_states
+        hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
         return hidden_states
 
