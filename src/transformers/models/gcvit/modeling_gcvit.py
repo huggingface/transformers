@@ -20,6 +20,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
+from itertools import repeat
 
 import torch
 import torch.utils.checkpoint
@@ -60,7 +61,7 @@ GCVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# drop_path, GCViTPatchEmbeddings, GCViTPatchMerging and GCViTDropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
+# drop_path, and GCViTDropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
 @dataclass
@@ -276,8 +277,6 @@ class GCViTDropPath(nn.Module):
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
 
-
-
 class GCViTEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
@@ -325,7 +324,7 @@ class SE(nn.Module):
         y = self.fc(y).view(b, c, 1, 1)
         return x * y
 
-class ReduceSize(nn.Module):
+class GCViTReducePatchSize(nn.Module):
     """
     DownSampling block for GCViT Patch Embedding
     """
@@ -335,9 +334,9 @@ class ReduceSize(nn.Module):
                  keep_dim=False):
         """
         Args:
-            dim: feature size dimension.
-            norm_layer: normalization layer.
-            keep_dim: bool argument for maintaining the resolution.
+            dim (`int`): feature size dimension.
+            norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`): normalization layer.
+            keep_dim (`bool`,*optional*, defaults to `False`): bool argument for maintaining the resolution.
         """
 
         super().__init__()
@@ -383,7 +382,7 @@ class GCViTPatchEmbeddings(nn.Module):
         self.num_channels = num_channels
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=3, stride=2)
-        self.conv_down = ReduceSize(dim = hidden_size, keep_dim=True)
+        self.conv_down = GCViTReducePatchSize(dim = hidden_size, keep_dim=True)
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
@@ -401,65 +400,9 @@ class GCViTPatchEmbeddings(nn.Module):
         embeddings = embeddings.flatten(2)
         return embeddings, output_dimensions
 
-
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PatchMerging with Swinv2->GCViT
-class GCViTPatchMerging(nn.Module):
-    """
-    Patch Merging Layer.
-
-    Args:
-        input_resolution (`Tuple[int]`):
-            Resolution of input feature.
-        dim (`int`):
-            Number of input channels.
-        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
-            Normalization layer class.
-    """
-
-    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
-        super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(2 * dim)
-
-    def maybe_pad(self, input_feature, height, width):
-        should_pad = (height % 2 == 1) or (width % 2 == 1)
-        if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_values)
-
-        return input_feature
-
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
-        height, width = input_dimensions
-        # `dim` is height * width
-        batch_size, dim, num_channels = input_feature.shape
-
-        input_feature = input_feature.view(batch_size, height, width, num_channels)
-        # pad input to be disible by width and height, if needed
-        input_feature = self.maybe_pad(input_feature, height, width)
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_0 = input_feature[:, 0::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_1 = input_feature[:, 1::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_2 = input_feature[:, 0::2, 1::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # [batch_size, height/2 * width/2, 4*num_channels]
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # [batch_size, height/2 * width/2, 4*C]
-
-        input_feature = self.reduction(input_feature)
-        input_feature = self.norm(input_feature)
-
-        return input_feature
-
-
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2SelfAttention with Swinv2->GCViT
+# Almost copied from transformers.models.swin.modeling_swin.Swinv2SelfAttention
 class GCViTSelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=[0, 0]):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -469,36 +412,11 @@ class GCViTSelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.window_size = (
-            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
-        )
-        self.pretrained_window_size = pretrained_window_size
-        self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
-        # mlp to generate continuous relative position bias
-        self.continuous_position_bias_mlp = nn.Sequential(
-            nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
-        )
+        self.window_size = window_size
 
-        # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
-        relative_coords_table = (
-            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
-            .permute(1, 2, 0)
-            .contiguous()
-            .unsqueeze(0)
-        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
-        if pretrained_window_size[0] > 0:
-            relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
-            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
-        relative_coords_table *= 8  # normalize to -8, 8
-        relative_coords_table = (
-            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
 
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
@@ -516,6 +434,7 @@ class GCViTSelfAttention(nn.Module):
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
@@ -538,29 +457,28 @@ class GCViTSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # cosine attention
-        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(
-            key_layer, dim=-1
-        ).transpose(-2, -1)
-        logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
-        attention_scores = attention_scores * logit_scale
-        relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
-            -1, self.num_attention_heads
-        )
-        # [window_height*window_width,window_height*window_width,num_attention_heads]
-        relative_position_bias = relative_position_bias_table[self.relative_position_index.view(-1)].view(
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        # [window_height*window_width, window_height*window_width, num_attention_heads]
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        relative_position_bias = relative_position_bias.view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
         )
-        # [num_attention_heads,window_height*window_width,window_height*window_width]
+
+        # [num_attention_heads, window_height*window_width, window_height*window_width]
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-        relative_position_bias = 16 * torch.sigmoid(relative_position_bias)
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
+        
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in GCViTModel forward() function)
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
-            ) + attention_mask.unsqueeze(1).unsqueeze(0)
+            )
             attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
             attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
 
@@ -584,7 +502,6 @@ class GCViTSelfAttention(nn.Module):
 
         return outputs
 
-
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->GCViT
 class GCViTSelfOutput(nn.Module):
     def __init__(self, config, dim):
@@ -599,18 +516,16 @@ class GCViTSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Attention with Swinv2->GCViT
-class GCViTAttention(nn.Module):
-    def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=0):
+class GCViTWindowAttention(nn.Module):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         self.self = GCViTSelfAttention(
             config=config,
             dim=dim,
             num_heads=num_heads,
-            window_size=window_size,
-            pretrained_window_size=pretrained_window_size
-            if isinstance(pretrained_window_size, collections.abc.Iterable)
-            else (pretrained_window_size, pretrained_window_size),
+            window_size=window_size
+            if isinstance(window_size, collections.abc.Iterable)
+            else (window_size, window_size),
         )
         self.output = GCViTSelfOutput(config, dim)
         self.pruned_heads = set()
@@ -645,6 +560,50 @@ class GCViTAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+# TODO
+class GCViTWindowAttentionGlobal(nn.Module):
+    def __init__(self, config, dim, num_heads, window_size):
+        super().__init__()
+        self.self = GCViTSelfAttention(
+            config=config,
+            dim=dim,
+            num_heads=num_heads,
+            window_size=window_size
+            if isinstance(window_size, collections.abc.Iterable)
+            else (window_size, window_size),
+        )
+        self.output = GCViTSelfOutput(config, dim)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
 
 # Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->GCViT
 class GCViTIntermediate(nn.Module):
@@ -675,23 +634,21 @@ class GCViTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->GCViT
 class GCViTLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, attention, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.set_shift_and_window_size(input_resolution)
-        self.attention = GCViTAttention(
+        self.attention = attention(
             config=config,
             dim=dim,
             num_heads=num_heads,
-            window_size=self.window_size,
-            pretrained_window_size=pretrained_window_size
-            if isinstance(pretrained_window_size, collections.abc.Iterable)
-            else (pretrained_window_size, pretrained_window_size),
+            window_size=self.window_size
+            if isinstance(self.window_size, collections.abc.Iterable)
+            else (self.window_size, self.window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.drop_path = GCViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
@@ -765,7 +722,7 @@ class GCViTLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         always_partition: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]: 
         if not always_partition:
             self.set_shift_and_window_size(input_dimensions)
         else:
@@ -822,10 +779,10 @@ class GCViTLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Stage with Swinv2->GCViT
+
 class GCViTStage(nn.Module):
     def __init__(
-        self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
+        self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, window_size=0
     ):
         super().__init__()
         self.config = config
@@ -837,20 +794,16 @@ class GCViTStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
+                    attention=GCViTWindowAttention  if (i % 2 == 0) else GCViTWindowAttentionGlobal,
+                    window_size=window_size,
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                    pretrained_window_size=pretrained_window_size,
                 )
                 for i in range(depth)
             ]
         )
 
-        # patch merging layer
-        if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
-        else:
-            self.downsample = None
-
-        self.pointing = False
+        # Reduce patch size layer
+        self.downsample = downsample(dim=dim, norm_layer=nn.LayerNorm) if not None else None
 
     # Copied from transformers.models.swin.modeling_swin.SwinStage.forward
     def forward(
@@ -886,26 +839,25 @@ class GCViTStage(nn.Module):
         return stage_outputs
 
 
-
 class GCViTEncoder(nn.Module):
-    def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
+    def __init__(self, config):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
-        if self.config.pretrained_window_sizes is not None:
-            pretrained_window_sizes = config.pretrained_window_sizes
+        self.image_size = config.image_size if isinstance(config.image_size, collections.abc.Iterable) else (config.image_size, config.image_size)
+
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
                 GCViTStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    input_resolution=(self.image_size[0] // (2**i_layer), self.image_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=GCViTPatchMerging if (i_layer < self.num_layers - 1) else None,
-                    pretrained_window_size=pretrained_window_sizes[i_layer],
+                    downsample=GCViTReducePatchSize if (i_layer < self.num_layers - 1) else None,
+                    window_size=config.window_size[i_layer],
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -1069,7 +1021,7 @@ class GCViTModel(GCViTPreTrainedModel):
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
         self.embeddings = GCViTEmbeddings(config)
-        self.encoder = GCViTEncoder(config, self.embeddings.patch_grid)
+        self.encoder = GCViTEncoder(config)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None

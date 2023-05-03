@@ -100,8 +100,7 @@ class GCViTConfig(PretrainedConfig):
         embed_dim=64, 
         depths=[3, 4, 19, 5], 
         num_heads=[2, 4, 8, 16], 
-        window_size=None,
-        window_ratio=[32, 32, 16, 32],
+        window_size=[7, 7, 14, 7],
         mlp_ratio=3.0, 
         qkv_bias=True, 
         hidden_dropout_prob=0.0, 
@@ -124,7 +123,6 @@ class GCViTConfig(PretrainedConfig):
         self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
-        self.window_ratio = window_ratio
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.hidden_dropout_prob = hidden_dropout_prob
