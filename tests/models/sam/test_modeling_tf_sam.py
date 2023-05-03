@@ -23,7 +23,7 @@ import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from transformers.testing_utils import require_tf, slow
-from transformers.utils import is_tf_available, is_torch_available, is_vision_available
+from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor
