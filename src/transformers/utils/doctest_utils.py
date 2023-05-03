@@ -47,7 +47,7 @@ def preprocess_string(string, skip_cuda_tests):
     for i, codeblock in enumerate(codeblocks):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
             codeblocks[i] = re.sub(r"(>>> .*load_dataset\(.*)", r"\1 # doctest: +IGNORE_RESULT", codeblock)
-        if ">>>" in codeblock and re.match(r"( cuda | to(0) | device = 0)", codeblock) and skip_cuda_tests:
+        if (">>>" in codeblock or "..." in codeblock) and re.search(r"cuda|to\(0\)|device=0", codeblock) and skip_cuda_tests:
             is_cuda_found = True
             break
     modified_string = ""
