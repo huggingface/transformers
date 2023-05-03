@@ -171,8 +171,6 @@ class FlaxGenerationTesterMixin:
             generation_outputs = model.generate(input_ids).sequences
             self.assertEqual(generation_outputs.shape[0], input_ids.shape[0] * config.num_return_sequences)
 
-
-
     def test_sample_generate_logits_warper(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()
         config.do_sample = True
