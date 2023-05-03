@@ -196,6 +196,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_skip_special_tokens_skips_prompt_ids(self):
         tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
         # fmt: off
         encoded_input = [
             50361, 2221, 13, 2326, 388, 391, 50258, 50259, 50359,
@@ -207,6 +208,10 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
         self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
         self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
+        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
+        )
 
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):

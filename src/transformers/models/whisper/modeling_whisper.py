@@ -16,7 +16,7 @@
 
 import math
 import random
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1470,7 +1470,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        prompt_ids: Optional[Union[List[int], torch.Tensor, np.ndarray]] = None,
+        prompt_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         """
@@ -1644,6 +1644,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 kwargs.pop("forced_decoder_ids", None) or generation_config.forced_decoder_ids
             )
             forced_decoder_ids = [
+                # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
+                # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
                 *text_prompt_ids[-self.config.max_length // 2 - 1 :],
                 generation_config.decoder_start_token_id,
                 *[token for _rank, token in non_prompt_forced_decoder_ids],

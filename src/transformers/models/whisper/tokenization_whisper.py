@@ -21,7 +21,7 @@ import numpy as np
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, to_py_obj
+from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 
 
@@ -586,17 +586,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
-        token_ids = to_py_obj(token_ids)
-        prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_prompt = isinstance(token_ids, list) and prompt_token_id in token_ids
-        # If an initial prompt was used, we need to remove it when skipping special tokens
-        if has_prompt and skip_special_tokens:
-            for i in range(1, len(token_ids)):
-                prompt_end_idx = i
-                if token_ids[i] in self.all_special_ids:
-                    break
-            token_ids = token_ids[prompt_end_idx:]
-
         text = super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -616,6 +605,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        has_prompt = isinstance(token_ids, list) and token_ids[0] == self.convert_tokens_to_ids("<|startofprev|>")
+        if skip_special_tokens and has_prompt:
+            token_ids = _strip_prompt(token_ids, self.all_special_ids)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -1003,3 +996,10 @@ def _find_longest_common_sequence(sequences):
     total_sequence.extend(left_sequence)
 
     return total_sequence
+
+
+def _strip_prompt(token_ids: List[int], all_special_ids: List[int]):
+    for i in range(1, len(token_ids)):
+        if token_ids[i] in all_special_ids:
+            print(len(token_ids[i:]), "stripped")
+            return token_ids[i:]

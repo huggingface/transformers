@@ -149,8 +149,24 @@ class WhisperProcessorTest(unittest.TestCase):
 
     def test_get_prompt_ids(self):
         processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        prompt_ids = processor.get_prompt_ids("Mr. Quilter", return_tensors=None)
+        prompt_ids = processor.get_prompt_ids("Mr. Quilter")
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
-        self.assertListEqual(prompt_ids, [50360, 1770, 13, 2264, 346, 353])
+        self.assertListEqual(prompt_ids.tolist(), [50360, 1770, 13, 2264, 346, 353])
         self.assertEqual(decoded_prompt, "<|startofprev|> Mr. Quilter")
+
+    def test_empty_get_prompt_ids(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        prompt_ids = processor.get_prompt_ids("")
+        decoded_prompt = processor.tokenizer.decode(prompt_ids)
+
+        self.assertListEqual(prompt_ids.tolist(), [50360, 220])
+        self.assertEqual(decoded_prompt, "<|startofprev|> ")
+
+    def test_invalid_get_prompt_ids(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        prompt_ids = processor.get_prompt_ids("<|startofprev|> test <|startofprev|> ")
+        decoded_prompt = processor.tokenizer.decode(prompt_ids)
+
+        self.assertListEqual(prompt_ids.tolist(), [50360, 1332])
+        self.assertEqual(decoded_prompt, "<|startofprev|> test")

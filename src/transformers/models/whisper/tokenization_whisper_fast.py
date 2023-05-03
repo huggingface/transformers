@@ -22,9 +22,9 @@ from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging, to_py_obj
+from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr, _strip_prompt
 
 
 logger = logging.get_logger(__name__)
@@ -296,17 +296,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: The decoded sentence.
         """
-        token_ids = to_py_obj(token_ids)
-        prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-        has_prompt = isinstance(token_ids, list) and prompt_token_id in token_ids
-        # If an initial prompt was used, we need to remove it when skipping special tokens
-        if has_prompt and skip_special_tokens:
-            for i in range(1, len(token_ids)):
-                prompt_end_idx = i
-                if token_ids[i] in self.all_special_ids:
-                    break
-            token_ids = token_ids[prompt_end_idx:]
-
         text = super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -323,6 +312,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return text
 
     def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
+        token_ids = kwargs["token_ids"]
+        skip_special_tokens = kwargs["skip_special_tokens"]
+        has_prompt = isinstance(token_ids, list) and token_ids[0] == self.convert_tokens_to_ids("<|startofprev|>")
+        if skip_special_tokens and has_prompt:
+            kwargs["token_ids"] = _strip_prompt(token_ids, self.all_special_ids)
+
         text = super()._decode(*args, **kwargs)
 
         if normalize:
