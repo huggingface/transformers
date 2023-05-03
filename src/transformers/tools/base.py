@@ -32,6 +32,9 @@ class Tool:
     outputs: List[str]
     name: str
 
+    def __init__(self, *args, **kwargs):
+        pass
+
     def __call__(self, *args, **kwargs):  # Might become run?
         return NotImplemented("Write this method in your subclass of `Tool`.")
 
