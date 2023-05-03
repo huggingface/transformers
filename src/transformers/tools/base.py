@@ -319,6 +319,8 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
                     f"{repo_id} does not provide a mapping to custom tools in its configuration `config.json`."
                 )
             custom_tools = config["custom_tools"]
+        else:
+            custom_tools = config
         if task is None:
             if len(custom_tools) == 1:
                 task = list(custom_tools.keys())[0]
