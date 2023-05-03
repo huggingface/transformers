@@ -606,7 +606,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        has_prompt = isinstance(token_ids, list) and token_ids[0] == self.convert_tokens_to_ids("<|startofprev|>")
+        has_prompt = isinstance(token_ids, list) and self.convert_tokens_to_ids("<|startofprev|>") in token_ids
         if skip_special_tokens and has_prompt:
             token_ids = _strip_prompt(token_ids, self.all_special_ids)
 
@@ -789,7 +789,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         last_timestamp = token
 
         current_tokens = []
-        passed_prompt = False
+
         # - all tokens within output
         for i, token in enumerate(token_ids):
             # 4 possible states for each token
@@ -798,9 +798,6 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
             # - 3/ Timestamp
             # - 4/ Regular text
             if token in all_special_ids:
-                # If we reach a special token and it isn't the first one, we've passed the prompt
-                if i > 0:
-                    passed_prompt = True
                 # Either language code or other
                 text = tokenizer.decode([token])
                 # Removing outer shell <|XX|>
@@ -868,8 +865,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 # 4/ Regular token
                 # We just append to the list of all tokens not in the prompt
                 # so we can handle merges later and decode into text.
-                if passed_prompt:
-                    current_tokens.append(token)
+                current_tokens.append(token)
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
@@ -1001,5 +997,4 @@ def _find_longest_common_sequence(sequences):
 def _strip_prompt(token_ids: List[int], all_special_ids: List[int]):
     for i in range(1, len(token_ids)):
         if token_ids[i] in all_special_ids:
-            print(len(token_ids[i:]), "stripped")
             return token_ids[i:]
