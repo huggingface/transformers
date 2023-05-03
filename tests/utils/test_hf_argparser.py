@@ -37,8 +37,9 @@ except ImportError:
     # For Python 3.7
     from typing_extensions import Literal
 
-
-PEP604 = sys.version_info >= (3, 10)
+# Since Python 3.10, we can use the builtin `|` operator for Union types
+# See PEP 604: https://peps.python.org/pep-0604
+is_python_no_less_than_3_10 = sys.version_info >= (3, 10)
 
 
 def list_field(default=None, metadata=None):
@@ -64,15 +65,6 @@ class WithDefaultBoolExample:
     foo: bool = False
     baz: bool = True
     opt: Optional[bool] = None
-
-
-if PEP604:
-
-    @dataclass
-    class WithDefaultBoolExamplePep604:
-        foo: bool = False
-        baz: bool = True
-        opt: bool | None = None
 
 
 class BasicEnum(Enum):
@@ -111,17 +103,6 @@ class OptionalExample:
     des: Optional[List[int]] = list_field(default=[])
 
 
-if PEP604:
-
-    @dataclass
-    class OptionalExamplePep604:
-        foo: int | None = None
-        bar: float | None = field(default=None, metadata={"help": "help message"})
-        baz: str | None = None
-        ces: list[str] | None = list_field(default=[])
-        des: list[int] | None = list_field(default=[])
-
-
 @dataclass
 class ListExample:
     foo_int: List[int] = list_field(default=[])
@@ -147,6 +128,23 @@ class StringLiteralAnnotationExample:
     opt: "Optional[bool]" = None
     baz: "str" = field(default="toto", metadata={"help": "help message"})
     foo_str: "List[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
+
+
+if is_python_no_less_than_3_10:
+
+    @dataclass
+    class WithDefaultBoolExamplePep604:
+        foo: bool = False
+        baz: bool = True
+        opt: bool | None = None
+
+    @dataclass
+    class OptionalExamplePep604:
+        foo: int | None = None
+        bar: float | None = field(default=None, metadata={"help": "help message"})
+        baz: str | None = None
+        ces: list[str] | None = list_field(default=[])
+        des: list[int] | None = list_field(default=[])
 
 
 class HfArgumentParserTest(unittest.TestCase):
@@ -200,7 +198,7 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--opt", type=string_to_bool, default=None)
 
         dataclass_types = [WithDefaultBoolExample]
-        if PEP604:
+        if is_python_no_less_than_3_10:
             dataclass_types.append(WithDefaultBoolExamplePep604)
 
         for dataclass_type in dataclass_types:
@@ -303,7 +301,7 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--des", nargs="+", default=[], type=int)
 
         dataclass_types = [OptionalExample]
-        if PEP604:
+        if is_python_no_less_than_3_10:
             dataclass_types.append(OptionalExamplePep604)
 
         for dataclass_type in dataclass_types:
