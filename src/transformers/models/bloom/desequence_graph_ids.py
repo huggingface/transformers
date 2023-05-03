@@ -51,9 +51,9 @@ def extract_edge_sequence(
     if (
         (
             len(edges) > 0
-            and edges[-1].pred_node != sequence[-3]
-            and edges[-1].edge != sequence[-2]
-            and edges[-1].succ_node != sequence[-1]
+            and edges[-1][0] != sequence[-3]
+            and edges[-1][1] != sequence[-2]
+            and edges[-1][2] != sequence[-1]
         )
         or len(edges) == 0
     ):

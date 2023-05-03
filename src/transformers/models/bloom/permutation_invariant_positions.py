@@ -59,8 +59,11 @@ def build_alibi_tensor(
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
     token_positions = []
-    for (t_ids, edge_sequence, mask, positions) in enumerate(
-        zip(token_ids, edge_sequences, attention_mask, arange_tensor)
+    for (t_ids, edge_sequence, mask, positions) in zip(
+        token_ids,
+        edge_sequences,
+        attention_mask,
+        arange_tensor
     ):
         token_positions.append(
             _get_graph_positions(t_ids, edge_sequence, mask, positions, graph_tokens, position_type)
@@ -84,8 +87,8 @@ def _get_graph_positions(
     """ Returns a revised position tenso where the position of tokens in the
         sequence reflect the position of nodes and edges in a graph
     """
-    if position_type == 'vanilla':
-        return positions
+    if position_type == 'normal':
+        return positions.unsqueeze(0)
     assert len(token_ids.shape) == 1, f"Incorrectly sized tensor - {token_ids.shape}"
     if len(edge_sequence) > 0:
         assert len(positions.shape) == 2 and positions.size(0) == 1
@@ -112,7 +115,7 @@ def _get_graph_positions(
             raise ValueError(f"Unknown position embedding type {position_type}")
         return new_positions.unsqueeze(0)
     else:
-        return positions
+        return positions.unsqueeze(0)
 
 
 def _get_all_edges_previous_positions(
@@ -147,7 +150,7 @@ def _get_all_edges_previous_positions(
             if idx < token_positions.numel():
                 token_positions[(idx + 1):] = -1e6
             new_positions_list.append(token_positions.unsqueeze(0))
-    return torch.cat([new_positions_list], dim=0)
+    return torch.cat(new_positions_list, dim=0)
 
 
 def _remove_positions_from_graph_tokens(
@@ -167,7 +170,7 @@ def _remove_positions_from_graph_tokens(
     init_position = positions[start_idx].item()
     new_positions = positions.clone()
     new_positions[start_idx:end_idx] = init_position # setting all isolated graph tokens to have a low bias
-    return new_positions
+    return new_positions.unsqueeze(0)
 
 
 def _get_action_invariant_positions(
@@ -205,4 +208,4 @@ def _get_action_invariant_positions(
             element_position[pred_node.ids] = after_edge_pos.item()
         if isinstance(succ_node, SequenceElement) and succ_node.token in graph_tokens['gen_node']:
             element_position[succ_node.ids] = after_edge_pos.item()
-    return new_positions
+    return new_positions.unsqueeze(0)
