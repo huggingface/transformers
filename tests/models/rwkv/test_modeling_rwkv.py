@@ -49,7 +49,6 @@ class RwkvModelTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=5,
-        num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -57,7 +56,6 @@ class RwkvModelTester:
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
-        initializer_range=0.02,
         num_labels=3,
         num_choices=4,
         scope=None,
@@ -73,7 +71,6 @@ class RwkvModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -81,10 +78,9 @@ class RwkvModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
-        self.scope = None
+        self.scope = scope
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
@@ -148,7 +144,6 @@ class RwkvModelTester:
             attn_pdrop=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            initializer_range=self.initializer_range,
             use_cache=True,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
@@ -286,6 +281,19 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester = ConfigTester(
             self, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
+
+    def test_initialization(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_config(self):
         self.config_tester.run_common_tests()

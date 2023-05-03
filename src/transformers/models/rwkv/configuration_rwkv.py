@@ -54,6 +54,12 @@ class RwkvConfig(PretrainedConfig):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer
+            as GPTNeoX.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the end of sentence token in the vocabulary. Defaults to 2 as RWKV uses the same tokenizer as
+            GPTNeoX.
         rescale_every (`int`, *optional*, default to 6):
             At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
             `rescale_every` layer. If set to 0 or a negative number, no rescale is done.
@@ -109,4 +115,6 @@ class RwkvConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
+        )
