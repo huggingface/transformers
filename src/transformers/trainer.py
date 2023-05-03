@@ -672,8 +672,7 @@ class Trainer:
             self.label_smoother = None
 
         self.state = TrainerState(
-            is_local_process_zero=self.is_local_process_zero(),
-            is_world_process_zero=self.is_world_process_zero(),
+            is_local_process_zero=self.is_local_process_zero(), is_world_process_zero=self.is_world_process_zero(),
         )
 
         self.control = TrainerControl()
@@ -858,10 +857,7 @@ class Trainer:
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
-                    seed=seed,
+                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index, seed=seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
@@ -1087,11 +1083,7 @@ class Trainer:
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-                self.optimizer = OSS(
-                    params=optimizer_grouped_parameters,
-                    optim=optimizer_cls,
-                    **optimizer_kwargs,
-                )
+                self.optimizer = OSS(params=optimizer_grouped_parameters, optim=optimizer_cls, **optimizer_kwargs,)
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
                 if optimizer_cls.__name__ == "Adam8bit":
@@ -1432,10 +1424,7 @@ class Trainer:
                 if ShardedDDPOption.AUTO_WRAP in self.args.sharded_ddp:
                     model = auto_wrap(model)
                 self.model = model = FullyShardedDDP(
-                    model,
-                    mixed_precision=mixed_precision,
-                    reshard_after_forward=zero_3,
-                    cpu_offload=cpu_offload,
+                    model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload,
                 ).to(self.args.device)
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
@@ -2112,7 +2101,7 @@ class Trainer:
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
         if not any(
-            [os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]]
+            os.path.isfile(f) for f in [weights_file, safe_weights_file, weights_index_file, safe_weights_index_file]
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2364,6 +2353,7 @@ class Trainer:
 
         if self.fsdp:
             # FSDP has a different interface for saving optimizer states.
+            # Needs to be called on all ranks to gather all states.
             # full_optim_state_dict will be deprecated after Pytorch 2.2!
             full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
 
@@ -2506,10 +2496,14 @@ class Trainer:
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
                     map_location = self.args.device if self.args.world_size > 1 else "cpu"
                     if self.fsdp:
-                        full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
+                        full_osd = None
+                        # In FSDP, we need to load the full optimizer state dict on rank 0 and then shard it
+                        if self.args.process_index == 0:
+                            full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
+                        # call scatter_full_optim_state_dict on all ranks
                         sharded_osd = self.model.__class__.scatter_full_optim_state_dict(full_osd, self.model)
                         self.optimizer.load_state_dict(sharded_osd)
-                    else:                        
+                    else:
                         self.optimizer.load_state_dict(
                             torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
                         )
