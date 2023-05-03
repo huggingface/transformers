@@ -437,11 +437,9 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
 
-        out_features, out_indices = get_aligned_output_features_output_indices(
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             config.out_features, config.out_indices, self.stage_names
         )
-        self._out_features = out_features
-        self._out_indices = out_indices
         self.num_features = [config.embedding_size] + config.hidden_sizes
 
         # initialize weights and apply final processing

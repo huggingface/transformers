@@ -510,11 +510,9 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         self.encoder = ConvNextV2Encoder(config)
 
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
-        out_features, out_indices = get_aligned_output_features_output_indices(
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             config.out_features, config.out_indices, self.stage_names
         )
-        self._out_features = out_features
-        self._out_indices = out_indices
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
