@@ -974,7 +974,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         self.gpt_neox = GPTNeoXModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
-
         # Initialize weights and apply final processing
         self.post_init()
 
