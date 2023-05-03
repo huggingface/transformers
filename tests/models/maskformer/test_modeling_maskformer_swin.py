@@ -156,7 +156,7 @@ class MaskFormerSwinModelTester:
 
         # verify ValueError
         with self.parent.assertRaises(ValueError):
-            config.set_out_features(["stem"])
+            config.out_features = ["stem"]
             model = MaskFormerSwinBackbone(config=config)
 
     def prepare_config_and_inputs_for_common(self):

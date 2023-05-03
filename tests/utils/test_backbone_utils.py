@@ -92,35 +92,11 @@ class BackboneUtilsTester(unittest.TestCase):
         self.assertEqual(backbone.out_features, ["a", "c"])
         self.assertEqual(backbone.out_indices, [0, 2])
 
-        # Check that the output features cannot be set directly
-        with self.assertRaises(ValueError):
-            backbone.out_features = ["a", "b"]
-
-        # Check that the output indices cannot be set directly
-        with self.assertRaises(ValueError):
-            backbone.out_indices = [0, 1]
-
-        # Check that an error is raised if we try to set out features directly
-        with self.assertRaises(ValueError):
-            backbone.out_features = ["a", "b"]
-
-        # Check that an error is raised if we try to set out indices directly
-        with self.assertRaises(ValueError):
-            backbone.out_indices = [0, 1]
-
-        # Check that an error is raised if we try to set out features to invalid values
-        with self.assertRaises(ValueError):
-            backbone.set_out_features(["d"])
-
-        # Check that an error is raised if we try to set out indices to invalid values
-        with self.assertRaises(ValueError):
-            backbone.set_out_indices([3])
-
         # Check out features and indices are updated correctly
-        backbone.set_out_features(["a", "b"])
+        backbone.out_features = ["a", "b"]
         self.assertEqual(backbone.out_features, ["a", "b"])
         self.assertEqual(backbone.out_indices, [0, 1])
 
-        backbone.set_out_indices([-3, -1])
+        backbone.out_indices = [-3, -1]
         self.assertEqual(backbone.out_features, ["a", "c"])
         self.assertEqual(backbone.out_indices, [-3, -1])

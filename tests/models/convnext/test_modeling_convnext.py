@@ -135,7 +135,7 @@ class ConvNextModelTester:
         self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
         # verify backbone works with out_features=None
-        config.set_out_features(None)
+        config.out_features = None
         model = ConvNextBackbone(config=config)
         model.to(torch_device)
         model.eval()

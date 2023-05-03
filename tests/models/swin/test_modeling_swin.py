@@ -159,7 +159,7 @@ class SwinModelTester:
         self.parent.assertEqual(len(model.channels), len(config.out_features))
 
         # verify backbone works with out_features=None
-        config.set_out_features(None)
+        config.out_features = None
         model = SwinBackbone(config=config)
         model.to(torch_device)
         model.eval()

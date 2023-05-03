@@ -16,7 +16,7 @@
 """ Collection of utils to be used by backbones and their components."""
 
 import inspect
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 
 def verify_out_features_out_indices(
@@ -138,34 +138,27 @@ class BackboneMixin:
     def out_features(self):
         return self._out_features
 
+    @out_features.setter
+    def out_features(self, out_features: List[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=None, stage_names=self.stage_names
+        )
+
     @property
     def out_indices(self):
         return self._out_indices
 
-    def __setattr__(self, key: str, value: Any) -> None:
-        if key in ("out_indices", "out_features"):
-            raise ValueError(f"Cannot set {key} directly, please use set_{key} instead")
-        super().__setattr__(key, value)
-
-    def set_out_features(self, out_features: List[str]):
-        """
-        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
-        """
-        out_features, out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=None, stage_names=self.stage_names
-        )
-        self._out_features = out_features
-        self._out_indices = out_indices
-
-    def set_out_indices(self, out_indices: Union[Tuple[int], List[int]]):
+    @out_indices.setter
+    def out_indices(self, out_indices: Union[Tuple[int], List[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
-        out_features, out_indices = get_aligned_output_features_output_indices(
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=None, out_indices=out_indices, stage_names=self.stage_names
         )
-        self._out_features = out_features
-        self._out_indices = out_indices
 
 
 class BackboneConfigMixin:
@@ -177,34 +170,27 @@ class BackboneConfigMixin:
     def out_features(self):
         return self._out_features
 
+    @out_features.setter
+    def out_features(self, out_features: List[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=None, stage_names=self.stage_names
+        )
+
     @property
     def out_indices(self):
         return self._out_indices
 
-    def __setattr__(self, key: str, value: Any) -> None:
-        if key in ("out_indices", "out_features"):
-            raise ValueError(f"Cannot set {key} directly, please use set_{key} instead")
-        super().__setattr__(key, value)
-
-    def set_out_features(self, out_features: List[str]):
-        """
-        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
-        """
-        out_features, out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=None, stage_names=self.stage_names
-        )
-        self._out_features = out_features
-        self._out_indices = out_indices
-
-    def set_out_indices(self, out_indices: Union[Tuple[int], List[int]]):
+    @out_indices.setter
+    def out_indices(self, out_indices: Union[Tuple[int], List[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
-        out_features, out_indices = get_aligned_output_features_output_indices(
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=None, out_indices=out_indices, stage_names=self.stage_names
         )
-        self._out_features = out_features
-        self._out_indices = out_indices
 
     def to_dict(self):
         """
