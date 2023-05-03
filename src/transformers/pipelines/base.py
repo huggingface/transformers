@@ -803,10 +803,19 @@ class Pipeline(_ScikitCompat):
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
-        # Update config with task specific parameters
+        # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
         if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
+            for attr_name, attr in task_specific_params.get(task).items():
+                if self.model.can_generate() and hasattr(self.model.generation_config, attr_name):
+                    setattr(self.model.generation_config, attr_name, attr)
+                else:
+                    setattr(self.model.config, attr_name, attr)
+
+        # If the model can generate, disables the flag for the legacy behavior check (generation can be parameterized
+        # from model.config), which can't happen in a pipeline
+        if self.model.can_generate():
+            self.model.generation_config._from_model_config = False
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
