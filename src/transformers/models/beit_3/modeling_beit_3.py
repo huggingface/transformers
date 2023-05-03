@@ -19,7 +19,8 @@ from transformers.modeling_outputs import (
 
 # from .configuration_beit_3 import Beit3Config
 from transformers.models.beit_3.configuration_beit_3 import Beit3Config
-from transformers.utils import ModelOutput, logging, add_start_docstrings_to_model_forward
+from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
+
 
 # from ... import PreTrainedModel
 # from ...utils import logging
@@ -88,8 +89,8 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the  classification loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
+            classification loss is computed (Cross-Entropy) against these labels.
 
 """
 
@@ -108,7 +109,7 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             [`BeitImageProcessor.__call__`] for details.
 
         language_masked_pos (`torch.LongTensor` of shape `({0})`):
-            language_masked_pos for denoting tokens for captioning 
+            language_masked_pos for denoting tokens for captioning
 
             - 1 indicates the token is **Present**,
             - 0 indicates the token is **absent**.
@@ -127,8 +128,8 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the  classification loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
+            classification loss is computed (Cross-Entropy) against these labels.
 
 """
 
@@ -160,8 +161,8 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the  classification loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
+            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
+            classification loss is computed (Cross-Entropy) against these labels.
 
 """
 
@@ -193,6 +194,7 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
 """
+
 
 def set_split_position(position):
     def apply_fn(module):
