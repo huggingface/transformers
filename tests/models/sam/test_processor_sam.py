@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_torchvision, require_vision, require_tf
-from transformers.utils import is_torch_available, is_vision_available, is_tf_available
+from transformers.testing_utils import require_tf, require_torch, require_torchvision, require_vision
+from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 
 if is_vision_available():
@@ -113,6 +113,7 @@ class SamProcessorTest(unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
+
 
 @require_vision
 @require_tf
