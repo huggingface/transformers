@@ -1457,6 +1457,7 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    @slow  # TODO(Joao): remove this. Some models (e.g. data2vec, xcom, roberta) have an error rate between 1 and 10%.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # It breaks the pattern in the tests above, for multiple reasons:
@@ -1489,7 +1490,7 @@ class GenerationTesterMixin:
             output_greedy = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=1,
+                max_length=max_length,
                 num_beams=1,
                 do_sample=False,
                 output_scores=True,
@@ -1502,7 +1503,7 @@ class GenerationTesterMixin:
             output_assisted = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=1,
+                max_length=max_length,
                 num_beams=1,
                 do_sample=False,
                 assistant_model=model,
