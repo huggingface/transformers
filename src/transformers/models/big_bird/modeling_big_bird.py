@@ -573,7 +573,6 @@ class BigBirdBlockSparseAttention(nn.Module):
                     from_block_size,
                     to_block_size,
                     n_rand_blocks,
-                    self.training,
                     last_idx=1024,
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
@@ -1058,9 +1057,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         return plan_from_length, plan_num_rand_blocks
 
-    @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, deterministic, last_idx=-1
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
     ):
         """
         Create adjacency list of random attention.
@@ -1071,7 +1069,6 @@ class BigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
-            deterministic: bool. If deterministic (eval mode) no random attention.
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
             if positive then num_rand_blocks blocks chosen only up to last_idx.
 
@@ -1085,7 +1082,7 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         # During inference (eval) no randomness
-        if deterministic:
+        if not self.training:
             return rand_attn
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
         last = to_seq_length // to_block_size - 1
@@ -1369,7 +1366,6 @@ class BigBirdAttention(nn.Module):
         attn_weights.key = self.self.key
         self.self = attn_weights
         self.attention_type = value
-
         if not self.training:
             self.self.eval()
 
