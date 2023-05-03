@@ -1691,6 +1691,7 @@ else:
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoForCausalLM",
+            "GPTNeoForQuestionAnswering",
             "GPTNeoForSequenceClassification",
             "GPTNeoForTokenClassification",
             "GPTNeoModel",
@@ -5249,6 +5250,7 @@ if TYPE_CHECKING:
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
             GPTNeoForSequenceClassification,
             GPTNeoForTokenClassification,
             GPTNeoModel,
