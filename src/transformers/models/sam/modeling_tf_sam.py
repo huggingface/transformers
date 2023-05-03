@@ -512,8 +512,9 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
             output_tokens[None, None, :], [batch_size, point_batch_size, 1, 1]
         )  # Should be (batch_size, point_size, 5, 32)
 
-        # Matt: I think this sum is actually checking that the sparse prompt embeddings aren't an empty tensor
-        #       with shape[1] == 0, so I'm going to replace this
+        # Matt: The original Torch code checked that the sum of sparse_prompt_embeddings equalled 0. However, this only
+        #       happens when the sparse prompt embeddings are an empty tensor with shape[1] == 0. I replaced
+        #       it with an explicit shape check to avoid data-dependent control flow which breaks XLA.
         if sparse_prompt_embeddings.shape[1] != 0:
             tokens = tf.concat((output_tokens, sparse_prompt_embeddings), axis=2)
         else:
