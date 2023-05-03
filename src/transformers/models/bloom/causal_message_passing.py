@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch_scatter import scatter
 
-from desequence_graph_ids import SequenceElement
+from .desequence_graph_ids import SequenceElement
 
 
 def build_message_passing_matrices(

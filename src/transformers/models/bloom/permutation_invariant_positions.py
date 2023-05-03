@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 
-from desequence_graph_ids import SequenceElement
+from .desequence_graph_ids import SequenceElement
 
 
 def build_alibi_tensor(
@@ -153,10 +153,10 @@ def _get_all_edges_previous_positions(
 def _remove_positions_from_graph_tokens(
     positions: torch.Tensor,
     edge_sequence: List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]
+) -> torch.Tensor:
     """ Returns a revised position tenso where all token ids in a serialized graph are given the
         same position
     """
-) -> torch.Tensor:
     start_idx = edge_sequence[0][0].start_idx
     if edge_sequence[-1][2] is None and edge_sequence[-1][1] is None:
         end_idx = edge_sequence[-1][0].end_idx

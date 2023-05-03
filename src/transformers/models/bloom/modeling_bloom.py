@@ -35,9 +35,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
-from desequence_graph_ids import extract_edge_sequence, SequenceElement
-from permutation_invariant_positions import build_alibi_tensor
-from causal_message_passing import build_message_passing_matrices, perform_causal_message_passing
+from .desequence_graph_ids import extract_edge_sequence, SequenceElement
+from .permutation_invariant_positions import build_alibi_tensor
+from .causal_message_passing import build_message_passing_matrices, perform_causal_message_passing
 
 
 logger = logging.get_logger(__name__)
