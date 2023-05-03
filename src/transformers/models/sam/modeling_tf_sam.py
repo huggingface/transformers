@@ -183,16 +183,17 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         if self.data_format == "channels_last":
-            x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps)
+            x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps, axis=-1)
         elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = tf.cast(x, tf.float32)
-            u = tf.reduce_mean(x, axis=1, keepdims=True)
-            s = tf.math.square(x - u)
-            s = tf.reduce_mean(s, axis=1, keepdims=True)
-            x = (x - u) / tf.math.sqrt(s + self.eps)
-            x = tf.cast(x, input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+            x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps, axis=1)
+        #     input_dtype = x.dtype
+        #     x = tf.cast(x, tf.float32)
+        #     u = tf.reduce_mean(x, axis=1, keepdims=True)
+        #     s = tf.math.square(x - u)
+        #     s = tf.reduce_mean(s, axis=1, keepdims=True)
+        #     x = (x - u) / tf.math.sqrt(s + self.eps)
+        #     x = tf.cast(x, input_dtype)
+        #     x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
 
@@ -897,7 +898,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
         relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
 
-        batch_size, _, dim = query.shape
+        batch_size, _, dim = shape_list(query)
         reshaped_query = tf.reshape(query, (batch_size, query_height, query_width, dim))
         rel_h = tf.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = tf.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
@@ -907,7 +908,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         return attn
 
     def call(self, hidden_states: tf.Tensor, output_attentions=False) -> tf.Tensor:
-        batch_size, height, width, _ = hidden_states.shape
+        batch_size, height, width, _ = shape_list(hidden_states)
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = tf.reshape(self.qkv(hidden_states), (batch_size, height * width, 3, self.num_attention_heads, -1))
         qkv = tf.transpose(qkv, perm=(2, 0, 3, 1, 4))
@@ -973,7 +974,7 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
     ) -> tf.Tensor:
         pad_height, pad_width = padding_shape
         height, width = original_shape
-        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        batch_size = shape_list(windows)[0] // (pad_height * pad_width // window_size // window_size)
         hidden_states = tf.reshape(
             windows, [batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1]
         )
@@ -1408,7 +1409,15 @@ class TFSamModel(TFSamPreTrainedModel):
                 )
         if pixel_values is not None:
             # Ensures that later checks pass even with an all-None shape from the serving signature
-            pixel_values = tf.ensure_shape(pixel_values, [None, self.config.vision_config.num_channels, None, None])
+            pixel_values = tf.ensure_shape(
+                pixel_values,
+                [
+                    None,
+                    self.config.vision_config.num_channels,
+                    self.config.vision_config.image_size,
+                    self.config.vision_config.image_size,
+                ],
+            )
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
         batch_size = shape_list(pixel_values)[0] if pixel_values is not None else shape_list(image_embeddings)[0]
@@ -1444,7 +1453,7 @@ class TFSamModel(TFSamPreTrainedModel):
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            batch_size=image_embeddings.shape[0],
+            batch_size=shape_list(image_embeddings)[0],
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,

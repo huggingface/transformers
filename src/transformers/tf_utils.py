@@ -70,14 +70,24 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
 
 
-def functional_layernorm(inputs, weight, bias, epsilon=1e-5):
+def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
     # This is a very simplified functional layernorm, designed to duplicate
     # the functionality of PyTorch nn.functional.layer_norm when this is needed to port
-    # models in Transformers. It assumes the dimension to be normalized is always the last one.
-    # If you need it to handle multiple dimensions, yell at me (Matt) and I'll patch it.
+    # models in Transformers.
+
+    if weight.shape.rank != 1 or bias.shape.rank != 1 or not isinstance(axis, int):
+        raise NotImplementedError("Only 1D weight and bias tensors are supported for now, with only a single axis.")
 
     # Calculate the moments on the last axis (layer activations).
-    mean, variance = tf.nn.moments(inputs, -1, keepdims=True)
+    mean, variance = tf.nn.moments(inputs, axes=[axis], keepdims=True)
+
+    if axis != -1:
+        # Reshape scale and weight to have the same rank as inputs, but with 1 dimensions
+        # on every dimension except axis
+        shape = [1] * inputs.shape.rank
+        shape[axis] = shape_list(inputs)[axis]
+        weight = tf.reshape(weight, shape)
+        bias = tf.reshape(bias, shape)
 
     # Compute layer normalization using the batch_normalization
     # function.
