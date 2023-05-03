@@ -1,3 +1,5 @@
+""" A set of functions to perform message passing on a serialized graph in an LLM """
+
 from collections import defaultdict
 import itertools
 from typing import Dict, List, Optional, Tuple
@@ -83,8 +85,8 @@ def perform_causal_message_passing(
     message_passing_dicts: List[Dict[str, torch.Tensor]],
     reduce: str = 'mean'
 ) -> torch.Tensor:
-    """ Returns token embeddings in a sequence where causal message passing has been performed to
-        based on the serialized graph described in the token sequence
+    """ Returns token embeddings in a sequence where causal message passing has been performed on
+        the token ids  based on the serialized graph described in the sequence
     """
     new_token_embeddings = []
     for t_embeddings, message_passing_dict in zip(token_embeddings, message_passing_dicts):

@@ -1,4 +1,6 @@
-""" Implementing permutation invariant masking """
+""" A set of functions to modify the position embeddings of BLOOM to edit position embeddings in
+    a sequence to describe the order generation position invariance of a serialized graph
+"""
 
 from collections import defaultdict
 import math
@@ -79,7 +81,7 @@ def _get_graph_positions(
     graph_tokens: Dict[str, List[int]],
     position_type: str
 ) -> torch.Tensor:
-    """ Returns a revised position tensor (arange_tensor) where the position of tokens in the
+    """ Returns a revised position tenso where the position of tokens in the
         sequence reflect the position of nodes and edges in a graph
     """
     if position_type == 'vanilla':
@@ -117,6 +119,10 @@ def _get_all_edges_previous_positions(
     positions: torch.Tensor,
     edge_sequence: List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]
 ) -> torch.Tensor:
+    """ Returns a revised position tenso where the position of all previous graph tokens in the
+        sequenced are set to immediately precede the current token meaning every edge besides the
+        edge being generated appears to have been just generated
+    """
     start_idx = edge_sequence[0][0].start_idx
     init_position = positions[start_idx].item()
     new_positions_list = []
@@ -147,6 +153,9 @@ def _get_all_edges_previous_positions(
 def _remove_positions_from_graph_tokens(
     positions: torch.Tensor,
     edge_sequence: List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]
+    """ Returns a revised position tenso where all token ids in a serialized graph are given the
+        same position
+    """
 ) -> torch.Tensor:
     start_idx = edge_sequence[0][0].start_idx
     if edge_sequence[-1][2] is None and edge_sequence[-1][1] is None:
@@ -167,7 +176,8 @@ def _get_action_invariant_positions(
     graph_tokens: Dict[str, List[int]]
 ) -> torch.Tensor:
     """ Returns a revised position tensor where the position of tokens in a graph sequence reflect
-        their position in the graph
+        the order in which they can be generated, i.e. some edges can be generated at the same time
+        so they will have similar positions
     """
     device = positions.device
     init_position = positions[edge_sequence[0][0].start_idx].item()

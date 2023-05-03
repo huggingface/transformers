@@ -1,4 +1,4 @@
-""" Implementing permutation invariant masking """
+""" A set of functions to identify a serialized graph within a list of token ids """
 
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
