@@ -48,7 +48,6 @@ GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
 
 def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
@@ -1040,7 +1039,7 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
