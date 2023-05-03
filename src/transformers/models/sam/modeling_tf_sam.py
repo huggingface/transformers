@@ -186,14 +186,6 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
             x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps, axis=-1)
         elif self.data_format == "channels_first":
             x = functional_layernorm(x, weight=self.weight, bias=self.bias, epsilon=self.eps, axis=1)
-        #     input_dtype = x.dtype
-        #     x = tf.cast(x, tf.float32)
-        #     u = tf.reduce_mean(x, axis=1, keepdims=True)
-        #     s = tf.math.square(x - u)
-        #     s = tf.reduce_mean(s, axis=1, keepdims=True)
-        #     x = (x - u) / tf.math.sqrt(s + self.eps)
-        #     x = tf.cast(x, input_dtype)
-        #     x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
 
