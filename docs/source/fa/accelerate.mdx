@@ -1,0 +1,132 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# آموزش توزیع شده با 🤗 Accelerate
+
+با بزرگ‌تر شدن مدل‌ها، موازی‌سازی به عنوان یک استراتژی برای آموزش مدل‌های بزرگتر بر روی سخت‌افزار محدود و افزایش چند برابری سرعت آموزش ایجاد شدند. در Hugging Face، کتابخانه [🤗 Accelerate](https://huggingface.co/docs/accelerate) را ایجاد کردیم تا به کاربران کمک کنیم به راحتی یک مدل 🤗 ترانسفورمر را در هر نوع تنظیمات توزیع شده آموزش دهید، خواه چندین GPU در یک دستگاه یا چندین GPU در چندین دستگاه باشد. در این آموزش، یاد خواهید گرفت که چگونه ترینینگ مدل خود در PyTorch را در یک محیط توزیع شده انجام دهید.
+
+## نصب
+
+با نصب 🤗 Accelerate شروع کنید:
+
+```bash
+pip install accelerate
+```
+
+سپس [`~accelerate.Accelerator`] را ایمپورت کرده و یک آبجکت ایجاد کنید. [`~accelerate.Accelerator`] به طور خودکار نوع تنظیمات توزیع شده شما را شناسایی می کند و تمام اجزای لازم برای آموزش را مقداردهی اولیه می کند. نیازی نیست که مدل خود را به صراحت روی دستگاه قرار دهید.
+
+```py
+>>> from accelerate import Accelerator
+
+>>> accelerator = Accelerator()
+```
+
+## پیش نیاز Accelerate
+
+مرحله بعدی این است که تمام آبجکت های آموزشی مربوطه را به روش [~ accelerate. Accelerator.prepare] منتقل کنید. این شامل آموزش و ارزیابی دیتالودرها، مدل و بهینه ساز شما می شود:
+
+```py
+>>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
+...     train_dataloader, eval_dataloader, model, optimizer
+... )
+```
+
+## استفاده از Backward
+
+آخرین مورد این است که `loss.backward()` را در ترینینگ با روش 🤗 Accelerate [`~accelerate.Accelerator.backward`] جایگزین کنید:
+
+```py
+>>> for epoch in range(num_epochs):
+...     for batch in train_dataloader:
+...         outputs = model(**batch)
+...         loss = outputs.loss
+...         accelerator.backward(loss)
+
+...         optimizer.step()
+...         lr_scheduler.step()
+...         optimizer.zero_grad()
+...         progress_bar.update(1)
+```
+
+همانطور که در کد زیر مشاهده می کنید، فقط باید چهار خط کد اضافی را به حلقه آموزشی خود اضافه کنید تا آموزش توزیع شده را فعال کنید!
+
+```diff
++ from accelerate import Accelerator
+  from transformers import AdamW, AutoModelForSequenceClassification, get_scheduler
+
++ accelerator = Accelerator()
+
+  model = AutoModelForSequenceClassification.from_pretrained(checkpoint, num_labels=2)
+  optimizer = AdamW(model.parameters(), lr=3e-5)
+
+- device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+- model.to(device)
+
++ train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
++     train_dataloader, eval_dataloader, model, optimizer
++ )
+
+  num_epochs = 3
+  num_training_steps = num_epochs * len(train_dataloader)
+  lr_scheduler = get_scheduler(
+      "linear",
+      optimizer=optimizer,
+      num_warmup_steps=0,
+      num_training_steps=num_training_steps
+  )
+
+  progress_bar = tqdm(range(num_training_steps))
+
+  model.train()
+  for epoch in range(num_epochs):
+      for batch in train_dataloader:
+-         batch = {k: v.to(device) for k, v in batch.items()}
+          outputs = model(**batch)
+          loss = outputs.loss
+-         loss.backward()
++         accelerator.backward(loss)
+
+          optimizer.step()
+          lr_scheduler.step()
+          optimizer.zero_grad()
+          progress_bar.update(1)
+```
+
+## ترینینگ
+
+هنگامی که خطوط کد مربوطه را اضافه کردید، آموزش خود را در یک اسکریپت یا دفترچه ای مانند Colaboratory راه اندازی کنید.
+
+### Train with a script
+
+اگر آموزش خود را از طریق یک اسکریپت اجرا می کنید، دستور زیر را برای ایجاد و ذخیره یک فایل پیکربندی اجرا کنید:
+
+```bash
+accelerate config
+```
+
+سپس آموزش خود را با این دستور فعال کنید:
+
+```bash
+accelerate launch train.py
+```
+
+### ترینینگ در نوت‌بوک
+
+ اگر می‌خواهید از TPUهای Colaboratory استفاده کنید،🤗 Accelerate می‌تواند در نوت‌بوک نیز اجرا شود. تمام کدهای مسئول ترینیگ را در یک تابع قرار دهید و آن را به [`~accelerate.notebook_launcher`] ارسال کنید:
+ 
+```py
+>>> from accelerate import notebook_launcher
+
+>>> notebook_launcher(training_function)
+```
+
+برای اطلاعات بیشتر درباره 🤗 Accelerate و ویژگی‌های غنی آن، به [اسناد] (https://huggingface.co/docs/accelerate) مراجعه کنید.

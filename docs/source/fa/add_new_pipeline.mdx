@@ -1,0 +1,223 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+-->
+
+# چگونه یک پایپ لاین سفارشی ایجاد کنیم؟
+
+در این راهنما، نحوه ایجاد یک پایپ لاین سفارشی و به اشتراک گذاری آن را در [Hub](hf.co/models) یا افزودن آن به کتابخانه 🤗 ترانسفورمرها بررسی می کنیم.
+
+اول از همه، شما باید تصمیم بگیرید که پایپ لاین چه ورودی های خامی خواهد داشت. این می تواند رشته، بایت های خام، دیکشنری یا هر چیزی دیگری به عنوان ورودی مورد نظر باشد. سعی کنید این ورودی‌ها را تا حد امکان به صورت پایتون خالص نگه دارید زیرا سازگاری آن را آسان‌تر می‌کند (حتی نسبت به JSON). اینها `ورودی‌های` پایپ لاین (`پیش پردازش`) خواهند بود.
+
+سپس `خروجی ها` را مانند `ورودی ها` تعریف کنید. هر چه ساده تر، بهتر. اینها خروجی های روش `پسا پردازش` خواهند بود.
+
+با به ارث بردن کلاس پایه `Pipeline` با 4 روش مورد نیاز برای اجرای `preprocess`، `_forward`، `postprocess` و `_sanitize_parameters` شروع کنید.
+
+
+```python
+from transformers import Pipeline
+
+
+class MyPipeline(Pipeline):
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
+        if "maybe_arg" in kwargs:
+            preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
+        return preprocess_kwargs, {}, {}
+
+    def preprocess(self, inputs, maybe_arg=2):
+        model_input = Tensor(inputs["input_ids"])
+        return {"model_input": model_input}
+
+    def _forward(self, model_inputs):
+        # model_inputs == {"model_input": model_input}
+        outputs = self.model(**model_inputs)
+        # Maybe {"logits": Tensor(...)}
+        return outputs
+
+    def postprocess(self, model_outputs):
+        best_class = model_outputs["logits"].softmax(-1)
+        return best_class
+```
+
+ساختار این تفکیک به این صورت است که از CPU/GPU پشتیبانی نسبتاً یکپارچه ای می‌کند، در حالی که از انجام پیش و پس پردازش روی CPU در رشته‌های مختلف پشتیبانی می‌کند.
+
+`پیش پردازش` ورودی های تعریف شده اولیه را می گیرد و آنها را برای مدل آماده می کند. ممکن است حاوی اطلاعات بیشتری باشد و معمولاً `Dict` است.
+
+`_forward` جزئیات پیاده‌سازی است و قرار نیست مستقیماً فراخوانی شود. «forward» روش ترجیحی فراخوانی است، زیرا حاوی محافظ‌هایی است تا مطمئن شود همه چیز روی سخت افزار مورد انتظار کار می‌کند. اگر چیزی به یک مدل واقعی پیوند داده شد در واقع به `_forward` تعلق دارد، هر چیز دیگری در پیش پردازش/پس فرآیند است.
+
+روش‌های `postprocess` خروجی `_forward` را می‌گیرند و آن را به خروجی نهایی که قبلاً تصمیم‌گیری شده بود تبدیل می‌کنند.
+
+`_sanitize_parameters` وجود دارد تا به کاربران اجازه دهد هر زمان که مایلند هر پارامتری را ارسال کنند، چه در زمان مقداردهی اولیه `pipeline(...., maybe_arg=4)` یا در زمان فراخوانی `pipe = pipeline(...)`; 
+`output= pipeline(....، maybe_arg=4)`.
+
+فراخوانی `_sanitize_parameters` سه dict هستند که مستقیماً به `پیش‌پردازش`، `_forward` و `postprocess` ارسال می‌شوند. اگر فراخوان هیچ پارامتر اضافی را فراخوانی نکرد، چیزی را پر نکنید. این اجازه می دهد تا آرگومان های پیش فرض را در تعریف تابع که همیشه "طبیعی تر" است حفظ کنید.
+
+یک مثال کلاسیک می‌تواند آرگومان «top_k» در پسا پردازش در طبقه‌بندی باشد.
+
+```python
+>>> pipe = pipeline("my-new-task")
+>>> pipe("This is a test")
+[{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}, {"label": "3-star", "score": 0.05}
+{"label": "4-star", "score": 0.025}, {"label": "5-star", "score": 0.025}]
+
+>>> pipe("This is a test", top_k=2)
+[{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}]
+```
+
+برای دستیابی به آن، روش "پس پردازش" خود را با یک پارامتر پیش فرض به `5` به روز می کنیم. و برای اجازه دادن به این پارامتر جدید، `_sanitize_parameters` را ویرایش کنید.
+
+
+```python
+def postprocess(self, model_outputs, top_k=5):
+    best_class = model_outputs["logits"].softmax(-1)
+    # Add logic to handle top_k
+    return best_class
+
+
+def _sanitize_parameters(self, **kwargs):
+    preprocess_kwargs = {}
+    if "maybe_arg" in kwargs:
+        preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
+
+    postprocess_kwargs = {}
+    if "top_k" in kwargs:
+        postprocess_kwargs["top_k"] = kwargs["top_k"]
+    return preprocess_kwargs, {}, postprocess_kwargs
+```
+
+سعی کنید ورودی/خروجی‌ها را بسیار ساده نگه دارید و به طور ایده‌آل با JSON قابل سریال‌سازی باشد، زیرا استفاده از خط لوله را بدون نیاز به درک نوع جدیدی از اشیاء توسط کاربران بسیار آسان می‌کند. همچنین پشتیبانی از انواع مختلف آرگومان‌ها برای سهولت استفاده (فایل‌های صوتی، می‌توانند نام فایل، URL یا بایت خالص باشند) نسبتاً رایج است.
+
+
+
+## افزودن به لیست کارهای پشتیبانی شده
+
+برای ثبت `وظیفه جدید` خود در لیست کارهای پشتیبانی شده، باید آن را به `PIPELINE_REGISTRY` اضافه کنید:
+
+```python
+from transformers.pipelines import PIPELINE_REGISTRY
+
+PIPELINE_REGISTRY.register_pipeline(
+    "new-task",
+    pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+)
+```
+
+اگر بخواهید می‌توانید یک مدل پیش‌فرض را مشخص کنید، در این صورت باید با یک ویرایش خاص (که می‌تواند نام یک شاخه یا یک هش commit باشد، در اینجا `abcdef` را انتخاب کردیم) و همچنین نوع آن را مشخص کنید:
+
+```python
+PIPELINE_REGISTRY.register_pipeline(
+    "new-task",
+    pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    default={"pt": ("user/awesome_model", "abcdef")},
+    type="text",  # current support type: text, audio, image, multimodal
+)
+```
+
+## پایپ لاین خود را در هاب به اشتراک بگذارید
+
+برای به اشتراک گذاشتن پایپ لاین سفارشی خود در هاب، فقط باید کد سفارشی زیرکلاس `Pipeline` خود را در یک فایل پایتون ذخیره کنید. به عنوان مثال، فرض کنید می خواهیم از یک پایپ لاین سفارشی برای طبقه بندی جفت جملات به شکل زیر استفاده کنیم:
+
+```py
+import numpy as np
+
+from transformers import Pipeline
+
+
+def softmax(outputs):
+    maxes = np.max(outputs, axis=-1, keepdims=True)
+    shifted_exp = np.exp(outputs - maxes)
+    return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
+
+class PairClassificationPipeline(Pipeline):
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
+        if "second_text" in kwargs:
+            preprocess_kwargs["second_text"] = kwargs["second_text"]
+        return preprocess_kwargs, {}, {}
+
+    def preprocess(self, text, second_text=None):
+        return self.tokenizer(text, text_pair=second_text, return_tensors=self.framework)
+
+    def _forward(self, model_inputs):
+        return self.model(**model_inputs)
+
+    def postprocess(self, model_outputs):
+        logits = model_outputs.logits[0].numpy()
+        probabilities = softmax(logits)
+
+        best_class = np.argmax(probabilities)
+        label = self.model.config.id2label[best_class]
+        score = probabilities[best_class].item()
+        logits = logits.tolist()
+        return {"label": label, "score": score, "logits": logits}
+```
+
+پیاده سازی به صورت فریمورک آگنوستیک است و برای مدل های PyTorch و TensorFlow کار می کند. اگر این را در فایلی به نام `pair_classification.py` ذخیره کنیم، می‌توانیم آن را وارد کرده و به این صورت ثبت کنیم:
+
+```py
+from pair_classification import PairClassificationPipeline
+from transformers.pipelines import PIPELINE_REGISTRY
+from transformers import AutoModelForSequenceClassification, TFAutoModelForSequenceClassification
+
+PIPELINE_REGISTRY.register_pipeline(
+    "pair-classification",
+    pipeline_class=PairClassificationPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    tf_model=TFAutoModelForSequenceClassification,
+)
+```
+
+هنگامی که این کار انجام شد، می توانیم آن را با یک مدل از پیش آموزش دیده استفاده کنیم. به عنوان مثال، `sgugger/finetuned-bert-mrpc` در مجموعه داده MRPC به‌خوبی تنظیم شده است، که جفت جملات را به‌عنوان نقل‌قول یا غیرمعمول طبقه‌بندی می‌کند.
+
+```py
+from transformers import pipeline
+
+classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
+```
+
+سپس با استفاده از روش `save_pretrained` در `ریپازیتوری` می‌توانیم آن را در Hub به اشتراک بگذاریم:
+
+```py
+from huggingface_hub import Repository
+
+repo = Repository("test-dynamic-pipeline", clone_from="{your_username}/test-dynamic-pipeline")
+classifier.save_pretrained("test-dynamic-pipeline")
+repo.push_to_hub()
+```
+
+با این کار فایلی را که در آن `PairClassificationPipeline` در فولدر `test-dynamic-pipeline` تعریف کرده‌اید، همراه با ذخیره مدل و توکنایزر پایپ لاین، قبل از پوش کردن همه چیز در ریپازیتوری `{your_username}/test-dynamic-pipeline` کپی می‌شود. پس از آن هر کسی می تواند از آن استفاده کند تا زمانی که گزینه `trust_remote_code=True` را انتخاب کنند:
+
+```py
+from transformers import pipeline
+
+classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remote_code=True)
+```
+
+## افزودن پایپ لاین به 🤗 ترانسفورمرها
+
+اگر می‌خواهید پایپ لاین خود را به 🤗 ترانسفورمرها اضافه کنید، باید یک ماژول جدید در زیرماژول `pipelines` که کدتان در داخل آن باشد اضافه کنید، سپس آن را به لیست وظایف تعریف شده در `pipelines/__init__.py` اضافه کنید.
+
+سپس باید تست هایی را اضافه کنید. یک فایل جدید `tests/test_pipelines_MY_PIPELINE.py` با مثال با سایر آزمایش‌ها ایجاد کنید.
+
+تابع `run_pipeline_test` بسیار کلی خواهد بود و بر روی مدل‌های تصادفی کوچک در هر معماری ممکن که توسط `model_mapping` و `tf_model_mapping` تعریف شده است اجرا می‌شود.
+
+این برای آزمایش سازگاری در آینده بسیار مهم است، به این معنی که اگر شخصی یک مدل جدید برای `XXXForQuestionAnswering` اضافه کند، آزمایش پایپ لاین تلاش می‌کند روی آن اجرا شود. از آنجایی که مدل‌ها تصادفی هستند، بررسی مقادیر واقعی غیرممکن است، به همین دلیل است که یک کمک کننده به نام `ANY` وجود دارد که به سادگی تلاش می‌کند خروجی تایپ پایپ لاین را مطابقت دهد.
+
+شما همچنین *نیاز به* اجرای 2 (در حالت ایده آل 4) تست دارید.
+
+- `test_small_model_pt`: یک مدل کوچک را برای این پایپ لاین تعریف کنید (اگر نتایج منطقی نباشد مهم نیست)
+   و خروجی های پایپ لاین را آزمایش کنید. نتایج باید مانند `test_small_model_tf` باشد.
+- `test_small_model_tf`: یک مدل کوچک را برای این پایپ لاین تعریف کنید (اگر نتایج منطقی نباشد مهم نیست)
+   و خروجی های پایپ لاین را آزمایش کنید. نتایج باید مانند `test_small_model_pt` باشد.
+- `test_large_model_pt` (`اختیاری`):  پایپ لاین را روی یک  پایپ لاین واقعی آزمایش می کند که در آن نتایج قرار است منطقی باشند. این تست ها کند هستند و باید به این ترتیب علامت گذاری شوند. در اینجا هدف این است که  پایپ لاین را به نمایش بگذاریم و اطمینان حاصل کنیم که هیچ تغییری در نسخه های بعدی وجود ندارد.
+- `test_large_model_tf` (`اختیاری`):  پایپ لاین را روی  پایپ لاین واقعی آزمایش می کند که در آن نتایج قرار است منطقی باشند. این تست ها کند هستند و باید به این ترتیب علامت گذاری شوند. در اینجا هدف این است که  پایپ لاین را به نمایش بگذاریم و اطمینان حاصل کنیم که هیچ تغییری در نسخه های بعدی وجود ندارد.
