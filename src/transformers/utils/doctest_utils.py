@@ -43,20 +43,17 @@ from pytest import DoctestItem
 def preprocess_string(string, skip_cuda_tests):
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
+    is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
             codeblocks[i] = re.sub(r"(>>> .*load_dataset\(.*)", r"\1 # doctest: +IGNORE_RESULT", codeblock)
-
         if ">>>" in codeblock and re.match(r"( cuda | to(0) | device = 0)", codeblock) and skip_cuda_tests:
-            if 'device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")' in codeblock:
-                continue
-            line_num = "".join(codeblocks[: i + 1]).count("\n")
-            codeblocks[
-                i - 1
-            ] += f'from pytest import skip;skip("Codeblock line {line_num} uses `cuda`. Skipping" \
-                                ,allow_module_level=True);'
-    codeblocks = "".join(codeblocks)
-    return codeblocks
+            is_cuda_found = True
+            break
+    modified_string = ""
+    if not is_cuda_found:
+        modified_string = "".join(codeblocks)
+    return modified_string
 
 
 class HfDocTestParser(doctest.DocTestParser):
