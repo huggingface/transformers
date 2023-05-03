@@ -262,6 +262,13 @@ Deep Java Library (DJL) is an open-source, high-level, engine-agnostic Java fram
 
 Keywords: Java, Framework
 
+
+## [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness/)
+
+This project provides a unified framework to test generative language models on a large number of different evaluation tasks. It has support for more than 200 tasks, and supports different ecosystems: HF Transformers, GPT-NeoX, DeepSpeed, as well as the OpenAI API.
+
+Keywords: LLM, Evaluation, Few-shot
+
 ## [gpt-neox](https://github.com/EleutherAI/gpt-neox)
 
 This repository records EleutherAI's library for training large-scale language models on GPUs. The framework is based on NVIDIA's Megatron Language Model and has been augmented with techniques from DeepSpeed as well as some novel optimizations. It is focused on training multi-billion-parameter models.
