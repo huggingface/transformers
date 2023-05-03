@@ -135,8 +135,6 @@ class BackboneTesterMixin:
             # Verify num_features has been initialized in the backbone init
             self.assertIsNotNone(backbone.num_features)
             self.assertTrue(len(backbone.channels) == len(backbone.out_indices))
-            print(backbone.stage_names)
-            print(backbone.num_features)
             self.assertTrue(len(backbone.stage_names) == len(backbone.num_features))
             self.assertTrue(len(backbone.channels) <= len(backbone.num_features))
             self.assertTrue(len(backbone.out_feature_channels) == len(backbone.stage_names))
