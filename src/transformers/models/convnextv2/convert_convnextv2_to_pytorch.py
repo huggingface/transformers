@@ -156,16 +156,14 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
-
     # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnextv2." + key
         state_dict[key] = val
-    
+
     # load HuggingFace model
-    print()
     model = ConvNextV2ForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
