@@ -251,8 +251,8 @@ Stable-Dreamfusion is a pytorch implementation of the text-to-3D model Dreamfusi
 Keywords: Text-to-3D, Stable Diffusion
 
 ## [txtai](https://github.com/neuml/txtai)
-
-[txtai](https://github.com/neuml/txtai) is an open-source platform for semantic search and workflows powered by language models.
+ 
+[txtai](https://github.com/neuml/txtai) is an open-source platform for semantic search and workflows powered by language models. txtai builds embeddings databases, which are a union of vector indexes and relational databases enabling similarity search with SQL. Semantic workflows connect language models together into unified applications.
 
 Keywords: Semantic search, LLM
 
@@ -261,7 +261,6 @@ Keywords: Semantic search, LLM
 Deep Java Library (DJL) is an open-source, high-level, engine-agnostic Java framework for deep learning. DJL is designed to be easy to get started with and simple to use for Java developers. DJL provides a native Java development experience and functions like any other regular Java library.
 
 Keywords: Java, Framework
-
 
 ## [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness/)
 
