@@ -312,11 +312,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return text
 
     def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
-        token_ids = kwargs["token_ids"]
-        skip_special_tokens = kwargs["skip_special_tokens"]
-        has_prompt = isinstance(token_ids, list) and token_ids[0] == self.convert_tokens_to_ids("<|startofprev|>")
-        if skip_special_tokens and has_prompt:
-            kwargs["token_ids"] = _strip_prompt(token_ids, self.all_special_ids)
+        if kwargs["skip_special_tokens"]:
+            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+            kwargs["token_ids"] = _strip_prompt(kwargs["token_ids"], prompt_token_id, self.all_special_ids)
 
         text = super()._decode(*args, **kwargs)
 

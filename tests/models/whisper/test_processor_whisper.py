@@ -16,6 +16,8 @@ import shutil
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import WhisperTokenizer, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
@@ -163,10 +165,15 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertListEqual(prompt_ids.tolist(), [50360, 220])
         self.assertEqual(decoded_prompt, "<|startofprev|> ")
 
-    def test_invalid_get_prompt_ids(self):
+    def test_get_prompt_ids_with_special_tokens(self):
         processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        prompt_ids = processor.get_prompt_ids("<|startofprev|> test <|startofprev|> ")
-        decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
-        self.assertListEqual(prompt_ids.tolist(), [50360, 1332])
-        self.assertEqual(decoded_prompt, "<|startofprev|> test")
+        def _test_prompt_error_raised_helper(prompt, special_token):
+            with pytest.raises(ValueError) as excinfo:
+                processor.get_prompt_ids(prompt)
+            expected = f"Encountered text in the prompt corresponding to disallowed special token '{special_token}'."
+            self.assertEqual(expected, str(excinfo.value))
+
+        _test_prompt_error_raised_helper("<|startofprev|> test", "<|startofprev|>")
+        _test_prompt_error_raised_helper("test <|2.0|>", "<|2.0|>")
+        _test_prompt_error_raised_helper("test <|zh|> test <|transcribe|>", "<|zh|>")

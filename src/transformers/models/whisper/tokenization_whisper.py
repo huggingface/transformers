@@ -606,9 +606,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        has_prompt = isinstance(token_ids, list) and self.convert_tokens_to_ids("<|startofprev|>") in token_ids
-        if skip_special_tokens and has_prompt:
-            token_ids = _strip_prompt(token_ids, self.all_special_ids)
+        if skip_special_tokens:
+            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+            token_ids = _strip_prompt(token_ids, prompt_token_id, self.all_special_ids)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -994,7 +994,10 @@ def _find_longest_common_sequence(sequences):
     return total_sequence
 
 
-def _strip_prompt(token_ids: List[int], all_special_ids: List[int]):
-    for i in range(1, len(token_ids)):
-        if token_ids[i] in all_special_ids:
-            return token_ids[i:]
+def _strip_prompt(token_ids: List[int], prompt_token_id: int, all_special_ids: List[int]):
+    has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+    if has_prompt:
+        for i in range(1, len(token_ids)):
+            if token_ids[i] in all_special_ids:
+                return token_ids[i:]
+    return token_ids

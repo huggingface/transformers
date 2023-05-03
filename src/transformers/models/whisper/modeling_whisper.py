@@ -39,7 +39,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
-    to_py_obj,
 )
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
@@ -1528,9 +1527,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
-            prompt_ids (`Optional[Union[List[int], torch.Tensor, np.ndarray]]`, *optional*):
-                List or rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that
-                is provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
+            prompt_ids (`Optional[torch.Tensor]]`, *optional*):
+                Rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
+                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
             kwargs:
@@ -1579,8 +1578,19 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if task is not None:
             generation_config.task = task
 
-        forced_decoder_ids = []
-        if task is not None or language is not None:
+        forced_decoder_ids = None
+
+        # Legacy code for backward compatibility
+        if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
+            forced_decoder_ids = self.config.forced_decoder_ids
+        elif (
+            hasattr(self.generation_config, "forced_decoder_ids")
+            and self.generation_config.forced_decoder_ids is not None
+        ):
+            forced_decoder_ids = self.generation_config.forced_decoder_ids
+
+        if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
+            forced_decoder_ids = []
             if hasattr(generation_config, "language"):
                 if generation_config.language in generation_config.lang_to_id.keys():
                     language_token = generation_config.language
@@ -1611,16 +1621,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
                 forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
 
-        # Legacy code for backward compatibility
-        elif hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
-            forced_decoder_ids = self.config.forced_decoder_ids
-        elif (
-            hasattr(self.generation_config, "forced_decoder_ids")
-            and self.generation_config.forced_decoder_ids is not None
-        ):
-            forced_decoder_ids = self.generation_config.forced_decoder_ids
-
-        if len(forced_decoder_ids) > 0:
+        if forced_decoder_ids is not None:
             generation_config.forced_decoder_ids = forced_decoder_ids
 
         if prompt_ids is not None:
@@ -1628,7 +1629,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 raise ValueError(
                     "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
                 )
-            prompt_ids = to_py_obj(prompt_ids)
+            prompt_ids = prompt_ids.tolist()
             decoder_start_token_id, *text_prompt_ids = prompt_ids
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
