@@ -1,5 +1,10 @@
 import requests
-from bs4 import BeautifulSoup
+
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 from transformers.tools.base import Tool
 
@@ -12,4 +17,6 @@ TEXT_DOWNLOAD_DESCRIPTION = (
 
 class TextDownloadTool(Tool):
     def __call__(self, url):
+        if BeautifulSoup is None:
+            raise ImportError("Please install bs4 in order to use this tool.")
         return BeautifulSoup(requests.get(url).text, features="html.parser").get_text()
