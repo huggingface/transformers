@@ -63,7 +63,7 @@ class HfDocTestParser(doctest.DocTestParser):
     """
     Overwrites the DocTestParser from doctest to properly parse the codeblocks that are formatted with black. This
     means that there are no extra lines at the end of our snippets. The `# doctest: +IGNORE_RESULT` marker is also
-    added anywhere a `load_dataset` call is made as a print would otherwise fail the corresonding line.
+    added anywhere a `load_dataset` call is made as a print would otherwise fail the corresponding line.
 
     Tests involving cuda are skipped base on a naive pattern that should be updated if it is not enough.
     """

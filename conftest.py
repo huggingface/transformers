@@ -19,8 +19,8 @@ import doctest
 import sys
 import warnings
 from os.path import abspath, dirname, join
-from transformers.utils.doctest_utils import HfDoctestModule, HfDocTestParser
 import _pytest
+from transformers.utils.doctest_utils import HfDoctestModule, HfDocTestParser
 
 # allow having multiple repository checkouts and not needing to remember to rerun
 # 'pip install -e .[dev]' when switching between checkouts and running tests.

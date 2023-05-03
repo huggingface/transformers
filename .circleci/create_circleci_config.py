@@ -51,7 +51,7 @@ class CircleCIJob:
     resource_class: Optional[str] = "xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
-    timeout :int = None
+    timeout: Optional[int] = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
@@ -423,7 +423,7 @@ doc_test_job = CircleCIJob(
         {
             "name": "Get files to test",
             "command":
-                "git remote add upstream https://github.com/huggingface/transformers.git  && git fetch upstream \n"
+                "git remote add upstream https://github.com/huggingface/transformers.git && git fetch upstream \n"
                 "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '\.(py|mdx)$' | grep -Ev '^\..*|/\.' | grep -Ev '__' > pr_documentation_tests.txt"
         },
         {
@@ -433,10 +433,9 @@ doc_test_job = CircleCIJob(
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",
-    pytest_options={"-doctest-modules":None, "doctest-glob":"*.mdx","dist":"loadfile", "rvsA":None},
+    pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
     timeout=1200, # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
-
 )
 
 REGULAR_TESTS = [
