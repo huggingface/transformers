@@ -486,10 +486,10 @@ Push the final model to the 🤗 Hub:
 ## Inference
 
 Great, now that you've fine-tuned a model, you can use it for inference!
-Load the model from the 🤗 Hub: 
+Load the model from the 🤗 Hub (make sure to use your account name in the following code snippet): 
 
 ```py
->>> model = SpeechT5ForTextToSpeech.from_pretrained("MariaK/speecht5_finetuned_voxpopuli_nl")
+>>> model = SpeechT5ForTextToSpeech.from_pretrained("YOUR_ACCOUNT/speecht5_finetuned_voxpopuli_nl")
 ```
 
 Pick an example, here we'll take one from the test dataset. Obtain a speaker embedding. 
