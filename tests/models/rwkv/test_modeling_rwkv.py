@@ -15,6 +15,7 @@
 
 
 import unittest
+from unittest.util import safe_repr
 
 from transformers import RwkvConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -188,6 +189,7 @@ class RwkvModelTester:
         )
 
     def create_and_check_rwkv_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        config.output_hidden_states = True
         model = RwkvModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -195,7 +197,7 @@ class RwkvModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.hidden_states), config.n_layer)
+        self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = RwkvForCausalLM(config)
@@ -282,18 +284,27 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             self, config_class=RwkvConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+    def assertInterval(self, member, container, msg=None):
+        r"""
+        Simple utility function to check if a member is inside an interval.
+        """
+        if isinstance(member, torch.Tensor):
+            max_value, min_value = member.max().item(), member.min().item()
+        elif isinstance(member, list) or isinstance(member, tuple):
+            max_value, min_value = max(member), min(member)
 
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+        if not isinstance(container, list):
+            raise TypeError("container should be a list or tuple")
+        elif len(container) != 2:
+            raise ValueError("container should have 2 elements")
+
+        expected_min, expected_max = container
+
+        is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
+
+        if not is_inside_interval:
+            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -309,6 +320,103 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
+
+    def test_initialization(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, param in model.named_parameters():
+                if "time_decay" in name:
+                    if param.requires_grad:
+                        self.assertTrue(param.data.max().item() == 3.0)
+                        self.assertTrue(param.data.min().item() == -5.0)
+                elif "time_first" in name:
+                    if param.requires_grad:
+                        # check if it's a ones like
+                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                elif any([x in name for x in ["time_mix_key", "time_mix_receptance"]]):
+                    if param.requires_grad:
+                        self.assertInterval(
+                            param.data,
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                elif "time_mix_value" in name:
+                    if param.requires_grad:
+                        self.assertInterval(
+                            param.data,
+                            [0.0, 1.3],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    def test_attention_outputs(self):
+        r"""
+        Overriding the test_attention_outputs test as the attention outputs of Rwkv are different from other models
+        it has a shape `batch_size, seq_len, hidden_size`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            batch_size = inputs["input_ids"].shape[0]
+            with torch.no_grad():
+                outputs = model(**inputs)
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            batch_size = inputs["input_ids"].shape[0]
+            with torch.no_grad():
+                outputs = model(**inputs)
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [batch_size, seq_len, config.hidden_size],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            batch_size = inputs["input_ids"].shape[0]
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [batch_size, seq_len, config.hidden_size],
+            )
 
     @slow
     def test_model_from_pretrained(self):

@@ -372,7 +372,7 @@ class RwkvBlock(nn.Module):
         self.attention = RwkvSelfAttention(config, layer_id)
         self.feed_forward = RwkvFeedForward(config, layer_id)
 
-    def forward(self, hidden, state=None, use_cache=False):
+    def forward(self, hidden, state=None, use_cache=False, output_attentions=False):
         if self.layer_id == 0:
             hidden = self.pre_ln(hidden)
 
@@ -381,7 +381,14 @@ class RwkvBlock(nn.Module):
 
         feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
         hidden = hidden + feed_forward
-        return hidden, state
+
+        outputs = (hidden, state)
+        if output_attentions:
+            outputs += (attention,)
+        else:
+            outputs += (None,)
+
+        return outputs
 
 
 class RwkvPreTrainedModel(PreTrainedModel):
@@ -631,18 +638,21 @@ class RwkvModel(RwkvPreTrainedModel):
         if use_cache and state is None:
             shape = (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers)
             state = [
-                torch.zeros(*shape, dtype=inputs_embeds.dtype if i <= 1 else torch.float32, device=input_ids.device)
+                torch.zeros(
+                    *shape, dtype=inputs_embeds.dtype if i <= 1 else torch.float32, device=inputs_embeds.device
+                )
                 for i in range(5)
             ]
             state[4] -= 1e30
 
         hidden_states = inputs_embeds
 
-        # TODO: add this.
-        # all_self_attentions = () if output_attentions else None
-        # all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
-            hidden_states, state = block(hidden_states, state=state, use_cache=use_cache)
+            hidden_states, state, attentions = block(
+                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
+            )
             if (
                 self.layers_are_rescaled
                 and self.config.rescale_every > 0
@@ -650,12 +660,26 @@ class RwkvModel(RwkvPreTrainedModel):
             ):
                 hidden_states = hidden_states / 2
 
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (attentions,)
+
         hidden_states = self.ln_out(hidden_states)
 
-        if not return_dict:
-            (hidden_states,)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return RwkvOutput(last_hidden_state=hidden_states, state=state, hidden_states=None, attentions=None)
+        if not return_dict:
+            return (hidden_states, state, all_hidden_states, all_self_attentions)
+
+        return RwkvOutput(
+            last_hidden_state=hidden_states,
+            state=state,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
     def _rescale_layers(self):
         # Layers should be rescaled for inference only.
