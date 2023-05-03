@@ -1489,7 +1489,7 @@ class GenerationTesterMixin:
             output_greedy = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=max_length,
+                max_new_tokens=1,
                 num_beams=1,
                 do_sample=False,
                 output_scores=True,
