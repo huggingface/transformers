@@ -2,14 +2,19 @@ import importlib
 import json
 from typing import List
 
-import torch
-from accelerate.utils import send_to_device
 from huggingface_hub import InferenceApi, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
-from ..utils import CONFIG_NAME, cached_file
+from ..utils import CONFIG_NAME, cached_file, is_accelerate_available, is_torch_available
+
+
+if is_torch_available():
+    import torch
+
+if is_accelerate_available():
+    from accelerate.utils import send_to_device
 
 
 TOOL_CONFIG_FILE = "tool_config.json"
@@ -95,6 +100,12 @@ class PipelineTool(Tool):
         token=None,
         **hub_kwargs,
     ):
+        if not is_torch_available():
+            raise ImportError("Please install torch in order to use this tool.")
+
+        if not is_accelerate_available():
+            raise ImportError("Please install accelerate in order to use this tool.")
+
         if model is None:
             if self.default_checkpoint is None:
                 raise ValueError("This tool does not implement a default checkpoint, you need to pass one.")
@@ -183,6 +194,9 @@ def launch_gradio_demo(tool_class: Tool):
 
 # TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
 def get_default_device():
+    if not is_torch_available():
+        raise ImportError("Please install torch in order to use this tool.")
+
     if torch.backends.mps.is_available() and torch.backends.mps.is_built():
         return torch.device("mps")
     elif torch.cuda.is_available():
