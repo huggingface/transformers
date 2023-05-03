@@ -167,7 +167,7 @@ class Agent:
                 return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
             else:
                 return code
-    
+
     def prepare_for_new_chat(self):
         self.chat_history = None
         self.chat_state = {}

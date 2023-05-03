@@ -295,6 +295,7 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
+        is_tool_config = resolved_config_file is not None
         if resolved_config_file is None:
             resolved_config_file = cached_file(
                 repo_id,
@@ -312,12 +313,12 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
         with open(resolved_config_file, encoding="utf-8") as reader:
             config = json.load(reader)
 
-        if "custom_tools" not in config:
-            raise EnvironmentError(
-                f"{repo_id} does not provide a mapping to custom tools in its configuration (either in "
-                "`tool_config.json` or `config.json`."
-            )
-        custom_tools = config["custom_tools"]
+        if not is_tool_config:
+            if "custom_tools" not in config:
+                raise EnvironmentError(
+                    f"{repo_id} does not provide a mapping to custom tools in its configuration `config.json`."
+                )
+            custom_tools = config["custom_tools"]
         if task is None:
             if len(custom_tools) == 1:
                 task = list(custom_tools.keys())[0]
