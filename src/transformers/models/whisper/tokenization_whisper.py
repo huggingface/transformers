@@ -733,7 +733,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     #   - special token
     #   - timestamp token
     #   - text token
-    # - We accumulate the text tokens (excluding the prompt, if it exists).
+    # - We accumulate the text tokens.
     # - We split on end timestamps
     # - Lots of complexity comes from stride and timestamps
 
@@ -863,8 +863,8 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         chunk = new_chunk()
             else:
                 # 4/ Regular token
-                # We just append to the list of all tokens not in the prompt
-                # so we can handle merges later and decode into text.
+                # We just append to the list of all tokens so we can handle
+                # merges later and decode into text.
                 current_tokens.append(token)
 
         if "stride" in output:
