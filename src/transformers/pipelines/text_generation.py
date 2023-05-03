@@ -247,6 +247,11 @@ class TextGenerationPipeline(Pipeline):
         else:
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
+        # `max_new_tokens` is set -> remove `max_length` from `generate_kwargs`, which may come from prefix handling
+        if "max_new_tokens" in generate_kwargs or (
+            "generation_config" in generate_kwargs and generate_kwargs["generation_config"].max_new_tokens is not None
+        ):
+            generate_kwargs.pop("max_length", None)
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
