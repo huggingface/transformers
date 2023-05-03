@@ -1502,7 +1502,7 @@ class GenerationTesterMixin:
             output_assisted = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=max_length,
+                max_new_tokens=1,
                 num_beams=1,
                 do_sample=False,
                 assistant_model=model,
