@@ -1103,6 +1103,13 @@ class BioGptForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class BioGptForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BioGptForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2993,6 +3000,13 @@ class FNetPreTrainedModel(metaclass=DummyObject):
 
 
 FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FocalNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class FocalNetForImageClassification(metaclass=DummyObject):
@@ -5049,6 +5063,34 @@ class OneFormerModel(metaclass=DummyObject):
 
 
 class OneFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
