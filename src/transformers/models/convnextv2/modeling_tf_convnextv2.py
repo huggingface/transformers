@@ -40,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ConvNextV2Config"
 
+
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->ConvNextV2
 class TFConvNextV2DropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -59,6 +60,7 @@ class TFConvNextV2DropPath(tf.keras.layers.Layer):
             random_tensor = tf.floor(random_tensor)
             return (x / keep_prob) * random_tensor
         return x
+
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextEmbeddings with ConvNext->ConvNextV2
 class TFConvNextV2Embeddings(tf.keras.layers.Layer):
@@ -107,16 +109,10 @@ class TFConvNextV2GRN(tf.keras.layers.Layer):
         self.dim = dim
 
     def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(name='weight',
-                                    shape=(1, 1, 1, self.dim),
-                                    initializer='zeros',
-                                    trainable=True)
-        self.bias = self.add_weight(name='bias',
-                                    shape=(1, 1, 1, self.dim),
-                                    initializer='zeros',
-                                    trainable=True)
+        self.weight = self.add_weight(name="weight", shape=(1, 1, 1, self.dim), initializer="zeros", trainable=True)
+        self.bias = self.add_weight(name="bias", shape=(1, 1, 1, self.dim), initializer="zeros", trainable=True)
         return super().build(input_shape)
-    
+
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # Compute and normalize global spatial feature maps
         global_features = tf.norm(hidden_states, ord=2, axis=(1, 2), keepdims=True)
@@ -124,7 +120,6 @@ class TFConvNextV2GRN(tf.keras.layers.Layer):
         hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
         return hidden_states
-
 
 
 class TFConvNextV2Layer(tf.keras.layers.Layer):
@@ -166,7 +161,7 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
             name="pwconv1",
         )  # pointwise/1x1 convs, implemented with linear layers
         self.act = get_tf_activation(config.hidden_act)
-        self.grn = TFConvNextV2GRN(4 * dim, name='grn')
+        self.grn = TFConvNextV2GRN(4 * dim, name="grn")
         self.pwconv2 = tf.keras.layers.Dense(
             units=dim,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -191,6 +186,7 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
         x = self.pwconv2(x)
         x = input + self.drop_path(x, training=training)
         return x
+
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextStage with ConvNeXT->ConvNeXTV2, ConvNext->ConvNextV2
 class TFConvNextV2Stage(tf.keras.layers.Layer):
@@ -248,6 +244,7 @@ class TFConvNextV2Stage(tf.keras.layers.Layer):
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
+
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextEncoder with ConvNext->ConvNextV2
 class TFConvNextV2Encoder(tf.keras.layers.Layer):
@@ -349,6 +346,7 @@ class TFConvNextV2MainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
+
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class TFConvNextV2PreTrainedModel(TFPreTrainedModel):

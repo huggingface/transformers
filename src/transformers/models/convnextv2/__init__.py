@@ -85,7 +85,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_convnextv2 import TFConvNextV2ForImageClassification, TFConvNextV2Model, TFConvNextV2PreTrainedModel
+        from .modeling_tf_convnextv2 import (
+            TFConvNextV2ForImageClassification,
+            TFConvNextV2Model,
+            TFConvNextV2PreTrainedModel,
+        )
 
 
 else:
