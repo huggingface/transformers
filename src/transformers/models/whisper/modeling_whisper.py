@@ -36,7 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
-from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE
 
 
 logger = logging.get_logger(__name__)
@@ -1573,9 +1573,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     language_token = generation_config.language
                 elif generation_config.language in TO_LANGUAGE_CODE.keys():
                     language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
+                elif generation_config.language in LANGUAGES.keys():
+                    language_token = f"<|{generation_config.language}|>"
                 else:
                     raise ValueError(
-                        f"Unsupported language: {self.language}. Language should be one of:"
+                        f"Unsupported language: {generation_config.language!r}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.keys()) if generation_config.language in TO_LANGUAGE_CODE.keys() else list(TO_LANGUAGE_CODE.values())}."
                     )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
