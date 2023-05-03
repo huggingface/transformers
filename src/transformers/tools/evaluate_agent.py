@@ -1,6 +1,6 @@
 import random
 
-from .agents import BASE_PYTHON_TOOLS, OUR_TOOLS
+from .agents import BASE_PYTHON_TOOLS, OUR_TOOLS, clean_code_for_run
 from .python_interpreter import evaluate
 
 
@@ -390,7 +390,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
             problem = EVALUATION_TASKS[eval_idx[start_idx + idx]]
             if verbose:
                 print(f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n")
-            explanation, code = agent.clean_code(result)
+            explanation, code = clean_code_for_run(result)
 
             tools_in_explanation = {name for name in OUR_TOOLS if f"`{name}`" in explanation}
             minimum_tools = {name for name, tool in ALL_TOOLS.items() if tool in problem.minimum_tools}

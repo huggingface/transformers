@@ -142,7 +142,7 @@ class Agent:
     def format_prompt(self, task):
         if getattr(self, "default_tools", None) is None:
             self.default_tools = get_all_tools_descriptions()
-        prompt = self.prompt_template.replace("<<all_tools>>", self.default_tools)
+        prompt = self.run_prompt_template.replace("<<all_tools>>", self.default_tools)
         return prompt.replace("<<prompt>>", task)
 
     def chat(self, task, return_code=False, remote=False, **kwargs):
