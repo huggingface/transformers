@@ -7,6 +7,7 @@ import requests
 from huggingface_hub import HfFolder
 
 from .base import TASK_MAPPING, supports_remote, tool
+from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
 from .python_interpreter import evaluate
 
 
@@ -17,85 +18,6 @@ def is_openai_available():
 
 if is_openai_available():
     import openai
-
-
-# docstyle-ignore
-PROMPT_TEMPLATE = """I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
-To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
-You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
-Each instruction in Python should be a simple assignement. You can print intermediate results if it makes sense to do so.
-The final result should be stored in a variable named `result`. You can also print the result if it makes sense to do so.
-
-Tools:
-<<all_tools>>
-
-
-Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
-
-I will use the following tools: `translator` to translate the question in English and then `image_qa` to answer the question on the input image.
-
-Answer:
-```py
-translated_question = translator(question=question, src_lang="French", tgt_lang="English")
-print(f"The translated question is {translated_question}.")
-result = image_qa(image=image, question=translated_question)
-print(f"The answer is {result}")
-```
-
-Task: "Identify the oldest person in the `table` and create an image showcasing the result as a banner."
-
-I wil use the following tools: `table_qa` to find the oldest person in the table, then `image_generator` to generate an image according to the answer.
-
-Answer:
-```py
-answer = table_qa(table=table, question="What is the oldest person?")
-print(f"The answer is {answer}.")
-result = image_generator("A banner showing " + answer)
-```
-
-Task: "Generate an image using the text given in the variable `caption`."
-
-I will use the following tool: `image_generator` to generate an image.
-
-Answer:
-```py
-result = image_generator(text=caption)
-```
-
-Task: "Summarize the text given in the variable `text` and read it out loud."
-
-I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
-
-Answer:
-```py
-summarized_text = summarizer(text)
-print(f"Summary: {summarized text}")
-result = text_reader(summarized_text)
-```
-
-Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
-
-I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
-
-Answer:
-```py
-answer = text_qa(text=text, question=question)
-print(f"The answer is {answer}.")
-result = image_generator(answer)
-```
-
-Task: "Caption the following `image`."
-
-I will use the following tool: `image_captioner` to generate a caption for the image.
-
-Answer:
-```py
-text = image_captioner(image)
-```
-
-Task: "<<prompt>>"
-
-I will use the following"""
 
 
 BASE_PYTHON_TOOLS = {
@@ -171,8 +93,47 @@ def resolve_tools(code, remote=False):
     return resolved_tools
 
 
+def clean_code_for_chat(result):
+    lines = result.split("\n")
+    idx = 0
+    while idx < len(lines) and not lines[idx].lstrip().startswith("```"):
+        idx += 1
+    explanation = "\n".join(lines[:idx]).strip()
+    if idx == len(lines):
+        return explanation, None
+
+    idx += 1
+    start_idx = idx
+    while not lines[idx].lstrip().startswith("```"):
+        idx += 1
+    code = "\n".join(lines[start_idx:idx]).strip()
+
+    return explanation, code
+
+
+def clean_code_for_run(result):
+    result = f"I will use the following {result}"
+    explanation, code = result.split("Answer:")
+    explanation = explanation.strip()
+    code = code.strip()
+
+    code_lines = code.split("\n")
+    if code_lines[0] in ["```", "```py"]:
+        code_lines = code_lines[1:]
+    if code_lines[-1] == "```":
+        code_lines = code_lines[:-1]
+    code = "\n".join(code_lines)
+
+    return explanation, code
+
+
 class Agent:
-    prompt_template = PROMPT_TEMPLATE
+    chat_prompt_template = CHAT_PROMPT_TEMPLATE
+    run_prompt_template = RUN_PROMPT_TEMPLATE
+
+    def __init__(self):
+        self.chat_history = None
+        self.chat_state = {}
 
     def format_prompt(self, task):
         if getattr(self, "default_tools", None) is None:
@@ -180,37 +141,43 @@ class Agent:
         prompt = self.prompt_template.replace("<<all_tools>>", self.default_tools)
         return prompt.replace("<<prompt>>", task)
 
-    def clean_code(self, code):
-        code = f"I will use the following {code}"
-        explanation, code = code.split("Answer:")
-        explanation = explanation.strip()
-        code = code.strip()
+    def chat(self, task, return_code=False, remote=False, **kwargs):
+        if self.chat_history is None:
+            prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", get_all_tools_descriptions())
+        else:
+            prompt = self.chat_history
+        prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
 
-        code_lines = code.split("\n")
-        if code_lines[0] in ["```", "```py"]:
-            code_lines = code_lines[1:]
-        if code_lines[-1] == "```":
-            code_lines = code_lines[:-1]
-        code = "\n".join(code_lines)
-
-        return explanation, code
-
-    def run(self, task, return_code=False, remote=False, **kwargs):
-        code = self.generate_code(task)
-        explanation, clean_code = self.clean_code(code)
-
-        all_tools = BASE_PYTHON_TOOLS.copy()
-        all_tools.update(OUR_TOOLS.copy())
+        result = self._generate_one(prompt, stop=["Human:", "====="])
+        self.chat_history = prompt + result + "\n"
+        explanation, code = clean_code_for_chat(result)
 
         print(f"==Explanation from the agent==\n{explanation}")
 
-        print(f"\n\n==Code generated by the agent==\n{clean_code}")
+        if code is not None:
+            print(f"\n\n==Code generated by the agent==\n{code}")
+            if not return_code:
+                print("\n\n==Result==")
+                resolved_tools = resolve_tools(code, remote=remote)
+                self.chat_state.update(kwargs)
+                return evaluate(code, resolved_tools, self.chat_state)
+            else:
+                return code
+
+    def run(self, task, return_code=False, remote=False, **kwargs):
+        prompt = self.format_prompt(task)
+        result = self._generate_one(prompt, stop=["Task:"])
+        explanation, code = clean_code_for_run(result)
+
+        print(f"==Explanation from the agent==\n{explanation}")
+
+        print(f"\n\n==Code generated by the agent==\n{code}")
         if not return_code:
             print("\n\n==Result==")
-            resolved_tools = resolve_tools(clean_code, remote=remote)
-            return evaluate(clean_code, resolved_tools, kwargs)
+            resolved_tools = resolve_tools(code, remote=remote)
+            return evaluate(code, resolved_tools, kwargs)
         else:
-            return clean_code
+            return code
 
 
 class OpenAiAgent(Agent):
@@ -240,6 +207,7 @@ class OpenAiAgent(Agent):
         else:
             openai.api_key = api_key
         self.model = model
+        super().__init__()
 
     def generate_code(self, task):
         is_batched = isinstance(task, list)
@@ -250,27 +218,33 @@ class OpenAiAgent(Agent):
             prompts = [self.format_prompt(task)]
 
         if "gpt" in self.model:
-            results = [self._chat_generate(prompt) for prompt in prompts]
+            results = [self._chat_generate(prompt, stop="Task:") for prompt in prompts]
         else:
-            results = self._completion_generate(prompts)
+            results = self._completion_generate(prompts, stop="Task:")
 
         return results if is_batched else results[0]
 
-    def _chat_generate(self, prompt):
+    def _generate_one(self, prompt, stop):
+        if "gpt" in self.model:
+            return self._chat_generate(prompt, stop)
+        else:
+            return self._completion_generate([prompt, stop])[0]
+
+    def _chat_generate(self, prompt, stop):
         result = openai.ChatCompletion.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            stop="Task:",
+            stop=stop,
         )
         return result["choices"][0]["message"]["content"]
 
-    def _completion_generate(self, prompts):
+    def _completion_generate(self, prompts, stop):
         result = openai.Completion.create(
             model=self.model,
             prompt=prompts,
             temperature=0,
-            stop="Task:",
+            stop=stop,
             max_tokens=200,
         )
         return [answer["text"] for answer in result["choices"]]
@@ -285,6 +259,7 @@ class EndpointAgent(Agent):
             self.token = token
         else:
             self.token = f"Bearer {token}"
+        super().__init__()
 
     def generate_code(self, task):
         is_batched = isinstance(task, list)
@@ -298,11 +273,11 @@ class EndpointAgent(Agent):
         results = [self._generate_one(prompt) for prompt in prompts]
         return results if is_batched else results[0]
 
-    def _generate_one(self, prompt):
+    def _generate_one(self, prompt, stop):
         headers = {"Authorization": self.token}
         inputs = {
             "inputs": prompt,
-            "parameters": {"max_new_tokens": 200, "return_full_text": False, "stop": ["Task:"]},
+            "parameters": {"max_new_tokens": 200, "return_full_text": False, "stop": stop},
         }
 
         response = requests.post(self.url_endpoint, json=inputs, headers=headers)
@@ -315,6 +290,7 @@ class EndpointAgent(Agent):
 
         result = response.json()[0]["generated_text"]
         # Inference API returns the stop sequence
-        if result.endswith("Task:"):
-            result = result[:-5]
+        for stop_seq in stop:
+            if result.endswith(stop_seq):
+                result = result[: -len(stop_seq)]
         return result
