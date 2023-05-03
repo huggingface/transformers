@@ -4,7 +4,8 @@ from typing import List
 
 import torch
 from accelerate.utils import send_to_device
-from huggingface_hub import InferenceApi
+from huggingface_hub import InferenceApi, hf_hub_download
+from huggingface_hub.utils import RepositoryNotFoundError
 
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
@@ -216,9 +217,36 @@ def supports_remote(task_name):
     return hasattr(tools_module, f"Remote{tool_class}")
 
 
-def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs):
+def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
+    if repo_type is not None:
+        return repo_type
+    try:
+        hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space", **hub_kwargs)
+        return "space"
+    except RepositoryNotFoundError:
+        try:
+            hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
+            return "model"
+        except RepositoryNotFoundError:
+            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
+        except Exception:
+            return "model"
+    except Exception:
+        return "space"
+
+
+def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=None, **tool_kwargs):
     # Make sure to keep this list updated with the doc of tool_kwargs (when it exists lol)
-    hub_kwargs_names = ["cache_dir", "force_download", "resume_download", "proxies", "revision", "local_files_only"]
+    hub_kwargs_names = [
+        "cache_dir",
+        "force_download",
+        "resume_download",
+        "proxies",
+        "revision",
+        "repo_type",
+        "subfolder",
+        "local_files_only",
+    ]
     hub_kwargs = {k: v for k, v in tool_kwargs if k in hub_kwargs_names}
 
     if task_or_repo_id in TASK_MAPPING:
@@ -241,6 +269,7 @@ def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs)
             task = task_or_repo_id
 
         # Try to get the tool config first.
+        hub_kwargs["repo_type"] = get_repo_type(repo_id, **hub_kwargs)
         resolved_config_file = cached_file(
             repo_id,
             TOOL_CONFIG_FILE,
@@ -280,6 +309,10 @@ def tool(task_or_repo_id, repo_id=None, remote=False, token=None, **tool_kwargs)
                 raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
 
         tool_class = get_class_from_dynamic_module(custom_tools[task], repo_id, use_auth_token=token, **hub_kwargs)
+        if model_repo_id is not None:
+            repo_id = model_repo_id
+        elif hub_kwargs["repo_type"] == "space":
+            repo_id = None
 
     return tool_class(repo_id, token=token, **tool_kwargs)
 

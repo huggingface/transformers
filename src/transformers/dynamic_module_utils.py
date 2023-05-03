@@ -169,6 +169,7 @@ def get_cached_module_file(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    repo_type: Optional[str] = None,
     _commit_hash: Optional[str] = None,
 ):
     """
@@ -207,6 +208,8 @@ def get_cached_module_file(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
 
     <Tip>
 
@@ -245,6 +248,7 @@ def get_cached_module_file(
             local_files_only=local_files_only,
             use_auth_token=use_auth_token,
             revision=revision,
+            repo_type=repo_type,
             _commit_hash=_commit_hash,
         )
         if not is_local and cached_module != resolved_module_file:
@@ -328,6 +332,7 @@ def get_class_from_dynamic_module(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    repo_type: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -377,6 +382,8 @@ def get_class_from_dynamic_module(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
 
     <Tip>
 
@@ -418,6 +425,7 @@ def get_class_from_dynamic_module(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        repo_type=repo_type,
     )
     return get_class_in_module(class_name, final_module.replace(".py", ""))
 
