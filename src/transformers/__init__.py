@@ -1623,6 +1623,7 @@ else:
     _import_structure["models.focalnet"].extend(
         [
             "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FocalNetBackbone",
             "FocalNetForImageClassification",
             "FocalNetForMaskedImageModeling",
             "FocalNetModel",
@@ -1666,6 +1667,7 @@ else:
         [
             "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPT2DoubleHeadsModel",
+            "GPT2ForQuestionAnswering",
             "GPT2ForSequenceClassification",
             "GPT2ForTokenClassification",
             "GPT2LMHeadModel",
@@ -5177,6 +5179,7 @@ if TYPE_CHECKING:
         )
         from .models.focalnet import (
             FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
             FocalNetModel,
@@ -5212,6 +5215,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
             GPT2ForSequenceClassification,
             GPT2ForTokenClassification,
             GPT2LMHeadModel,
