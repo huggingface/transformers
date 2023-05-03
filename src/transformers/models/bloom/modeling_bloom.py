@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -35,7 +35,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
-from permutation_invariant_attention import build_alibi_tensor
+from desequence_graph_ids import extract_edge_sequence, SequenceElement
+from permutation_invariant_positions import build_alibi_tensor
+from causal_message_passing import build_message_passing_matrices, perform_causal_message_passing
 
 
 logger = logging.get_logger(__name__)
@@ -577,6 +579,9 @@ class BloomModel(BloomPreTrainedModel):
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.n_head
+        self.graph_tokens = {}
+        self.position_type = "normal"
+        self.message_passing_type = "none"
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -593,8 +598,23 @@ class BloomModel(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def build_alibi_tensor(self, attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
-        return build_alibi_tensor(attention_mask, num_heads, dtype, self.graph_tokens, self.position_encoding_type)
+    def build_alibi_tensor(
+        self,
+        token_ids: torch.Tensor,
+        edge_sequences: List[List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]],
+        attention_mask: torch.Tensor,
+        num_heads: int,
+        dtype: torch.dtype
+    ) -> torch.Tensor:
+        return build_alibi_tensor(
+            token_ids=token_ids,
+            edge_sequences=edge_sequences,
+            attention_mask=attention_mask,
+            num_heads=num_heads,
+            dtype=dtype,
+            graph_tokens=self.graph_tokens,
+            position_type=self.position_type
+        )
 
     def get_input_embeddings(self):
         return self.word_embeddings
@@ -706,7 +726,19 @@ class BloomModel(BloomPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+        token_ids: torch.Tensor = full_input_ids if full_input_ids is not None else input_ids
+        edge_sequences = [
+            extract_edge_sequence(t_ids.tolist(), self.graph_tokens) for t_ids in token_ids
+        ]
+        alibi = self.build_alibi_tensor(
+            token_ids=token_ids,
+            edge_sequences=edge_sequences,
+            attention_mask=attention_mask,
+            num_heads=self.num_heads,
+            dtype=hidden_states.dtype
+        )
+        if self.message_passing_type != 'none':
+            message_passing_dicts = build_message_passing_matrices(token_ids, edge_sequences)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
@@ -747,6 +779,9 @@ class BloomModel(BloomPreTrainedModel):
                 )
 
             hidden_states = outputs[0]
+            if i != len(self.h) - 1 and self.message_passing_type != 'none':
+                hidden_states = perform_causal_message_passing(hidden_states, message_passing_dicts)
+
             if use_cache is True:
                 presents = presents + (outputs[1],)
 
