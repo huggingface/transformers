@@ -1,9 +1,9 @@
 from .agents import Agent, EndpointAgent, OpenAiAgent
 from .base import PipelineTool, RemoteTool, tool
-from .document_qa import DocumentQuestionAnsweringTool
+from .document_question_answering import DocumentQuestionAnsweringTool
 from .generative_question_answering import GenerativeQuestionAnsweringTool, RemoteGenerativeQuestionAnsweringTool
 from .image_captioning import ImageCaptioningTool, RemoteImageCaptioningTool
-from .image_qa import ImageQuestionAnsweringTool
+from .image_question_answering import ImageQuestionAnsweringTool
 from .image_segmentation import ImageSegmentationTool
 from .image_transformation import ImageTransformationTool
 from .language_identifier import LanguageIdentificationTool
