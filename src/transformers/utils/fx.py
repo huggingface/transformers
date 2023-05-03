@@ -1219,7 +1219,7 @@ def symbolic_trace(
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
-        tracer_cls (Type[HFTracer], *optional*, defaults to `HFTracer`):
+        tracer_cls (`Type[HFTracer]`, *optional*, defaults to `HFTracer`):
             The tracer class to use for instantiating the tracer. If unset, `HFTracer` is used instead.
 
     Returns:
