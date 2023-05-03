@@ -229,18 +229,13 @@ class FocalNetModelTester:
 class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            FocalNetBackbone,
             FocalNetModel,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
+            FocalNetBackbone,
         )
         if is_torch_available()
         else ()
-    )
-    pipeline_model_mapping = (
-        {"feature-extraction": FocalNetModel, "image-classification": FocalNetForImageClassification}
-        if is_torch_available()
-        else {}
     )
     fx_compatible = False
 
@@ -360,7 +355,7 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
             else (self.model_tester.image_size, self.model_tester.image_size)
         )
 
-        for model_class in self.all_model_classes[1:]:
+        for model_class in self.all_model_classes[:-1]:
             inputs_dict["output_hidden_states"] = True
             self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
@@ -388,7 +383,7 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
         padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
         padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
 
-        for model_class in self.all_model_classes[1:]:
+        for model_class in self.all_model_classes[:-1]:
             inputs_dict["output_hidden_states"] = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
