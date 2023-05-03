@@ -167,6 +167,11 @@ class Agent:
                 return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
             else:
                 return code
+    
+    def prepare_for_new_chat(self):
+        self.chat_history = None
+        self.chat_state = {}
+        self.cached_tools = None
 
     def run(self, task, return_code=False, remote=False, **kwargs):
         prompt = self.format_prompt(task)
