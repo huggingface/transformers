@@ -99,6 +99,10 @@ def rename_key(name):
     if "stages" in name and "downsampling_layer" not in name:
         # stages.0.0. for instance should be renamed to stages.0.layers.0.
         name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
+    if "gamma" in name:
+        name = name.replace("gamma", "weight")
+    if "beta" in name:
+        name = name.replace("beta", "bias")
     if "stages" in name:
         name = name.replace("stages", "encoder.stages")
     if "norm" in name:
@@ -152,14 +156,16 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
+
     # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnextv2." + key
         state_dict[key] = val
-
+    
     # load HuggingFace model
+    print()
     model = ConvNextV2ForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
