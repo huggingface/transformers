@@ -1260,6 +1260,8 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable PP
+            labels = labels.to(logits.device)
             raise NotImplementedError("Training is not yet supported.")
 
         if not return_dict:
