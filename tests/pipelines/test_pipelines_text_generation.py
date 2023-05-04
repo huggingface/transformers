@@ -334,7 +334,10 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_length_setting_warning(self):
         prompt = """Hello world"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
-        logger = logging.get_logger("transformers.generation.utils")
+        if text_generator.model.framework == "tf":
+            logger = logging.get_logger("transformers.generation.tf_utils")
+        else:
+            logger = logging.get_logger("transformers.generation.utils")
         logger_msg = "Both `max_new_tokens`"  # The beggining of the message to be checked in this test
 
         # Both are set by the user -> log warning
