@@ -459,9 +459,6 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             model = TFData2VecVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True, tol=5e-4):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True, tol=tol)
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
