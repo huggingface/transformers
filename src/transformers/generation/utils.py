@@ -1291,7 +1291,6 @@ class GenerationMixin:
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = inputs_tensor.shape[0]
-        using_inputs_embeds = len(inputs_tensor.shape) > 2
 
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
@@ -1312,7 +1311,8 @@ class GenerationMixin:
                 generation_config.pad_token_id is not None and (
                 # if `input_ids` was given, check if the last id in any sequence is `pad_token_id`
                 torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
-                if not using_inputs_embeds else
+                # If shape of `inputs_tensor` is (Batch, Sequence) then `input_ids` was given, else `inputs_embeds` was given
+                if len(inputs_tensor.shape) == 2 else
                 # if `inputs_embeds` was given, check if the last embed in any sequence is *all* zeros
                 torch.any(torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id, dim=1) == inputs_tensor.shape[2])
             )):
