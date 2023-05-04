@@ -429,14 +429,25 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 class RWKVIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.model_id = "ybelkada/rwkv-4-169m-pile"
-        self.model = RwkvForCausalLM.from_pretrained(self.model_id).to(torch_device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     def test_simple_generate(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
+        model = RwkvForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        output = self.model.generate(input_ids, max_new_tokens=10)
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+    def test_simple_generate_bf16(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = RwkvForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+
+        output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
