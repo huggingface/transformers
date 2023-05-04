@@ -331,6 +331,10 @@ The labels should be a log-mel spectrogram with 80 mel bins.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/tts_logmelspectrogram_1.png" alt="Log-mel spectrogram with 80 mel bins"/>
 </div>
 
+Side note: If you find this spectrogram confusing, it may be due to your familiarity with the convention of placing low frequencies 
+at the bottom and high frequencies at the top of a plot. However, when creating spectrograms using the matplotlib library, 
+the y-axis is flipped and the spectrograms appear upside down.
+
 Now apply the processing function to the entire dataset. This will take between 5 and 10 minutes.
 
 ```py
