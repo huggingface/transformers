@@ -1511,7 +1511,7 @@ class TrainingArguments:
             os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         # create accelerator object
-        self.accelerator = Accelerator()
+        self.accelerator = Accelerator() if self.framework == "pt" else None
 
     def __str__(self):
         self_as_dict = asdict(self)
