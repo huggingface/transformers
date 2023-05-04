@@ -44,7 +44,7 @@ OUR_TOOLS = {
     "translator": "translation",
     "summarizer": "summarizer",
     "image_qa": "image-question-answering",
-    "image_segmenter": "image-segmenter",
+    "image_segmenter": "image-segmentation",
     "document_qa": "document-question-answering",
     "video_generator": None,
     "table_qa": None,
