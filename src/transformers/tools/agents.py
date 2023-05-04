@@ -169,7 +169,6 @@ class Agent:
 
     def chat(self, task, return_code=False, remote=False, **kwargs):
         prompt = self.format_prompt(task, chat_mode=True)
-
         result = self._generate_one(prompt, stop=["Human:", "====="])
         self.chat_history = prompt + result + "\n"
         explanation, code = clean_code_for_chat(result)
