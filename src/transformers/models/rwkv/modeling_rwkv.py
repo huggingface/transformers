@@ -399,7 +399,6 @@ class RwkvPreTrainedModel(PreTrainedModel):
 
     config_class = RwkvConfig
     base_model_prefix = "rwkv"
-    # supports_gradient_checkpointing = True
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
 

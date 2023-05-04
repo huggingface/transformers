@@ -142,6 +142,9 @@ def convert_rmkv_checkpoint_to_hf_format(
             state_dict = torch.load(os.path.join(output_dir, shard_file))
             torch.save({k: v.cpu().clone() for k, v in state_dict.items()}, shard_file)
 
+    del state_dict
+    gc.collect()
+
     if push_to_hub:
         if model_name is None:
             raise ValueError("Please provide a `model_name` to push the model to the Hub.")
