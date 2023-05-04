@@ -1485,7 +1485,7 @@ class TFSamModel(TFSamPreTrainedModel):
         return TFSamImageSegmentationOutput(
             iou_scores=output.iou_scores,
             pred_masks=output.pred_masks,
-            vision_hidden_states=hs,
-            vision_attentions=attns,
-            mask_decoder_attentions=output.mask_decoder_attentions,
+            vision_hidden_states=hs if self.config.output_hidden_states else None,
+            vision_attentions=attns if self.config.output_attentions else None,
+            mask_decoder_attentions=output.mask_decoder_attentions if self.config.output_attentions else None,
         )
