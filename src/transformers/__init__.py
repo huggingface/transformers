@@ -3779,7 +3779,6 @@ else:
             "FlaxWhisperForConditionalGeneration",
             "FlaxWhisperModel",
             "FlaxWhisperPreTrainedModel",
-            "FlaxWhisperForAudioClassification",
         ]
     )
     _import_structure["models.xglm"].extend(
@@ -6904,12 +6903,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
-        from .models.whisper import (
-            FlaxWhisperForAudioClassification,
-            FlaxWhisperForConditionalGeneration,
-            FlaxWhisperModel,
-            FlaxWhisperPreTrainedModel,
-        )
+        from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
