@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
 from .configuration_bit import BitConfig
 
 
@@ -848,12 +849,10 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
         self.bit = BitModel(config)
 
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         self.num_features = [config.embedding_size] + config.hidden_sizes
-        if config.out_indices is not None:
-            self.out_indices = config.out_indices
-        else:
-            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            config.out_features, config.out_indices, self.stage_names
+        )
 
         # initialize weights and apply final processing
         self.post_init()
