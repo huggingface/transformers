@@ -36,6 +36,7 @@ else:
     _import_structure["modeling_gpt_neox"] = [
         "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXForCausalLM",
+        "GPTNeoXForQuestionAnswering",
         "GPTNeoXForSequenceClassification",
         "GPTNeoXForTokenClassification",
         "GPTNeoXLayer",
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
         from .modeling_gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
+            GPTNeoXForQuestionAnswering,
             GPTNeoXForSequenceClassification,
             GPTNeoXForTokenClassification,
             GPTNeoXLayer,

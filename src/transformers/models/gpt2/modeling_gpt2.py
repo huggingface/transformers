@@ -52,7 +52,6 @@ from .configuration_gpt2 import GPT2Config
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
-_REAL_CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1619,7 +1618,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
