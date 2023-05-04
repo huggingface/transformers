@@ -1246,18 +1246,15 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        # past_key_values_length
-        past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
-        attention_mask = None
-
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         hidden_states = self.value_embedding(inputs_embeds)
-        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        embed_pos = self.embed_positions(
+            inputs_embeds.size(), past_key_values_length=self.config.context_length - self.config.label_length
+        )
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -1596,25 +1593,37 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # Decoder inputs
-        seasonal_input, trend_input = self.decomposition_layer(transformer_inputs)
+        if future_values is not None:
+            # Decoder inputs
+            # seasonality and trend from context length
+            seasonal_input, trend_input = self.decomposition_layer(
+                transformer_inputs[:, : self.config.context_length, ...]
+            )
+            mean = (
+                torch.mean(transformer_inputs[:, : self.config.context_length, ...], dim=1)
+                .unsqueeze(1)
+                .repeat(1, self.config.prediction_length, 1)
+            )
+            zeros = torch.zeros(
+                [transformer_inputs.shape[0], self.config.prediction_length, transformer_inputs.shape[2]],
+                device=enc_input.device,
+            )
 
-        dec_input = torch.cat(
-            (
-                seasonal_input[:, self.config.context_length :, ...],
-                temporal_features[:, self.config.context_length :, ...],
-            ),
-            dim=-1,
-        )
-        trend_init = torch.cat(
-            (
-                trend_input[:, self.config.context_length :, ...],
-                temporal_features[:, self.config.context_length :, ...],
-            ),
-            dim=-1,
-        )
+            dec_input = torch.cat(
+                (
+                    torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
+                    temporal_features[:, self.config.context_length - self.config.label_length :, ...],
+                ),
+                dim=-1,
+            )
+            trend_init = torch.cat(
+                (
+                    torch.cat((trend_input[:, -self.config.label_length :, ...], mean), dim=1),
+                    temporal_features[:, self.config.context_length - self.config.label_length :, ...],
+                ),
+                dim=-1,
+            )
 
-        if dec_input.size(1) > 0:
             decoder_outputs = self.decoder(
                 trend=trend_init,
                 inputs_embeds=dec_input,
@@ -1678,7 +1687,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         self.post_init()
 
     def output_params(self, dec_output):
-        return self.parameter_projection(dec_output)
+        return self.parameter_projection(dec_output[:, -self.config.prediction_length :, :])
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1930,7 +1939,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             past_time_features=past_time_features,
             past_values=past_values,
             past_observed_mask=past_observed_mask,
-            future_time_features=future_time_features,
+            future_time_features=None,
             future_values=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1952,45 +1961,48 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) - repeated_loc
         ) / repeated_scale
 
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
-        features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
+        time_features = torch.cat((past_time_features, future_time_features), dim=1)
+
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_features.shape[1], -1)
+        features = torch.cat((expanded_static_feat, time_features), dim=-1)
         repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-        future_samples = []
+        past_values_shape = repeated_past_values.shape
+        repeated_past_values = repeated_past_values.reshape(past_values_shape[0], past_values_shape[1], -1)
+        seasonal_input, trend_input = self.model.decomposition_layer(repeated_past_values)
 
-        # greedy decoding
-        for k in range(self.config.prediction_length):
-            lagged_sequence = self.model.get_lagged_subsequences(
-                sequence=repeated_past_values,
-                subsequences_length=k + self.config.context_length,
-                shift=1,
-            )
-            lags_shape = lagged_sequence.shape
-            reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
-            seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
+        mean = torch.mean(repeated_past_values, dim=1).unsqueeze(1).repeat(1, self.config.prediction_length, 1)
+        zeros = torch.zeros(
+            [repeated_past_values.shape[0], self.config.prediction_length, repeated_past_values.shape[2]],
+            device=repeated_past_values.device,
+        )
 
-            dec_input = torch.cat((seasonal_input[:, -(k + 1) :, ...], repeated_features[:, : k + 1, ...]), dim=-1)
-            trend_init = torch.cat((trend_input[:, -(k + 1) :, ...], repeated_features[:, : k + 1, ...]), dim=-1)
-            dec_output = decoder(
-                trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
-            )
-            dec_last_hidden = dec_output.last_hidden_state
-
-            params = self.output_params(dec_last_hidden[0][:, -1:] + dec_last_hidden[1][:, -1:])
-            distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
-            next_sample = distr.sample()
-            future_samples.append(next_sample)
-
-            repeated_past_values = torch.cat(
-                (repeated_past_values, (next_sample - repeated_loc) / repeated_scale), dim=1
-            )
-
-        concat_future_samples = torch.cat(future_samples, dim=1)
+        dec_input = torch.cat(
+            (
+                torch.cat((seasonal_input[:, -self.config.label_length :, ...], zeros), dim=1),
+                repeated_features[:, -self.config.prediction_length - self.config.label_length :, ...],
+            ),
+            dim=-1,
+        )
+        trend_init = torch.cat(
+            (
+                torch.cat((trend_input[:, -self.config.label_length :, ...], mean), dim=1),
+                repeated_features[:, -self.config.prediction_length - self.config.label_length :, ...],
+            ),
+            dim=-1,
+        )
+        decoder_outputs = decoder(
+            trend=trend_init, inputs_embeds=dec_input, encoder_hidden_states=repeated_enc_last_hidden
+        )
+        dec_last_hidden = decoder_outputs.last_hidden_state
+        params = self.output_params(dec_last_hidden[0] + dec_last_hidden[1])
+        distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
+        future_samples = distr.sample()
 
         return SampleTSPredictionOutput(
-            sequences=concat_future_samples.reshape(
+            sequences=future_samples.reshape(
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )

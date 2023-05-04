@@ -162,6 +162,7 @@ class AutoformerConfig(PretrainedConfig):
         init_std: float = 0.02,
         use_cache=True,
         # Autoformer arguments
+        label_length: Optional[int] = None,
         moving_avg: int = 25,
         factor: int = 3,  # between 1 and 3
         **kwargs,
@@ -169,6 +170,7 @@ class AutoformerConfig(PretrainedConfig):
         # time series specific configuration
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
+        self.label_length = label_length or 10
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
