@@ -1543,7 +1543,7 @@ class TrainingArguments:
             os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
             # unset `self.fp16` and `self.bf16` as accelerate will handle it
-            self.fp16 = self.bf16 = False
+            # self.fp16 = self.bf16 = False
 
         # create accelerator object
         self.accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
