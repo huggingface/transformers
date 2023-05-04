@@ -22,21 +22,21 @@ from pathlib import Path
 import datasets
 import numpy as np
 import torch
+from accelerate import Accelerator, DistributedType
+from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import Repository
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator, DistributedType
-from accelerate.utils import set_seed
-from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForMaskedImageModeling,
     SchedulerType,
     get_scheduler,
@@ -297,7 +297,7 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    data_files = dict()
+    data_files = {}
     if args.train_dir is not None:
         data_files["train"] = args.train_dir
     if args.validation_dir is not None:
