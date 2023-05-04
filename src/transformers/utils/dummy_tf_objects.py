@@ -785,7 +785,7 @@ class TFConvNextV2ForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFConvNextV2model(metaclass=DummyObject):
+class TFConvNextV2Model(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
