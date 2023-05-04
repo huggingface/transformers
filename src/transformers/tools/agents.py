@@ -153,18 +153,22 @@ class Agent:
             get_remote_tools()
             _tools_are_initialized = True
 
-    def format_prompt(self, task):
+    def format_prompt(self, task, chat_mode=False):
         if getattr(self, "default_tools", None) is None:
             self.default_tools = get_all_tools_descriptions()
-        prompt = self.run_prompt_template.replace("<<all_tools>>", self.default_tools)
-        return prompt.replace("<<prompt>>", task)
+        if chat_mode:
+            if self.chat_history is None:
+                prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", self.default_tools)
+            else:
+                prompt = self.chat_history
+            prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
+        else:
+            prompt = self.run_prompt_template.replace("<<all_tools>>", self.default_tools)
+            prompt = prompt.replace("<<prompt>>", task)
+        return prompt
 
     def chat(self, task, return_code=False, remote=False, **kwargs):
-        if self.chat_history is None:
-            prompt = CHAT_PROMPT_TEMPLATE.replace("<<all_tools>>", get_all_tools_descriptions())
-        else:
-            prompt = self.chat_history
-        prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
+        prompt = self.format_prompt(task, chat_mode=True)
 
         result = self._generate_one(prompt, stop=["Human:", "====="])
         self.chat_history = prompt + result + "\n"
