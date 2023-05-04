@@ -1425,12 +1425,12 @@ class TFSamModel(TFSamPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
             )
-            image_embeddings = vision_outputs['last_hidden_state']
+            image_embeddings = vision_outputs["last_hidden_state"]
 
             if output_hidden_states:
-                vision_hidden_states = vision_outputs['hidden_states']
+                vision_hidden_states = vision_outputs["hidden_states"]
             if output_attentions:
-                vision_attentions = vision_outputs['attentions']
+                vision_attentions = vision_outputs["attentions"]
 
         if input_points is not None and input_labels is None:
             input_labels = tf.ones_like(input_points[:, :, :, 0], dtype=tf.int32)
