@@ -74,24 +74,6 @@
     title: (번역중) 멀티모달
     isExpanded: false
   title: 태스크 가이드
-- sections:
-    - local: in_translation
-      - local: tasks/image_classification
-        title: 이미지 분류
-      - local: in_translation
-        title: (번역중) Semantic segmentation
-      - local: tasks/image_classification
-        title: 영상 분류
-      - local: in_translation
-        title: (번역중) Object detection
-      - local: in_translation
-        title: (번역중) Zero-shot object detection
-      - local: tasks/zero_shot_image_classification
-        title: 제로샷(zero-shot) 이미지 분류
-      - local: in_translation
-        title: (번역중) Depth estimation
-    title: (번역중) 컴퓨터 비전
-    isExpanded: false
   - sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
