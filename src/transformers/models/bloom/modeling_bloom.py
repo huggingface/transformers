@@ -582,6 +582,7 @@ class BloomModel(BloomPreTrainedModel):
         self.graph_tokens = {}
         self.position_type = "normal"
         self.message_passing_type = "none"
+        self.linear_layers = []
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -780,7 +781,15 @@ class BloomModel(BloomPreTrainedModel):
 
             hidden_states = outputs[0]
             if i != len(self.h) - 1 and self.message_passing_type != 'none':
-                hidden_states = perform_causal_message_passing(hidden_states, message_passing_dicts)
+                hidden_states = perform_causal_message_passing(
+                    hidden_states,
+                    message_passing_dicts,
+                    linear_layer=(
+                        self.linear_layers[i]
+                        if (i < len(self.linear_layers) and self.message_passing_type == 'naive')
+                        else None
+                    )
+                )
 
             if use_cache is True:
                 presents = presents + (outputs[1],)

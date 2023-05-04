@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 import itertools
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -83,6 +83,7 @@ def add_missing_idxs(
 def perform_causal_message_passing(
     token_embeddings: torch.Tensor,
     message_passing_dicts: List[Dict[str, torch.Tensor]],
+    linear_layer: Optional[Callable] = None,
     reduce: str = 'mean'
 ) -> torch.Tensor:
     """ Returns token embeddings in a sequence where causal message passing has been performed on
@@ -113,6 +114,9 @@ def perform_causal_message_passing(
                 index=message_passing_dict['inverse_edge_index'][1],
                 reduce=reduce
             )
+            if linear_layer is not None:
+                edge_embeddings = linear_layer(edge_embeddings)
+                edge_embeddings = torch.relu(edge_embeddings)
             edge_embeddings = torch.cat([
                 edge_embeddings,
                 torch.zeros_like(edge_embeddings[0].unsqueeze(0))
