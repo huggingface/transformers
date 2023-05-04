@@ -1416,7 +1416,6 @@ class TFSamModel(TFSamPreTrainedModel):
         image_positional_embeddings = tf.repeat(image_positional_embeddings, batch_size, axis=0)
 
         vision_attentions = None
-        mask_decoder_attentions = None
         vision_hidden_states = None
 
         if pixel_values is not None:
@@ -1424,14 +1423,14 @@ class TFSamModel(TFSamPreTrainedModel):
                 pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
             )
-            image_embeddings = vision_outputs[0]
+            image_embeddings = vision_outputs['last_hidden_state']
 
             if output_hidden_states:
-                vision_hidden_states = vision_outputs[1]
+                vision_hidden_states = vision_outputs['hidden_states']
             if output_attentions:
-                vision_attentions = vision_outputs[-1]
+                vision_attentions = vision_outputs['attentions']
 
         if input_points is not None and input_labels is None:
             input_labels = tf.ones_like(input_points[:, :, :, 0], dtype=tf.int32)
