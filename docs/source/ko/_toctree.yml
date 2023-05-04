@@ -55,7 +55,7 @@
       - local: in_translation
         title: (번역중) Semantic segmentation
       - local: tasks/video_classification
-        title: 영상 
+        title: 영상 분류
       - local: in_translation
         title: (번역중) Object detection
       - local: in_translation
@@ -80,8 +80,8 @@
         title: 이미지 분류
       - local: in_translation
         title: (번역중) Semantic segmentation
-      - local: in_translation
-        title: (번역중) Video classification
+      - local: tasks/image_classification
+        title: 영상 분류
       - local: in_translation
         title: (번역중) Object detection
       - local: in_translation
