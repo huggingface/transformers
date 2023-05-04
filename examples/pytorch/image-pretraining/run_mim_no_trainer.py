@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ from accelerate.utils import set_seed
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
@@ -62,7 +62,9 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a simple Masked Image Modeling task"
+    )
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -179,7 +181,7 @@ def parse_args():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument(
-        "--feature_extractor_name",
+        "--image_processor_name",
         type=str,
         default=None,
         help="Name or path of preprocessor config.",
@@ -461,17 +463,16 @@ def main():
         }
     )
 
-    # create feature extractor
-    if args.feature_extractor_name:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(args.feature_extractor_name, **config_kwargs)
+    # create image processor
+    if args.image_processor_name:
+        image_processor = AutoImageProcessor.from_pretrained(args.image_processor_name, **config_kwargs)
     elif args.model_name_or_path:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path, **config_kwargs)
+        image_processor = AutoImageProcessor.from_pretrained(args.model_name_or_path, **config_kwargs)
     else:
-        FEATURE_EXTRACTOR_TYPES = {
-            conf.model_type: feature_extractor_class
-            for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
+        IMAGE_PROCESSOR_TYPES = {
+            conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
-        feature_extractor = FEATURE_EXTRACTOR_TYPES[args.model_type]()
+        image_processor = IMAGE_PROCESSOR_TYPES[args.model_type]()
 
     # create model
     if args.model_name_or_path:
@@ -502,11 +503,11 @@ def main():
     # source: https://github.com/microsoft/SimMIM/blob/main/data/data_simmim.py
     transforms = Compose(
         [
-            Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+            Lambda(lambda img: img.convert("RGB")),
             RandomResizedCrop(args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
             RandomHorizontalFlip(),
             ToTensor(),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
         ]
     )
 
@@ -728,7 +729,7 @@ def main():
                 args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
             )
             if accelerator.is_main_process:
-                feature_extractor.save_pretrained(args.output_dir)
+                image_processor.save_pretrained(args.output_dir)
                 repo.push_to_hub(
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
@@ -749,7 +750,7 @@ def main():
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
         )
         if accelerator.is_main_process:
-            feature_extractor.save_pretrained(args.output_dir)
+            image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
