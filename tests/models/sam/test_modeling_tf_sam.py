@@ -424,8 +424,15 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = TFSamModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True, tol=5e-4):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True, tol=tol)
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-4, name="outputs", attributes=None):
+        super().check_pt_tf_outputs(
+            tf_outputs=tf_outputs,
+            pt_outputs=pt_outputs,
+            model_class=model_class,
+            tol=tol,
+            name=name,
+            attributes=attributes,
+        )
 
 
 def prepare_image():

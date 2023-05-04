@@ -640,7 +640,7 @@ class TFModelTesterMixin:
 
         return pt_inputs_dict
 
-    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict, tol=1e-5):
+    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
         pt_inputs_dict = self.prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -665,10 +665,10 @@ class TFModelTesterMixin:
         if tf_loss is not None:
             tf_outputs.loss = tf.math.reduce_mean(tf_loss)
 
-        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model), tol=tol)
+        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
 
     @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False, tol=1e-5):
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
         for model_class in self.all_model_classes:
@@ -711,10 +711,10 @@ class TFModelTesterMixin:
             )
 
             # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict, tol=tol)
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
             # check with `labels`
             if tf_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels, tol=tol)
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -731,10 +731,10 @@ class TFModelTesterMixin:
                 )
 
             # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict, tol=tol)
+            self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
             # check with `labels`
             if tf_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels, tol=tol)
+                self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
