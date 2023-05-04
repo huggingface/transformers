@@ -1,4 +1,3 @@
-
 import numpy as np
 
 from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_available
