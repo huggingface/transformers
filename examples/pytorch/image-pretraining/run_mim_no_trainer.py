@@ -246,6 +246,12 @@ def parse_args():
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=5e-5,
+        help="The initial learning rate for [`AdamW`] optimizer.",
+    )
+    parser.add_argument(
         "--weight_decay",
         type=float,
         default=0.0,
