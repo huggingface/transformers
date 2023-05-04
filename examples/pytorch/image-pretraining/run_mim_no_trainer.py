@@ -258,6 +258,12 @@ def parse_args():
         help="Weight decay to use.",
     )
     parser.add_argument(
+        "--num_train_epochs",
+        type=float,
+        default=3.0,
+        help="Total number of training epochs to perform (if not an integer, will perform the decimal part percents of the last epoch before stopping training).",
+    )
+    parser.add_argument(
         "--max_train_steps",
         type=int,
         default=None,
