@@ -218,18 +218,21 @@ def get_theoretical_tools(agent_answer, theoretical_answer, code_answer):
     return {name for name in TEST_TOOLS if name in code_answer[0]}
 
 
-def evaluate_code(code, inputs, verbose=False):
+def evaluate_code(code, inputs=None, state=None, verbose=False):
     tools = BASE_PYTHON_TOOLS.copy()
     for name, tool in TEST_TOOLS.items():
         if name not in code:
             continue
         tools[name] = tool
 
+    if isinstance(inputs, dict):
+        inputs = inputs.copy()
+    elif inputs is not None:
+        inputs = {inp: f"<<{inp}>>" for inp in inputs}
+    else:
+        inputs = state
+        
     try:
-        if isinstance(inputs, dict):
-            inputs = inputs.copy()
-        else:
-            inputs = {inp: f"<<{inp}>>" for inp in inputs}
         return evaluate(code, tools, inputs)
     except Exception as e:
         if verbose:
