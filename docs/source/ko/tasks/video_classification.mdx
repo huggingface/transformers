@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# 영상 분류[[video-classification]]
+# 영상 분류 [[video-classification]]
 
 [[open-in-colab]]
 
@@ -19,9 +19,8 @@ specific language governing permissions and limitations under the License.
 
 이 가이드에서는 다음을 수행하는 방법을 보여줍니다:
 
-<!--흠...-->
-1. [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) 데이터 세트의 하위 집합을 통해 [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) 모델을 미세 조정하는 법.
-2. 미세 조정한 모델을 추론에 사용하는 법.
+1. [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) 데이터 세트의 하위 집합을 통해 [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) 모델을 미세 조정하기.
+2. 미세 조정한 모델을 추론에 사용하기.
 
 <Tip>
 
@@ -63,7 +62,7 @@ pip install -q pytorchvideo transformers evaluate
 >>> file_path = hf_hub_download(repo_id=hf_dataset_identifier, filename=filename, repo_type="dataset")
 ```
 
-데이터 세트의 하위 집합이 다운로드 되면, 압축된 아카이브를 해제해야 합니다.
+데이터 세트의 하위 집합이 다운로드 되면, 압축된 파일의 압축을 해제해야 합니다:
 ```py 
 >>> import tarfile
 
@@ -141,9 +140,9 @@ UCF101_subset/
 
 이 데이터 세트에는 총 10개의 고유한 클래스가 있습니다. 각 클래스마다 30개의 영상이 훈련 세트에 있습니다
 
-## 미세 조정하기 위해 모델 불러오기 [[load-a-model-to-fine-tune]]
+## 미세 조정하기 위해 모델 가져오기 [[load-a-model-to-fine-tune]]
 
-사전 학습된 체크포인트와 체크포인트에 연관된 이미지 프로세서를 사용하여 영상 분류 모델을 인스턴스화합니다. 모델의 인코더는 미리 학습된 매개변수가 제공되며, 분류 헤드(데이터를 분류하는 마지막 레이어)는 무작위로 초기화됩니다. 데이터셋의 전처리 파이프라인을 작성할 때 이미지 프로세서가 유용합니다.
+사전 훈련된 체크포인트와 체크포인트에 연관된 이미지 프로세서를 사용하여 영상 분류 모델을 인스턴스화합니다. 모델의 인코더에는 미리 학습된 매개변수가 제공되며, 분류 헤드(데이터를 분류하는 마지막 레이어)는 무작위로 초기화됩니다. 데이터 세트의 전처리 파이프라인을 작성할 때는 이미지 프로세서가 유용합니다.
 
 ```py 
 >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
@@ -198,7 +197,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 ... )
 ```
 
-학습 데이터셋 변환에는 '균일한 시간 샘플링(uniform temporal subsampling)', '픽셀 정규화(pixel normalization)', '무작위 잘라내기(random cropping)' 및 '무작위 수평 뒤집기(random horizontal flipping)'의 조합을 사용합니다. 검증 및 평가 데이터셋 변환에는 '무작위 잘라내기'와 '수평 뒤집기'를 제외한 동일한 변환 체인을 유지합니다. 이러한 변환의 자세한 내용을 알아보려면 [PyTorchVideo 공식 문서](https://pytorchvideo.org)를 확인하세요.
+학습 데이터 세트 변환에는 '균일한 시간 샘플링(uniform temporal subsampling)', '픽셀 정규화(pixel normalization)', '랜덤 잘라내기(random cropping)' 및 '랜덤 수평 뒤집기(random horizontal flipping)'의 조합을 사용합니다. 검증 및 평가 데이터 세트 변환에는 '랜덤 잘라내기'와 '랜덤 뒤집기'를 제외한 동일한 변환 체인을 유지합니다. 이러한 변환에 대해 자세히 알아보려면 [PyTorchVideo 공식 문서](https://pytorchvideo.org)를 확인하세요.
 
 사전 훈련된 모델과 관련된 이미지 프로세서를 사용하여 다음 정보를 얻을 수 있습니다:
 
@@ -224,7 +223,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 >>> clip_duration = num_frames_to_sample * sample_rate / fps
 ```
 
-이제 데이터셋에 특화된 전처리(transform)과 데이터셋 자체를 정의합니다. 먼저 훈련 데이터셋으로 시작합니다.
+이제 데이터 세트에 특화된 전처리(transform)과 데이터 세트 자체를 정의합니다. 먼저 훈련 데이터 세트로 시작합니다:
 
 ```py 
 >>> train_transform = Compose(
@@ -288,7 +287,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 ```
 
 
-**참고**: 위의 데이터셋 파이프라인은 [공식 파이토치 예제](https://pytorchvideo.org/docs/tutorial_classification#dataset)에서 가져온 것입니다. 우리는 UCF-101 데이터셋에 맞게 [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) 함수를 사용하고 있습니다. 내부적으로, 이 함수는 [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) 객체를 반환합니다. `LabeledVideoDataset` 클래스는 PyTorchVideo 데이터셋에서 모든 영상 관련 작업의 기본 클래스입니다. 따라서 PyTorchVideo에서 미리 제공하지 않는 사용자 지정 데이터셋을 사용하려면, 이 클래스를 적절하게 확장하면 됩니다. 더 자세한 사항이 알고 싶다면 `data` API [documentation](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) 를 참고하세요. 또한 위의 예시와 유사한 구조를 갖는 데이터셋을 사용하고 있다면, `pytorchvideo.data.Ucf101()` 함수를 사용하는 데 문제가 없을 것입니다.
+**참고**: 위의 데이터 세트의 파이프라인은 [공식 파이토치 예제](https://pytorchvideo.org/docs/tutorial_classification#dataset)에서 가져온 것입니다. 우리는 UCF-101 데이터셋에 맞게 [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) 함수를 사용하고 있습니다. 내부적으로 이 함수는 [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) 객체를 반환합니다. `LabeledVideoDataset` 클래스는 PyTorchVideo 데이터셋에서 모든 영상 관련 작업의 기본 클래스입니다. 따라서 PyTorchVideo에서 미리 제공하지 않는 사용자 지정 데이터 세트를 사용하려면, 이 클래스를 적절하게 확장하면 됩니다. 더 자세한 사항이 알고 싶다면 `data` API [문서](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) 를 참고하세요. 또한 위의 예시와 유사한 구조를 갖는 데이터 세트를 사용하고 있다면, `pytorchvideo.data.Ucf101()` 함수를 사용하는 데 문제가 없을 것입니다.
 
 데이터 세트에 영상의 개수를 알기 위해 `num_videos` 인수에 접근할 수 있습니다.
 
@@ -371,8 +370,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 `pytorchvideo.data.Ucf101()` 함수로 반환되는 데이터 세트는 `__len__` 메소드가 이식되어 있지 않습니다. 따라서,  `TrainingArguments`를 인스턴스화할 때 `max_steps`를 정의해야 합니다.
 
-다음으로, 평가지표를 불러올 함수를 정의해야 합니다. 이 함수는 예측값에서 평가지표를 계산하는 데 사용됩니다. 전처리로 수행해야 하는 작업은 예측된 로짓(logits)에 argmax 값을 취하는 것뿐입니다.
-
+다음으로, 평가지표를 불러오고, 예측값에서 평가지표를 계산할 함수를 정의합니다. 필요한 전처리 작업은 예측된 로짓(logits)에 argmax 값을 취하는 것뿐입니다:
 
 ```py
 import evaluate
@@ -401,7 +399,7 @@ def compute_metrics(eval_pred):
 ...     return {"pixel_values": pixel_values, "labels": labels}
 ```
 
-그런 다음 이 모든 것을 데이터셋과 함께 `Trainer`에 전달하기만 하면 됩니다.
+그런 다음 이 모든 것을 데이터 세트와 함께 `Trainer`에 전달하기만 하면 됩니다:
 
 ```py 
 >>> trainer = Trainer(
@@ -487,7 +485,7 @@ def compute_metrics(eval_pred):
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 
-`logits`을 디코딩하면, 우리는 다음을 얻을 수 있습니다.
+`logits`을 디코딩하면, 우리는 다음 결과를 얻을 수 있습니다:
 
 ```py 
 >>> predicted_class_idx = logits.argmax(-1).item()
