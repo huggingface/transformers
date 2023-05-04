@@ -65,6 +65,14 @@ def document_qa(image, question):
     return f"This is the answer to {question} from the document {image}."
 
 
+def image_segmenter(prompt, image):
+    return f"This is the mask of {prompt} in {image}"
+
+
+def image_inpainter(image, mask, prompt):
+    return f"This is the inpainted of {image} using prompt {prompt} and mask {mask}"
+
+
 TEST_TOOLS = {
     "text_classifier": classifier,
     "translator": translator,
@@ -79,6 +87,8 @@ TEST_TOOLS = {
     "image_qa": image_qa,
     "video_generator": video_generator,
     "document_qa": document_qa,
+    "image_segmenter": image_segmenter,
+    "image_inpainter": image_inpainter
 }
 
 
