@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_tf, require_torch, require_torchvision, require_vision
+from transformers.testing_utils import require_tf, require_torch, require_torchvision, require_vision, is_pt_tf_cross_test
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 
@@ -202,3 +202,47 @@ class TFSamProcessorTest(unittest.TestCase):
             masks = processor.post_process_masks(
                 dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
             )
+
+
+@require_vision
+@require_torchvision
+class SamProcessorEquivalenceTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+        image_processor = SamImageProcessor()
+        processor = SamProcessor(image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
+
+    @is_pt_tf_cross_test
+    def test_post_process_masks_equivalence(self):
+        image_processor = self.get_image_processor()
+
+        processor = SamProcessor(image_processor=image_processor)
+        dummy_masks = np.random.randint(0, 2, size=(1, 3, 5, 5)).astype(np.float32)
+        tf_dummy_masks = [tf.convert_to_tensor(dummy_masks)]
+        pt_dummy_masks = [torch.tensor(dummy_masks)]
+
+        original_sizes = [[1764, 2646]]
+
+        reshaped_input_size = [[683, 1024]]
+        tf_masks = processor.post_process_masks(tf_dummy_masks, original_sizes, reshaped_input_size, return_tensors="tf")
+        pt_masks = processor.post_process_masks(pt_dummy_masks, original_sizes, reshaped_input_size, return_tensors="pt")
+
+        self.assertTrue(np.all(tf_masks[0].numpy() == pt_masks[0].numpy()))

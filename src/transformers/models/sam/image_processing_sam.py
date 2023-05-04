@@ -519,7 +519,7 @@ class SamImageProcessor(BaseImageProcessor):
             # tf.image expects NHWC, we transpose the NCHW inputs for it
             mask = tf.transpose(masks[i], perm=[0, 2, 3, 1])
             interpolated_mask = tf.image.resize(mask, target_image_size, method="bilinear")
-            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
+            interpolated_mask = interpolated_mask[:, : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1], :]
             interpolated_mask = tf.image.resize(interpolated_mask, original_size, method="bilinear")
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
