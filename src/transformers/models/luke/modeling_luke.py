@@ -1298,7 +1298,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         self.lm_head = LukeLMHead(config)
         self.entity_predictions = EntityPredictionHead(config)
 
-        self.loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
+        self.loss_fn = nn.CrossEntropyLoss()
 
         # Initialize weights and apply final processing
         self.post_init()
