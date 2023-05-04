@@ -17,7 +17,13 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_tf, require_torch, require_torchvision, require_vision, is_pt_tf_cross_test
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_tf,
+    require_torch,
+    require_torchvision,
+    require_vision,
+)
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 
@@ -242,8 +248,12 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
         original_sizes = [[1764, 2646]]
 
         reshaped_input_size = [[683, 1024]]
-        tf_masks = processor.post_process_masks(tf_dummy_masks, original_sizes, reshaped_input_size, return_tensors="tf")
-        pt_masks = processor.post_process_masks(pt_dummy_masks, original_sizes, reshaped_input_size, return_tensors="pt")
+        tf_masks = processor.post_process_masks(
+            tf_dummy_masks, original_sizes, reshaped_input_size, return_tensors="tf"
+        )
+        pt_masks = processor.post_process_masks(
+            pt_dummy_masks, original_sizes, reshaped_input_size, return_tensors="pt"
+        )
 
         self.assertTrue(np.all(tf_masks[0].numpy() == pt_masks[0].numpy()))
 

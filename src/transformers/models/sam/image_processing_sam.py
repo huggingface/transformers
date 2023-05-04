@@ -585,24 +585,32 @@ class SamImageProcessor(BaseImageProcessor):
             return_tensors (`str`, *optional*, defaults to `pt`):
                 If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
         """
+        crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
+            image,
+            target_size,
+            crop_n_layers,
+            overlap_ratio,
+            points_per_crop,
+            crop_n_points_downscale_factor,
+        )
         if return_tensors == "pt":
-            return _generate_crop_boxes_pt(
-                image,
-                target_size,
-                crop_n_layers,
-                overlap_ratio,
-                points_per_crop,
-                crop_n_points_downscale_factor,
-                device,
-            )
+            if device is None:
+                device = torch.device("cpu")
+            crop_boxes = torch.tensor(crop_boxes, device=device)
+            points_per_crop = torch.tensor(points_per_crop, device=device)
+            # cropped_images stays as np
+            input_labels = torch.tensor(input_labels, device=device)
+
         elif return_tensors == "tf":
             if device is not None:
                 raise ValueError("device is not a supported argument when return_tensors is tf!")
-            return _generate_crop_boxes_tf(
-                image, target_size, crop_n_layers, overlap_ratio, points_per_crop, crop_n_points_downscale_factor
-            )
+            crop_boxes = tf.convert_to_tensor(crop_boxes)
+            points_per_crop = tf.convert_to_tensor(points_per_crop)
+            # cropped_images stays as np
+            input_labels = tf.convert_to_tensor(input_labels)
         else:
             raise ValueError("return_tensors must be either 'pt' or 'tf'.")
+        return crop_boxes, points_per_crop, cropped_images, input_labels
 
     def filter_masks(
         self,
@@ -883,14 +891,13 @@ def _normalize_coordinates(
     return coords
 
 
-def _generate_crop_boxes_pt(
+def _generate_crop_boxes(
     image,
     target_size: int,  # Is it tuple here?
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
-    device: Optional["torch.device"] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -910,64 +917,6 @@ def _generate_crop_boxes_pt(
             Number of points to sample per crop.
         crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
-        device (`torch.device`, *optional*):
-            Device to run the crop generation on. Defaults to CPU.
-    """
-    if device is None:
-        device = torch.device("cpu")
-
-    if isinstance(image, list):
-        raise ValueError("Only one image is allowed for crop generation.")
-    image = to_numpy_array(image)
-    original_size = get_image_size(image)
-
-    points_grid = []
-    for i in range(crop_n_layers + 1):
-        n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
-        points_grid.append(_build_point_grid(n_points))
-
-    crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
-
-    cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
-    )
-
-    crop_boxes = torch.tensor(crop_boxes, dtype=torch.float32, device=device)
-    point_grid_per_crop = np.array([point_grid_per_crop])
-    points_per_crop = torch.tensor(point_grid_per_crop, device=device)
-    points_per_crop = points_per_crop.permute(0, 2, 1, 3)
-
-    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.long, device=device)
-
-    return crop_boxes, points_per_crop, cropped_images, input_labels
-
-
-def _generate_crop_boxes_tf(
-    image,
-    target_size: int,  # Is it tuple here?
-    crop_n_layers: int = 0,
-    overlap_ratio: float = 512 / 1500,
-    points_per_crop: Optional[int] = 32,
-    crop_n_points_downscale_factor: Optional[List[int]] = 1,
-) -> Tuple[List[List[int]], List[int]]:
-    """
-    Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
-
-    Args:
-        image (Union[`numpy.ndarray`, `PIL.Image`, `tf.Tensor`]):
-            Image to generate crops for.
-        target_size (`int`):
-            Size of the smallest crop.
-        crop_n_layers (`int`, *optional*):
-            If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers
-            to run, where each layer has 2**i_layer number of image crops.
-        overlap_ratio (`int`, *optional*):
-            Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of the
-            image length. Later layers with more crops scale down this overlap.
-        points_per_crop (`int`, *optional*):
-            Number of points to sample per crop.
-        crop_n_points_downscale_factor (`int`, *optional*):
-            The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
     """
 
     if isinstance(image, list):
@@ -986,12 +935,11 @@ def _generate_crop_boxes_tf(
         crop_boxes, image, points_grid, layer_idxs, target_size, original_size
     )
 
-    crop_boxes = tf.convert_to_tensor(crop_boxes, dtype=tf.float32)
-    point_grid_per_crop = np.array([point_grid_per_crop])
-    points_per_crop = tf.convert_to_tensor(point_grid_per_crop)
-    points_per_crop = tf.transpose(points_per_crop, perm=(0, 2, 1, 3))
+    crop_boxes = crop_boxes.astype(np.float32)
+    points_per_crop = np.array([point_grid_per_crop])
+    points_per_crop = np.transpose(points_per_crop, axes=(0, 2, 1, 3))
 
-    input_labels = tf.ones_like(points_per_crop[:, :, :, 0], dtype=tf.int64)
+    input_labels = np.ones_like(points_per_crop[:, :, :, 0], dtype=np.int64)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
