@@ -153,6 +153,10 @@ class GPTJAttention(nn.Module):
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
+        # For compatibility with models that saved `self.bias` as torch.float16 or `torch.float32`
+        if causal_mask.dtype != torch.bool:
+            causal_mask = causal_mask.to(torch.bool)
+
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
