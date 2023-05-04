@@ -44,7 +44,7 @@ def evaluate(code: str, tools: Dict[str, Callable], variables=None, chat_mode=Fa
     result = None
     for idx, node in enumerate(expression.body):
         try:
-            result = evaluate_ast(node, state, tools)
+            line_result = evaluate_ast(node, state, tools)
         except InterpretorError as e:
             msg = f"Evaluation of the code stopped at line {idx} before the end because of the following error"
             if chat_mode:
@@ -55,18 +55,10 @@ def evaluate(code: str, tools: Dict[str, Callable], variables=None, chat_mode=Fa
                 msg += f":\n{e}"
             print(msg)
             break
+        if line_result is not None:
+            result = line_result
 
-    if result is not None:
-        return result
-    if "result" in state:
-        return state["result"]
-    for key in state:
-        if "result" in key:
-            return state[key]
-
-    if not chat_mode:
-        print("No result found, returning the current state.")
-    return state
+    return result
 
 
 def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
@@ -88,7 +80,8 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     """
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
-        evaluate_assign(expression, state, tools)
+        # We return the variable assigned as it may be used to determine the final result.
+        return evaluate_assign(expression, state, tools)
     elif isinstance(expression, ast.Call):
         # Function call -> we return the value of the function call
         return evaluate_call(expression, state, tools)
@@ -136,6 +129,7 @@ def evaluate_assign(assign, state, tools):
             raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
         for var_name, r in zip(var_names, result):
             state[var_name.id] = r
+    return result
 
 
 def evaluate_call(call, state, tools):

@@ -1,7 +1,7 @@
 import re
 
 from .agents import BASE_PYTHON_TOOLS, clean_code_for_run
-from .python_interpreter import evaluate
+from .python_interpreter import InterpretorError, evaluate
 
 
 ### Fake tools for test
@@ -65,7 +65,7 @@ def document_qa(image, question):
     return f"This is the answer to {question} from the document {image}."
 
 
-def image_segmenter(prompt, image):
+def image_segmenter(image, prompt):
     return f"This is the mask of {prompt} in {image}"
 
 
@@ -88,7 +88,7 @@ TEST_TOOLS = {
     "video_generator": video_generator,
     "document_qa": document_qa,
     "image_segmenter": image_segmenter,
-    "image_inpainter": image_inpainter
+    "image_inpainter": image_inpainter,
 }
 
 
@@ -184,8 +184,11 @@ EVALUATION_TASKS = [
             "Transform the `image` so that it contains the `prompt`.",
             "Use `prompt` to transform this `image`.",
         ],
-        inputs={"image": "<image object>", "prompt": "capybara"},
-        answer="image_transformer(image, prompt='capybara')",
+        inputs=["image", "prompt"],
+        answer=[
+            "image_transformer(image, prompt)",
+            "image_inpainter(image, image_segmenter(image, 'beaver'), prompt)",
+        ],
     ),
     Problem(
         task=[
@@ -228,7 +231,7 @@ def get_theoretical_tools(agent_answer, theoretical_answer, code_answer):
     return {name for name in TEST_TOOLS if name in code_answer[0]}
 
 
-def evaluate_code(code, inputs=None, state=None, verbose=False):
+def evaluate_code(code, inputs=None, state=None, verbose=False, return_interpretor_error=False):
     tools = BASE_PYTHON_TOOLS.copy()
     for name, tool in TEST_TOOLS.items():
         if name not in code:
@@ -241,9 +244,11 @@ def evaluate_code(code, inputs=None, state=None, verbose=False):
         inputs = {inp: f"<<{inp}>>" for inp in inputs}
     else:
         inputs = state
-        
+
     try:
         return evaluate(code, tools, inputs)
+    except InterpretorError as e:
+        return str(e)
     except Exception as e:
         if verbose:
             print(e)
