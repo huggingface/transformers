@@ -212,9 +212,9 @@ def rwkv_linear_attention_cpu(time_decay, time_first, key, value, state=None, re
 
     time_decay = -torch.exp(time_decay)
 
-    for t in range(seq_length):
-        current_key = key[:, t].float()
-        current_value = value[:, t]
+    for current_index in range(seq_length):
+        current_key = key[:, current_index].float()
+        current_value = value[:, current_index]
 
         # wkv computation at time t
         max_for_output = torch.maximum(max_state, current_key + time_first)
@@ -222,7 +222,7 @@ def rwkv_linear_attention_cpu(time_decay, time_first, key, value, state=None, re
         e2 = torch.exp(current_key + time_first - max_for_output)
         numerator = e1 * num_state + e2 * current_value
         denominator = e1 * den_state + e2
-        output[:, t] = (numerator / denominator).to(output.dtype)
+        output[:, current_index] = (numerator / denominator).to(output.dtype)
 
         # Update state for next iteration
         max_for_state = torch.maximum(max_state + time_decay, current_key)
