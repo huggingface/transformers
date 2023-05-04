@@ -537,6 +537,7 @@ class BlipVQAModelTest(unittest.TestCase):
     def _prepare_inputs_for_vqa(self):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict["labels"] = inputs_dict["input_ids"]
+        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
         inputs_dict.pop("return_loss")
         return inputs_dict
 
