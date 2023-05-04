@@ -89,6 +89,7 @@ class GPTJAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
@@ -152,10 +153,6 @@ class GPTJAttention(nn.Module):
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-
-        # For compatibility with models that saved `self.bias` as torch.float16 or `torch.float32`
-        if causal_mask.dtype != torch.bool:
-            causal_mask = causal_mask.to(torch.bool)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
@@ -737,6 +734,7 @@ class GPTJModel(GPTJPreTrainedModel):
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
         super().__init__(config)
