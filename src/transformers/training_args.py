@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate import Accelerator, PartialState
+    from accelerate import PartialState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
@@ -1509,9 +1509,6 @@ class TrainingArguments:
             elif self.bf16:
                 mixed_precision_dtype = "bf16"
             os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
-
-        # create accelerator object
-        self.accelerator = Accelerator() if self.framework == "pt" else None
 
     def __str__(self):
         self_as_dict = asdict(self)

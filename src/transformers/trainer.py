@@ -212,6 +212,8 @@ if is_accelerate_available():
     if version.parse(accelerate_version) >= version.parse("0.16"):
         from accelerate import skip_first_batches
 
+    from accelerate import Accelerator
+
 
 if TYPE_CHECKING:
     import optuna
@@ -336,8 +338,9 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
-        self.accelerator = self.args.accelerator
-        self.args.accelerator = None  # delete from args to avoid pickling issues
+
+        # create accelerator object
+        self.accelerator = Accelerator()
         self.accelerator.print(f"{self.accelerator=}")
         self.accelerator.print(f"{self.accelerator.state=}")
 
