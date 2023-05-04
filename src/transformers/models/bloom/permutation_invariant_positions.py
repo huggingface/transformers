@@ -106,51 +106,11 @@ def _get_graph_positions(
                 positions=positions[0],
                 edge_sequence=edge_sequence,
             ) * mask
-        elif position_type == 'all_edges_previous':
-            new_positions = _get_all_edges_previous_positions(
-                positions=positions[0],
-                edge_sequence=edge_sequence
-            ) * mask
         else:
             raise ValueError(f"Unknown position embedding type {position_type}")
         return new_positions.unsqueeze(0)
     else:
         return positions.unsqueeze(0)
-
-
-def _get_all_edges_previous_positions(
-    positions: torch.Tensor,
-    edge_sequence: List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]
-) -> torch.Tensor:
-    """ Returns a revised position tenso where the position of all previous graph tokens in the
-        sequenced are set to immediately precede the current token meaning every edge besides the
-        edge being generated appears to have been just generated
-    """
-    start_idx = edge_sequence[0][0].start_idx
-    init_position = positions[start_idx].item()
-    new_positions_list = []
-    for s_idx, sequenced_edge in enumerate(edge_sequence):
-        new_positions = positions.clone()
-        max_length = 0
-        for prev_edge in edge_sequence[:s_idx]:
-            pred_node, _, succ_node = prev_edge
-            new_positions[pred_node.start_idx:succ_node.end_idx] = torch.arange(start_idx - end_idx, 0, -1).to(positions.device)
-            max_length = max(end_idx - start_idx, max_length)
-        pred_node, edge, succ_node = sequenced_edge
-        if succ_node is None and edge is None:
-            end_idx = pred_node.end_idx
-        elif succ_node is None:
-            end_idx = edge.end_idx
-        else:
-            end_idx = succ_node.end_idx
-        new_positions[pred_node.start_idx:end_idx] = torch.arange(end_idx - start_idx).to(positions.device)
-        new_positions[start_idx:end_idx] += init_position + max_length
-        for idx in range(pred_node.start_idx, end_idx):
-            token_positions = new_positions.clone()
-            if idx < token_positions.numel():
-                token_positions[(idx + 1):] = -1e6
-            new_positions_list.append(token_positions.unsqueeze(0))
-    return torch.cat(new_positions_list, dim=0)
 
 
 def _remove_positions_from_graph_tokens(
