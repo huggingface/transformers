@@ -1359,7 +1359,8 @@ class SamModel(SamPreTrainedModel):
                 "The batch size of the image embeddings and the input points must be the same. ",
                 "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
                 " if you want to pass multiple points for the same image, make sure that you passed ",
-                " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
+                " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
+                " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
