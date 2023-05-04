@@ -336,6 +336,10 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
+        self.accelerator = self.args.accelerator
+        self.args.accelerator = None  # delete from args to avoid pickling issues
+        self.accelerator.print(f"{self.accelerator=}")
+        self.accelerator.print(f"{self.accelerator.state=}")
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -607,53 +611,18 @@ class Trainer:
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
 
-        if args.fp16 or args.bf16:
-            if args.half_precision_backend == "auto":
-                if args.device == torch.device("cpu"):
-                    if args.fp16:
-                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                    elif _is_native_cpu_amp_available:
-                        args.half_precision_backend = "cpu_amp"
-                    else:
-                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
-                else:
-                    args.half_precision_backend = "cuda_amp"
-
-            logger.info(f"Using {args.half_precision_backend} half precision backend")
-
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
-            # deepspeed and SageMaker Model Parallel manage their own half precision
-            if args.half_precision_backend == "cuda_amp":
-                self.use_cuda_amp = True
-                self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                #  bf16 does not need grad scaling
-                self.do_grad_scaling = self.amp_dtype == torch.float16
-                if self.do_grad_scaling:
-                    if self.sharded_ddp is not None:
-                        self.scaler = ShardedGradScaler()
-                    elif self.fsdp is not None:
-                        from torch.distributed.fsdp.sharded_grad_scaler import (
-                            ShardedGradScaler as FSDPShardedGradScaler,
-                        )
-
-                        self.scaler = FSDPShardedGradScaler()
-                    elif is_torch_tpu_available():
-                        from torch_xla.amp import GradScaler
-
-                        self.scaler = GradScaler()
-                    else:
-                        self.scaler = torch.cuda.amp.GradScaler()
-            elif args.half_precision_backend == "cpu_amp":
-                self.use_cpu_amp = True
-                self.amp_dtype = torch.bfloat16
-            else:
-                if not is_apex_available():
-                    raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to"
-                        " https://www.github.com/nvidia/apex."
-                    )
-                self.use_apex = True
+        if (
+            (args.fp16 or args.bf16)
+            and not (args.deepspeed or is_sagemaker_mp_enabled())
+            and args.half_precision_backend == "apex"
+        ):
+            if not is_apex_available():
+                raise ImportError(
+                    "Using FP16 with APEX but APEX is not installed, please refer to"
+                    " https://www.github.com/nvidia/apex."
+                )
+            self.use_apex = True
 
         # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
         if (
@@ -1759,6 +1728,13 @@ class Trainer:
 
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        # prepare using `accelerator` prepare
+        model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+            self.model, self.optimizer, self.lr_scheduler
+        )
+        self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
+        self.accelerator.print(f"{model.forward=}")
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
