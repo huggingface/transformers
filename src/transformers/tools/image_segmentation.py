@@ -1,10 +1,10 @@
-from typing import List
 
-from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_available, ViTImageProcessor
-
-from .base import PipelineTool, send_to_device
-import torch
 import numpy as np
+
+from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_available
+
+from .base import PipelineTool
+
 
 if is_vision_available():
     from PIL import Image
@@ -29,7 +29,7 @@ class ImageSegmentationTool(PipelineTool):
         super().__init__(*args, **kwargs)
 
     def encode(self, text: str, image: "Image"):
-        self.pre_processor.image_processor.size = {'width': 512, 'height': 512}
+        self.pre_processor.image_processor.size = {"width": 512, "height": 512}
         return self.pre_processor(text=[text], images=[image], padding=True, return_tensors="pt")
 
     def forward(self, inputs):
