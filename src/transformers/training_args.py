@@ -1535,7 +1535,7 @@ class TrainingArguments:
         # create accelerator object
         # if training args is specified, it will override the one specified in the accelerate config
         if self.half_precision_backend != "apex":
-            mixed_precision_dtype = "no"
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             if self.fp16:
                 mixed_precision_dtype = "fp16"
             elif self.bf16:

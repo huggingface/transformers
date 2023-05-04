@@ -1754,6 +1754,7 @@ class Trainer:
             self.model, self.optimizer, self.lr_scheduler
         )
         self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
+        self.accelerator.print(f"{model.forward=}")
 
         if self.is_accelerate_fsdp_enabled:
             self.model = model
