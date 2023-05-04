@@ -21,7 +21,7 @@ def extract_edge_sequence(
     token_ids: List[int],
     graph_tokens: Dict[str, List[int]]
 ) -> List[Tuple[SequenceElement, Optional[SequenceElement], Optional[SequenceElement]]]:
-    """ Returns a list of edges of the graph sequence identified in a sequence of token ids """
+    """ Returns a list of edges of the graph sequence identified in a sequence of generated token ids. """
     sequence = _extract_graph_elements(token_ids, graph_tokens)
     edges = []
     if len(sequence) > 2:
