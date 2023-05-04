@@ -27,9 +27,9 @@ class ImageSegmentationTool(PipelineTool):
 
         super().__init__(*args, **kwargs)
 
-    def encode(self, text: str, image: "Image"):
-        self.pre_processor.image_processor.size = {"width": 512, "height": 512}
-        return self.pre_processor(text=[text], images=[image], padding=True, return_tensors="pt")
+    def encode(self, image: "Image", prompt: str):
+        self.pre_processor.image_processor.size = {"width": image.size[0], "height": image.size[1]}
+        return self.pre_processor(text=[prompt], images=[image], padding=True, return_tensors="pt")
 
     def forward(self, inputs):
         logits = self.model(**inputs).logits
