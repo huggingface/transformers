@@ -246,3 +246,20 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
         pt_masks = processor.post_process_masks(pt_dummy_masks, original_sizes, reshaped_input_size, return_tensors="pt")
 
         self.assertTrue(np.all(tf_masks[0].numpy() == pt_masks[0].numpy()))
+
+    def test_image_processor_equivalence(self):
+        image_processor = self.get_image_processor()
+
+        processor = SamProcessor(image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+
+        pt_input_feat_extract = image_processor(image_input, return_tensors="pt")["pixel_values"].numpy()
+        pt_input_processor = processor(images=image_input, return_tensors="pt")["pixel_values"].numpy()
+
+        tf_input_feat_extract = image_processor(image_input, return_tensors="tf")["pixel_values"].numpy()
+        tf_input_processor = processor(images=image_input, return_tensors="tf")["pixel_values"].numpy()
+
+        self.assertTrue(np.allclose(pt_input_feat_extract, pt_input_processor))
+        self.assertTrue(np.allclose(pt_input_feat_extract, tf_input_feat_extract))
+        self.assertTrue(np.allclose(pt_input_feat_extract, tf_input_processor))
