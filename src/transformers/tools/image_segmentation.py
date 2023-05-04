@@ -1,4 +1,5 @@
-from typing import List
+
+import numpy as np
 
 from transformers import AutoProcessor, CLIPSegForImageSegmentation, is_vision_available
 
@@ -10,8 +11,8 @@ if is_vision_available():
 
 
 IMAGE_SEGMENTATION_DESCRIPTION = (
-    "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
-    "image to caption, and returns a text that contains the description in English."
+    "This is a tool that creates a segmentation mask using an image and a prompt. It takes an original image, as well as a prompt which "
+    "is a textual description of what should be identified in the mask. The tool returns the mask as an image."
 )
 
 
@@ -23,21 +24,20 @@ class ImageSegmentationTool(PipelineTool):
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
-            raise ImportError("Pillow should be installed in order to use the StableDiffusionTool.")
+            raise ImportError("Pillow should be installed in order to use the ImageSegmentationTool.")
 
         super().__init__(*args, **kwargs)
 
-    def encode(self, texts: List[str], image: "Image"):
-        return self.pre_processor(text=texts, images=[image] * len(texts), padding=True, return_tensors="pt")
+    def encode(self, text: str, image: "Image"):
+        self.pre_processor.image_processor.size = {"width": 512, "height": 512}
+        return self.pre_processor(text=[text], images=[image], padding=True, return_tensors="pt")
+
+    def forward(self, inputs):
+        logits = self.model(**inputs).logits
+        return logits
 
     def decode(self, outputs):
-        logits_array = outputs.logits
-        segmentation_maps = []
-
-        for logits in logits_array:
-            array = logits.cpu().detach().numpy()
-            array[array < 0] = 0
-            array[array >= 0] = 1
-            segmentation_maps.append(array)
-
-        return segmentation_maps
+        array = outputs.cpu().detach().numpy()
+        array[array <= 0] = 0
+        array[array > 0] = 1
+        return Image.fromarray((np.dstack([array, array, array]) * 255).astype(np.uint8))
