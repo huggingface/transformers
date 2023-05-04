@@ -1,10 +1,11 @@
 import importlib.util
+import json
 import os
 import time
 import warnings
 
 import requests
-from huggingface_hub import HfFolder
+from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from .base import TASK_MAPPING, supports_remote, tool
 from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
@@ -19,6 +20,8 @@ def is_openai_available():
 if is_openai_available():
     import openai
 
+_tools_are_initialized = False
+
 
 BASE_PYTHON_TOOLS = {
     "print": print,
@@ -28,36 +31,42 @@ BASE_PYTHON_TOOLS = {
     "str": str,
 }
 
-# Todo: create tools later
+
 OUR_TOOLS = {
     "text_qa": "generative-qa",
     "image_captioner": "image-captioning",
-    "image_transformer": "image-transformation",
-    "text_downloader": "text-download",
+    "image_transformer": None,
+    "text_downloader": None,
     "transcriber": "speech-to-text",
-    "image_generator": "image-generation",
+    "image_generator": None,
     "text_reader": "text-to-speech",
     "text_classifier": "text-classification",
     "translator": "translation",
     "summarizer": "summarizer",
     "image_qa": "image-question-answering",
     "document_qa": "document-question-answering",
-    "video_generator": "text-to-video",
-    "search_engine": None,
-    "database_reader": None,
-    "database_writer": None,
+    "video_generator": None,
     "table_qa": None,
 }
 
 
-# This is a temporary workaround for tools that aren't implemented yet.
-# docstyle-ignore
-MISSING_TOOLS = """
-- database_reader: This is a tool that reads a record in a key-value database. It takes an input `key` and returns the value in the database.
-- database_writer: This is a tool that writes a record in a key-value database. It takes an input `key` indicating the location in the database, as well as an input `value` which will populate the database. It returns the HTTP code indicating success or failure of the write operation.
-- image_qa: This is a tool that answers question about images. It takes an input named `text` which should be the question in English and an input `image` which should be an image, and outputs a text that is the answer to the question.
-- video_generator: This is a tool that generates a video (or animation) according to a `prompt`. The `prompt` is a text-based definition of the video to be generated. The returned value is a video object.
-"""
+REMOTE_TOOLS_DESCRIPTION = {}
+
+
+def get_remote_tools(organization="huggingface-tools"):
+    global OUR_TOOLS
+    global REMOTE_TOOLS_DESCRIPTION
+
+    spaces = list_spaces(author=organization)
+    for space_info in spaces:
+        repo_id = space_info.id
+        resolved_config_file = hf_hub_download(repo_id, "tool_config.json", repo_type="space")
+        with open(resolved_config_file, encoding="utf-8") as reader:
+            config = json.load(reader)
+
+        for _, task_info in config.items():
+            OUR_TOOLS[task_info["name"]] = repo_id
+            REMOTE_TOOLS_DESCRIPTION[task_info["name"]] = task_info["description"]
 
 
 def get_all_tools_descriptions():
@@ -68,12 +77,13 @@ def get_all_tools_descriptions():
     for tool_name, task_name in OUR_TOOLS.items():
         if task_name is None:
             continue
-        tool_class_name = TASK_MAPPING.get(task_name)
-        description = getattr(tools_module, tool_class_name).description
+        elif tool_name in REMOTE_TOOLS_DESCRIPTION:
+            description = REMOTE_TOOLS_DESCRIPTION[tool_name]
+        else:
+            tool_class_name = TASK_MAPPING.get(task_name)
+            description = getattr(tools_module, tool_class_name).description
         lines.append(f"- {tool_name}: {description}")
 
-    # force-add missing tools descriptions for now
-    lines.append(MISSING_TOOLS.strip())
     return "\n".join(lines)
 
 
@@ -135,9 +145,13 @@ class Agent:
     run_prompt_template = RUN_PROMPT_TEMPLATE
 
     def __init__(self):
+        global _tools_are_initialized
         self.chat_history = None
         self.chat_state = {}
         self.cached_tools = None
+        if not _tools_are_initialized:
+            get_remote_tools()
+            _tools_are_initialized = True
 
     def format_prompt(self, task):
         if getattr(self, "default_tools", None) is None:
