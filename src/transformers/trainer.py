@@ -1579,7 +1579,7 @@ class Trainer:
 
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
-            if any(p.requires_grad for p in model.parameters()):
+            if not any(p.requires_grad for p in model.parameters()):
                 setattr(self.accelerator, "prepare_model", False)
 
         # torch.compile() needs to be called after wrapping the model with FSDP or DDP
