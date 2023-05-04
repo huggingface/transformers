@@ -228,6 +228,8 @@ TASK_MAPPING = {
 
 
 def supports_remote(task_name):
+    if task_name not in TASK_MAPPING:
+        return False
     main_module = importlib.import_module("transformers")
     tools_module = main_module.tools
     tool_class = TASK_MAPPING[task_name]
