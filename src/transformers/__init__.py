@@ -179,7 +179,7 @@ _import_structure = {
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
-    "models.beit_3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
+    "models.beit_3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config", "Beit3Processor"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BasicTokenizer",
@@ -1272,6 +1272,7 @@ else:
     _import_structure["image_processing_utils"] = ["ImageProcessingMixin"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
+    _import_structure["models.beit_3"].extend(["Beit3ImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
@@ -4950,7 +4951,7 @@ if TYPE_CHECKING:
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
-    from .models.beit_3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config
+    from .models.beit_3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config, Beit3Processor
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BasicTokenizer,
