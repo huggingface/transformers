@@ -1,5 +1,6 @@
+import re
 
-from .agents import BASE_PYTHON_TOOLS, OUR_TOOLS, clean_code_for_run
+from .agents import BASE_PYTHON_TOOLS, clean_code_for_run
 from .python_interpreter import evaluate
 
 
@@ -24,12 +25,6 @@ def transcriber(audio):
 
 def image_generator(prompt):
     return f"This is actually an image representing {prompt}."
-
-
-def image_segmentor(image):
-    if "image" not in image:
-        raise ValueError(f"`image` ({image}) is not an image.")
-    return f"This is the segmentation mask of {image}."
 
 
 def image_captioner(image):
@@ -66,20 +61,24 @@ def video_generator(prompt, seconds=2):
     return f"A video of {prompt}"
 
 
-ALL_TOOLS = {
+def document_qa(image, question):
+    return f"This is the answer to {question} from the document {image}."
+
+
+TEST_TOOLS = {
     "text_classifier": classifier,
     "translator": translator,
     "text_reader": speaker,
     "summarizer": summarizer,
     "transcriber": transcriber,
     "image_generator": image_generator,
-    "image_segmentor": image_segmentor,
     "image_captioner": image_captioner,
     "image_transformer": image_transformer,
-    "test_qa": question_answerer,
+    "text_qa": question_answerer,
     "text_downloader": text_downloader,
     "image_qa": image_qa,
     "video_generator": video_generator,
+    "document_qa": document_qa,
 }
 
 
@@ -91,19 +90,16 @@ class Problem:
         task (`str` ou `list[str]`):
             One or several descriptions of the task to perform. If a list, it should contain variations on the
             phrasing, but for the same task.
-        tools (`list[Tool]`):
-            The list of tools necessary to solve the problem.
         inputs (`list[str]` or `dict[str, str]`):
             The inputs that will be fed to the tools. For this testing environment, only strings are accepted as
             values. Pass along a dictionary when you want to specify the values of each inputs, or just the list of
             inputs expected (the value used will be `<<input_name>>` in this case).
-        answer:
-            The theoretical answer (or list of possible valid answers) to the problem.
+        answer (`str` or `list[str`]):
+            The theoretical answer (or list of possible valid answers) to the problem, as code.
     """
 
-    def __init__(self, task, tools, inputs, answer):
+    def __init__(self, task, inputs, answer):
         self.task = task
-        self.tools = tools
         self.inputs = inputs
         self.answer = answer
 
@@ -116,12 +112,8 @@ EVALUATION_TASKS = [
             "Is the text in the variable `text` (in Spanish) positive or negative?",
             "Translate the following `text` from Spanish to English then tell me if its positive or negative.",
         ],
-        tools=[classifier, translator],
-        inputs={"text": "C'est une review positive."},
-        answer=classifier(
-            translator("C'est une review positive.", src_lang="Spanish", tgt_lang="English"),
-            labels=["positive", "negative"],
-        ),
+        inputs=["text"],
+        answer="""text_classifier(translator(text, src_lang="Spanish", tgt_lang="English"), labels=["positive", "negative"])""",
     ),
     Problem(
         task=[
@@ -129,11 +121,10 @@ EVALUATION_TASKS = [
             "Describe the following `image` out loud.",
             "Determine what is in the pictured stored in `image` then read it out loud.",
         ],
-        tools=[image_captioner, speaker],
         inputs=["image"],
         answer=[
-            speaker(image_captioner("<<image>>")),
-            speaker(image_qa("<<image>>", question="What is in the image?")),
+            "text_reader(image_captioner(image))",
+            "text_reader(image_qa(image, question='What is in the image?'))",
         ],
     ),
     Problem(
@@ -141,9 +132,8 @@ EVALUATION_TASKS = [
             "Generate an image from the text given in `text_input`. Then transform it according to the text in `prompt`.",
             "Use the following `text_input` to generate an image, then transform it by using the text in `prompt`.",
         ],
-        tools=[image_generator, image_transformer],
         inputs=["text_input", "prompt"],
-        answer=image_transformer(image_generator("<<text_input>>"), "<<prompt>>"),
+        answer="image_transformer(image_generator(text_input), prompt)",
     ),
     Problem(
         task=[
@@ -151,9 +141,8 @@ EVALUATION_TASKS = [
             "Use a summary of the web page at `url` to generate an image.",
             "Summarize the content of the web page at `url`, and use the result to generate an image.",
         ],
-        tools=[summarizer, text_downloader, image_generator],
         inputs=["url"],
-        answer=image_generator(summarizer(text_downloader("<<url>>"))),
+        answer="image_generator(summarizer(text_downloader(url)))",
     ),
     Problem(
         task=[
@@ -161,26 +150,23 @@ EVALUATION_TASKS = [
             "Use the text prompt in `text` (in Spanish) to transform the following `image`.",
             "Translate the `text` from Spanish to English then use it to transform the picture in `image`.",
         ],
-        tools=[translator, image_transformer],
         inputs=["text", "image"],
-        answer=image_transformer("<<image>>", translator("<<text>>", src_lang="Spanish", tgt_lang="English")),
+        answer="image_transformer(image, translator(text, src_lang='Spanish', tgt_lang='English'))",
     ),
     Problem(
         task=[
             "Download the content of `url`, summarize it then read it out loud to me.",
             "Read me a summary of the web page at `url`.",
         ],
-        tools=[summarizer, text_downloader, speaker],
         inputs=["url"],
-        answer=speaker(summarizer(text_downloader("<<url>>"))),
+        answer="text_reader(summarizer(text_downloader(url)))",
     ),
     Problem(
         task=[
             "Generate an image from the text given in `text_input`.",
         ],
-        tools=[image_generator],
         inputs=["text_input"],
-        answer=image_generator("<<text_input>>"),
+        answer="image_generator(text_input)",
     ),
     Problem(
         task=[
@@ -188,9 +174,8 @@ EVALUATION_TASKS = [
             "Transform the `image` so that it contains the `prompt`.",
             "Use `prompt` to transform this `image`.",
         ],
-        tools=[image_transformer],
         inputs={"image": "<image object>", "prompt": "capybara"},
-        answer=image_transformer("<image object>", "capybara"),
+        answer="image_transformer(image, prompt='capybara')",
     ),
     Problem(
         task=[
@@ -198,31 +183,44 @@ EVALUATION_TASKS = [
             "Summarize `text`, read it out loud then transcribe the audio and translate it in French.",
             "Read me a summary of the the `text` out loud. Transcribe this and translate it in French.",
         ],
-        tools=[summarizer, speaker, transcriber, translator],
-        inputs={"text": "I'm a text"},
-        answer=translator(transcriber(speaker(summarizer("I'm a text"))), src_lang="English", tgt_lang="French"),
+        inputs=["text"],
+        answer="translator(transcriber(text_reader(summarizer(text))), src_lang='English', tgt_lang='French')",
     ),
     Problem(
         task=["Generate a video of the `prompt`", "Animate a `prompt`", "Make me a short video using `prompt`."],
-        tools=[video_generator],
         inputs={"prompt": "A lobster swimming"},
-        answer=video_generator("A lobster swimming"),
+        answer="video_generator('A lobster swimming')",
     ),
     Problem(
         task=[
             "Download the following file `url`, summarize it in a few words and generate a video from it."
             "Fetch the file at this `url`, summarize it, and create an animation out of it."
         ],
-        tools=[text_downloader, summarizer, video_generator],
-        inputs={"url": "url"},
-        answer=video_generator(summarizer(text_downloader("url"))),
+        inputs=["url"],
+        answer="video_generator(summarizer(text_downloader(url)))",
     ),
 ]
 
 
+def get_theoretical_tools(agent_answer, theoretical_answer, code_answer):
+    if not isinstance(theoretical_answer, list):
+        return {name for name in TEST_TOOLS if name in code_answer}
+
+    for one_answer, one_code in zip(theoretical_answer, code_answer):
+        if agent_answer == one_answer:
+            return {name for name in TEST_TOOLS if name in one_code}
+
+    if isinstance(agent_answer, dict):
+        for one_answer, one_code in zip(theoretical_answer, code_answer):
+            if one_answer in agent_answer.values():
+                return {name for name in TEST_TOOLS if name in one_code}
+
+    return {name for name in TEST_TOOLS if name in code_answer[0]}
+
+
 def evaluate_code(code, inputs, verbose=False):
     tools = BASE_PYTHON_TOOLS.copy()
-    for name, tool in ALL_TOOLS.items():
+    for name, tool in TEST_TOOLS.items():
         if name not in code:
             continue
         tools[name] = tool
@@ -271,6 +269,16 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
         print(bad)
     ```
     """
+    # Sanity check
+    agent.format_prompt("Fake")  # To initialize the list of tools in the agent.
+    agent_tools = set(re.findall(r"-\s+([^:]+):", agent.default_tools))
+    if agent_tools != set(TEST_TOOLS):
+        missing_tools = set(TEST_TOOLS) - agent_tools
+        unexpected_tools = set(agent_tools) - TEST_TOOLS
+        raise ValueError(
+            f"Fix the test tools in the evaluate_agent module. Tools mising: {missing_tools}. Extra tools: {unexpected_tools}."
+        )
+
     eval_tasks = []
     eval_idx = []
     for idx, pb in enumerate(EVALUATION_TASKS):
@@ -302,8 +310,15 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
                 print(f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n")
             explanation, code = clean_code_for_run(result)
 
-            tools_in_explanation = {name for name in OUR_TOOLS if f"`{name}`" in explanation}
-            theoretical_tools = {name for name, tool in ALL_TOOLS.items() if tool in problem.tools}
+            # Evaluate agent answer and code answer
+            agent_answer = evaluate_code(code, problem.inputs, verbose=verbose)
+            if isinstance(problem.answer, list):
+                theoretical_answer = [evaluate_code(answer, problem.inputs) for answer in problem.answer]
+            else:
+                theoretical_answer = evaluate_code(problem.answer, problem.inputs)
+
+            tools_in_explanation = {name for name in TEST_TOOLS if f"`{name}`" in explanation}
+            theoretical_tools = get_theoretical_tools(agent_answer, theoretical_answer, problem.answer)
             if tools_in_explanation == theoretical_tools:
                 tool_selection_score += 1.0
             else:
@@ -316,7 +331,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
                         "theoretical_tools": theoretical_tools,
                     }
 
-            tools_in_code = {name for name in OUR_TOOLS if name in code}
+            tools_in_code = {name for name in TEST_TOOLS if name in code}
             if tools_in_code == theoretical_tools:
                 tool_used_score += 1.0
             else:
@@ -329,13 +344,12 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
                         "theoretical_tools": theoretical_tools,
                     }
 
-            agent_answer = evaluate_code(code, problem.inputs, verbose=verbose)
-            score = score_code(agent_answer, problem.answer, verbose=verbose)
+            score = score_code(agent_answer, theoretical_answer, verbose=verbose)
             if return_errors and score < 1.0:
                 code_errors[batch_tasks[idx]] = {
                     "code_produced": code,
                     "evaluation": agent_answer,
-                    "theoretical_answer": problem.answer,
+                    "theoretical_answer": theoretical_answer,
                 }
             code_score += score
 
