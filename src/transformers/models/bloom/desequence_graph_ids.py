@@ -66,7 +66,6 @@ def extract_edge_sequence(
                 and not node_explored[sequence[-2].ids]
             )
         ):
-
             edges.append((sequence[-2], sequence[-1], None))
         elif (
             len(sequence) > 0 and sequence[-1].token in graph_tokens['nodes']
