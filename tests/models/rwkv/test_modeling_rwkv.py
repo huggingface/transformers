@@ -17,7 +17,7 @@
 import unittest
 from unittest.util import safe_repr
 
-from transformers import RwkvConfig, is_torch_available
+from transformers import AutoTokenizer, RwkvConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -423,3 +423,20 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_name in RWKV_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = RwkvModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@slow
+class RWKVIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.model_id = "ybelkada/rwkv-4-169m-pile"
+        self.model = RwkvForCausalLM.from_pretrained(self.model_id).to(torch_device)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+    def test_simple_generate(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        output = self.model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
