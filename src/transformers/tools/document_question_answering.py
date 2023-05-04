@@ -13,7 +13,7 @@ if is_vision_available():
 
 DOCUMENT_QUESTION_ANSWERING_DESCRIPTION = (
     "This is a tool that answers a question about an document (pdf). It takes an input named `document` which should be the "
-    "document containing the information, as well as a `query` that is the question about the document. It returns a text "
+    "document containing the information, as well as a `question` that is the question about the document. It returns a text "
     "that contains the answer to the question."
 )
 
@@ -33,9 +33,9 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
         super().__init__(*args, **kwargs)
 
-    def encode(self, image: "Image", query: str):
+    def encode(self, image: "Image", question: str):
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
-        prompt = task_prompt.replace("{user_input}", query)
+        prompt = task_prompt.replace("{user_input}", question)
         decoder_input_ids = self.pre_processor.tokenizer(
             prompt, add_special_tokens=False, return_tensors="pt"
         ).input_ids
