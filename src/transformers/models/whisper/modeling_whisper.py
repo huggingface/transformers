@@ -1579,7 +1579,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 else:
                     is_language_code = len(generation_config.language) == 2
                     raise ValueError(
-                        f"Unsupported language: {generation_config.language!r}. Language should be one of:"
+                        f"Unsupported language: {generation_config.language}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                     )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
