@@ -422,12 +422,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
             ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
             ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
 
-            ddd = torch.tensor(
+            time_weight = torch.tensor(
                 [i / hidden_size for i in range(hidden_size)],
                 dtype=module.time_mix_key.dtype,
                 device=module.time_mix_key.device,
             )
-            ddd = ddd[None, None, :]
+            time_weight = time_weight[None, None, :]
 
             decay_speed = [
                 -5 + 8 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
@@ -447,9 +447,9 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 module.time_decay.data = decay_speed
                 module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
 
-                module.time_mix_key.data = torch.pow(ddd, ratio_1_to_almost0)
-                module.time_mix_value.data = torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
-                module.time_mix_receptance.data = torch.pow(ddd, 0.5 * ratio_1_to_almost0)
+                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
+                module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -457,16 +457,16 @@ class RwkvPreTrainedModel(PreTrainedModel):
 
             ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
 
-            ddd = torch.tensor(
+            time_weight = torch.tensor(
                 [i / hidden_size for i in range(hidden_size)],
                 dtype=module.time_mix_key.dtype,
                 device=module.time_mix_key.device,
             )
-            ddd = ddd[None, None, :]
+            time_weight = time_weight[None, None, :]
 
             with torch.no_grad():
-                module.time_mix_key.data = torch.pow(ddd, ratio_1_to_almost0)
-                module.time_mix_receptance.data = torch.pow(ddd, ratio_1_to_almost0)
+                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, RwkvModel):
