@@ -1512,6 +1512,7 @@ append_replace_return_docstrings(
 class FlaxWhisperForAudioClassificationModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         self.encoder = FlaxWhisperEncoder(config=self.config, dtype=self.dtype)
