@@ -2779,11 +2779,15 @@ class Trainer:
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
             or self.fsdp is not None
+            or getattr(self.accelerator.state, "fsdp_plugin", None) is not None
         ):
-            state_dict = self.model.state_dict()
+            if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
+                self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
+            else:
+                state_dict = self.model.state_dict()
 
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
