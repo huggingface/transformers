@@ -1446,10 +1446,8 @@ class TrainingArguments:
         # accelerate integration for FSDP
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
             os.environ["ACCELERATE_USE_FSDP"] = "true"
-            prefix = "FSDP_"
             from accelerate.utils.constants import (
                 FSDP_AUTO_WRAP_POLICY,
-                FSDP_BACKWARD_PREFETCH,
                 FSDP_SHARDING_STRATEGY,
             )
 

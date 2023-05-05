@@ -1711,7 +1711,7 @@ class Trainer:
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # Fairscale Sharded DDP, FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
-        use_accelerator_prepare = True if model is not self.model else False
+        use_accelerator_prepare = True if model is self.model else False
 
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
