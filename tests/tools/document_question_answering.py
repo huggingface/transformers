@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
@@ -41,4 +40,3 @@ class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
 
         result = self.tool(image=image, question="When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")
-

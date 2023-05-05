@@ -24,8 +24,8 @@ class TextToSpeechTool(PipelineTool):
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    inputs = ['text']
-    outputs = ['audio']
+    inputs = ["text"]
+    outputs = ["audio"]
 
     def setup(self):
         if self.post_processor is None:

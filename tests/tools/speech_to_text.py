@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.tools import SpeechToTextTool
+import unittest
+
 import torch
 
-from .test_tools_common import ToolTesterMixin
-import unittest
+from transformers.tools import SpeechToTextTool
 
 from .test_tools_common import ToolTesterMixin
-import unittest
+
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
@@ -29,8 +29,8 @@ class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_arg(self):
         result = self.tool(torch.ones(3000))
-        self.assertEqual(result, ' you')
+        self.assertEqual(result, " you")
 
     def test_exact_match_kwarg(self):
         result = self.tool(audio=torch.ones(3000))
-        self.assertEqual(result, ' you')
+        self.assertEqual(result, " you")

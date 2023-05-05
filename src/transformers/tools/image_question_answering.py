@@ -31,10 +31,11 @@ class ImageQuestionAnsweringTool(PipelineTool):
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", question: str):
-        return self.pre_processor([image], question, return_tensors="pt")
+        return self.pre_processor(image, question, return_tensors="pt")
 
     def forward(self, inputs):
-        return self.model(**inputs)
+        return self.model(**inputs).logits
 
     def decode(self, outputs):
-        return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+        idx = outputs.argmax(-1).item()
+        return self.model.config.id2label[idx]

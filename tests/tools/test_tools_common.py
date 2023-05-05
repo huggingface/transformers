@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
@@ -17,39 +16,41 @@
 from pathlib import Path
 from typing import List
 
-from PIL import Image
 import torch
+from PIL import Image
 
 from transformers.testing_utils import get_tests_dir
 
 
-authorized_types = ['text', 'image', 'audio']
+authorized_types = ["text", "image", "audio"]
+
 
 def create_inputs(input_types: List[str]):
     inputs = []
 
     for input_type in input_types:
-        if input_type == 'text':
-            inputs.append('Text input')
-        elif input_type == 'image':
-            inputs.append(Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / '000000039769.png'))
-        elif input_type == 'audio':
+        if input_type == "text":
+            inputs.append("Text input")
+        elif input_type == "image":
+            inputs.append(Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"))
+        elif input_type == "audio":
             inputs.append(torch.ones(3000))
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
 
     return inputs
 
+
 def output_types(outputs: List):
     output_types = []
 
     for output in outputs:
         if isinstance(output, str):
-            output_types.append('text')
+            output_types.append("text")
         elif isinstance(output, Image.Image):
-            output_types.append('image')
+            output_types.append("image")
         elif isinstance(output, torch.Module):
-            output_types.append('audio')
+            output_types.append("audio")
         else:
             raise ValueError(f"Invalid output: {output}")
 
@@ -58,8 +59,8 @@ def output_types(outputs: List):
 
 class ToolTesterMixin:
     def test_inputs_outputs(self):
-        self.assertTrue(hasattr(self.tool, 'inputs'))
-        self.assertTrue(hasattr(self.tool, 'outputs'))
+        self.assertTrue(hasattr(self.tool, "inputs"))
+        self.assertTrue(hasattr(self.tool, "outputs"))
 
         inputs = self.tool.inputs
         for _input in inputs:
@@ -80,7 +81,6 @@ class ToolTesterMixin:
         self.assertListEqual(output_types(outputs), self.tool.outputs)
 
     def test_common_attributes(self):
-        self.assertTrue(hasattr(self.tool, 'description'))
-        self.assertTrue(hasattr(self.tool, 'default_checkpoint'))
+        self.assertTrue(hasattr(self.tool, "description"))
+        self.assertTrue(hasattr(self.tool, "default_checkpoint"))
         self.assertTrue(self.tool.description.startswith("This is a tool that"))
-
