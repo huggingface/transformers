@@ -72,7 +72,7 @@ _bitsandbytes_available = _is_package_available("bitsandbytes")
 _bs4_available = _is_package_available("bs4")
 _coloredlogs_available = _is_package_available("coloredlogs")
 _datasets_available = _is_package_available("datasets")
-_decord_availale = _is_package_available("decord")
+_decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
 _faiss_available = _is_package_available("faiss") or _is_package_available("faiss-cpu")
 _ftfy_available = _is_package_available("ftfy")
@@ -99,7 +99,12 @@ _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
-_sklearn_available = _is_package_available("sklearn")
+_sklearn_available = importlib.util.find_spec("sklearn") is not None
+if _sklearn_available:
+    try:
+        importlib_metadata.version("scikit-learn")
+    except importlib_metadata.PackageNotFoundError:
+        _sklearn_available = False
 _smdistributed_available = _is_package_available("smdistributed")
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
@@ -645,7 +650,7 @@ def is_ccl_available():
 
 
 def is_decord_available():
-    return _decord_availale
+    return _decord_available
 
 
 def is_sudachi_available():
