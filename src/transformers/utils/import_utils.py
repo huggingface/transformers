@@ -25,7 +25,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Literal, Tuple, Union, overload
+from typing import Any, Tuple, Union
 
 from packaging import version
 
@@ -34,21 +34,6 @@ from .versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-@overload
-def _is_package_available(pkg_name: str) -> bool:
-    ...
-
-
-@overload
-def _is_package_available(pkg_name: str, return_version: Literal[False]) -> bool:
-    ...
-
-
-@overload
-def _is_package_available(pkg_name: str, return_version: Literal[True]) -> Tuple[bool, str]:
-    ...
 
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
