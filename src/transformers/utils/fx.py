@@ -25,7 +25,6 @@ import warnings
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx._compatibility import compatibility
@@ -57,11 +56,10 @@ from ..models.auto.modeling_auto import (
 from ..utils import (
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
+    get_torch_version,
     is_peft_available,
     is_torch_fx_available,
-    get_torch_version,
 )
-from ..utils.versions import importlib_metadata
 
 
 if is_peft_available():
