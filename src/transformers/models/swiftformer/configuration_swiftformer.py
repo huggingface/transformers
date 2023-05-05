@@ -65,6 +65,8 @@ class SwiftFormerConfig(PretrainedConfig):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-5):
             Factor by which outputs from token mixers are scaled.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-3):
+            The epsilon used by the batch normalization layers.
 
 
     Example:
@@ -96,7 +98,7 @@ class SwiftFormerConfig(PretrainedConfig):
         drop_path_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
-        batch_norm_eps=0.00001,
+        batch_norm_eps=1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
