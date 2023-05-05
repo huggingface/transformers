@@ -52,6 +52,7 @@ class AutoformerModelTester:
         batch_size=13,
         prediction_length=7,
         context_length=14,
+        label_length=10,
         cardinality=19,
         embedding_dimension=5,
         num_time_features=4,
@@ -87,6 +88,7 @@ class AutoformerModelTester:
 
         self.encoder_seq_length = context_length
         self.decoder_seq_length = prediction_length
+        self.label_length = label_length
 
         self.moving_avg = moving_avg
         self.factor = factor
@@ -104,6 +106,7 @@ class AutoformerModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             prediction_length=self.prediction_length,
             context_length=self.context_length,
+            label_length=self.label_length,
             lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
             num_static_categorical_features=1,
@@ -156,21 +159,39 @@ class AutoformerModelTester:
             encoder = AutoformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         transformer_inputs, feature, _, _, _ = model.create_network_inputs(**inputs_dict)
-        seasonal_input, trend_input = model.decomposition_layer(transformer_inputs)
+        seasonal_input, trend_input = model.decomposition_layer(transformer_inputs[:, : config.context_length, ...])
 
         enc_input = torch.cat(
-            (transformer_inputs[:, : config.context_length, ...], feature[:, : config.context_length, ...]), dim=-1
+            (transformer_inputs[:, : config.context_length, ...], feature[:, : config.context_length, ...]),
+            dim=-1,
         )
-        dec_input = torch.cat(
-            (seasonal_input[:, config.context_length :, ...], feature[:, config.context_length :, ...]), dim=-1
-        )
-        trend_input = torch.cat(
-            (trend_input[:, config.context_length :, ...], feature[:, config.context_length :, ...]), dim=-1
-        )
-
         encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
-
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+
+        mean = (
+            torch.mean(transformer_inputs[:, : config.context_length, ...], dim=1)
+            .unsqueeze(1)
+            .repeat(1, config.prediction_length, 1)
+        )
+        zeros = torch.zeros(
+            [transformer_inputs.shape[0], config.prediction_length, transformer_inputs.shape[2]],
+            device=enc_input.device,
+        )
+
+        dec_input = torch.cat(
+            (
+                torch.cat((seasonal_input[:, -config.label_length :, ...], zeros), dim=1),
+                feature[:, config.context_length - config.label_length :, ...],
+            ),
+            dim=-1,
+        )
+        trend_init = torch.cat(
+            (
+                torch.cat((trend_input[:, -config.label_length :, ...], mean), dim=1),
+                feature[:, config.context_length - config.label_length :, ...],
+            ),
+            dim=-1,
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -178,7 +199,7 @@ class AutoformerModelTester:
             decoder = AutoformerDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2, _ = decoder(
-            trend=torch.ones_like(dec_input),
+            trend=trend_init,
             inputs_embeds=dec_input,
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
@@ -302,6 +323,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        label_length = getattr(self.model_tester, "label_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         d_model = getattr(self.model_tester, "d_model", None)
         num_attention_heads = getattr(self.model_tester, "num_attention_heads", None)
@@ -358,7 +380,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
+                [self.model_tester.num_attention_heads, decoder_seq_length + label_length, dim],
             )
 
             # cross attentions
@@ -367,7 +389,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, dim],
+                [self.model_tester.num_attention_heads, decoder_seq_length + label_length, dim],
             )
 
         # Check attention is always last and order is fine
