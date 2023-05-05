@@ -17,6 +17,7 @@ IMAGE_QUESTION_ANSWERING_DESCRIPTION = (
 class ImageQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "dandelin/vilt-b32-finetuned-vqa"
     description = IMAGE_QUESTION_ANSWERING_DESCRIPTION
+    name = "image_qa"
     pre_processor_class = AutoProcessor
     model_class = AutoModelForVisualQuestionAnswering
 

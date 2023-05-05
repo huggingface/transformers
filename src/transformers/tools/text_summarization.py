@@ -19,6 +19,7 @@ class TextSummarizationTool(PipelineTool):
 
     default_checkpoint = "philschmid/flan-t5-base-samsum"
     description = TEXT_SUMMARIZATION_CESCRIPTION
+    name = "sumamrizer"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 

@@ -25,6 +25,7 @@ class TextClassificationTool(PipelineTool):
 
     default_checkpoint = "facebook/bart-large-mnli"
     description = TEXT_CLASSIFIER_DESCRIPTION
+    name = "text-classifier"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 

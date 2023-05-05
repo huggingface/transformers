@@ -19,6 +19,7 @@ IMAGE_SEGMENTATION_DESCRIPTION = (
 class ImageSegmentationTool(PipelineTool):
     description = IMAGE_SEGMENTATION_DESCRIPTION
     default_checkpoint = "CIDAS/clipseg-rd64-refined"
+    name = "image_segmenter"
     pre_processor_class = AutoProcessor
     model_class = CLIPSegForImageSegmentation
 

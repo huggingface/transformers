@@ -19,6 +19,7 @@ TEXT_TO_SPEECH_DESCRIPTION = (
 class TextToSpeechTool(PipelineTool):
     default_checkpoint = "microsoft/speecht5_tts"
     description = TEXT_TO_SPEECH_DESCRIPTION
+    name = "text_reader"
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan

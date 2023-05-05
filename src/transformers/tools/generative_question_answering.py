@@ -16,6 +16,7 @@ GENERATIVE_QUESTION_ANSWERING_DESCRIPTION = (
 class GenerativeQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "google/flan-t5-base"
     description = GENERATIVE_QUESTION_ANSWERING_DESCRIPTION
+    name = "text_qa"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
