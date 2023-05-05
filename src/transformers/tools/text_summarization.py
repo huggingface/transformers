@@ -17,7 +17,7 @@ class TextSummarizationTool(PipelineTool):
     ```
     """
 
-    default_checkpoint = "philschmid/bart-large-cnn-samsum"
+    default_checkpoint = "philschmid/flan-t5-base-samsum"
     description = TEXT_SUMMARIZATION_CESCRIPTION
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
@@ -44,7 +44,7 @@ class RemoteTextSummarizationTool(RemoteTool):
     ```
     """
 
-    default_checkpoint = "philschmid/bart-large-cnn-samsum"
+    default_checkpoint = "philschmid/flan-t5-base-samsum"
     description = TEXT_SUMMARIZATION_CESCRIPTION
 
     def prepare_inputs(self, text):
