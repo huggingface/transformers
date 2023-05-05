@@ -103,7 +103,7 @@ class FlaxBeamSearchOutput(ModelOutput):
 class GreedyState:
     cur_len: jnp.ndarray
     sequences: jnp.ndarray
-    scores: jnp.ndarray
+    scores: Optional[jnp.ndarray]
     running_token: jnp.ndarray
     is_sent_finished: jnp.ndarray
     model_kwargs: Dict[str, jnp.ndarray]
@@ -650,7 +650,7 @@ class FlaxGenerationMixin:
             next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
             next_token = jnp.argmax(next_tokens_scores, axis=-1)
-            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores)
+            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores) if output_scores else None
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
