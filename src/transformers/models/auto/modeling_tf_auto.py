@@ -164,9 +164,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("whisper", "TFWhisperForAudioClassification")])
-
-
 TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
@@ -354,7 +351,13 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetForQuestionAnsweringSimple"),
     ]
 )
-TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("wav2vec2", "TFWav2Vec2ForSequenceClassification")])
+
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("wav2vec2", "TFWav2Vec2ForSequenceClassification"),
+        ("whisper", "TFWhisperForAudioClassification"),
+    ]
+)
 
 TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
