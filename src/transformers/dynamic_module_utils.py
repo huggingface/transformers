@@ -314,7 +314,7 @@ def get_cached_module_file(
     if len(new_files) > 0:
         new_files = "\n".join([f"- {f}" for f in new_files])
         logger.warning(
-            f"A new version of the following files was downloaded from {pretrained_model_name_or_path}:\n{new_files}"
+            f"A new version of the following files was downloaded from https://huggingface.co/spaces/{pretrained_model_name_or_path}:\n{new_files}"
             "\n. Make sure to double-check they do not contain any added malicious code. To avoid downloading new "
             "versions of the code file, you can pin a revision."
         )

@@ -266,7 +266,7 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
         "subfolder",
         "local_files_only",
     ]
-    hub_kwargs = {k: v for k, v in tool_kwargs if k in hub_kwargs_names}
+    hub_kwargs = {k: v for k, v in tool_kwargs.items() if k in hub_kwargs_names}
 
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
