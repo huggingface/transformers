@@ -1,6 +1,6 @@
 import re
 
-from .agents import BASE_PYTHON_TOOLS, clean_code_for_run
+from .agents import BASE_PYTHON_TOOLS, clean_code_for_chat, clean_code_for_run
 from .python_interpreter import InterpretorError, evaluate
 
 
@@ -215,6 +215,185 @@ EVALUATION_TASKS = [
 ]
 
 
+EVALUATION_CHATS = [
+    [
+        Problem(
+            task=[
+                "Translate the following `text` from Spanish to English.",
+                "Translate the following `text` from Spanish to English.",
+            ],
+            inputs=["text"],
+            answer="translated_text=translator(text, src_lang='Spanish', tgt_lang='English')",
+        ),
+        Problem(
+            task=[
+                "Is it positive or negative?",
+                "Tell me if its positive or negative.",
+            ],
+            inputs=[],
+            answer="text_classifier(translated_text, labels=['positive', 'negative'])",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "What does this `image` contain?",
+                "Describe the following `image`.",
+                "Determine what is in the picture stored in `image`",
+            ],
+            inputs=["image"],
+            answer=[
+                "description=image_captioner(image)",
+                "description=image_qa(image, question='What is in the image?')",
+            ],
+        ),
+        Problem(
+            task=["Now, read the description out loud.", "Great! Can you read it out loud?", "Read it out loud."],
+            inputs=[],
+            answer=["audio=text_reader(description)", "audio=text_reader(description)"],
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Generate an image from the text given in `text_input`.",
+                "Use the following `text_input` to generate an image",
+            ],
+            inputs=["text_input"],
+            answer="image = image_generator(text_input)",
+        ),
+        Problem(
+            task=[
+                "Transform it according to the text in `prompt`.",
+                "Transform it by using the text in `prompt`.",
+            ],
+            inputs=["prompt"],
+            answer="image_transformer(image, prompt)",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Download the content of `url` and summarize it.",
+                "Summarize the content of the web page at `url`.",
+            ],
+            inputs=["url"],
+            answer="summary = summarizer(text_downloader(url))",
+        ),
+        Problem(
+            task=[
+                "Generate an image from its content.",
+                "Use the previous result to generate an image.",
+            ],
+            inputs=[],
+            answer="image_generator(summary)",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Translate this Spanish `text` in English.",
+                "Translate the `text` from Spanish to English.",
+            ],
+            inputs=["text"],
+            answer="translated_text = translator(text, src_lang='Spanish', tgt_lang='English')",
+        ),
+        Problem(
+            task=[
+                "Transform the following `image` using the translated `text`.",
+                "Use the previous result to transform the following `image`.",
+            ],
+            inputs=["image"],
+            answer="image_transformer(image, translated_text)",
+        ),
+    ],
+    [
+        Problem(
+            task=["Download the content of `url`.", "Get me the text on the weg page `url`."],
+            inputs=["url"],
+            answer="text = text_downloader(url)",
+        ),
+        Problem(
+            task=["Summarize this text.", "Summarize this text."],
+            inputs=[],
+            answer="summary = summarizer(text)",
+        ),
+        Problem(
+            task=["Read it out loud to me.", "Read me the previous result."],
+            inputs=[],
+            answer="text_reader(summary)",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Generate an image from the text given in `text_input`.",
+            ],
+            inputs=["text_input"],
+            answer="image_generator(text_input)",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Replace the beaver in the `image` by the `prompt`.",
+                "Transform the `image` so that it contains the `prompt`.",
+                "Use `prompt` to transform this `image`.",
+            ],
+            inputs=["image", "prompt"],
+            answer=[
+                "image_transformer(image, prompt)",
+                "image_inpainter(image, image_segmenter(image, 'beaver'), prompt)",
+            ],
+        ),
+    ],
+    [
+        Problem(
+            task=["Provide me the summary of the `text`.", "Summarize `text`."],
+            inputs=["text"],
+            answer="summary = summarizer(text)",
+        ),
+        Problem(
+            task=["Read this summary to me.", "Read it out loud."],
+            inputs=[],
+            answer="audio = text_reader(summarizer(text))",
+        ),
+        Problem(
+            task=["Transcribing the previous result back in text.", "Transcribe the audio."],
+            inputs=[],
+            answer="text = transcriber(audio)",
+        ),
+        Problem(
+            task=["Translating the last result in French.", "Translate this in French."],
+            inputs=[],
+            answer="translator(text, src_lang='English', tgt_lang='French')",
+        ),
+    ],
+    [
+        Problem(
+            task=["Generate a video of the `prompt`", "Animate a `prompt`", "Make me a short video using `prompt`."],
+            inputs={"prompt": "A lobster swimming"},
+            answer="video_generator('A lobster swimming')",
+        ),
+    ],
+    [
+        Problem(
+            task=[
+                "Download the content of `url` and summarize it.",
+                "Summarize the content of the web page at `url`.",
+            ],
+            inputs=["url"],
+            answer="summary = summarizer(text_downloader(url))",
+        ),
+        Problem(
+            task=["generate a video from it.", "Create an animation from the last result."],
+            inputs=[],
+            answer="video_generator(summary)",
+        ),
+    ],
+]
+
+
 def get_theoretical_tools(agent_answer, theoretical_answer, code_answer):
     if not isinstance(theoretical_answer, list):
         return {name for name in TEST_TOOLS if name in code_answer}
@@ -242,11 +421,14 @@ def evaluate_code(code, inputs=None, state=None, verbose=False, return_interpret
         inputs = inputs.copy()
     elif inputs is not None:
         inputs = {inp: f"<<{inp}>>" for inp in inputs}
+
+    if state is not None:
+        state.update(inputs)
     else:
-        inputs = state
+        state = inputs
 
     try:
-        return evaluate(code, tools, inputs)
+        return evaluate(code, tools, state)
     except InterpretorError as e:
         return str(e)
     except Exception as e:
@@ -272,6 +454,49 @@ def score_code(agent_answer, theoretical_answer, verbose: bool = False):
         if verbose:
             print("Result is not the right one but code executed.")
         return 0.3
+
+
+def evaluate_one_result(explanation, code, agent_answer, theoretical_answer, answer, verbose=False):
+    tools_in_explanation = {name for name in TEST_TOOLS if f"`{name}`" in explanation}
+    theoretical_tools = get_theoretical_tools(agent_answer, theoretical_answer, answer)
+    if tools_in_explanation == theoretical_tools:
+        tool_selection_score = 1.0
+        tool_selection_errors = None
+    else:
+        missing_tools = len(theoretical_tools - tools_in_explanation)
+        unexpected_tools = len(tools_in_explanation - theoretical_tools)
+        tool_selection_score = max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
+
+        tool_selection_errors = {
+            "selected_tools": tools_in_explanation,
+            "theoretical_tools": theoretical_tools,
+        }
+
+    tools_in_code = {name for name in TEST_TOOLS if name in code}
+    if tools_in_code == theoretical_tools:
+        tool_used_score = 1.0
+        tool_used_errors = None
+    else:
+        missing_tools = len(theoretical_tools - tools_in_code)
+        unexpected_tools = len(tools_in_code - theoretical_tools)
+        tool_used_score = max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
+
+        tool_used_errors = {
+            "selected_tools": tools_in_explanation,
+            "theoretical_tools": theoretical_tools,
+        }
+
+    score = score_code(agent_answer, theoretical_answer, verbose=verbose)
+    if score < 1.0:
+        code_errors = {
+            "code_produced": code,
+            "evaluation": agent_answer,
+            "theoretical_answer": theoretical_answer,
+        }
+    else:
+        code_errors = None
+
+    return (tool_selection_score, tool_used_score, score), (tool_selection_errors, tool_used_errors, code_errors)
 
 
 def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
@@ -335,46 +560,128 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
             else:
                 theoretical_answer = evaluate_code(problem.answer, problem.inputs)
 
-            tools_in_explanation = {name for name in TEST_TOOLS if f"`{name}`" in explanation}
-            theoretical_tools = get_theoretical_tools(agent_answer, theoretical_answer, problem.answer)
-            if tools_in_explanation == theoretical_tools:
-                tool_selection_score += 1.0
-            else:
-                missing_tools = len(theoretical_tools - tools_in_explanation)
-                unexpected_tools = len(tools_in_explanation - theoretical_tools)
-                tool_selection_score += max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
-                if return_errors:
-                    tool_selection_errors[batch_tasks[idx]] = {
-                        "selected_tools": tools_in_explanation,
-                        "theoretical_tools": theoretical_tools,
-                    }
+            scores, errors = evaluate_one_result(
+                explanation, code, agent_answer, theoretical_answer, problem.answer, verbose=verbose
+            )
 
-            tools_in_code = {name for name in TEST_TOOLS if name in code}
-            if tools_in_code == theoretical_tools:
-                tool_used_score += 1.0
-            else:
-                missing_tools = len(theoretical_tools - tools_in_code)
-                unexpected_tools = len(tools_in_code - theoretical_tools)
-                tool_used_score += max(0, 1.0 - 0.25 * missing_tools - 0.25 * unexpected_tools)
-                if return_errors:
-                    tool_used_errors[batch_tasks[idx]] = {
-                        "selected_tools": tools_in_code,
-                        "theoretical_tools": theoretical_tools,
-                    }
+            tool_selection_score += scores[0]
+            tool_used_score += scores[1]
+            code_score += scores[2]
 
-            score = score_code(agent_answer, theoretical_answer, verbose=verbose)
-            if return_errors and score < 1.0:
-                code_errors[batch_tasks[idx]] = {
-                    "code_produced": code,
-                    "evaluation": agent_answer,
-                    "theoretical_answer": theoretical_answer,
-                }
-            code_score += score
+            if return_errors:
+                if errors[0] is not None:
+                    tool_selection_errors[batch_tasks[idx]] = errors[0]
+                if errors[1] is not None:
+                    tool_used_errors[batch_tasks[idx]] = errors[1]
+                if errors[2] is not None:
+                    code_errors[batch_tasks[idx]] = errors[2]
 
     scores = {
         "tool selection score": 100 * (tool_selection_score / len(eval_tasks)),
         "tool used score": 100 * (tool_used_score / len(eval_tasks)),
         "code score": 100 * (code_score / len(eval_tasks)),
+    }
+
+    if return_errors:
+        return scores, tool_selection_errors, tool_used_errors, code_errors
+    else:
+        return scores
+
+
+def evaluate_chat_agent(agent, verbose=False, return_errors=False):
+    """
+    Evaluates a new agent on all `EVALUATION_CHATS`.
+
+    Example:
+
+    ```py
+    agent = NewOpenAiAgent(model="text-davinci-003", api_key=your_api_key)
+    bads = new_evaluate_agent(agent)
+    for bad in bads:
+        print(bad)
+    ```
+    """
+    # Sanity check
+    agent.format_prompt("Fake")  # To initialize the list of tools in the agent.
+    agent_tools = set(re.findall(r"-\s+([^:]+):", agent.default_tools))
+    if agent_tools != set(TEST_TOOLS):
+        missing_tools = set(TEST_TOOLS) - agent_tools
+        unexpected_tools = agent_tools - set(TEST_TOOLS)
+        raise ValueError(
+            f"Fix the test tools in the evaluate_agent module. Tools mising: {missing_tools}. Extra tools: {unexpected_tools}."
+        )
+
+    tool_selection_score = 0
+    tool_used_score = 0
+    code_score = 0
+    total_steps = 0
+
+    if return_errors:
+        tool_selection_errors = {}
+        tool_used_errors = {}
+        code_errors = {}
+
+    for chat_problem in EVALUATION_CHATS:
+        if isinstance(chat_problem[0].task, str):
+            resolved_problems = [chat_problem]
+        else:
+            resolved_problems = [
+                [Problem(task=pb.task[i], inputs=pb.inputs, answer=pb.answer) for pb in chat_problem]
+                for i in range(len(chat_problem[0].task))
+            ]
+        for problem in resolved_problems:
+            agent.prepare_for_new_chat()
+            agent_state = {}
+            theoretical_state = (
+                [{} for _ in range(len(problem[0].answer))] if isinstance(problem[0].answer, list) else {}
+            )
+
+            for step, step_problem in enumerate(problem):
+                if verbose:
+                    print(step_problem.task)
+                total_steps += 1
+                prompt = agent.format_prompt(step_problem.task, chat_mode=True)
+                result = agent._generate_one(prompt, stop=["Human:", "====="])
+                agent.chat_history = prompt + result + "\n"
+
+                explanation, code = clean_code_for_chat(result)
+
+                if verbose:
+                    print(f"==Explanation from the agent==\n{explanation}")
+                    print(f"\n==Code generated by the agent==\n{code}")
+
+                # Evaluate agent answer and code answer
+                agent_answer = evaluate_code(code, step_problem.inputs, state=agent_state, verbose=verbose)
+
+                answer = step_problem.answer
+                if isinstance(answer, list):
+                    theoretical_answer = [
+                        evaluate_code(a, step_problem.inputs, state=state)
+                        for a, state in zip(answer, theoretical_state)
+                    ]
+                else:
+                    theoretical_answer = evaluate_code(answer, step_problem.inputs, state=theoretical_state)
+
+                scores, errors = evaluate_one_result(
+                    explanation, code, agent_answer, theoretical_answer, answer, verbose=verbose
+                )
+
+                tool_selection_score += scores[0]
+                tool_used_score += scores[1]
+                code_score += scores[2]
+
+                if return_errors:
+                    if errors[0] is not None:
+                        tool_selection_errors[step_problem.task] = errors[0]
+                    if errors[1] is not None:
+                        tool_used_errors[step_problem.task] = errors[1]
+                    if errors[2] is not None:
+                        code_errors[step_problem.task] = errors[2]
+
+    scores = {
+        "tool selection score": 100 * (tool_selection_score / total_steps),
+        "tool used score": 100 * (tool_used_score / total_steps),
+        "code score": 100 * (code_score / total_steps),
     }
 
     if return_errors:
