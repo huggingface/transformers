@@ -705,16 +705,7 @@ class BatchEncoding(UserDict):
             as_tensor = jnp.array
             is_tensor = is_jax_tensor
         else:
-
-            def as_tensor(value):
-                value_lens = [len(val) for val in value]
-                if len(np.unique(value_lens)) != 1:
-                    # we have a ragged list so handle explicitly
-                    value = np.asarray([np.asarray(val) for val in value], dtype=object)
-                else:
-                    value = np.asarray(value)
-                return value
-
+            as_tensor = np.asarray
             is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
