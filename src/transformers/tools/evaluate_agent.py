@@ -1,4 +1,3 @@
-import re
 
 from .agents import BASE_PYTHON_TOOLS, clean_code_for_chat, clean_code_for_run
 from .python_interpreter import InterpretorError, evaluate
@@ -513,8 +512,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
     ```
     """
     # Sanity check
-    agent.format_prompt("Fake")  # To initialize the list of tools in the agent.
-    agent_tools = set(re.findall(r"-\s+([^:]+):", agent.default_tools))
+    agent_tools = set(agent.toolbox.keys())
     if agent_tools != set(TEST_TOOLS):
         missing_tools = set(TEST_TOOLS) - agent_tools
         unexpected_tools = set(agent_tools) - TEST_TOOLS
@@ -602,8 +600,7 @@ def evaluate_chat_agent(agent, verbose=False, return_errors=False):
     ```
     """
     # Sanity check
-    agent.format_prompt("Fake")  # To initialize the list of tools in the agent.
-    agent_tools = set(re.findall(r"-\s+([^:]+):", agent.default_tools))
+    agent_tools = set(agent.toolbox.keys())
     if agent_tools != set(TEST_TOOLS):
         missing_tools = set(TEST_TOOLS) - agent_tools
         unexpected_tools = agent_tools - set(TEST_TOOLS)
