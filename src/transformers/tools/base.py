@@ -1,13 +1,14 @@
 import importlib
 import json
+import os
 from typing import List
 
 from huggingface_hub import InferenceApi, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from ..dynamic_module_utils import get_class_from_dynamic_module
+from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
-from ..utils import CONFIG_NAME, cached_file, is_accelerate_available, is_torch_available
+from ..utils import CONFIG_NAME, PushToHubMixin, cached_file, is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
@@ -20,17 +21,16 @@ if is_accelerate_available():
 TOOL_CONFIG_FILE = "tool_config.json"
 
 
-class Tool:
+class Tool(PushToHubMixin):
     """
     Example of a super 'Tool' class that could live in huggingface_hub
     """
 
-    description = "This is a tool that ..."
-    is_initialized = False
+    description: str = "This is a tool that ..."
+    name: str = ""
 
     inputs: List[str]
     outputs: List[str]
-    name: str
 
     def __init__(self, *args, **kwargs):
         pass
@@ -42,6 +42,30 @@ class Tool:
         # Do here any operation that is expensive and needs to be executed before you start using your tool. Such as
         # loading a big model.
         self.is_initialized = True
+
+    def save_pretrained(self, output_dir, task_name=None):
+        os.makedirs(output_dir, exist_ok=True)
+        custom_object_save(self, output_dir)
+
+        module_name = self.__class__.__module__
+        last_module = module_name.split(".")[-1]
+        full_name = f"{last_module}.{self.__class__.__name__}"
+
+        config_file = os.path.join(output_dir, "tool_config.json")
+        if os.path.isfile(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                tool_config = json.load(f)
+        else:
+            tool_config = {}
+
+        if task_name is None:
+            class_name = tool.__class__.__name__.replace("Tool", "")
+            chars = [f"_{c.lower()}" if c.isupper() else c for c in class_name]
+            task_name = "".join(chars)[1:]
+
+        tool_config[task_name] = {"tool_class": full_name, "description": self.description, "name": self.name}
+        with open(config_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
 
 
 class RemoteTool(Tool):

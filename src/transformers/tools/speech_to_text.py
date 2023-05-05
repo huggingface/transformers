@@ -11,6 +11,7 @@ SPEECH_TO_TEXT_DESCRIPTION = (
 class SpeechToTextTool(PipelineTool):
     default_checkpoint = "openai/whisper-base"
     description = SPEECH_TO_TEXT_DESCRIPTION
+    name = "transcriber"
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 
