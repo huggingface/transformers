@@ -1043,7 +1043,7 @@ class FlaxGenerationMixin:
         sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
-        sequences = sequences[:, 0:num_return_sequences]
-        sequences_scores = scores[:, 0:num_return_sequences] if output_scores else None
+        sequences = sequences[:, 0:num_return_sequences][0]
+        sequences_scores = scores[:, 0:num_return_sequences][0] if output_scores else None
 
         return FlaxBeamSearchOutput(sequences=sequences, sequences_scores=sequences_scores)
