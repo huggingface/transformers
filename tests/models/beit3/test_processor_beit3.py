@@ -116,23 +116,6 @@ class Beit3ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_slow.image_processor, Beit3ImageProcessor)
         self.assertIsInstance(processor_fast.image_processor, Beit3ImageProcessor)
 
-    # def test_save_load_pretrained_additional_features(self):
-    #     processor = Beit3Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-    #     processor.save_pretrained(self.tmpdirname)
-    #
-    #     tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-    #     image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
-    #
-    #     processor = Beit3Processor.from_pretrained(
-    #         self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False
-    #     )
-    #
-    #     self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-    #     self.assertIsInstance(processor.tokenizer, XLMRobertaTokenizer)
-    #
-    #     self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-    #     self.assertIsInstance(processor.image_processor, Beit3ImageProcessor)
-
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -178,58 +161,6 @@ class Beit3ProcessorTest(unittest.TestCase):
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
-
-    # def test_processor_with_text_list(self):
-    #     model_name = "google/owlvit-base-patch32"
-    #     processor = Beit3Processor.from_pretrained(model_name)
-    #
-    #     input_text = ["cat", "nasa badge"]
-    #     inputs = processor(text=input_text)
-    #
-    #     seq_length = 16
-    #     self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
-    #     self.assertEqual(inputs["input_ids"].shape, (2, seq_length))
-    #
-    #     # test if it raises when no input is passed
-    #     with pytest.raises(ValueError):
-    #         processor()
-
-    # def test_processor_with_nested_text_list(self):
-    #     model_name = "google/owlvit-base-patch32"
-    #     processor = Beit3Processor.from_pretrained(model_name)
-    #
-    #     input_texts = [["cat", "nasa badge"], ["person"]]
-    #     inputs = processor(text=input_texts)
-    #
-    #     seq_length = 16
-    #     batch_size = len(input_texts)
-    #     num_max_text_queries = max([len(texts) for texts in input_texts])
-    #
-    #     self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
-    #     self.assertEqual(inputs["input_ids"].shape, (batch_size * num_max_text_queries, seq_length))
-    #
-    #     # test if it raises when no input is passed
-    #     with pytest.raises(ValueError):
-    #         processor()
-
-    # def test_processor_case(self):
-    #     model_name = "google/owlvit-base-patch32"
-    #     processor = Beit3Processor.from_pretrained(model_name)
-    #
-    #     input_texts = ["cat", "nasa badge"]
-    #     inputs = processor(text=input_texts)
-    #
-    #     seq_length = 16
-    #     input_ids = inputs["input_ids"]
-    #     predicted_ids = [
-    #         [49406, 2368, 49407, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    #         [49406, 6841, 11301, 49407, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    #     ]
-    #
-    #     self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
-    #     self.assertEqual(inputs["input_ids"].shape, (2, seq_length))
-    #     self.assertListEqual(list(input_ids[0]), predicted_ids[0])
-    #     self.assertListEqual(list(input_ids[1]), predicted_ids[1])
 
     def test_processor_case2(self):
         image_processor = self.get_image_processor()
