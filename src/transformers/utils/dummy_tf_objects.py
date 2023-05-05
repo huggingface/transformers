@@ -2614,6 +2614,13 @@ class TFWav2Vec2PreTrainedModel(metaclass=DummyObject):
 TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFWhisperForAudioClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFWhisperForConditionalGeneration(metaclass=DummyObject):
     _backends = ["tf"]
 
