@@ -38,11 +38,6 @@ class Tool:
     def __call__(self, *args, **kwargs):  # Might become run?
         return NotImplemented("Write this method in your subclass of `Tool`.")
 
-    def post_init(self):
-        # Do here everything you need to execute after the init (to avoir overriding the init which is complex), such
-        # as formatting the description with the attributes of your tools.
-        pass
-
     def setup(self):
         # Do here any operation that is expensive and needs to be executed before you start using your tool. Such as
         # loading a big model.
@@ -58,7 +53,6 @@ class RemoteTool(Tool):
             repo_id = self.default_checkpoint
         self.repo_id = repo_id
         self.client = InferenceApi(repo_id, token=token)
-        self.post_init()
 
     def prepare_inputs(self, *args, **kwargs):
         if len(args) > 1:
@@ -128,7 +122,6 @@ class PipelineTool(Tool):
         self.hub_kwargs["use_auth_token"] = token
 
         self.is_initialized = False
-        self.post_init()
 
     def setup(self):
         # Instantiate me maybe

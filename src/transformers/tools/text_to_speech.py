@@ -23,9 +23,10 @@ class TextToSpeechTool(PipelineTool):
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    def post_init(self):
+    def setup(self):
         if self.post_processor is None:
             self.post_processor = "microsoft/speecht5_hifigan"
+        super().setup()
 
     def encode(self, text, speaker_embeddings=None):
         inputs = self.pre_processor(text=text, return_tensors="pt", truncation=True)
