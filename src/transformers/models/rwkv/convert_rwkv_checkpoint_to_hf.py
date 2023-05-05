@@ -117,7 +117,7 @@ def convert_rmkv_checkpoint_to_hf_format(
     state_dict = convert_state_dict(state_dict)
 
     # 4. Split in shards and save
-    shards, index = shard_checkpoint(state_dict, max_shard_size="2GB")
+    shards, index = shard_checkpoint(state_dict)
     for shard_file, shard in shards.items():
         torch.save(shard, os.path.join(output_dir, shard_file))
 
@@ -140,7 +140,7 @@ def convert_rmkv_checkpoint_to_hf_format(
 
         for shard_file in shard_files:
             state_dict = torch.load(os.path.join(output_dir, shard_file))
-            torch.save({k: v.cpu().clone() for k, v in state_dict.items()}, shard_file)
+            torch.save({k: v.cpu().clone() for k, v in state_dict.items()}, os.path.join(output_dir, shard_file))
 
     del state_dict
     gc.collect()
