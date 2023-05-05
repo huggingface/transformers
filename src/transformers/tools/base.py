@@ -33,6 +33,7 @@ class Tool(PushToHubMixin):
     outputs: List[str]
 
     def __init__(self, *args, **kwargs):
+        self.is_initialized = False
         pass
 
     def __call__(self, *args, **kwargs):  # Might become run?
