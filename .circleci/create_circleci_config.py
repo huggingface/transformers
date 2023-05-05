@@ -433,7 +433,7 @@ py_command = f"$(python3 -c '{py_command}')"
 command = f'echo "{py_command}" > pr_documentation_tests_filtered.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
-    additional_env={"TRANSFORMERS_VERBOSITY":"error", "DATASETS_VERBOSITY":"error", "SKIP_CUDA_DOCTEST": "1"},
+    additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade pip",
