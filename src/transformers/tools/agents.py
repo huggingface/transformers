@@ -202,7 +202,7 @@ class Agent:
         if not return_code:
             print("\n\n==Result==")
             self.cached_tools = resolve_tools(code, remote=remote, cached_tools=self.cached_tools)
-            return evaluate(code, self.cached_tools, kwargs)
+            return evaluate(code, self.cached_tools, state=kwargs.copy())
         else:
             return code
 
