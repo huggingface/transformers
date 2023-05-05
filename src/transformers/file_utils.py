@@ -125,5 +125,5 @@ from .utils import (
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_version,
+    get_torch_version,
 )

@@ -319,12 +319,12 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
-            from transformers.utils import torch_version
+            from transformers.utils import get_torch_version
 
-            if torch_version < onnx_config.torch_onnx_minimum_version:
+            if get_torch_version() < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
                     "Skipping due to incompatible PyTorch version. Minimum required is"
-                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {get_torch_version()}"
                 )
 
         preprocessor = get_preprocessor(model_name)
@@ -362,12 +362,12 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
-            from transformers.utils import torch_version
+            from transformers.utils import get_torch_version
 
-            if torch_version < onnx_config.torch_onnx_minimum_version:
+            if get_torch_version() < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
                     "Skipping due to incompatible PyTorch version. Minimum required is"
-                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {get_torch_version()}"
                 )
 
         encoder_model = model.get_encoder()

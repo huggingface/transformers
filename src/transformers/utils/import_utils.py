@@ -223,6 +223,10 @@ def is_torch_available():
     return _torch_available
 
 
+def get_torch_version():
+    return _torch_version
+
+
 def is_torchvision_available():
     return _torchvision_available
 

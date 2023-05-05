@@ -169,7 +169,7 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
+    get_torch_version,
 )
 
 
