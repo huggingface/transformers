@@ -107,6 +107,16 @@ class AutoformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        label_length (`int`, *optional*, defaults to 10):
+            Start token length of the Autoformer decoder, which is used for direct multi-step prediction
+            (i.e. non-autoregressive generation).
+        moving_avg (`int`, defaults to 25):
+            The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the
+            Decomposition Layer
+        factor (`int`, defaults to 3):
+            attention factor which is used to find top k autocorrelations delays. It's recommended in the paper
+            to set it to a number between 1 and 5.
+
 
         Example:
 
@@ -164,13 +174,12 @@ class AutoformerConfig(PretrainedConfig):
         # Autoformer arguments
         label_length: Optional[int] = None,
         moving_avg: int = 25,
-        factor: int = 3,  # between 1 and 3
+        factor: int = 3,
         **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.label_length = label_length or 10
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
@@ -223,6 +232,7 @@ class AutoformerConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         # Autoformer
+        self.label_length = label_length or 10
         self.moving_avg = moving_avg
         self.factor = factor
 
