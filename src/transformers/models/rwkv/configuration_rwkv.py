@@ -61,7 +61,7 @@ class RwkvConfig(PretrainedConfig):
             Dimensionality of the attention hidden states. Will default to `hidden_size` if unset.
         intermediate_size (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
         bos_token_id (`int`, *optional*, defaults to 0):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer
@@ -91,9 +91,7 @@ class RwkvConfig(PretrainedConfig):
     ```"""
 
     model_type = "rwkv"
-    attribute_map = {
-        "max_position_embeddings": "context_length",
-    }
+    attribute_map = {"max_position_embeddings": "context_length"}
 
     def __init__(
         self,

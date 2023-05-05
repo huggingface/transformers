@@ -253,9 +253,7 @@ class RwkvModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {
-            "input_ids": input_ids,
-        }
+        inputs_dict = {"input_ids": input_ids}
 
         return config, inputs_dict
 

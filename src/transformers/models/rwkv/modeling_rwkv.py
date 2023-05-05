@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright 2023 Peng Bo and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -573,6 +573,8 @@ RWKV_INPUTS_DOCSTRING = r"""
         state (tuple of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
+        use_cache (`bool`, *optional*):
+            If set to `True`, the last state is returned and can be used to quickly generate the next logits.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -581,8 +583,6 @@ RWKV_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        use_cache (`bool`, *optional*):
-            If set to `True`, the last state is returned and can be used to quickly generate the next logits.
 """
 
 
