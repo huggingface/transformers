@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
@@ -14,21 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+
 from transformers.tools import TextClassificationTool
 
 from .test_tools_common import ToolTesterMixin
-import unittest
 
 
-class TextClassificationTool(unittest.TestCase, ToolTesterMixin):
+class TextClassificationToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.tool = TextClassificationTool()
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool("That's quite cool", ['positive', 'negative'])
-        self.assertEqual(result, 'positive')
+        result = self.tool("That's quite cool", ["positive", "negative"])
+        self.assertEqual(result, "positive")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(text="That's quite cool", labels=['positive', 'negative'])
-        self.assertEqual(result, 'positive')
+        result = self.tool(text="That's quite cool", labels=["positive", "negative"])
+        self.assertEqual(result, "positive")
