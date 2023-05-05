@@ -10,8 +10,9 @@ if is_vision_available():
 
 
 IMAGE_SEGMENTATION_DESCRIPTION = (
-    "This is a tool that creates a segmentation mask using an image and a prompt. It takes an original image, as well as a prompt which "
-    "is a textual description of what should be identified in the mask. The tool returns the mask as an image."
+    "This is a tool that creates a segmentation mask using an image and a prompt. It takes two arguments named "
+    "`image` which should be the original image, and `prompt` which should be a text describing what should be "
+    "identified in the segmentation mask. The tool returns the mask as a black-and-white image."
 )
 
 
