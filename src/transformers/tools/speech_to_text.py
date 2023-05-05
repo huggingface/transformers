@@ -15,6 +15,9 @@ class SpeechToTextTool(PipelineTool):
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 
+    inputs = ['audio']
+    outputs = ['text']
+
     def encode(self, audio):
         return self.pre_processor(audio, return_tensors="pt").input_features
 

@@ -31,7 +31,7 @@ class ImageQuestionAnsweringTool(PipelineTool):
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", question: str):
-        return self.pre_processor(image, question, return_tensors="pt")
+        return self.pre_processor([image], question, return_tensors="pt")
 
     def forward(self, inputs):
         return self.model(**inputs)

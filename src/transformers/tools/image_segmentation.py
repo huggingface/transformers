@@ -23,6 +23,9 @@ class ImageSegmentationTool(PipelineTool):
     pre_processor_class = AutoProcessor
     model_class = CLIPSegForImageSegmentation
 
+    inputs = ['image', 'text']
+    outputs = ['image']
+
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
             raise ImportError("Pillow should be installed in order to use the ImageSegmentationTool.")

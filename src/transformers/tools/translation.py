@@ -30,6 +30,9 @@ class TranslationTool(PipelineTool):
     # TODO add all other languages
     lang_to_code = {"French": "fra_Latn", "English": "eng_Latn", "Spanish": "spa_Latn"}
 
+    inputs = ['text', 'text', 'text']
+    outputs = ['text']
+
     def encode(self, text, src_lang, tgt_lang):
         if src_lang not in self.lang_to_code:
             raise ValueError(f"{src_lang} is not a supported language.")
