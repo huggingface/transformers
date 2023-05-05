@@ -1579,9 +1579,6 @@ class Trainer:
 
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
-            if not any(p.requires_grad for p in model.parameters()):
-                setattr(self.accelerator, "prepare_model", False)
-
         # torch.compile() needs to be called after wrapping the model with FSDP or DDP
         # to ensure that it accounts for the graph breaks required by those wrappers
         if self.args.torch_compile:
@@ -1768,12 +1765,10 @@ class Trainer:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
-        if getattr(self.accelerator, "prepare_model", True):
-            model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                self.model, self.optimizer, self.lr_scheduler
-            )
-        else:
-            self.optimizer, self.lr_scheduler = self.accelerator.prepare(self.optimizer, self.lr_scheduler)
+        model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+            self.model, self.optimizer, self.lr_scheduler
+        )
+
         self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
         self.accelerator.print(f"{model.forward=}")
 
