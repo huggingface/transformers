@@ -226,7 +226,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
         super().__init__(num_positions, embedding_dim)
 
     def forward(self, input_ids, past_key_values_length=0):
-        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
+        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
 
 
 class WhisperAttention(nn.Module):
