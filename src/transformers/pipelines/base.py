@@ -97,6 +97,8 @@ def _pad(items, key, padding_value, padding_side):
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+        elif dim == 4:
+            tensor = torch.zeros((batch_size, max_length, shape[-2], shape[-1]), dtype=dtype) + padding_value
 
         for i, item in enumerate(items):
             if dim == 2:
@@ -109,6 +111,12 @@ def _pad(items, key, padding_value, padding_side):
                     tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
                 else:
                     tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+            elif dim == 4:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :, :] = item[key][0].clone()
+
         return tensor
     else:
         return [item[key] for item in items]
@@ -795,10 +803,12 @@ class Pipeline(_ScikitCompat):
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
-        # Update config with task specific parameters
+        # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
         if task_specific_params is not None and task in task_specific_params:
             self.model.config.update(task_specific_params.get(task))
+            if self.model.can_generate():
+                self.model.generation_config.update(**task_specific_params.get(task))
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)

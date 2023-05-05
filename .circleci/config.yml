@@ -63,6 +63,12 @@ jobs:
                   else
                       touch test_preparation/examples_test_list.txt
                   fi
+            - run: |
+                  if [ -f filtered_test_list_cross_tests.txt ]; then
+                      mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
+                  else
+                      touch test_preparation/filtered_test_list_cross_tests.txt
+                  fi
             - store_artifacts:
                   path: test_preparation/test_list.txt
             - store_artifacts:
@@ -78,6 +84,8 @@ jobs:
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
                   path: test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/filtered_test_list_cross_tests.txt
             - continuation/continue:
                   configuration_path: test_preparation/generated_config.yml
 

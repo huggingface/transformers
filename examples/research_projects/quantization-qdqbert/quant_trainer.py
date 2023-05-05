@@ -41,8 +41,8 @@ def add_arguments(parser):
     group.add_argument("--quant-disable", action="store_true", help="disable all quantizers")
     group.add_argument("--quant-disable-embeddings", action="store_true", help="disable all embeddings quantizers")
     group.add_argument("--quant-disable-keyword", type=str, nargs="+", help="disable quantizers by keyword")
-    group.add_argument("--quant-disable-layer-module", type=str, help="disable quantizers by keyword under layer.\d+.")
-    group.add_argument("--quant-enable-layer-module", type=str, help="enable quantizers by keyword under layer.\d+.")
+    group.add_argument("--quant-disable-layer-module", type=str, help="disable quantizers by keyword under layer.")
+    group.add_argument("--quant-enable-layer-module", type=str, help="enable quantizers by keyword under layer")
     group.add_argument("--calibrator", default="max", help="which quantization range calibrator to use")
     group.add_argument("--percentile", default=None, type=float, help="percentile for PercentileCalibrator")
     group.add_argument("--fuse-qkv", action="store_true", help="use the same scale factor for qkv")
@@ -94,10 +94,10 @@ def configure_model(model, args, calib=False, eval=False):
             set_quantizer_by_name(model, args.quant_disable_keyword, _disabled=True)
 
         if args.quant_disable_layer_module:
-            set_quantizer_by_name(model, ["layer.\d+." + args.quant_disable_layer_module], _disabled=True)
+            set_quantizer_by_name(model, [r"layer.\d+." + args.quant_disable_layer_module], _disabled=True)
 
         if args.quant_enable_layer_module:
-            set_quantizer_by_name(model, ["layer.\d+." + args.quant_enable_layer_module], _disabled=False)
+            set_quantizer_by_name(model, [r"layer.\d+." + args.quant_enable_layer_module], _disabled=False)
 
         if args.recalibrate_weights:
             recalibrate_weights(model)

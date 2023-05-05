@@ -56,6 +56,10 @@ class GPTNeoXConfig(PretrainedConfig):
             percentage of hidden dimensions to allocate to rotary embeddings
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
+
+            The dropout ratio for the hidden layer.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -95,6 +99,7 @@ class GPTNeoXConfig(PretrainedConfig):
         hidden_act="gelu",
         rotary_pct=0.25,
         rotary_emb_base=10000,
+        classifier_dropout=0.1,
         max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -115,6 +120,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
+        self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache

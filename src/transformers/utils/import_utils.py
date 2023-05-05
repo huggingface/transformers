@@ -407,6 +407,10 @@ def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_peft_available():
+    return importlib.util.find_spec("peft") is not None
+
+
 def is_bs4_available():
     return importlib.util.find_spec("bs4") is not None
 
@@ -575,8 +579,15 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available():
-    return importlib.util.find_spec("accelerate") is not None
+def is_accelerate_available(check_partial_state=False):
+    accelerate_available = importlib.util.find_spec("accelerate") is not None
+    if accelerate_available:
+        if check_partial_state:
+            return version.parse(importlib_metadata.version("accelerate")) >= version.parse("0.17.0")
+        else:
+            return True
+    else:
+        return False
 
 
 def is_optimum_available():

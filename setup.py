@@ -102,7 +102,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.10.0",
+    "accelerate>=0.17.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "black~=23.1",
@@ -118,7 +118,7 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flax>=0.4.1",
+    "flax>=0.4.1,<=0.6.9",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -135,12 +135,13 @@ _deps = [
     "librosa",
     "nltk",
     "natten>=0.14.6",
+    "numba<0.57.0",  # Can be removed once unpinned.
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
-    "optax>=0.0.8",
+    "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
@@ -184,6 +185,7 @@ _deps = [
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
+    "urllib3<2.0.0",
     "uvicorn",
 ]
 
@@ -286,7 +288,8 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
+# numba can be removed here once unpinned
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm", "numba")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -329,7 +332,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
 
 extras["all"] = (
     extras["tf"]
