@@ -19,8 +19,11 @@ import doctest
 import sys
 import warnings
 from os.path import abspath, dirname, join
+
 import _pytest
+
 from transformers.utils.doctest_utils import HfDoctestModule, HfDocTestParser
+
 
 # allow having multiple repository checkouts and not needing to remember to rerun
 # 'pip install -e .[dev]' when switching between checkouts and running tests.
@@ -39,9 +42,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "is_pt_flax_cross_test: mark test to run only when PT and FLAX interactions are tested"
     )
-    config.addinivalue_line(
-        "markers", "is_pipeline_test: mark test to run only when pipelines are tested"
-    )
+    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
 
@@ -67,7 +68,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 # Doctest custom flag to ignore output.
-IGNORE_RESULT = doctest.register_optionflag('IGNORE_RESULT')
+IGNORE_RESULT = doctest.register_optionflag("IGNORE_RESULT")
 
 OutputChecker = doctest.OutputChecker
 
