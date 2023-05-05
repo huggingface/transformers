@@ -6010,6 +6010,7 @@ if TYPE_CHECKING:
         from .image_processing_utils import ImageProcessingMixin
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
+        from .models.beit_3 import Beit3ImageProcessor
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
         from .models.bridgetower import BridgeTowerImageProcessor
