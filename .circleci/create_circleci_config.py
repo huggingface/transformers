@@ -176,11 +176,13 @@ class CircleCIJob:
             test_command += f" -m {self.marker}"
 
         if self.name == "pr_documentation_tests":
+            # can't use ` | tee tee tests_output.txt` as usual
             test_command += " > tests_output.txt"
-            # Never fail the test step for the doctest job. We will check the results later, and fail that step instead.
-            # This is to avoid the timeout being reported as test failure.
-            # Save the return code, so we can check if it is timeout
+            # Save the return code, so we can check if it is timeout in the next step.
             test_command += '; touch "$?".txt'
+            # Never fail the test step for the doctest job. We will check the results in the next step, and fail that
+            # step instead if the actual test failures are found. This is to avoid the timeout being reported as test
+            # failure.
             test_command = f"({test_command}) || true"
         else:
             test_command += " | tee tests_output.txt"
@@ -425,6 +427,7 @@ repo_utils_job = CircleCIJob(
     tests_to_run="tests/repo_utils",
 )
 
+# At this moment, only the files that are in `utils/documentation_tests.txt` will be kept (together with a dummy file).
 py_command = 'import os; import json; fp = open("pr_documentation_tests.txt"); data_1 = fp.read().strip().split("\\n"); fp = open("utils/documentation_tests.txt"); data_2 = fp.read().strip().split("\\n"); to_test = [x for x in data_1 if x in set(data_2)] + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
 py_command = f"$(python3 -c '{py_command}')"
 command = f'echo "{py_command}" > pr_documentation_tests_filtered.txt'
@@ -439,6 +442,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade pytest pytest-sugar",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
+        # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         {
             "name": "Get files to test",
