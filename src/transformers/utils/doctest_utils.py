@@ -41,6 +41,13 @@ from pytest import DoctestItem
 
 
 def preprocess_string(string, skip_cuda_tests):
+    """Prepare a docstring or a `.mdx` file to be run by doctest.
+
+    The argument `string` would be the whole file content if it is a `.mdx` file. For a python file, it would be one of
+    its docstring. In each case, it may contain multiple python code examples. If `skip_cuda_tests` is `True` and a
+    cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
+    `string`.
+    """
     codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
     codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
     is_cuda_found = False
