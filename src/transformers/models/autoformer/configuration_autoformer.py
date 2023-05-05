@@ -114,8 +114,8 @@ class AutoformerConfig(PretrainedConfig):
             The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the
             Decomposition Layer
         factor (`int`, defaults to 3):
-            attention factor which is used to find top k autocorrelations delays. It's recommended in the paper
-            to set it to a number between 1 and 5.
+            "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
+            It's recommended in the paper to set it to a number between 1 and 5.
 
 
         Example:
