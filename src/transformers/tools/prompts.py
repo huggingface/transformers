@@ -83,7 +83,6 @@ The job of the AI assistant is to come up with a series of simple commands in Py
 To help with that, the AI assistant has access to a set of tools. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 The AI assistant should first explain the tools it will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. The AI assistant can print intermediate results if it makes sense to do so.
-The final result should be stored in a variable named `result`. The AI assistant can also print the result if it makes sense to do so.
 
 Tools:
 <<all_tools>>
@@ -126,7 +125,7 @@ Human: Can you generate an image with the result?
 Assistant: I will use the tool `image_generator` to do that.
 
 ```py
-result = image_generator(prompt="A banner showing " + answer)
+image = image_generator(prompt="A banner showing " + answer)
 ```
 
 =====
