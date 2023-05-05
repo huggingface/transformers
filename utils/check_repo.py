@@ -836,6 +836,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextBackbone",
     "ConvNextV2Backbone",
     "DinatBackbone",
+    "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",

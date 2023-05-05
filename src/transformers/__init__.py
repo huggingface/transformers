@@ -1623,6 +1623,7 @@ else:
     _import_structure["models.focalnet"].extend(
         [
             "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FocalNetBackbone",
             "FocalNetForImageClassification",
             "FocalNetForMaskedImageModeling",
             "FocalNetModel",
@@ -1666,6 +1667,7 @@ else:
         [
             "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPT2DoubleHeadsModel",
+            "GPT2ForQuestionAnswering",
             "GPT2ForSequenceClassification",
             "GPT2ForTokenClassification",
             "GPT2LMHeadModel",
@@ -1688,6 +1690,7 @@ else:
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoForCausalLM",
+            "GPTNeoForQuestionAnswering",
             "GPTNeoForSequenceClassification",
             "GPTNeoForTokenClassification",
             "GPTNeoModel",
@@ -1699,6 +1702,7 @@ else:
         [
             "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTNeoXForCausalLM",
+            "GPTNeoXForQuestionAnswering",
             "GPTNeoXForSequenceClassification",
             "GPTNeoXForTokenClassification",
             "GPTNeoXLayer",
@@ -5177,6 +5181,7 @@ if TYPE_CHECKING:
         )
         from .models.focalnet import (
             FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
             FocalNetModel,
@@ -5212,6 +5217,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
             GPT2ForSequenceClassification,
             GPT2ForTokenClassification,
             GPT2LMHeadModel,
@@ -5230,6 +5236,7 @@ if TYPE_CHECKING:
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
             GPTNeoForSequenceClassification,
             GPTNeoForTokenClassification,
             GPTNeoModel,
@@ -5239,6 +5246,7 @@ if TYPE_CHECKING:
         from .models.gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
+            GPTNeoXForQuestionAnswering,
             GPTNeoXForSequenceClassification,
             GPTNeoXForTokenClassification,
             GPTNeoXLayer,
