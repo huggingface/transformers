@@ -128,7 +128,7 @@ class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
 
     def call(self, input_ids, past_key_values_length=0):
         past_key_values_length = tf.cast(past_key_values_length, tf.int32)
-        gather_indices = tf.range(tf.shape(input_ids)[-1], delta=1) + past_key_values_length
+        gather_indices = tf.range(tf.shape(input_ids)[1], delta=1) + past_key_values_length
         return tf.gather(self.weight, gather_indices)
 
 
