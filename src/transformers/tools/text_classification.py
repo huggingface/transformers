@@ -1,6 +1,6 @@
 import torch
 
-from ..models.auto import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
+from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
 from .base import PipelineTool, RemoteTool
 
 
@@ -28,12 +28,9 @@ class TextClassificationTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 
-    def post_init(self):
-        if isinstance(self.model, str):
-            config = AutoConfig.from_pretrained(self.model)
-        else:
-            config = self.model.config
-
+    def setup(self):
+        super().setup()
+        config = self.model.config
         self.entailment_id = -1
         for idx, label in config.id2label.items():
             if label.lower().startswith("entail"):
