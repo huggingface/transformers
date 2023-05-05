@@ -106,7 +106,6 @@ _optimumneuron_available = _optimum_available and _is_package_available("optimum
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
-_PIL_available = _is_package_available("PIL")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
@@ -522,7 +521,14 @@ def is_tokenizers_available():
 
 
 def is_vision_available():
-    return _PIL_available
+    _pil_available = importlib.util.find_spec("PIL") is not None
+    if _pil_available:
+        try:
+            package_version = importlib_metadata.version("Pillow")
+        except importlib_metadata.PackageNotFoundError:
+            return False
+        logger.debug(f"Detected PIL version {package_version}")
+    return _pil_available
 
 
 def is_pytesseract_available():
