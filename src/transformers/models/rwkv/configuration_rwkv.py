@@ -57,8 +57,8 @@ class RwkvConfig(PretrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 0):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer
             as GPTNeoX.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end of sentence token in the vocabulary. Defaults to 2 as RWKV uses the same tokenizer as
+        eos_token_id (`int`, *optional*, defaults to 0):
+            The id of the end of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer as
             GPTNeoX.
         rescale_every (`int`, *optional*, default to 6):
             At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
@@ -96,7 +96,7 @@ class RwkvConfig(PretrainedConfig):
         intermediate_size=None,
         layer_norm_epsilon=1e-5,
         bos_token_id=0,
-        eos_token_id=2,
+        eos_token_id=0,
         rescale_every=6,
         tie_word_embeddings=False,
         use_cache=True,
