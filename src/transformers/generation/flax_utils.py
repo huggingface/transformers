@@ -338,9 +338,6 @@ class FlaxGenerationMixin:
         # set init values
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
-        if generation_config.num_return_sequences > generation_config.num_beams:
-            raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
@@ -447,6 +444,8 @@ class FlaxGenerationMixin:
                 model_kwargs=model_kwargs,
             )
         elif not generation_config.do_sample and generation_config.num_beams > 1:
+            if generation_config.num_return_sequences > generation_config.num_beams:
+                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
             # broadcast input_ids & encoder_outputs
             input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
@@ -790,7 +789,7 @@ class FlaxGenerationMixin:
         length_penalty: Optional[float] = None,
         early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
-        num_beam_hyps_to_keep: Optional[int] = 1,
+        num_beam_hyps_to_keep: Optional[int] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
