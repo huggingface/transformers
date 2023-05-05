@@ -100,7 +100,7 @@ class RealmRetrieverTest(TestCase):
                 b"This is the fifth record",
                 b"This is a longer longer longer record",
             ],
-            dtype=np.object,
+            dtype=object,
         )
         return block_records
 
