@@ -78,7 +78,7 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
     if weight.shape.rank != 1 or bias.shape.rank != 1 or not isinstance(axis, int):
         raise NotImplementedError("Only 1D weight and bias tensors are supported for now, with only a single axis.")
 
-    # Calculate the moments on the last axis (layer activations).
+    # Get mean and variance on the axis to be normalized
     mean, variance = tf.nn.moments(inputs, axes=[axis], keepdims=True)
 
     if axis != -1:
