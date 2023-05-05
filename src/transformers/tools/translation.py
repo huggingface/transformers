@@ -24,6 +24,7 @@ class TranslationTool(PipelineTool):
 
     default_checkpoint = "facebook/nllb-200-distilled-600M"
     description = TRANSLATION_DESCRIPTION
+    name = "translator"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
     # TODO add all other languages

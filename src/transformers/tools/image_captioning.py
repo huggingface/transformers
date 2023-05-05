@@ -18,6 +18,7 @@ IMAGE_CAPTIONING_DESCRIPTION = (
 class ImageCaptioningTool(PipelineTool):
     default_checkpoint = "Salesforce/blip-image-captioning-base"
     description = IMAGE_CAPTIONING_DESCRIPTION
+    name = "image_captioner"
     pre_processor_class = AutoProcessor
     model_class = AutoModelForVision2Seq
 

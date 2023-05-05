@@ -21,6 +21,7 @@ DOCUMENT_QUESTION_ANSWERING_DESCRIPTION = (
 class DocumentQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "naver-clova-ix/donut-base-finetuned-docvqa"
     description = DOCUMENT_QUESTION_ANSWERING_DESCRIPTION
+    name = "document_qa"
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
 
