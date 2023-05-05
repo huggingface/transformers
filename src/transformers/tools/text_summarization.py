@@ -23,6 +23,9 @@ class TextSummarizationTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
+    inputs = ['text']
+    outputs = ['text']
+
     def encode(self, raw_inputs):
         return self.pre_processor(raw_inputs, return_tensors="pt", truncation=True)
 
