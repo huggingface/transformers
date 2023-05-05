@@ -20,8 +20,8 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
-    inputs = ['text', 'text']
-    outputs = ['text']
+    inputs = ["text", "text"]
+    outputs = ["text"]
 
     def encode(self, text: str, question: str):
         prompt = QA_PROMPT.format(text=text, question=question)

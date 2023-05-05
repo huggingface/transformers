@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+
 from transformers.tools import TranslationTool
 
 from .test_tools_common import ToolTesterMixin
-import unittest
 
 
 class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
@@ -25,9 +26,9 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool("Hey, what's up?", src_lang='English', tgt_lang='French')
-        self.assertEqual(result, '- Hé, comment ça va?')
+        result = self.tool("Hey, what's up?", src_lang="English", tgt_lang="French")
+        self.assertEqual(result, "- Hé, comment ça va?")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(text="Hey, what's up?", src_lang='English', tgt_lang='French')
-        self.assertEqual(result, '- Hé, comment ça va?')
+        result = self.tool(text="Hey, what's up?", src_lang="English", tgt_lang="French")
+        self.assertEqual(result, "- Hé, comment ça va?")

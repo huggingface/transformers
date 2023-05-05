@@ -13,17 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+from pathlib import Path
+
+from PIL import Image
+
+from transformers.testing_utils import get_tests_dir
 from transformers.tools import ImageSegmentationTool
 
 from .test_tools_common import ToolTesterMixin
-import unittest
-
-from PIL import Image
-from pathlib import Path
-from transformers.testing_utils import get_tests_dir
-
-from .test_tools_common import ToolTesterMixin
-import unittest
 
 
 class ImageSegmentationToolTester(unittest.TestCase, ToolTesterMixin):
@@ -32,11 +30,11 @@ class ImageSegmentationToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / '000000039769.png')
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.tool(image, "cat")
         self.assertTrue(isinstance(result, Image.Image))
 
     def test_exact_match_kwarg(self):
-        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / '000000039769.png')
+        image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.tool(image=image, prompt="cat")
         self.assertTrue(isinstance(result, Image.Image))

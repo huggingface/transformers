@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+
 from transformers.tools import GenerativeQuestionAnsweringTool
 
 from .test_tools_common import ToolTesterMixin
-import unittest
+
 
 TEXT = """
 Hugging Face was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf originally as a company that developed a chatbot app targeted at teenagers.[2] After open-sourcing the model behind the chatbot, the company pivoted to focus on being a platform for machine learning.
