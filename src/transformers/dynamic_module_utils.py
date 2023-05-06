@@ -232,7 +232,7 @@ def get_cached_module_file(
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
         cached_module = try_to_load_from_cache(
-            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash
+            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
 
     new_files = []

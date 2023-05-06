@@ -235,6 +235,7 @@ def try_to_load_from_cache(
     filename: str,
     cache_dir: Union[str, Path, None] = None,
     revision: Optional[str] = None,
+    repo_type: Optional[str] = None,
 ) -> Optional[str]:
     """
     Explores the cache to return the latest cached file for a given revision if found.
@@ -251,6 +252,8 @@ def try_to_load_from_cache(
         revision (`str`, *optional*):
             The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
             provided either.
+        repo_type (`str`, *optional*):
+            The type of the repo.
 
     Returns:
         `Optional[str]` or `_CACHED_NO_EXIST`:
@@ -266,7 +269,9 @@ def try_to_load_from_cache(
         cache_dir = TRANSFORMERS_CACHE
 
     object_id = repo_id.replace("/", "--")
-    repo_cache = os.path.join(cache_dir, f"models--{object_id}")
+    if repo_type is None:
+        repo_type = "model"
+    repo_cache = os.path.join(cache_dir, f"{repo_type}s--{object_id}")
     if not os.path.isdir(repo_cache):
         # No cache for this model
         return None
@@ -396,7 +401,7 @@ def cached_file(
     if _commit_hash is not None and not force_download:
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(
-            path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
+            path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
         if resolved_file is not None:
             if resolved_file is not _CACHED_NO_EXIST:
@@ -632,6 +637,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
+        **kwargs,
     ) -> str:
         """
         Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
@@ -653,7 +659,7 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
+        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True, **kwargs)
 
         # If the namespace is not there, add it or `upload_file` will complain
         if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":

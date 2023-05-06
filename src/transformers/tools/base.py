@@ -1,15 +1,25 @@
 import importlib
 import json
 import os
-from typing import List
+from typing import List, Optional, Union
 
-from huggingface_hub import InferenceApi, hf_hub_download
+from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
-from ..utils import CONFIG_NAME, PushToHubMixin, cached_file, is_accelerate_available, is_torch_available
+from ..utils import (
+    CONFIG_NAME,
+    PushToHubMixin,
+    cached_file,
+    is_accelerate_available,
+    is_torch_available,
+    logging,
+    working_or_temp_dir,
+)
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -19,6 +29,33 @@ if is_accelerate_available():
 
 
 TOOL_CONFIG_FILE = "tool_config.json"
+
+
+def supports_remote(task_name):
+    if task_name not in TASK_MAPPING:
+        return False
+    main_module = importlib.import_module("transformers")
+    tools_module = main_module.tools
+    tool_class = TASK_MAPPING[task_name]
+    return hasattr(tools_module, f"Remote{tool_class}")
+
+
+def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
+    if repo_type is not None:
+        return repo_type
+    try:
+        hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space", **hub_kwargs)
+        return "space"
+    except RepositoryNotFoundError:
+        try:
+            hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
+            return "model"
+        except RepositoryNotFoundError:
+            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
+        except Exception:
+            return "model"
+    except Exception:
+        return "space"
 
 
 class Tool(PushToHubMixin):
@@ -44,7 +81,7 @@ class Tool(PushToHubMixin):
         # loading a big model.
         self.is_initialized = True
 
-    def save_pretrained(self, output_dir, task_name=None):
+    def save(self, output_dir, task_name=None):
         os.makedirs(output_dir, exist_ok=True)
         custom_object_save(self, output_dir)
 
@@ -60,13 +97,152 @@ class Tool(PushToHubMixin):
             tool_config = {}
 
         if task_name is None:
-            class_name = tool.__class__.__name__.replace("Tool", "")
+            class_name = self.__class__.__name__.replace("Tool", "")
             chars = [f"_{c.lower()}" if c.isupper() else c for c in class_name]
             task_name = "".join(chars)[1:]
 
         tool_config[task_name] = {"tool_class": full_name, "description": self.description, "name": self.name}
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
+
+    @classmethod
+    def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, **kwargs):
+        hub_kwargs_names = [
+            "cache_dir",
+            "force_download",
+            "resume_download",
+            "proxies",
+            "revision",
+            "repo_type",
+            "subfolder",
+            "local_files_only",
+        ]
+        hub_kwargs = {k: v for k, v in kwargs.items() if k in hub_kwargs_names}
+        if repo_id is None:
+            repo_id = task_or_repo_id
+            task = None
+        else:
+            task = task_or_repo_id
+
+        # Try to get the tool config first.
+        hub_kwargs["repo_type"] = get_repo_type(repo_id, **hub_kwargs)
+        resolved_config_file = cached_file(
+            repo_id,
+            TOOL_CONFIG_FILE,
+            use_auth_token=token,
+            **hub_kwargs,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
+        is_tool_config = resolved_config_file is not None
+        if resolved_config_file is None:
+            resolved_config_file = cached_file(
+                repo_id,
+                CONFIG_NAME,
+                use_auth_token=token,
+                **hub_kwargs,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        if resolved_config_file is None:
+            raise EnvironmentError(
+                f"{repo_id} does not appear to provide a valid configuration in `tool_config.json` or `config.json`."
+            )
+
+        with open(resolved_config_file, encoding="utf-8") as reader:
+            config = json.load(reader)
+
+        if not is_tool_config:
+            if "custom_tools" not in config:
+                raise EnvironmentError(
+                    f"{repo_id} does not provide a mapping to custom tools in its configuration `config.json`."
+                )
+            custom_tools = config["custom_tools"]
+        else:
+            custom_tools = config
+        if task is None:
+            if len(custom_tools) == 1:
+                task = list(custom_tools.keys())[0]
+            else:
+                tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
+                raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
+
+        tool_class = get_class_from_dynamic_module(
+            custom_tools[task]["tool_class"], repo_id, use_auth_token=token, **hub_kwargs
+        )
+        if model_repo_id is not None:
+            repo_id = model_repo_id
+        elif hub_kwargs["repo_type"] == "space":
+            repo_id = None
+
+        return tool_class(repo_id, token=token, **kwargs)
+
+    def push_to_hub(
+        self,
+        repo_id: str,
+        use_temp_dir: Optional[bool] = None,
+        commit_message: str = "Upload tool",
+        private: Optional[bool] = None,
+        token: Optional[Union[bool, str]] = None,
+        create_pr: bool = False,
+    ) -> str:
+        """
+        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
+        `repo_path_or_name`.
+
+        Parameters:
+            repo_id (`str`):
+                The name of the repository you want to push your tool to. It should contain your organization name when
+                pushing to a given organization.
+            use_temp_dir (`bool`, *optional*):
+                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
+                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
+            commit_message (`str`, *optional*, defaults to `"Upload too"`):
+                Message to commit while pushing.
+            private (`bool`, *optional*):
+                Whether or not the repository created should be private.
+            token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If unsel, will use the token generated
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
+        """
+        if os.path.isdir(repo_id):
+            working_dir = repo_id
+            repo_id = repo_id.split(os.path.sep)[-1]
+        else:
+            working_dir = repo_id.split("/")[-1]
+
+        repo_id = self._create_repo(
+            repo_id, private=private, use_auth_token=token, repo_type="space", space_sdk="gradio"
+        )
+
+        if use_temp_dir is None:
+            use_temp_dir = not os.path.isdir(working_dir)
+
+        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
+            files_timestamps = self._get_files_timestamps(work_dir)
+
+            # Save all files.
+            self.save(work_dir)
+
+            modified_files = [
+                f
+                for f in os.listdir(work_dir)
+                if f not in files_timestamps or os.path.getmtime(os.path.join(work_dir, f)) > files_timestamps[f]
+            ]
+            operations = []
+            for file in modified_files:
+                operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(work_dir, file), path_in_repo=file))
+            logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
+            return create_commit(
+                repo_id=repo_id,
+                operations=operations,
+                commit_message=commit_message,
+                token=token,
+                create_pr=create_pr,
+                repo_type="space",
+            )
 
 
 class RemoteTool(Tool):
@@ -228,9 +404,7 @@ def get_default_device():
 
 TASK_MAPPING = {
     "generative-qa": "GenerativeQuestionAnsweringTool",
-    "image-transformation": "ImageTransformationTool",
     "image-captioning": "ImageCaptioningTool",
-    "image-generation": "TextToImageTool",
     "image-segmentation": "ImageSegmentationTool",
     "language-identification": "LanguageIdenticationTool",
     "speech-to-text": "SpeechToTextTool",
@@ -241,51 +415,10 @@ TASK_MAPPING = {
     "summarizer": "TextSummarizationTool",
     "image-question-answering": "ImageQuestionAnsweringTool",
     "document-question-answering": "DocumentQuestionAnsweringTool",
-    "text-to-video": "TextToVideoTool",
 }
 
 
-def supports_remote(task_name):
-    if task_name not in TASK_MAPPING:
-        return False
-    main_module = importlib.import_module("transformers")
-    tools_module = main_module.tools
-    tool_class = TASK_MAPPING[task_name]
-    return hasattr(tools_module, f"Remote{tool_class}")
-
-
-def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
-    if repo_type is not None:
-        return repo_type
-    try:
-        hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space", **hub_kwargs)
-        return "space"
-    except RepositoryNotFoundError:
-        try:
-            hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
-            return "model"
-        except RepositoryNotFoundError:
-            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
-        except Exception:
-            return "model"
-    except Exception:
-        return "space"
-
-
-def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=None, **tool_kwargs):
-    # Make sure to keep this list updated with the doc of tool_kwargs (when it exists lol)
-    hub_kwargs_names = [
-        "cache_dir",
-        "force_download",
-        "resume_download",
-        "proxies",
-        "revision",
-        "repo_type",
-        "subfolder",
-        "local_files_only",
-    ]
-    hub_kwargs = {k: v for k, v in tool_kwargs.items() if k in hub_kwargs_names}
-
+def load_tool(task_or_repo_id, repo_id=None, remote=False, token=None, **kwargs):
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         if remote:
@@ -298,65 +431,10 @@ def tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=
         main_module = importlib.import_module("transformers")
         tools_module = main_module.tools
         tool_class = getattr(tools_module, tool_class_name)
+
+        return tool_class(repo_id, token=token, **kwargs)
     else:
-        if repo_id is None:
-            repo_id = task_or_repo_id
-            task = None
-        else:
-            task = task_or_repo_id
-
-        # Try to get the tool config first.
-        hub_kwargs["repo_type"] = get_repo_type(repo_id, **hub_kwargs)
-        resolved_config_file = cached_file(
-            repo_id,
-            TOOL_CONFIG_FILE,
-            use_auth_token=token,
-            **hub_kwargs,
-            _raise_exceptions_for_missing_entries=False,
-            _raise_exceptions_for_connection_errors=False,
-        )
-        is_tool_config = resolved_config_file is not None
-        if resolved_config_file is None:
-            resolved_config_file = cached_file(
-                repo_id,
-                CONFIG_NAME,
-                use_auth_token=token,
-                **hub_kwargs,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
-        if resolved_config_file is None:
-            raise EnvironmentError(
-                f"{repo_id} does not appear to provide a valid configuration in `tool_config.json` or `config.json`."
-            )
-
-        with open(resolved_config_file, encoding="utf-8") as reader:
-            config = json.load(reader)
-
-        if not is_tool_config:
-            if "custom_tools" not in config:
-                raise EnvironmentError(
-                    f"{repo_id} does not provide a mapping to custom tools in its configuration `config.json`."
-                )
-            custom_tools = config["custom_tools"]
-        else:
-            custom_tools = config
-        if task is None:
-            if len(custom_tools) == 1:
-                task = list(custom_tools.keys())[0]
-            else:
-                tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
-                raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
-
-        tool_class = get_class_from_dynamic_module(
-            custom_tools[task]["tool_class"], repo_id, use_auth_token=token, **hub_kwargs
-        )
-        if model_repo_id is not None:
-            repo_id = model_repo_id
-        elif hub_kwargs["repo_type"] == "space":
-            repo_id = None
-
-    return tool_class(repo_id, token=token, **tool_kwargs)
+        return Tool.from_hub(task_or_repo_id, repo_id=repo_id, token=token, remote=remote, **kwargs)
 
 
 def add_description(description):
