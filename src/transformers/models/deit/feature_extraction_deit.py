@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The OpenAI Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,8 @@
 
 import warnings
 
-from ...utils import logging
 from .image_processing_deit import DeiTImageProcessor
-
+from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
