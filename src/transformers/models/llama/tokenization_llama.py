@@ -142,6 +142,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
                 current_sub_tokens = []
+                if token == self.eos_token:
+                    break
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
