@@ -1,5 +1,5 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool, RemoteTool
+from .base import OldRemoteTool, PipelineTool
 
 
 TEXT_SUMMARIZATION_CESCRIPTION = "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, and returns a summary of the text."
@@ -36,7 +36,7 @@ class TextSummarizationTool(PipelineTool):
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
 
-class RemoteTextSummarizationTool(RemoteTool):
+class RemoteTextSummarizationTool(OldRemoteTool):
     """
     Example:
 

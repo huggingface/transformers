@@ -1,5 +1,5 @@
 from ..models.whisper import WhisperForConditionalGeneration, WhisperProcessor
-from .base import PipelineTool, RemoteTool
+from .base import OldRemoteTool, PipelineTool
 
 
 SPEECH_TO_TEXT_DESCRIPTION = (
@@ -28,7 +28,7 @@ class SpeechToTextTool(PipelineTool):
         return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
 
-class RemoteSpeechToTextTool(RemoteTool):
+class RemoteSpeechToTextTool(OldRemoteTool):
     default_checkpoint = "openai/whisper-base"
     description = SPEECH_TO_TEXT_DESCRIPTION
 

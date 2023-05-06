@@ -1,5 +1,5 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool, RemoteTool
+from .base import OldRemoteTool, PipelineTool
 
 
 QA_PROMPT = """Here is a text containing a lot of information: '''{text}'''.
@@ -39,7 +39,7 @@ class GenerativeQuestionAnsweringTool(PipelineTool):
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
 
-class RemoteGenerativeQuestionAnsweringTool(RemoteTool):
+class RemoteGenerativeQuestionAnsweringTool(OldRemoteTool):
     default_checkpoint = "google/flan-t5-base"
     description = GENERATIVE_QUESTION_ANSWERING_DESCRIPTION
 
