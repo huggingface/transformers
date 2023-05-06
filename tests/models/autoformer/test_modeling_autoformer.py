@@ -65,7 +65,7 @@ class AutoformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
-        moving_avg=25,
+        moving_average=25,
         factor=5,
     ):
         self.d_model = d_model
@@ -90,7 +90,7 @@ class AutoformerModelTester:
         self.decoder_seq_length = prediction_length
         self.label_length = label_length
 
-        self.moving_avg = moving_avg
+        self.moving_average = moving_average
         self.factor = factor
 
     def get_config(self):
@@ -112,7 +112,7 @@ class AutoformerModelTester:
             num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
-            moving_avg=self.moving_avg,
+            moving_average=self.moving_average,
         )
 
     def prepare_autoformer_inputs_dict(self, config):
