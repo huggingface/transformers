@@ -108,11 +108,11 @@ class AutoformerConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
         label_length (`int`, *optional*, defaults to 10):
-            Start token length of the Autoformer decoder, which is used for direct multi-step prediction
-            (i.e. non-autoregressive generation).
+            Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
+            non-autoregressive generation).
         moving_average (`int`, defaults to 25):
-            The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the
-            Decomposition Layer.
+            The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the Decomposition
+            Layer.
         autocorrelation_factor (`int`, defaults to 3):
             "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
             It's recommended in the paper to set it to a number between 1 and 5.
