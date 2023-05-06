@@ -389,7 +389,6 @@ class FlaxGenerationMixin:
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
             if not has_default_max_length:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
@@ -397,6 +396,7 @@ class FlaxGenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -472,6 +472,7 @@ class FlaxGenerationMixin:
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 trace=trace,
                 params=params,
+                num_return_sequences=generation_config.num_return_sequences,
                 model_kwargs=model_kwargs,
             )
         else:
@@ -792,6 +793,7 @@ class FlaxGenerationMixin:
         num_beam_hyps_to_keep: Optional[int] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
+        num_return_sequences: Optional[int] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         """
@@ -838,7 +840,7 @@ class FlaxGenerationMixin:
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         num_return_sequences = (
-            num_beam_hyps_to_keep if num_beam_hyps_to_keep is not None else self.generation_config.num_return_sequences
+            num_return_sequences if num_return_sequences is not None else self.generation_config.num_return_sequences
         )
 
         batch_size, num_beams, cur_len = input_ids.shape
@@ -1043,7 +1045,8 @@ class FlaxGenerationMixin:
         sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
-        sequences = sequences[:, 0:num_return_sequences][0]
-        sequences_scores = scores[:, 0:num_return_sequences][0] if output_scores else None
+        # Take best beams for each batch (the score is sorted in descending order)
+        sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
+        sequences_scores = flatten_beam_dim(scores[:, :num_return_sequences]) if output_scores else None
 
         return FlaxBeamSearchOutput(sequences=sequences, sequences_scores=sequences_scores)

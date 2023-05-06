@@ -66,6 +66,10 @@ class GPTNeoConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`].
+
+            The dropout ratio for the hidden layer.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -111,6 +115,7 @@ class GPTNeoConfig(PretrainedConfig):
         resid_dropout=0.0,
         embed_dropout=0.0,
         attention_dropout=0.0,
+        classifier_dropout=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
@@ -129,6 +134,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.resid_dropout = resid_dropout
         self.embed_dropout = embed_dropout
         self.attention_dropout = attention_dropout
+        self.classifier_dropout = classifier_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.use_cache = use_cache
