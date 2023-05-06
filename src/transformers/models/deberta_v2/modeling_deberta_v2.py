@@ -16,6 +16,7 @@
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
+import math
 
 import torch
 import torch.utils.checkpoint
@@ -709,8 +710,8 @@ class DisentangledSelfAttention(nn.Module):
         """
         if query_states is None:
             query_states = hidden_states
-        query_layer = self.transpose_for_scores(self.query_proj(query_states), self.num_attention_heads)
-        key_layer = self.transpose_for_scores(self.key_proj(hidden_states), self.num_attention_heads)
+        query_layer = self.transpose_for_scores(self.query_proj(query_states), self.num_attention_heads).float()
+        key_layer = self.transpose_for_scores(self.key_proj(hidden_states), self.num_attention_heads).float()
         value_layer = self.transpose_for_scores(self.value_proj(hidden_states), self.num_attention_heads)
 
         rel_att = None
@@ -720,6 +721,8 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
+        # scale = 1 / math.sqrt(query_layer.size(-1) * scale_factor)
+        # attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) * scale)
         scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale.to(dtype=query_layer.dtype)
         if self.relative_attention:
@@ -730,14 +733,16 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = attention_scores
+        attention_scores = (attention_scores - attention_scores.max(dim=-1, keepdim=True).values.detach()).to(
+            hidden_states
+        )
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
 
         # bsz x height x length x dimension
-        attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
-        attention_probs = self.dropout(attention_probs)
+        _attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
+        attention_probs = self.dropout(_attention_probs)
         context_layer = torch.bmm(
             attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
         )
@@ -774,14 +779,14 @@ class DisentangledSelfAttention(nn.Module):
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
 
-        rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
+        rel_embeddings = rel_embeddings[self.pos_ebd_size - att_span:self.pos_ebd_size + att_span, :].unsqueeze(0)  # .repeat(query_layer.size(0)//self.num_attention_heads, 1, 1)
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
-            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
+            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
             pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads).repeat(
                 query_layer.size(0) // self.num_attention_heads, 1, 1
-            )
+            )  # .split(self.all_head_size, dim=-1)
         else:
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
@@ -799,39 +804,24 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
-            c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
-            c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
+            scale = 1 / math.sqrt(pos_key_layer.size(-1) * scale_factor)
+            c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2).to(query_layer) * scale)
+            c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1).squeeze(0).expand(
+                [query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]
+            )
             c2p_att = torch.gather(
                 c2p_att,
                 dim=-1,
-                index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
+                index=c2p_pos
             )
-            score += c2p_att / scale.to(dtype=c2p_att.dtype)
+            score += c2p_att
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if key_layer.size(-2) != query_layer.size(-2):
-                r_pos = build_relative_position(
-                    key_layer.size(-2),
-                    key_layer.size(-2),
-                    bucket_size=self.position_buckets,
-                    max_position=self.max_relative_positions,
-                    device=query_layer.device,
-                )
-                r_pos = r_pos.unsqueeze(0)
-            else:
-                r_pos = relative_pos
-
-            p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-            p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
-            p2c_att = torch.gather(
-                p2c_att,
-                dim=-1,
-                index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
-            ).transpose(-1, -2)
-            score += p2c_att / scale.to(dtype=p2c_att.dtype)
+            scale = 1 / math.sqrt(pos_query_layer.size(-1) * scale_factor)
+            p2c_att = torch.bmm(pos_query_layer.to(key_layer) * scale, key_layer.transpose(-1, -2))
+            p2c_att = torch.gather(p2c_att, dim=-2, index=c2p_pos)
+            score += p2c_att
 
         return score
 
