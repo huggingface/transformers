@@ -3,14 +3,13 @@ import json
 import os
 from typing import List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, hf_hub_download
+from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, create_repo, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
-    PushToHubMixin,
     cached_file,
     is_accelerate_available,
     is_torch_available,
@@ -58,7 +57,13 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
         return "space"
 
 
-class Tool(PushToHubMixin):
+APP_FILE_TEMPLATE = """from transformers.tools.base import launch_gradio_demo from {module_name} import {class_name}
+
+launch_gradio_demo({class_name})
+"""
+
+
+class Tool:
     """
     Example of a super 'Tool' class that could live in huggingface_hub
     """
@@ -83,12 +88,14 @@ class Tool(PushToHubMixin):
 
     def save(self, output_dir, task_name=None):
         os.makedirs(output_dir, exist_ok=True)
+        # Save module file
         custom_object_save(self, output_dir)
 
         module_name = self.__class__.__module__
         last_module = module_name.split(".")[-1]
         full_name = f"{last_module}.{self.__class__.__name__}"
 
+        # Save config file
         config_file = os.path.join(output_dir, "tool_config.json")
         if os.path.isfile(config_file):
             with open(config_file, "r", encoding="utf-8") as f:
@@ -104,6 +111,11 @@ class Tool(PushToHubMixin):
         tool_config[task_name] = {"tool_class": full_name, "description": self.description, "name": self.name}
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
+
+        # Save app file
+        app_file = os.path.join(output_dir, "app.py")
+        with open(app_file, "w", encoding="utf-8") as f:
+            f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
 
     @classmethod
     def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, **kwargs):
@@ -213,9 +225,10 @@ class Tool(PushToHubMixin):
         else:
             working_dir = repo_id.split("/")[-1]
 
-        repo_id = self._create_repo(
-            repo_id, private=private, use_auth_token=token, repo_type="space", space_sdk="gradio"
+        repo_url = create_repo(
+            repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
         )
+        repo_id = repo_url.repo_id
 
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)

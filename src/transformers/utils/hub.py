@@ -637,7 +637,6 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
-        **kwargs,
     ) -> str:
         """
         Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
@@ -659,7 +658,7 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True, **kwargs)
+        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
 
         # If the namespace is not there, add it or `upload_file` will complain
         if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
