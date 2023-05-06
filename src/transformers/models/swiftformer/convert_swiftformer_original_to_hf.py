@@ -75,7 +75,7 @@ def create_rename_keys(state_dict):
         if ".Proj." in k:
             k_new = k_new.replace(".Proj.", ".proj.")
         if "patch_embed" in k_new:
-            k_new = k_new.replace("patch_embed", "swiftformer.patch_embed.pe")
+            k_new = k_new.replace("patch_embed", "swiftformer.patch_embed.patch_embedding")
         if "network" in k_new:
             k_new = k_new.replace("network", "swiftformer.encoder.network")
         rename_keys.append((k, k_new))

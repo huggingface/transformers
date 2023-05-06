@@ -16,7 +16,7 @@
 
 
 import collections.abc
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Iterator
 
 import torch
 import torch.utils.checkpoint
@@ -48,7 +48,7 @@ _CHECKPOINT_FOR_DOC = "MBZUAI/swiftformer-xs"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/swiftformer-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
@@ -60,19 +60,16 @@ SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class SwiftFormerPatchEmbedding(nn.Module):
     """
-    Patch Embedding Layer that is implemented by two layers of conv. Output: sequence of layers with final shape of [B,
-    C, H/4, W/4]
+    Patch Embedding Layer that is implemented by two layers of conv. Output: sequence of layers with final shape of
+    [batch_size, channels, height/4, width/4]
     """
 
-    def __init__(
-        self,
-        config: SwiftFormerConfig,
-        in_chs: int,
-        out_chs: int,
-    ):
-        super(SwiftFormerPatchEmbedding, self).__init__()
+    def __init__(self, config: SwiftFormerConfig):
+        super().__init__()
 
-        self.pe = nn.Sequential(
+        in_chs = config.input_channels
+        out_chs = config.embed_dims[0]
+        self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_chs, out_chs // 2, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(out_chs // 2, eps=config.batch_norm_eps),
             nn.ReLU(),
@@ -82,9 +79,10 @@ class SwiftFormerPatchEmbedding(nn.Module):
         )
 
     def forward(self, x):
-        return self.pe(x)
+        return self.patch_embedding(x)
 
 
+# Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -96,15 +94,16 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-    if keep_prob > 0.0:
-        random_tensor.div_(keep_prob)
-    return x * random_tensor
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
 
 
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -115,17 +114,17 @@ class SwiftFormerDropPath(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
 
-    def extra_repr(self):
-        return f"drop_prob={round(self.drop_prob,3):0.3f}"
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 class SwiftFormerEmbeddings(nn.Module):
     """
-    Patch Embedding that is implemented by a layer of conv. Input: tensor in shape [B, C, H, W] Output: tensor in shape
-    [B, C, H/stride, W/stride]
+    Patch Embedding that is implemented by a layer of conv. Input: tensor in shape [batch_size, channels, height,
+    width] Output: tensor in shape [batch_size, channels, height/stride, width/stride]
     """
 
-    def __init__(self, config: SwiftFormerConfig, index, norm_layer=nn.BatchNorm2d):
+    def __init__(self, config: SwiftFormerConfig, index: int):
         super().__init__()
 
         patch_size = config.down_patch_size
@@ -141,7 +140,7 @@ class SwiftFormerEmbeddings(nn.Module):
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
-        self.norm = norm_layer(embed_dim, eps=config.batch_norm_eps) if norm_layer else nn.Identity()
+        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps)
 
     def forward(self, x):
         x = self.proj(x)
@@ -151,23 +150,21 @@ class SwiftFormerEmbeddings(nn.Module):
 
 class SwiftFormerConvEncoder(nn.Module):
     """
-    Implementation of SwiftFormerConvEncoder with 3*3 and 1*1 convolutions. Input: tensor with shape [B, C, H, W]
-    Output: tensor with shape [B, C, H, W]
+    Implementation of SwiftFormerConvEncoder with 3*3 and 1*1 convolutions. Input: tensor with shape [batch_size,
+    channels, height, width] Output: tensor with shape [batch_size, channels, height, width]
     """
 
-    def __init__(
-        self, config: SwiftFormerConfig, dim, hidden_dim=64, kernel_size=3, drop_path=0.0, use_layer_scale=True
-    ):
+    def __init__(self, config: SwiftFormerConfig, dim: int):
         super().__init__()
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
+        hidden_dim = int(config.mlp_ratio * dim)
+
+        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
         self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
         self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
-        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.use_layer_scale = use_layer_scale
-        if use_layer_scale:
-            self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.drop_path = nn.Identity()
+        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
 
     def forward(self, x):
         input = x
@@ -176,10 +173,7 @@ class SwiftFormerConvEncoder(nn.Module):
         x = self.point_wise_conv1(x)
         x = self.act(x)
         x = self.point_wise_conv2(x)
-        if self.use_layer_scale:
-            x = input + self.drop_path(self.layer_scale * x)
-        else:
-            x = input + self.drop_path(x)
+        x = input + self.drop_path(self.layer_scale * x)
         return x
 
 
@@ -189,23 +183,15 @@ class SwiftFormerMlp(nn.Module):
     Output: tensor with shape [batch_size, channels, height, width]
     """
 
-    def __init__(
-        self,
-        config: SwiftFormerConfig,
-        in_features,
-        hidden_features=None,
-        out_features=None,
-        act_layer=nn.GELU,
-        drop=0.0,
-    ):
+    def __init__(self, config: SwiftFormerConfig, in_features: int):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
+        hidden_features = int(in_features * config.mlp_ratio)
         self.norm1 = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
         self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
+        act_layer = ACT2CLS[config.act_layer]
         self.act = act_layer()
-        self.fc2 = nn.Conv2d(hidden_features, out_features, 1)
-        self.drop = nn.Dropout(drop)
+        self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
+        self.drop = nn.Dropout(p=0.0)
 
     def forward(self, x):
         x = self.norm1(x)
@@ -223,16 +209,16 @@ class SwiftFormerEfficientAdditiveAttention(nn.Module):
     Output: tensor in shape [batch_size, channels, height, width]
     """
 
-    def __init__(self, in_dims=512, token_dim=256, num_heads=2):
+    def __init__(self, config: SwiftFormerConfig, dim: int = 512):
         super().__init__()
 
-        self.to_query = nn.Linear(in_dims, token_dim * num_heads)
-        self.to_key = nn.Linear(in_dims, token_dim * num_heads)
+        self.to_query = nn.Linear(dim, dim)
+        self.to_key = nn.Linear(dim, dim)
 
-        self.w_g = nn.Parameter(torch.randn(token_dim * num_heads, 1))
-        self.scale_factor = token_dim**-0.5
-        self.proj = nn.Linear(token_dim * num_heads, token_dim * num_heads)
-        self.final = nn.Linear(token_dim * num_heads, token_dim)
+        self.w_g = nn.Parameter(torch.randn(dim, 1))
+        self.scale_factor = dim**-0.5
+        self.proj = nn.Linear(dim, dim)
+        self.final = nn.Linear(dim, dim)
 
     def forward(self, x):
         query = self.to_query(x)
@@ -261,17 +247,16 @@ class SwiftFormerLocalRepresentation(nn.Module):
     width]
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim, kernel_size=3, drop_path=0.0, use_layer_scale=True):
+    def __init__(self, config: SwiftFormerConfig, dim: int):
         super().__init__()
-        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size // 2, groups=dim)
+
+        self.depth_wise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
         self.norm = nn.BatchNorm2d(dim, eps=config.batch_norm_eps)
         self.point_wise_conv1 = nn.Conv2d(dim, dim, kernel_size=1)
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.use_layer_scale = use_layer_scale
-        if use_layer_scale:
-            self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.drop_path = nn.Identity()
+        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
 
     def forward(self, x):
         input = x
@@ -280,41 +265,26 @@ class SwiftFormerLocalRepresentation(nn.Module):
         x = self.point_wise_conv1(x)
         x = self.act(x)
         x = self.point_wise_conv2(x)
-        if self.use_layer_scale:
-            x = input + self.drop_path(self.layer_scale * x)
-        else:
-            x = input + self.drop_path(x)
+        x = input + self.drop_path(self.layer_scale * x)
         return x
 
 
-class SwiftFormerEncoderBlk(nn.Module):
+class SwiftFormerEncoderBlock(nn.Module):
     """
     SwiftFormer Encoder Block for SwiftFormer. It consists of (1) Local representation module, (2)
-    SwiftFormerEfficientAdditiveAttention, and (3) MLP block. Input: tensor in shape [B, C, H, W] Output: tensor in
-    shape [B, C, H, W]
+    SwiftFormerEfficientAdditiveAttention, and (3) MLP block. Input: tensor in shape [batch_size, channels, height,
+    width] Output: tensor in shape [batch_size, channels, height, width]
     """
 
-    def __init__(
-        self,
-        config: SwiftFormerConfig,
-        dim,
-        drop=0.0,
-        drop_path=0.0,
-    ):
+    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0) -> None:
         super().__init__()
 
-        mlp_ratio = config.mlp_ratio
-        act_layer = ACT2CLS[config.act_layer]
         layer_scale_init_value = config.layer_scale_init_value
         use_layer_scale = config.use_layer_scale
 
-        self.local_representation = SwiftFormerLocalRepresentation(
-            config, dim=dim, kernel_size=3, drop_path=0.0, use_layer_scale=True
-        )
-        self.attn = SwiftFormerEfficientAdditiveAttention(in_dims=dim, token_dim=dim, num_heads=1)
-        self.linear = SwiftFormerMlp(
-            config, in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer, drop=drop
-        )
+        self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
+        self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
+        self.linear = SwiftFormerMlp(config, in_features=dim)
         self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
@@ -347,31 +317,42 @@ class SwiftFormerEncoderBlk(nn.Module):
         return x
 
 
-def Stage(
-    config: SwiftFormerConfig,
-    index,
-):
+class SwiftFormerStage(nn.Module):
     """
-    Implementation of each SwiftFormer stages. Here, SwiftFormerEncoderBlk used as the last block in all stages, while
-    SwiftFormerConvEncoder used in the rest of the blocks. Input: tensor in shape [B, C, H, W] Output: tensor in shape
-    [B, C, H, W]
+    Implementation of each SwiftFormer stages. Here, SwiftFormerEncoderBlock used as the last block in all stages,
+    while SwiftFormerConvEncoder used in the rest of the blocks. Input: tensor in shape [batch_size, channels, height,
+    width] Output: tensor in shape [batch_size, channels, height, width]
     """
-    mlp_ratio = config.mlp_ratio
-    layers = config.layers
-    dim = config.embed_dims[index]
 
-    blocks = []
+    def __init__(self, config: SwiftFormerConfig, index: int) -> None:
+        super().__init__()
 
-    for block_idx in range(layers[index]):
-        block_dpr = config.drop_path_rate * (block_idx + sum(layers[:index])) / (sum(layers) - 1)
+        layers = config.layers
+        dim = config.embed_dims[index]
 
-        if layers[index] - block_idx <= 1:
-            blocks.append(SwiftFormerEncoderBlk(config, dim=dim, drop_path=block_dpr))
-        else:
-            blocks.append(SwiftFormerConvEncoder(config, dim=dim, hidden_dim=int(mlp_ratio * dim), kernel_size=3))
+        blocks = []
+        for block_idx in range(layers[index]):
+            block_dpr = config.drop_path_rate * (block_idx + sum(layers[:index])) / (sum(layers) - 1)
 
-    blocks = nn.Sequential(*blocks)
-    return blocks
+            if layers[index] - block_idx <= 1:
+                blocks.append(SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
+            else:
+                blocks.append(SwiftFormerConvEncoder(config, dim=dim))
+
+        # self.blocks = nn.Sequential(*blocks)
+        
+        for idx, block in enumerate(blocks):
+            self.add_module(str(idx), block)
+
+    # def forward(self, x):
+    #     return self.blocks(x)
+    def __iter__(self) -> Iterator[nn.Module]:
+        return iter(self._modules.values())
+    
+    def forward(self, input):
+        for module in self:
+            input = module(input)
+        return input
 
 
 class SwiftFormerEncoder(nn.Module):
@@ -386,7 +367,7 @@ class SwiftFormerEncoder(nn.Module):
         # Transformer model
         network = []
         for i in range(len(layers)):
-            stage = Stage(config=config, index=i)
+            stage = SwiftFormerStage(config=config, index=i)
             network.append(stage)
             if i >= len(layers) - 1:
                 break
@@ -408,11 +389,9 @@ class SwiftFormerEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        all_hidden_states = () if output_hidden_states else None
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
 
-        for idx, block in enumerate(self.network):
+        for block in self.network:
             hidden_states = block(hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -436,7 +415,6 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -487,13 +465,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        # configs
-        embed_dims = config.embed_dims
-
-        # Patch embedding
-        self.patch_embed = SwiftFormerPatchEmbedding(config, 3, embed_dims[0])
-
-        # SwiftFormer encoder
+        self.patch_embed = SwiftFormerPatchEmbedding(config)
         self.encoder = SwiftFormerEncoder(config)
 
         # Initialize weights and apply final processing
@@ -523,9 +495,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # run base model
-        x = pixel_values
-        embedding_output = self.patch_embed(x)
+        embedding_output = self.patch_embed(pixel_values)
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
@@ -544,7 +514,6 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
 @add_start_docstrings(
     """
     SwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
-
     """,
     SWIFTFORMER_START_DOCSTRING,
 )
@@ -597,11 +566,11 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         sequence_output = outputs.last_hidden_state if return_dict else outputs[0]
 
         # run classification head
-        x = self.norm(sequence_output)
-        cls_out = self.head(x.flatten(2).mean(-1)), self.dist_head(x.flatten(2).mean(-1))
-        cls_out = (cls_out[0] + cls_out[1]) / 2
-
-        logits = cls_out
+        sequence_output = self.norm(sequence_output)
+        sequence_output = sequence_output.flatten(2).mean(-1)
+        cls_out = self.head(sequence_output)
+        distillation_out = self.dist_head(sequence_output)
+        logits = (cls_out + distillation_out) / 2
 
         # calculate loss
         loss = None
