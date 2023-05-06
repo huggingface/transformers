@@ -115,9 +115,9 @@ def get_relative_import_files(module_file):
     return all_relative_imports
 
 
-def check_imports(filename):
+def get_imports(filename):
     """
-    Check if the current Python environment contains all the libraries that are imported in a file.
+    Extracts all the libraries that are imported in a file.
     """
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
@@ -131,9 +131,14 @@ def check_imports(filename):
     imports += re.findall(r"^\s*from\s+(\S+)\s+import", content, flags=re.MULTILINE)
     # Only keep the top-level module
     imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
+    return list(set(imports))
 
-    # Unique-ify and test we got them all
-    imports = list(set(imports))
+
+def check_imports(filename):
+    """
+    Check if the current Python environment contains all the libraries that are imported in a file.
+    """
+    imports = get_imports(filename)
     missing_packages = []
     for imp in imports:
         try:
@@ -488,12 +493,17 @@ def custom_object_save(obj, folder, config=None):
     elif config is not None:
         _set_auto_map_in_config(config)
 
+    result = []
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
     shutil.copy(object_file, dest_file)
+    result.append(dest_file)
 
     # Gather all relative imports recursively and make sure they are copied as well.
     for needed_file in get_relative_import_files(object_file):
         dest_file = Path(folder) / (Path(needed_file).name)
         shutil.copy(needed_file, dest_file)
+        result.append(dest_file)
+
+    return result
