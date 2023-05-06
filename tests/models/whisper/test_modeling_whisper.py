@@ -95,7 +95,7 @@ class WhisperModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=60,
+        seq_length=1500,
         is_training=True,
         use_labels=False,
         vocab_size=200,
@@ -107,7 +107,7 @@ class WhisperModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=30,
+        max_source_positions=750,
         max_target_positions=40,
         bos_token_id=98,
         eos_token_id=98,
@@ -359,16 +359,15 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def _get_input_ids_and_config(self):
+    def _get_input_ids_and_config(self, batch_size=3):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
-        # cut to half length & take max batch_size 3
-        max_batch_size = 3
-        input_ids = input_ids[:max_batch_size, :, :]
+        # cut to half length & take max batch_size=batch_size
+        input_ids = input_ids[:batch_size, :, :]
 
         # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
+        max_length = 4
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
@@ -414,6 +413,21 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.half()
         model.generate(input_features)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_generate_language(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_features = input_dict["input_features"]
+        model = WhisperForConditionalGeneration(config).to(torch_device)
+        # Hack to keep the test fast and not require downloading a model with a generation_config
+        model.generation_config.__setattr__("lang_to_id", {"<|en|>": 1})
+        model.generation_config.__setattr__("task_to_id", {"transcribe": 2})
+
+        # test language code
+        model.generate(input_features, language="en")
+        # test tokenizer code
+        model.generate(input_features, language="<|en|>")
+        # test language name
+        model.generate(input_features, language="English")
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1420,7 +1434,7 @@ class WhisperEncoderModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=60,
+        seq_length=3000,
         is_training=True,
         use_labels=True,
         hidden_size=16,
@@ -1431,7 +1445,7 @@ class WhisperEncoderModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=30,
+        max_source_positions=1500,
         num_mel_bins=80,
         num_conv_layers=1,
         suppress_tokens=None,
