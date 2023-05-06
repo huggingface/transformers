@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, create_repo, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 
-from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
+from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
@@ -91,7 +91,7 @@ class Tool:
     def save(self, output_dir, task_name=None):
         os.makedirs(output_dir, exist_ok=True)
         # Save module file
-        custom_object_save(self, output_dir)
+        module_files = custom_object_save(self, output_dir)
 
         module_name = self.__class__.__module__
         last_module = module_name.split(".")[-1]
@@ -118,6 +118,15 @@ class Tool:
         app_file = os.path.join(output_dir, "app.py")
         with open(app_file, "w", encoding="utf-8") as f:
             f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
+
+        # Save requirements file
+        requirements_file = os.path.join(output_dir, "requirements.txt")
+        imports = []
+        for module in module_files:
+            imports.extend(get_imports(module))
+        imports = list(set(imports))
+        with open(requirements_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(imports) + "\n")
 
     @classmethod
     def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, remote=False, **kwargs):
