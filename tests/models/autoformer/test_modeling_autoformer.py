@@ -66,7 +66,7 @@ class AutoformerModelTester:
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
         moving_average=25,
-        factor=5,
+        autocorrelation_factor=5,
     ):
         self.d_model = d_model
         self.parent = parent
@@ -91,7 +91,7 @@ class AutoformerModelTester:
         self.label_length = label_length
 
         self.moving_average = moving_average
-        self.factor = factor
+        self.autocorrelation_factor = autocorrelation_factor
 
     def get_config(self):
         return AutoformerConfig(

@@ -113,7 +113,7 @@ class AutoformerConfig(PretrainedConfig):
         moving_average (`int`, defaults to 25):
             The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the
             Decomposition Layer.
-        factor (`int`, defaults to 3):
+        autocorrelation_factor (`int`, defaults to 3):
             "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
             It's recommended in the paper to set it to a number between 1 and 5.
 
@@ -174,7 +174,7 @@ class AutoformerConfig(PretrainedConfig):
         # Autoformer arguments
         label_length: Optional[int] = None,
         moving_average: int = 25,
-        factor: int = 3,
+        autocorrelation_factor: int = 3,
         **kwargs,
     ):
         # time series specific configuration
@@ -234,7 +234,7 @@ class AutoformerConfig(PretrainedConfig):
         # Autoformer
         self.label_length = label_length or 10
         self.moving_average = moving_average
-        self.factor = factor
+        self.autocorrelation_factor = autocorrelation_factor
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

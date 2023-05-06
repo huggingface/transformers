@@ -372,7 +372,7 @@ class AutoformerAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        factor: int = 3,
+        autocorrelation_factor: int = 3,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -393,7 +393,7 @@ class AutoformerAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-        self.factor = factor
+        self.autocorrelation_factor = autocorrelation_factor
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -520,7 +520,7 @@ class AutoformerAttention(nn.Module):
         autocorrelations = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
 
         # find top k autocorrelations delays
-        top_k = int(self.factor * math.log(time_length))
+        top_k = int(self.autocorrelation_factor * math.log(time_length))
         autocorrelations_mean_on_head_channel = torch.mean(autocorrelations, dim=(1, -1))  # bsz x tgt_len
         if self.training:
             autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
@@ -591,7 +591,7 @@ class AutoformerEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
-            factor=config.factor,
+            autocorrelation_factor=config.autocorrelation_factor,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -667,7 +667,7 @@ class AutoformerDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            factor=config.factor,
+            autocorrelation_factor=config.autocorrelation_factor,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -679,7 +679,7 @@ class AutoformerDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            factor=config.factor,
+            autocorrelation_factor=config.autocorrelation_factor,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
