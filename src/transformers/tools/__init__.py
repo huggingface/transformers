@@ -1,5 +1,5 @@
 from .agents import Agent, EndpointAgent, OpenAiAgent
-from .base import PipelineTool, RemoteTool, tool
+from .base import PipelineTool, RemoteTool, load_tool
 from .document_question_answering import DocumentQuestionAnsweringTool
 from .generative_question_answering import GenerativeQuestionAnsweringTool, RemoteGenerativeQuestionAnsweringTool
 from .image_captioning import ImageCaptioningTool, RemoteImageCaptioningTool
@@ -8,6 +8,6 @@ from .image_segmentation import ImageSegmentationTool
 from .language_identifier import LanguageIdentificationTool
 from .speech_to_text import RemoteSpeechToTextTool, SpeechToTextTool
 from .text_classification import RemoteTextClassificationTool, TextClassificationTool
-from .text_summarization import TextSummarizationTool
+from .text_summarization import RemoteTextSummarizationTool, TextSummarizationTool
 from .text_to_speech import TextToSpeechTool
 from .translation import TranslationTool
