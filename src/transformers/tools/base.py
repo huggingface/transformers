@@ -1,10 +1,11 @@
 import importlib
 import json
 import os
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, create_repo, hf_hub_download
-from huggingface_hub.utils import RepositoryNotFoundError
+from huggingface_hub import CommitOperationAdd, create_commit, create_repo, hf_hub_download, model_info
+from huggingface_hub.constants import INFERENCE_ENDPOINT
+from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
 from ..models.auto import AutoProcessor
@@ -13,6 +14,7 @@ from ..utils import (
     cached_file,
     is_accelerate_available,
     is_torch_available,
+    is_vision_available,
     logging,
     working_or_temp_dir,
 )
@@ -460,3 +462,69 @@ def add_description(description):
         return func
 
     return inner
+
+
+## Will move to the Hub
+class InferenceApi:
+    def __init__(
+        self,
+        repo_id_or_url: str,
+        task: Optional[str] = None,
+        token: Optional[str] = None,
+    ):
+        self.headers = build_hf_headers(token=token)
+
+        if repo_id_or_url.startswith("https://"):
+            self.url = repo_id_or_url
+            return
+
+        # Configure task
+        if task is None:
+            info = model_info(repo_id=repo_id_or_url, token=token)
+            task = info.pipeline_tag
+
+        self.url = f"{INFERENCE_ENDPOINT}/pipeline/{task}/{repo_id_or_url}"
+
+    def __call__(
+        self,
+        inputs: Optional[Union[str, Dict, List[str], List[List[str]]]] = None,
+        params: Optional[Dict] = None,
+        data: Optional[bytes] = None,
+        raw_response: bool = False,
+    ) -> Any:
+        # Build payload
+        payload = {"options": {"wait_for_model": True}}
+        if inputs:
+            payload["inputs"] = inputs
+        if params:
+            payload["parameters"] = params
+
+        # Make API call
+        response = get_session().post(self.url, headers=self.headers, json=payload, data=data)
+
+        # Let the user handle the response
+        if raw_response:
+            return response
+
+        # By default, parse the response for the user.
+        content_type = response.headers.get("Content-Type") or ""
+        if content_type.startswith("image"):
+            if not is_vision_available():
+                raise ImportError(
+                    f"Task '{self.task}' returned as image but Pillow is not installed."
+                    " Please install it (`pip install Pillow`) or pass"
+                    " `raw_response=True` to get the raw `Response` object and parse"
+                    " the image by yourself."
+                )
+
+            from PIL import Image
+
+            return Image.open(io.BytesIO(response.content))
+        elif content_type == "application/json":
+            return response.json()
+        else:
+            raise NotImplementedError(
+                f"{content_type} output type is not implemented yet. You can pass"
+                " `raw_response=True` to get the raw `Response` object and parse the"
+                " output by yourself."
+            )
