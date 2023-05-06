@@ -262,7 +262,6 @@ class Tool:
 
 class RemoteTool(Tool):
     default_checkpoint = None
-    description = "This is a tool that ..."
 
     def __init__(self, repo_id=None, token=None):
         if repo_id is None:
@@ -300,7 +299,6 @@ class PipelineTool(Tool):
     model_class = None
     post_processor_class = AutoProcessor
     default_checkpoint = None
-    description = "This is a tool that ..."
 
     def __init__(
         self,
