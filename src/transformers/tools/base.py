@@ -1,10 +1,10 @@
 import importlib
+import io
 import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, create_commit, create_repo, hf_hub_download, model_info
-from huggingface_hub.constants import INFERENCE_ENDPOINT
+from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, create_repo, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
@@ -120,7 +120,7 @@ class Tool:
             f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
 
     @classmethod
-    def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, **kwargs):
+    def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, remote=False, **kwargs):
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -181,9 +181,10 @@ class Tool:
                 tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
                 raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
 
-        tool_class = get_class_from_dynamic_module(
-            custom_tools[task]["tool_class"], repo_id, use_auth_token=token, **hub_kwargs
-        )
+        tool_class = custom_tools[task]["tool_class"]
+        if isinstance(tool_class, (list, tuple)):
+            tool_class = tool_class[1] if remote else tool_class[0]
+        tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
         if model_repo_id is not None:
             repo_id = model_repo_id
         elif hub_kwargs["repo_type"] == "space":
@@ -260,7 +261,7 @@ class Tool:
             )
 
 
-class RemoteTool(Tool):
+class OldRemoteTool(Tool):
     default_checkpoint = None
 
     def __init__(self, repo_id=None, token=None):
@@ -284,6 +285,37 @@ class RemoteTool(Tool):
         if not self.is_initialized:
             self.setup()
 
+        inputs = self.prepare_inputs(*args, **kwargs)
+        if isinstance(inputs, dict):
+            outputs = self.client(**inputs)
+        else:
+            outputs = self.client(inputs)
+        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
+            outputs = outputs[0]
+        return self.extract_outputs(outputs)
+
+
+class RemoteTool(Tool):
+    default_url = None
+
+    def __init__(self, endpoint_url=None, token=None):
+        if endpoint_url is None:
+            endpoint_url = self.default_url
+        self.endpoint_url = endpoint_url
+        self.client = EndpointClient(endpoint_url, token=token)
+
+    def prepare_inputs(self, *args, **kwargs):
+        if len(args) > 1:
+            raise ValueError("A `RemoteTool` can only accept one positional input.")
+        elif len(args) == 1:
+            return {"data": args[0]}
+
+        return {"inputs": kwargs}
+
+    def extract_outputs(self, outputs):
+        return outputs
+
+    def __call__(self, *args, **kwargs):
         inputs = self.prepare_inputs(*args, **kwargs)
         if isinstance(inputs, dict):
             outputs = self.client(**inputs)
@@ -463,25 +495,10 @@ def add_description(description):
 
 
 ## Will move to the Hub
-class InferenceApi:
-    def __init__(
-        self,
-        repo_id_or_url: str,
-        task: Optional[str] = None,
-        token: Optional[str] = None,
-    ):
+class EndpointClient:
+    def __init__(self, endpoint_url: str, token: Optional[str] = None):
         self.headers = build_hf_headers(token=token)
-
-        if repo_id_or_url.startswith("https://"):
-            self.url = repo_id_or_url
-            return
-
-        # Configure task
-        if task is None:
-            info = model_info(repo_id=repo_id_or_url, token=token)
-            task = info.pipeline_tag
-
-        self.url = f"{INFERENCE_ENDPOINT}/pipeline/{task}/{repo_id_or_url}"
+        self.endpoint_url = endpoint_url
 
     def __call__(
         self,
@@ -491,14 +508,14 @@ class InferenceApi:
         raw_response: bool = False,
     ) -> Any:
         # Build payload
-        payload = {"options": {"wait_for_model": True}}
+        payload = {}
         if inputs:
             payload["inputs"] = inputs
         if params:
             payload["parameters"] = params
 
         # Make API call
-        response = get_session().post(self.url, headers=self.headers, json=payload, data=data)
+        response = get_session().post(self.endpoint_url, headers=self.headers, json=payload, data=data)
 
         # Let the user handle the response
         if raw_response:

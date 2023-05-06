@@ -1,7 +1,7 @@
 import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
-from .base import PipelineTool, RemoteTool
+from .base import OldRemoteTool, PipelineTool
 
 
 TEXT_CLASSIFIER_DESCRIPTION = (
@@ -54,7 +54,7 @@ class TextClassificationTool(PipelineTool):
         return self._labels[label_id]
 
 
-class RemoteTextClassificationTool(RemoteTool):
+class RemoteTextClassificationTool(OldRemoteTool):
     """
     Example:
 

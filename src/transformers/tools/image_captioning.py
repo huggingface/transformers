@@ -2,7 +2,7 @@ import io
 
 from ..models.auto import AutoModelForVision2Seq, AutoProcessor
 from ..utils import is_vision_available
-from .base import PipelineTool, RemoteTool
+from .base import OldRemoteTool, PipelineTool
 
 
 if is_vision_available():
@@ -41,7 +41,7 @@ class ImageCaptioningTool(PipelineTool):
         return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
 
-class RemoteImageCaptioningTool(RemoteTool):
+class RemoteImageCaptioningTool(OldRemoteTool):
     default_checkpoint = "Salesforce/blip-image-captioning-large"
     description = IMAGE_CAPTIONING_DESCRIPTION
 
