@@ -8,51 +8,28 @@
   title: 시작하기
 - sections:
   - local: pipeline_tutorial
-    title: 추론을 위한 Pipeline
+    title: Pipeline으로 추론하기
   - local: autoclass_tutorial
-    title: 자동 클래스로 사전 학습된 인스턴스 로드하기
+    title: AutoClass로 사전 학습된 인스턴스 로드하기
   - local: preprocessing
-    title: 전처리
+    title: 데이터 전처리하기
   - local: training
     title: 사전 학습된 모델 미세 조정하기
+  - local: run_scripts
+    title: 스크립트로 학습하기
   - local: accelerate
-    title: 🤗 Accelerate를 활용한 분산 학습
-  - local: in_translation
-    title: (번역중) Share a model
-  title: (번역중) 튜토리얼
+    title: 🤗 Accelerate로 분산 학습 구성하기
+  - local: model_sharing
+    title: 만든 모델 공유하기
+  title: 튜토리얼
 - sections:
   - sections:
-    - local: create_a_model
-      title: 맞춤형 아키텍처 만들기
-    - local: custom_models
-      title: 사용자 정의 모델 공유하기
-    - local: run_scripts
-      title: 스크립트로 학습하기
-    - local: sagemaker
-      title: Amazon SageMaker에서 학습 실행하기
-    - local: in_translation
-      title: (번역중) Converting from TensorFlow checkpoints
-    - local: in_translation
-      title: (번역중) Export to ONNX
-    - local: in_translation
-      title: (번역중) Export to TorchScript
-    - local: in_translation
-      title: (번역중) Troubleshoot
-    title: (번역중) 일반적인 사용방법
-  - sections:
-    - local: in_translation
-      title: (번역중) Use tokenizers from 🤗 Tokenizers
-    - local: in_translation
-      title: (번역중) Inference for multilingual models
-    - local: in_translation
-      title: (번역중) Text generation strategies
-    - sections:
       - local: tasks/sequence_classification
         title: 텍스트 분류
-      - local: in_translation
-        title: (번역중) Token classification
-      - local: in_translation
-        title: (번역중) Question answering
+      - local: tasks/token_classification
+        title: 토큰 분류
+      - local: tasks/question_answering
+        title: 질의 응답(Question Answering)
       - local: in_translation
         title: (번역중) Causal language modeling
       - local: tasks/masked_language_modeling
@@ -61,40 +38,69 @@
         title: 번역
       - local: tasks/summarization
         title: 요약
+      - local: tasks/multiple_choice
+        title: 객관식 문제(Multiple Choice)
+    title: 자연어처리
+    isExpanded: false
+  - sections:
       - local: in_translation
-        title: (번역중) Multiple choice
-      title: (번역중) 태스크별 가이드
-      isExpanded: false
-    title: (번역중) 자연어처리
-  - sections:
-    - local: in_translation
-      title: (번역중) Audio classification
-    - local: in_translation
-      title: (번역중) Automatic speech recognition
+        title: (번역중) Audio classification
+      - local: in_translation
+        title: (번역중) Automatic speech recognition
     title: (번역중) 오디오
+    isExpanded: false
   - sections:
-    - local: in_translation
-      title: (번역중) Image classification
-    - local: in_translation
-      title: (번역중) Semantic segmentation
-    - local: in_translation
-      title: (번역중) Video classification
-    - local: in_translation
-      title: (번역중) Object detection
-    - local: in_translation
-      title: (번역중) Zero-shot object detection
-    - local: in_translation
-      title: (번역중) Zero-shot image classification
-    - local: in_translation
-      title: (번역중) Depth estimation
+      - local: tasks/image_classification
+        title: 이미지 분류
+      - local: in_translation
+        title: (번역중) Semantic segmentation
+      - local: in_translation
+        title: (번역중) Video classification
+      - local: in_translation
+        title: (번역중) Object detection
+      - local: in_translation
+        title: (번역중) Zero-shot object detection
+      - local: tasks/zero_shot_image_classification
+        title: 제로샷(zero-shot) 이미지 분류
+      - local: in_translation
+        title: (번역중) Depth estimation
     title: (번역중) 컴퓨터 비전
+    isExpanded: false
   - sections:
-    - local: in_translation
-      title: (번역중) Image captioning
-    - local: in_translation
-      title: (번역중) Document Question Answering
+      - local: tasks/image_captioning
+        title: 이미지 캡셔닝
+      - local: in_translation
+        title: (번역중) Document Question Answering
     title: (번역중) 멀티모달
-  - sections:
+    isExpanded: false
+  title: 태스크 가이드
+- sections:
+    - local: in_translation
+      title: (번역중) Use fast tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: 다국어 모델 추론하기
+    - local: in_translation
+      title: (번역중) Customize text generation strategy
+    - local: create_a_model
+      title: 모델별 API 사용하기
+    - local: custom_models
+      title: 사용자 정의 모델 공유하기
+    - local: sagemaker
+      title: Amazon SageMaker에서 학습 실행하기
+    - local: serialization
+      title: ONNX로 내보내기
+    - local: torchscript
+      title: TorchScript로 내보내기
+    - local: in_translation
+      title: (번역중) Benchmarks
+    - local: in_translation
+      title: (번역중) Notebooks with examples
+    - local: in_translation
+      title: (번역중) Community resources
+    - local: in_translation
+      title: (번역중) Troubleshoot
+  title: (번역중) 개발자 가이드
+- sections:
     - local: in_translation
       title: (번역중) Overview
     - local: in_translation
@@ -129,8 +135,8 @@
       title: (번역중) Hyperparameter Search using Trainer API
     - local: in_translation
       title: (번역중) XLA Integration for TensorFlow Models
-    title: (번역중) 성능 및 확장성
-  - sections:
+  title: (번역중) 성능 및 확장성
+- sections:
     - local: in_translation
       title: (번역중) How to contribute to transformers?
     - local: in_translation
@@ -143,16 +149,8 @@
       title: (번역중) Testing
     - local: in_translation
       title: (번역중) Checks on a Pull Request
-    title: (번역중) 기여하기
-  - local: notebooks
-    title: (번역중) 🤗 Transformers Notebooks
-  - local: in_translation
-    title: (번역중) Community resources
-  - local: in_translation
-    title: (번역중) Benchmarks
-  - local: in_translation
-    title: (번역중) Migrating from previous packages
-  title: (번역중) How-to 가이드
+  title: (번역중) 기여하기
+
 - sections:
   - local: in_translation
     title: (번역중) Philosophy
@@ -264,6 +262,8 @@
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
+        title: (번역중) CPMANT
+      - local: in_translation
         title: (번역중) CTRL
       - local: in_translation
         title: (번역중) DeBERTa
@@ -309,6 +309,8 @@
         title: (번역중) GPT-J
       - local: in_translation
         title: (번역중) GPT2
+      - local: in_translation
+        title: (번역중) GPTBigCode
       - local: in_translation
         title: (번역중) GPTSAN Japanese
       - local: in_translation
@@ -361,6 +363,8 @@
         title: (번역중) NLLB-MoE
       - local: in_translation
         title: (번역중) Nyströmformer
+      - local: in_translation
+        title: (번역중) Open-Llama
       - local: in_translation
         title: (번역중) OPT
       - local: in_translation
@@ -460,6 +464,8 @@
         title: (번역중) EfficientFormer
       - local: in_translation
         title: (번역중) EfficientNet
+      - local: in_translation
+        title: (번역중) FocalNet
       - local: in_translation
         title: (번역중) GLPN
       - local: in_translation
@@ -573,6 +579,8 @@
       - local: in_translation
         title: (번역중) Data2Vec
       - local: in_translation
+        title: (번역중) DePlot
+      - local: in_translation
         title: (번역중) Donut
       - local: in_translation
         title: (번역중) FLAVA
@@ -593,6 +601,8 @@
       - local: in_translation
         title: (번역중) LXMERT
       - local: in_translation
+        title: (번역중) MatCha
+      - local: in_translation
         title: (번역중) MGP-STR
       - local: in_translation
         title: (번역중) OneFormer
@@ -602,6 +612,8 @@
         title: (번역중) Perceiver
       - local: in_translation
         title: (번역중) Pix2Struct
+      - local: in_translation
+        title: (번역중) Segment Anything
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation

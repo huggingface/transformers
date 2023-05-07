@@ -57,7 +57,7 @@ fasteners==0.17.3
 filelock==3.6.0
 fire==0.4.0
 flake8==4.0.1
-Flask==2.0.3
+Flask==2.3.2
 Flask-Compress==1.11
 flatbuffers==2.0
 flax==0.4.0
