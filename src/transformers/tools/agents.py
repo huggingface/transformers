@@ -124,6 +124,23 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
     return resolved_tools
 
 
+def get_tool_creation_code(code, toolbox, remote=False):
+    code_lines = ["from transformers import load_tool", ""]
+    for name, tool in toolbox.items():
+        if name not in code or isinstance(tool, Tool):
+            continue
+
+        line = f'{name} = load_tool("{tool.task}"'
+        if tool.repo_id is not None:
+            line += f', repo_id="{tool.repo_id}"'
+        if remote:
+            line += ", remote=True)"
+        line += ")"
+        code_lines.append(line)
+
+    return "\n".join(code_lines) + "\n"
+
+
 def clean_code_for_chat(result):
     lines = result.split("\n")
     idx = 0
@@ -213,7 +230,8 @@ class Agent:
                 self.chat_state.update(kwargs)
                 return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
             else:
-                return code
+                tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
+                return f"{tool_code}\n{code}"
 
     def prepare_for_new_chat(self):
         self.chat_history = None
@@ -233,7 +251,8 @@ class Agent:
             self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
             return evaluate(code, self.cached_tools, state=kwargs.copy())
         else:
-            return code
+            tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
+            return f"{tool_code}\n{code}"
 
 
 class OpenAiAgent(Agent):
