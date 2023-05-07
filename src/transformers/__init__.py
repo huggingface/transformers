@@ -439,6 +439,7 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.scibart": ["SciBartTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -4177,6 +4178,7 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.scibart import SciBartTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig

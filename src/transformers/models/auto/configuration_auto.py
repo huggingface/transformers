@@ -546,6 +546,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roc_bert", "RoCBert"),
         ("roformer", "RoFormer"),
         ("sam", "SAM"),
+        ("scibart", "SciBart"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
