@@ -29,6 +29,9 @@ class TextClassificationTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 
+    inputs = ["text", ["text"]]
+    outputs = ["text"]
+
     def setup(self):
         super().setup()
         config = self.model.config

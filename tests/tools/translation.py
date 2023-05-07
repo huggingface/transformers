@@ -17,7 +17,7 @@ import unittest
 
 from transformers.tools import TranslationTool
 
-from .test_tools_common import ToolTesterMixin
+from .test_tools_common import ToolTesterMixin, output_types
 
 
 class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
@@ -32,3 +32,13 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
     def test_exact_match_kwarg(self):
         result = self.tool(text="Hey, what's up?", src_lang="English", tgt_lang="French")
         self.assertEqual(result, "- Hé, comment ça va?")
+
+    def test_call(self):
+        inputs = ["Hey, what's up?", "English", "Spanish"]
+        outputs = self.tool(*inputs)
+
+        # There is a single output
+        if len(self.tool.outputs) == 1:
+            outputs = [outputs]
+
+        self.assertListEqual(output_types(outputs), self.tool.outputs)
