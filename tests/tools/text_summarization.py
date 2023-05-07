@@ -36,7 +36,6 @@ class TextSummarizationToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_arg(self):
         result = self.tool(TEXT)
-        print(result)
         self.assertEqual(
             result,
             "Hugging Face was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf. In March 2021, Hugging Face raised $40 million in a Series B funding round. On April 28, 2021, the company launched the BigScience Research Workshop in collaboration with several other research groups to release an open large language model. In 2022, the workshop concluded with the announcement of BLOOM.",
@@ -44,7 +43,6 @@ class TextSummarizationToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_kwarg(self):
         result = self.tool(text=TEXT)
-        print(result)
         self.assertEqual(
             result,
             "Hugging Face was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf. In March 2021, Hugging Face raised $40 million in a Series B funding round. On April 28, 2021, the company launched the BigScience Research Workshop in collaboration with several other research groups to release an open large language model. In 2022, the workshop concluded with the announcement of BLOOM.",
