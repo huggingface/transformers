@@ -78,7 +78,7 @@ class TFConvNextV2Embeddings(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
         )
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.num_channels = config.num_channels
 
     def call(self, pixel_values):
@@ -151,7 +151,7 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
             name="dwconv",
         )  # depthwise conv
         self.layernorm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-6,
+            epsilon=config.layer_norm_eps,
             name="layernorm",
         )
         self.pwconv1 = tf.keras.layers.Dense(
@@ -207,7 +207,7 @@ class TFConvNextV2Stage(tf.keras.layers.Layer):
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = [
                 tf.keras.layers.LayerNormalization(
-                    epsilon=1e-6,
+                    epsilon=config.layer_norm_eps,
                     name="downsampling_layer.0",
                 ),
                 # Inputs to this layer will follow NHWC format since we
@@ -440,7 +440,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
 
 CONVNEXTV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
 
@@ -450,7 +450,7 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
             used instead.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
-            eager mode, in graph mode the value will always be set to True.
+            eager mode, in graph mode the value will always be set to `True`.
 """
 
 

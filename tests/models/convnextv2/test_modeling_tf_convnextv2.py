@@ -36,7 +36,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConvNextFeatureExtractor
+    from transformers import ConvNextV2ImageProcessor
 
 
 class TFConvNextV2ModelTester:
@@ -98,7 +98,7 @@ class TFConvNextV2ModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFConvNextV2Model(config=config)
         result = model(pixel_values, training=False)
-        # expected last hidden states: B, C, H // 32, W // 32
+        # expected last hidden states: batch_size, channels, height // 32, width // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
@@ -276,18 +276,18 @@ def prepare_img():
 @require_vision
 class TFConvNextV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            ConvNextV2FeatureExtractor.from_pretrained("facebook/convnextv2-tiny-224") if is_vision_available() else None
+            ConvNextV2ImageProcessor.from_pretrained("facebook/convnextv2-tiny-224") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
         model = TFConvNextV2ForImageClassification.from_pretrained("facebook/convnextv2-tiny-224")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor  = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
