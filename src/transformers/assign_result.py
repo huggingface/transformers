@@ -8,29 +8,15 @@ class AssignResult:
     """Stores assignments between predicted and truth boxes.
 
     Attributes:
-        num_gts (int): the number of truth boxes considered when computing this
-            assignment
-
-        gt_indices (LongTensor): for each predicted box indicates the 1-based
-            index of the assigned truth box. 0 means unassigned and -1 means ignore.
-
-        max_overlaps (FloatTensor): the iou between the predicted box and its
-            assigned truth box.
-
-        labels (None | LongTensor): If specified, for each predicted box
-            indicates the category label of the assigned truth box.
-
-    Example:
-        >>> # An assign result between 4 predicted boxes and 9 true boxes >>> # where only two boxes were assigned. >>>
-        num_gts = 9 >>> max_overlaps = torch.LongTensor([0, .5, .9, 0]) >>> gt_indices = torch.LongTensor([-1, 1, 2,
-        0]) >>> labels = torch.LongTensor([0, 3, 4, 0]) >>> self = AssignResult(num_gts, gt_indices, max_overlaps,
-        labels) >>> print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9, gt_indices.shape=(4,),
-        max_overlaps.shape=(4,),
-                      labels.shape=(4,))>
-        >>> # Force addition of gt labels (when adding gt as proposals) >>> new_labels = torch.LongTensor([3, 4, 5])
-        >>> self.add_gt_(new_labels) >>> print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9,
-        gt_indices.shape=(7,), max_overlaps.shape=(7,),
-                      labels.shape=(7,))>
+        num_gts (`int`):
+            The number of truth boxes considered when computing this assignment
+        gt_indices (`torch.LongTensor`):
+            For each predicted box indicates the 1-based index of the assigned truth box. 0 means unassigned and -1
+            means ignore.
+        max_overlaps (`torch.FloatTensor`):
+            The iou between the predicted box and its assigned truth box.
+        labels (`torch.LongTensor`, *optional*):
+            If specified, indicates the category label of the assigned truth box for each predicted box.
     """
 
     def __init__(self, num_gts, gt_indices, max_overlaps, labels=None):
@@ -68,7 +54,8 @@ class AssignResult:
 
     def set_extra_property(self, key, value):
         """Set user-defined new property."""
-        assert key not in self.info
+        if key in self.info:
+            raise KeyError(f"Key {key} already exists in the info dict")
         self._extra_properties[key] = value
 
     def get_extra_property(self, key):
@@ -106,105 +93,12 @@ class AssignResult:
             parts.append(f"labels.shape={tuple(self.labels.shape)!r}")
         return ", ".join(parts)
 
-    @classmethod
-    def random(cls, **kwargs):
-        """Create random AssignResult for tests or debugging.
-
-        Args:
-            num_preds: number of predicted boxes
-            num_gts: number of true boxes
-            p_ignore (float): probability of a predicted box assigned to an
-                ignored truth
-            p_assigned (float): probability of a predicted box not being
-                assigned
-            p_use_label (float | bool): with labels or not
-            rng (None | int | numpy.random.RandomState): seed or state
-
-        Returns:
-            `AssignResult`: Randomly generated assign results.
-
-        Example:
-            >>> from mmdet.core.bbox.assigners.assign_result import * # NOQA >>> self = AssignResult.random() >>>
-            print(self.info)
-        """
-        from mmdet.core.bbox import demodata
-
-        rng = demodata.ensure_rng(kwargs.get("rng", None))
-
-        num_gts = kwargs.get("num_gts", None)
-        num_preds = kwargs.get("num_preds", None)
-        p_ignore = kwargs.get("p_ignore", 0.3)
-        p_assigned = kwargs.get("p_assigned", 0.7)
-        p_use_label = kwargs.get("p_use_label", 0.5)
-        num_classes = kwargs.get("p_use_label", 3)
-
-        if num_gts is None:
-            num_gts = rng.randint(0, 8)
-        if num_preds is None:
-            num_preds = rng.randint(0, 16)
-
-        if num_gts == 0:
-            max_overlaps = torch.zeros(num_preds, dtype=torch.float32)
-            gt_indices = torch.zeros(num_preds, dtype=torch.int64)
-            if p_use_label is True or p_use_label < rng.rand():
-                labels = torch.zeros(num_preds, dtype=torch.int64)
-            else:
-                labels = None
-        else:
-            import numpy as np
-
-            # Create an overlap for each predicted box
-            max_overlaps = torch.from_numpy(rng.rand(num_preds))
-
-            # Construct gt_indices for each predicted box
-            is_assigned = torch.from_numpy(rng.rand(num_preds) < p_assigned)
-            # maximum number of assignments constraints
-            n_assigned = min(num_preds, min(num_gts, is_assigned.sum()))
-
-            assigned_idxs = np.where(is_assigned)[0]
-            rng.shuffle(assigned_idxs)
-            assigned_idxs = assigned_idxs[0:n_assigned]
-            assigned_idxs.sort()
-
-            is_assigned[:] = 0
-            is_assigned[assigned_idxs] = True
-
-            is_ignore = torch.from_numpy(rng.rand(num_preds) < p_ignore) & is_assigned
-
-            gt_indices = torch.zeros(num_preds, dtype=torch.int64)
-
-            true_idxs = np.arange(num_gts)
-            rng.shuffle(true_idxs)
-            true_idxs = torch.from_numpy(true_idxs)
-            gt_indices[is_assigned] = true_idxs[:n_assigned]
-
-            gt_indices = torch.from_numpy(rng.randint(1, num_gts + 1, size=num_preds))
-            gt_indices[is_ignore] = -1
-            gt_indices[~is_assigned] = 0
-            max_overlaps[~is_assigned] = 0
-
-            if p_use_label is True or p_use_label < rng.rand():
-                if num_classes == 0:
-                    labels = torch.zeros(num_preds, dtype=torch.int64)
-                else:
-                    labels = torch.from_numpy(
-                        # remind that we set FG labels to [0, num_class-1]
-                        # since mmdet v2.0
-                        # BG cat_id: num_class
-                        rng.randint(0, num_classes, size=num_preds)
-                    )
-                    labels[~is_assigned] = 0
-            else:
-                labels = None
-
-        self = cls(num_gts, gt_indices, max_overlaps, labels)
-        return self
-
     def add_gt_(self, gt_labels):
         """Add ground truth as assigned results.
 
         Args:
-            gt_labels (torch.Tensor): Labels of gt boxes
+            gt_labels (`torch.Tensor`):
+                Labels of ground truth boxes.
         """
         self_indices = torch.arange(1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
         self.gt_indices = torch.cat([self_indices, self.gt_indices])
