@@ -44,24 +44,16 @@ class PreTool:
     repo_id: str
 
 
-# None values come from the Hub.
-HUGGINGFACE_DEFAULT_TOOLS = {
-    "text_qa": "generative-qa",
-    "image_captioner": "image-captioning",
-    "image_transformer": None,
-    "text_downloader": None,
-    "transcriber": "speech-to-text",
-    "image_generator": None,
-    "text_reader": "text-to-speech",
-    "text_classifier": "text-classification",
-    "translator": "translation",
-    "summarizer": "summarizer",
-    "image_qa": "image-question-answering",
-    "image_segmenter": "image-segmentation",
-    "document_qa": "document-question-answering",
-    "video_generator": None,
-    "image_inpainter": None,
-}
+HUGGINGFACE_DEFAULT_TOOLS = {}
+
+
+HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
+    "image-transformation",
+    "text-download",
+    "text-to-image",
+    "text-to-video",
+    "image-inpainting",
+]
 
 
 def get_remote_tools(organization="huggingface-tools"):
@@ -90,16 +82,22 @@ def _setup_default_tools():
     tools_module = main_module.tools
 
     remote_tools = get_remote_tools()
+    for task_name in TASK_MAPPING:
+        tool_class_name = TASK_MAPPING.get(task_name)
+        tool_class = getattr(tools_module, tool_class_name)
+        description = tool_class.description
+        HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
 
-    for tool_name, task_name in HUGGINGFACE_DEFAULT_TOOLS.items():
-        if tool_name in remote_tools:
-            HUGGINGFACE_DEFAULT_TOOLS[tool_name] = remote_tools[tool_name]
-        elif task_name is not None:
-            tool_class_name = TASK_MAPPING.get(task_name)
-            description = getattr(tools_module, tool_class_name).description
-            HUGGINGFACE_DEFAULT_TOOLS[tool_name] = PreTool(task=task_name, description=description, repo_id=None)
-        else:
-            raise ValueError(f"{task_name} is not implemented on the Hub or locally.")
+    for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
+        found = False
+        for tool_name, tool in remote_tools.items():
+            if tool.task == task_name:
+                HUGGINGFACE_DEFAULT_TOOLS[tool_name] = tool
+                found = True
+                break
+
+        if not found:
+            raise ValueError(f"{task_name} is not implemented on the Hub.")
 
     _tools_are_initialized = True
 
