@@ -10,34 +10,34 @@ class SamplingResult:
     Example:
         >>> # xdoctest: +IGNORE_WANT >>> from mmdet.core.bbox.samplers.sampling_result import * # NOQA >>> self =
         SamplingResult.random(rng=10) >>> print(f'self = {self}') self = <SamplingResult({
-            'neg_bboxes': torch.Size([12, 4]), 'neg_inds': tensor([ 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 'num_gts':
-            4, 'pos_assigned_gt_inds': tensor([], dtype=torch.int64), 'pos_bboxes': torch.Size([0, 4]), 'pos_inds':
+            'neg_bboxes': torch.Size([12, 4]), 'neg_indices': tensor([ 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 'num_gts':
+            4, 'pos_assigned_gt_indices': tensor([], dtype=torch.int64), 'pos_bboxes': torch.Size([0, 4]), 'pos_indices':
             tensor([], dtype=torch.int64), 'pos_is_gt': tensor([], dtype=torch.uint8)
         })>
     """
 
-    def __init__(self, pos_inds, neg_inds, bboxes, gt_bboxes, assign_result, gt_flags):
-        self.pos_inds = pos_inds
-        self.neg_inds = neg_inds
-        self.pos_bboxes = bboxes[pos_inds]
-        self.neg_bboxes = bboxes[neg_inds]
-        self.pos_is_gt = gt_flags[pos_inds]
+    def __init__(self, pos_indices, neg_indices, bboxes, gt_bboxes, assign_result, gt_flags):
+        self.pos_indices = pos_indices
+        self.neg_indices = neg_indices
+        self.pos_bboxes = bboxes[pos_indices]
+        self.neg_bboxes = bboxes[neg_indices]
+        self.pos_is_gt = gt_flags[pos_indices]
 
         self.num_gts = gt_bboxes.shape[0]
-        self.pos_assigned_gt_inds = assign_result.gt_inds[pos_inds] - 1
+        self.pos_assigned_gt_indices = assign_result.gt_indices[pos_indices] - 1
 
         if gt_bboxes.numel() == 0:
             # hack for index error case
-            assert self.pos_assigned_gt_inds.numel() == 0
+            assert self.pos_assigned_gt_indices.numel() == 0
             self.pos_gt_bboxes = torch.empty_like(gt_bboxes).view(-1, 4)
         else:
             if len(gt_bboxes.shape) < 2:
                 gt_bboxes = gt_bboxes.view(-1, 4)
 
-            self.pos_gt_bboxes = gt_bboxes[self.pos_assigned_gt_inds.long(), :]
+            self.pos_gt_bboxes = gt_bboxes[self.pos_assigned_gt_indices.long(), :]
 
         if assign_result.labels is not None:
-            self.pos_gt_labels = assign_result.labels[pos_inds]
+            self.pos_gt_labels = assign_result.labels[pos_indices]
         else:
             self.pos_gt_labels = None
 
@@ -91,13 +91,13 @@ class SamplingResult:
     def info(self):
         """Returns a dictionary of info about the object."""
         return {
-            "pos_inds": self.pos_inds,
-            "neg_inds": self.neg_inds,
+            "pos_indices": self.pos_indices,
+            "neg_indices": self.neg_indices,
             "pos_bboxes": self.pos_bboxes,
             "neg_bboxes": self.neg_bboxes,
             "pos_is_gt": self.pos_is_gt,
             "num_gts": self.num_gts,
-            "pos_assigned_gt_inds": self.pos_assigned_gt_inds,
+            "pos_assigned_gt_indices": self.pos_assigned_gt_indices,
         }
 
     @classmethod
