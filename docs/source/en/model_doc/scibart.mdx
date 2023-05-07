@@ -1,0 +1,56 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# SciBart
+
+## Overview
+
+The BART-base and BART-large models pre-trained from scratch on scientific text.
+
+We pre-train the model using the titles and abstracts from the [S2ORC](https://github.com/allenai/s2orc) corpus. The tokenizer is trained on S2ORC with sentencepiece. 
+
+Example of using SciBart:
+
+```python
+>>> from transformers import Bart, AutoTokenizer
+
+>>> from transformers import BartForConditionalGeneration, AutoTokenizer
+>>> tokenizer = AutoTokenizer.from_pretrained('uclanlp/scibart-large')
+>>> model = BartForConditionalGeneration.from_pretrained('uclanlp/scibart-large')
+>>> tokenizer.batch_decode(model.generate(**tokenizer('This is an example of a <mask> computer.', return_tensors='pt')))
+['<s><s> This is an example of a small, low-cost, low power computer.</s>']
+```
+
+Tips:
+
+- This implementation is the same as BART, except for tokenization method. Refer to the [documentation of BART](bart) for more usage examples.
+
+This model was contributed by [uclanlp](https://huggingface.co/uclanlp).
+
+Paper: [Pre-trained Language Models for Keyphrase Generation: A Thorough Empirical Study](https://arxiv.org/abs/2212.10233)
+
+```
+@article{https://doi.org/10.48550/arxiv.2212.10233,
+  doi = {10.48550/ARXIV.2212.10233},
+  url = {https://arxiv.org/abs/2212.10233},
+  author = {Wu, Di and Ahmad, Wasi Uddin and Chang, Kai-Wei},
+  keywords = {Computation and Language (cs.CL), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Pre-trained Language Models for Keyphrase Generation: A Thorough Empirical Study},
+  publisher = {arXiv},
+  year = {2022}, 
+  copyright = {Creative Commons Attribution 4.0 International}
+}
+```
+
+## SciBartTokenizer
+
+[[autodoc]] SciBartTokenizer
