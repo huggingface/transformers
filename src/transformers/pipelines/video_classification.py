@@ -2,15 +2,13 @@ from io import BytesIO
 from typing import List, Union
 
 import requests
+import numpy as np
 
 from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
-
 if is_decord_available():
-    import numpy as np
     from decord import VideoReader
-
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
@@ -23,10 +21,8 @@ class VideoClassificationPipeline(Pipeline):
     """
     Video classification pipeline using any `AutoModelForVideoClassification`. This pipeline predicts the class of a
     video.
-
     This video classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"video-classification"`.
-
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
     """
@@ -51,14 +47,11 @@ class VideoClassificationPipeline(Pipeline):
     def __call__(self, videos: Union[str, List[str]], **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
-
         Args:
             videos (`str`, `List[str]`):
                 The pipeline handles three types of videos:
-
                 - A string containing a http link pointing to a video
                 - A string containing a local path to a video
-
                 The pipeline accepts either a single video or a batch of videos, which must then be passed as a string.
                 Videos in a batch must all be in the same format: all as http links or all as local paths.
             top_k (`int`, *optional*, defaults to 5):
@@ -70,14 +63,11 @@ class VideoClassificationPipeline(Pipeline):
             frame_sampling_rate (`int`, *optional*, defaults to 1):
                 The sampling rate used to select frames from the video. If not provided, will default to 1, i.e. every
                 frame will be used.
-
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single video, will return a
             dictionary, if the input is a list of several videos, will return a list of dictionaries corresponding to
             the videos.
-
             The dictionaries contain the following keys:
-
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
