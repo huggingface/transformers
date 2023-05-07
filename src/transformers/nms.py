@@ -30,41 +30,37 @@ def nms(
     scores: ArrayType,
     iou_threshold: float,
     offset: int = 0,
-    score_threshold: float = 0,
-    max_num: int = -1,
 ) -> Tuple[ArrayType, ArrayType]:
     """Dispatch to either CPU or GPU NMS implementations.
 
-    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise
-    CPU: NMS will be used. The returned type will always be the same as inputs.
+    Source: https://github.com/open-mmlab/mmcv/blob/main/mmcv/ops/nms.py. Removed the `score_threshold`and `max_num` arguments
+    as those are only supported by MMCV's NMS implementation and we are using torchvision.ops.nms. See also
+    https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/nms.py#L28.
+
+    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is GPU tensor, otherwise
+    CPU: NMS will be used. The returned type will always be the same as the inputs.
 
     Args:
-        boxes (torch.Tensor or np.ndarray):
-            boxes in shape (N, 4).
-        scores (torch.Tensor or np.ndarray):
-            scores in shape (N, ).
-        iou_threshold (float):
+        boxes (`torch.Tensor` or `np.ndarray`):
+            Bounding boxes of shape (N, 4) with N = number of objects.
+        scores (`torch.Tensor` or `np.ndarray`):
+            Scores of shape (N, ).
+        iou_threshold (`float`):
             IoU threshold for NMS.
-        offset (int, 0 or 1):
-            boxes' width or height is (x2 - x1 + offset).
-        score_threshold (float):
-            score threshold for NMS.
-        max_num (int):
-            maximum number of boxes after NMS.
+        offset (`int`, *optional*, defaults to 0):
+            If set, the bounding boxes' width or height is (x2 - x1 + offset). Can be set to 0 or 1.
+        score_threshold (`float`, *optional*, defaults to 0):
+            Score threshold for NMS.
+        max_num (`int`, *optional*, defaults to -1):
+            Maximum number of boxes after NMS.
 
     Returns:
-        tuple: kept dets (boxes and scores) and indice, which always have the same data type as the input.
-
-    Example:
-        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9], >>> [49.3, 32.9, 51.0, 35.3], >>> [49.2, 31.8, 51.0, 35.4], >>>
-        [35.1, 11.5, 39.1, 15.7], >>> [35.6, 11.8, 39.3, 14.2], >>> [35.3, 11.5, 39.9, 14.5], >>> [35.2, 11.7, 39.7,
-        15.7]], dtype=np.float32) >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
-               dtype=np.float32)
-        >>> iou_threshold = 0.6 >>> dets, inds = nms(boxes, scores, iou_threshold) >>> assert len(inds) == len(dets) ==
-        3
+        `Tuple`: kept detections (boxes and scores) and indices, which always have the same data type as the input.
     """
-    assert isinstance(boxes, (torch.Tensor, np.ndarray))
-    assert isinstance(scores, (torch.Tensor, np.ndarray))
+    if not isinstance(boxes, (torch.Tensor, np.ndarray)):
+        raise ValueError(f"Unsupported type {type(boxes)} for boxes.")
+    if not isinstance(scores, (torch.Tensor, np.ndarray)):
+        raise ValueError(f"Unsupported type {type(scores)} for scores.")
     is_numpy = False
     if isinstance(boxes, np.ndarray):
         is_numpy = True
@@ -75,14 +71,12 @@ def nms(
     assert boxes.size(0) == scores.size(0)
     assert offset in (0, 1)
 
-    # TODO use the NMS op of mmcv: https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/nms.py#L28
-    # inds = NMSop.apply(boxes, scores, iou_threshold, offset, score_threshold, max_num)
-    inds = torchvision.ops.nms(boxes, scores, iou_threshold)
-    dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
+    indices = torchvision.ops.nms(boxes, scores, iou_threshold)
+    dets = torch.cat((boxes[indices], scores[indices].reshape(-1, 1)), dim=1)
     if is_numpy:
         dets = dets.cpu().numpy()
-        inds = inds.cpu().numpy()
-    return dets, inds
+        indices = indices.cpu().numpy()
+    return dets, indices
 
 
 def batched_nms(
@@ -123,9 +117,9 @@ def batched_nms(
     """
     # skip nms when nms_cfg is None
     if nms_cfg is None:
-        scores, inds = scores.sort(descending=True)
-        boxes = boxes[inds]
-        return torch.cat([boxes, scores[:, None]], -1), inds
+        scores, indices = scores.sort(descending=True)
+        boxes = boxes[indices]
+        return torch.cat([boxes, scores[:, None]], -1), indices
 
     nms_cfg_ = nms_cfg.copy()
     class_agnostic = nms_cfg_.pop("class_agnostic", class_agnostic)
@@ -177,8 +171,8 @@ def batched_nms(
             scores_after_nms[mask[keep]] = dets[:, -1]
         keep = total_mask.nonzero(as_tuple=False).view(-1)
 
-        scores, inds = scores_after_nms[keep].sort(descending=True)
-        keep = keep[inds]
+        scores, indices = scores_after_nms[keep].sort(descending=True)
+        keep = keep[indices]
         boxes = boxes[keep]
 
         if max_num > 0:
@@ -190,7 +184,7 @@ def batched_nms(
     return boxes, keep
 
 
-def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None, return_inds=False):
+def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None, return_indices=False):
     """NMS for multi-class bboxes.
     Args:
         multi_bboxes (Tensor): shape (n, #class*4) or (n, 4)
@@ -203,7 +197,7 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
             NMS, only top max_num will be kept. Default to -1.
         score_factors (Tensor, optional): The factors multiplied to scores
             before applying NMS. Default to None.
-        return_inds (bool, optional): Whether return the indices of kept
+        return_indices (bool, optional): Whether return the indices of kept
             bboxes. Default to False.
     Returns:
         tuple: (dets, labels, indices (optional)), tensors of shape (k, 5),
@@ -239,8 +233,8 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
 
     if not torch.onnx.is_in_onnx_export():
         # NonZero not supported  in TensorRT
-        inds = valid_mask.nonzero(as_tuple=False).squeeze(1)
-        bboxes, scores, labels = bboxes[inds], scores[inds], labels[inds]
+        indices = valid_mask.nonzero(as_tuple=False).squeeze(1)
+        bboxes, scores, labels = bboxes[indices], scores[indices], labels[indices]
     else:
         # TensorRT NMS plugin has invalid output filled with -1
         # add dummy data to make detection output correct.
@@ -252,8 +246,8 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
         if torch.onnx.is_in_onnx_export():
             raise RuntimeError("[ONNX Error] Can not record NMS as it has not been executed this time")
         dets = torch.cat([bboxes, scores[:, None]], -1)
-        if return_inds:
-            return dets, labels, inds
+        if return_indices:
+            return dets, labels, indices
         else:
             return dets, labels
 
@@ -263,7 +257,7 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
         dets = dets[:max_num]
         keep = keep[:max_num]
 
-    if return_inds:
-        return dets, labels[keep], inds[keep]
+    if return_indices:
+        return dets, labels[keep], indices[keep]
     else:
         return dets, labels[keep]

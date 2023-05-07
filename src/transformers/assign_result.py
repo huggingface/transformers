@@ -11,7 +11,7 @@ class AssignResult:
         num_gts (int): the number of truth boxes considered when computing this
             assignment
 
-        gt_inds (LongTensor): for each predicted box indicates the 1-based
+        gt_indices (LongTensor): for each predicted box indicates the 1-based
             index of the assigned truth box. 0 means unassigned and -1 means ignore.
 
         max_overlaps (FloatTensor): the iou between the predicted box and its
@@ -22,19 +22,19 @@ class AssignResult:
 
     Example:
         >>> # An assign result between 4 predicted boxes and 9 true boxes >>> # where only two boxes were assigned. >>>
-        num_gts = 9 >>> max_overlaps = torch.LongTensor([0, .5, .9, 0]) >>> gt_inds = torch.LongTensor([-1, 1, 2, 0])
-        >>> labels = torch.LongTensor([0, 3, 4, 0]) >>> self = AssignResult(num_gts, gt_inds, max_overlaps, labels) >>>
-        print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9, gt_inds.shape=(4,), max_overlaps.shape=(4,),
+        num_gts = 9 >>> max_overlaps = torch.LongTensor([0, .5, .9, 0]) >>> gt_indices = torch.LongTensor([-1, 1, 2, 0])
+        >>> labels = torch.LongTensor([0, 3, 4, 0]) >>> self = AssignResult(num_gts, gt_indices, max_overlaps, labels) >>>
+        print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9, gt_indices.shape=(4,), max_overlaps.shape=(4,),
                       labels.shape=(4,))>
         >>> # Force addition of gt labels (when adding gt as proposals) >>> new_labels = torch.LongTensor([3, 4, 5])
         >>> self.add_gt_(new_labels) >>> print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9,
-        gt_inds.shape=(7,), max_overlaps.shape=(7,),
+        gt_indices.shape=(7,), max_overlaps.shape=(7,),
                       labels.shape=(7,))>
     """
 
-    def __init__(self, num_gts, gt_inds, max_overlaps, labels=None):
+    def __init__(self, num_gts, gt_indices, max_overlaps, labels=None):
         self.num_gts = num_gts
-        self.gt_inds = gt_inds
+        self.gt_indices = gt_indices
         self.max_overlaps = max_overlaps
         self.labels = labels
         # Interface for possible user-defined properties
@@ -63,7 +63,7 @@ class AssignResult:
     @property
     def num_preds(self):
         """int: the number of predictions in this assignment"""
-        return len(self.gt_inds)
+        return len(self.gt_indices)
 
     def set_extra_property(self, key, value):
         """Set user-defined new property."""
@@ -80,7 +80,7 @@ class AssignResult:
         basic_info = {
             "num_gts": self.num_gts,
             "num_preds": self.num_preds,
-            "gt_inds": self.gt_inds,
+            "gt_indices": self.gt_indices,
             "max_overlaps": self.max_overlaps,
             "labels": self.labels,
         }
@@ -91,10 +91,10 @@ class AssignResult:
         """str: a "nice" summary string describing this assign result"""
         parts = []
         parts.append(f"num_gts={self.num_gts!r}")
-        if self.gt_inds is None:
-            parts.append(f"gt_inds={self.gt_inds!r}")
+        if self.gt_indices is None:
+            parts.append(f"gt_indices={self.gt_indices!r}")
         else:
-            parts.append(f"gt_inds.shape={tuple(self.gt_inds.shape)!r}")
+            parts.append(f"gt_indices.shape={tuple(self.gt_indices.shape)!r}")
         if self.max_overlaps is None:
             parts.append(f"max_overlaps={self.max_overlaps!r}")
         else:
@@ -144,7 +144,7 @@ class AssignResult:
 
         if num_gts == 0:
             max_overlaps = torch.zeros(num_preds, dtype=torch.float32)
-            gt_inds = torch.zeros(num_preds, dtype=torch.int64)
+            gt_indices = torch.zeros(num_preds, dtype=torch.int64)
             if p_use_label is True or p_use_label < rng.rand():
                 labels = torch.zeros(num_preds, dtype=torch.int64)
             else:
@@ -155,7 +155,7 @@ class AssignResult:
             # Create an overlap for each predicted box
             max_overlaps = torch.from_numpy(rng.rand(num_preds))
 
-            # Construct gt_inds for each predicted box
+            # Construct gt_indices for each predicted box
             is_assigned = torch.from_numpy(rng.rand(num_preds) < p_assigned)
             # maximum number of assignments constraints
             n_assigned = min(num_preds, min(num_gts, is_assigned.sum()))
@@ -170,16 +170,16 @@ class AssignResult:
 
             is_ignore = torch.from_numpy(rng.rand(num_preds) < p_ignore) & is_assigned
 
-            gt_inds = torch.zeros(num_preds, dtype=torch.int64)
+            gt_indices = torch.zeros(num_preds, dtype=torch.int64)
 
             true_idxs = np.arange(num_gts)
             rng.shuffle(true_idxs)
             true_idxs = torch.from_numpy(true_idxs)
-            gt_inds[is_assigned] = true_idxs[:n_assigned]
+            gt_indices[is_assigned] = true_idxs[:n_assigned]
 
-            gt_inds = torch.from_numpy(rng.randint(1, num_gts + 1, size=num_preds))
-            gt_inds[is_ignore] = -1
-            gt_inds[~is_assigned] = 0
+            gt_indices = torch.from_numpy(rng.randint(1, num_gts + 1, size=num_preds))
+            gt_indices[is_ignore] = -1
+            gt_indices[~is_assigned] = 0
             max_overlaps[~is_assigned] = 0
 
             if p_use_label is True or p_use_label < rng.rand():
@@ -196,7 +196,7 @@ class AssignResult:
             else:
                 labels = None
 
-        self = cls(num_gts, gt_inds, max_overlaps, labels)
+        self = cls(num_gts, gt_indices, max_overlaps, labels)
         return self
 
     def add_gt_(self, gt_labels):
@@ -205,8 +205,8 @@ class AssignResult:
         Args:
             gt_labels (torch.Tensor): Labels of gt boxes
         """
-        self_inds = torch.arange(1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
-        self.gt_inds = torch.cat([self_inds, self.gt_inds])
+        self_indices = torch.arange(1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
+        self.gt_indices = torch.cat([self_indices, self.gt_indices])
 
         self.max_overlaps = torch.cat([self.max_overlaps.new_ones(len(gt_labels)), self.max_overlaps])
 

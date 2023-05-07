@@ -129,11 +129,11 @@ class MaskRCNNModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def unmap(data, count, inds, fill=0):
+def unmap(data, count, indices, fill=0):
     """Unmap a subset of item (data) back to the original set of items (of size count)"""
     new_size = (count,) + data.size()[1:]
     ret = data.new_full(new_size, fill)
-    ret[inds.type(torch.bool)] = data
+    ret[indices.type(torch.bool)] = data
     return ret
 
 
@@ -356,8 +356,8 @@ def bbox2roi(bbox_list):
     rois_list = []
     for img_id, bboxes in enumerate(bbox_list):
         if bboxes.size(0) > 0:
-            img_inds = bboxes.new_full((bboxes.size(0), 1), img_id)
-            rois = torch.cat([img_inds, bboxes[:, :4]], dim=-1)
+            img_indices = bboxes.new_full((bboxes.size(0), 1), img_id)
+            rois = torch.cat([img_indices, bboxes[:, :4]], dim=-1)
         else:
             rois = bboxes.new_zeros((0, 5))
         rois_list.append(rois)
@@ -1040,7 +1040,7 @@ class MaskRCNNMaxIoUAssigner:
 
         assign_result = self.assign_wrt_overlaps(overlaps, gt_labels)
         if assign_on_cpu:
-            assign_result.gt_inds = assign_result.gt_inds.to(device)
+            assign_result.gt_indices = assign_result.gt_indices.to(device)
             assign_result.max_overlaps = assign_result.max_overlaps.to(device)
             if assign_result.labels is not None:
                 assign_result.labels = assign_result.labels.to(device)
@@ -1061,19 +1061,19 @@ class MaskRCNNMaxIoUAssigner:
         num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
 
         # 1. assign -1 by default
-        assigned_gt_inds = overlaps.new_full((num_bboxes,), -1, dtype=torch.long)
+        assigned_gt_indices = overlaps.new_full((num_bboxes,), -1, dtype=torch.long)
 
         if num_gts == 0 or num_bboxes == 0:
             # No ground truth or boxes, return empty assignment
             max_overlaps = overlaps.new_zeros((num_bboxes,))
             if num_gts == 0:
                 # No truth, assign everything to background
-                assigned_gt_inds[:] = 0
+                assigned_gt_indices[:] = 0
             if gt_labels is None:
                 assigned_labels = None
             else:
                 assigned_labels = overlaps.new_full((num_bboxes,), -1, dtype=torch.long)
-            return AssignResult(num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+            return AssignResult(num_gts, assigned_gt_indices, max_overlaps, labels=assigned_labels)
 
         # for each anchor, which gt best overlaps with it
         # for each anchor, the max iou of all gts
@@ -1083,44 +1083,44 @@ class MaskRCNNMaxIoUAssigner:
         gt_max_overlaps, gt_argmax_overlaps = overlaps.max(dim=1)
 
         # 2. assign negative: below
-        # the negative inds are set to be 0
+        # the negative indices are set to be 0
         if isinstance(self.neg_iou_thr, float):
-            assigned_gt_inds[(max_overlaps >= 0) & (max_overlaps < self.neg_iou_thr)] = 0
+            assigned_gt_indices[(max_overlaps >= 0) & (max_overlaps < self.neg_iou_thr)] = 0
         elif isinstance(self.neg_iou_thr, tuple):
             if len(self.neg_iou_thr) != 2:
                 raise ValueError("`neg_iou_thr` should be a float or tuple of length 2")
-            assigned_gt_inds[(max_overlaps >= self.neg_iou_thr[0]) & (max_overlaps < self.neg_iou_thr[1])] = 0
+            assigned_gt_indices[(max_overlaps >= self.neg_iou_thr[0]) & (max_overlaps < self.neg_iou_thr[1])] = 0
 
         # 3. assign positive: above positive IoU threshold
-        pos_inds = max_overlaps >= self.pos_iou_thr
-        assigned_gt_inds[pos_inds] = argmax_overlaps[pos_inds] + 1
+        pos_indices = max_overlaps >= self.pos_iou_thr
+        assigned_gt_indices[pos_indices] = argmax_overlaps[pos_indices] + 1
 
         if self.match_low_quality:
-            # Low-quality matching will overwrite the assigned_gt_inds assigned
+            # Low-quality matching will overwrite the assigned_gt_indices assigned
             # in Step 3. Thus, the assigned gt might not be the best one for
             # prediction.
             # For example, if bbox A has 0.9 and 0.8 iou with GT bbox 1 & 2,
             # bbox 1 will be assigned as the best target for bbox A in step 3.
             # However, if GT bbox 2's gt_argmax_overlaps = A, bbox A's
-            # assigned_gt_inds will be overwritten to be bbox B.
+            # assigned_gt_indices will be overwritten to be bbox B.
             # This might be the reason that it is not used in ROI Heads.
             for i in range(num_gts):
                 if gt_max_overlaps[i] >= self.min_pos_iou:
                     if self.gt_max_assign_all:
-                        max_iou_inds = overlaps[i, :] == gt_max_overlaps[i]
-                        assigned_gt_inds[max_iou_inds] = i + 1
+                        max_iou_indices = overlaps[i, :] == gt_max_overlaps[i]
+                        assigned_gt_indices[max_iou_indices] = i + 1
                     else:
-                        assigned_gt_inds[gt_argmax_overlaps[i]] = i + 1
+                        assigned_gt_indices[gt_argmax_overlaps[i]] = i + 1
 
         if gt_labels is not None:
-            assigned_labels = assigned_gt_inds.new_full((num_bboxes,), -1)
-            pos_inds = torch.nonzero(assigned_gt_inds > 0, as_tuple=False).squeeze()
-            if pos_inds.numel() > 0:
-                assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] - 1]
+            assigned_labels = assigned_gt_indices.new_full((num_bboxes,), -1)
+            pos_indices = torch.nonzero(assigned_gt_indices > 0, as_tuple=False).squeeze()
+            if pos_indices.numel() > 0:
+                assigned_labels[pos_indices] = gt_labels[assigned_gt_indices[pos_indices] - 1]
         else:
             assigned_labels = None
 
-        return AssignResult(num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+        return AssignResult(num_gts, assigned_gt_indices, max_overlaps, labels=assigned_labels)
 
 
 class MaskRCNNRandomSampler:
@@ -1175,30 +1175,30 @@ class MaskRCNNRandomSampler:
         # when PyTorch fixes the abnormal return of torch.randperm.
         # See: https://github.com/open-mmlab/mmdetection/pull/5014
         perm = torch.randperm(gallery.numel())[:num].to(device=gallery.device)
-        rand_inds = gallery[perm]
+        rand_indices = gallery[perm]
         if not is_tensor:
-            rand_inds = rand_inds.cpu().numpy()
-        return rand_inds
+            rand_indices = rand_indices.cpu().numpy()
+        return rand_indices
 
     def _sample_pos(self, assign_result, num_expected, **kwargs):
         """Randomly sample some positive samples."""
-        pos_inds = torch.nonzero(assign_result.gt_inds > 0, as_tuple=False)
-        if pos_inds.numel() != 0:
-            pos_inds = pos_inds.squeeze(1)
-        if pos_inds.numel() <= num_expected:
-            return pos_inds
+        pos_indices = torch.nonzero(assign_result.gt_indices > 0, as_tuple=False)
+        if pos_indices.numel() != 0:
+            pos_indices = pos_indices.squeeze(1)
+        if pos_indices.numel() <= num_expected:
+            return pos_indices
         else:
-            return self.random_choice(pos_inds, num_expected)
+            return self.random_choice(pos_indices, num_expected)
 
     def _sample_neg(self, assign_result, num_expected, **kwargs):
         """Randomly sample some negative samples."""
-        neg_inds = torch.nonzero(assign_result.gt_inds == 0, as_tuple=False)
-        if neg_inds.numel() != 0:
-            neg_inds = neg_inds.squeeze(1)
-        if len(neg_inds) <= num_expected:
-            return neg_inds
+        neg_indices = torch.nonzero(assign_result.gt_indices == 0, as_tuple=False)
+        if neg_indices.numel() != 0:
+            neg_indices = neg_indices.squeeze(1)
+        if len(neg_indices) <= num_expected:
+            return neg_indices
         else:
-            return self.random_choice(neg_inds, num_expected)
+            return self.random_choice(neg_indices, num_expected)
 
     def sample(self, assign_result, bboxes, gt_bboxes, gt_labels=None, **kwargs):
         """Sample positive and negative bboxes.
@@ -1233,21 +1233,21 @@ class MaskRCNNRandomSampler:
             gt_flags = torch.cat([gt_ones, gt_flags])
 
         num_expected_pos = int(self.num * self.pos_fraction)
-        pos_inds = self.pos_sampler._sample_pos(assign_result, num_expected_pos, bboxes=bboxes, **kwargs)
+        pos_indices = self.pos_sampler._sample_pos(assign_result, num_expected_pos, bboxes=bboxes, **kwargs)
         # We found that sampled indices have duplicated items occasionally.
         # (may be a bug of PyTorch)
-        pos_inds = pos_inds.unique()
-        num_sampled_pos = pos_inds.numel()
+        pos_indices = pos_indices.unique()
+        num_sampled_pos = pos_indices.numel()
         num_expected_neg = self.num - num_sampled_pos
         if self.neg_pos_ub >= 0:
             _pos = max(1, num_sampled_pos)
             neg_upper_bound = int(self.neg_pos_ub * _pos)
             if num_expected_neg > neg_upper_bound:
                 num_expected_neg = neg_upper_bound
-        neg_inds = self.neg_sampler._sample_neg(assign_result, num_expected_neg, bboxes=bboxes, **kwargs)
-        neg_inds = neg_inds.unique()
+        neg_indices = self.neg_sampler._sample_neg(assign_result, num_expected_neg, bboxes=bboxes, **kwargs)
+        neg_indices = neg_indices.unique()
 
-        sampling_result = SamplingResult(pos_inds, neg_inds, bboxes, gt_bboxes, assign_result, gt_flags)
+        sampling_result = SamplingResult(pos_indices, neg_indices, bboxes, gt_bboxes, assign_result, gt_flags)
         return sampling_result
 
 
@@ -1487,27 +1487,27 @@ class MaskRCNNRPN(nn.Module):
         labels = anchors.new_full((num_valid_anchors,), self.num_classes, dtype=torch.long)
         label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
 
-        pos_inds = sampling_result.pos_inds
-        neg_inds = sampling_result.neg_inds
-        if len(pos_inds) > 0:
+        pos_indices = sampling_result.pos_indices
+        neg_indices = sampling_result.neg_indices
+        if len(pos_indices) > 0:
             if not self.reg_decoded_bbox:
                 pos_bbox_targets = self.bbox_coder.encode(sampling_result.pos_bboxes, sampling_result.pos_gt_bboxes)
             else:
                 pos_bbox_targets = sampling_result.pos_gt_bboxes
-            bbox_targets[pos_inds, :] = pos_bbox_targets
-            bbox_weights[pos_inds, :] = 1.0
+            bbox_targets[pos_indices, :] = pos_bbox_targets
+            bbox_weights[pos_indices, :] = 1.0
             if gt_labels is None:
                 # Only rpn gives gt_labels as None
                 # Foreground is the first class since v2.5.0
-                labels[pos_inds] = 0
+                labels[pos_indices] = 0
             else:
-                labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
+                labels[pos_indices] = gt_labels[sampling_result.pos_assigned_gt_indices]
             if self.train_cfg["pos_weight"] <= 0:
-                label_weights[pos_inds] = 1.0
+                label_weights[pos_indices] = 1.0
             else:
-                label_weights[pos_inds] = self.train_cfg["pos_weight"]
-        if len(neg_inds) > 0:
-            label_weights[neg_inds] = 1.0
+                label_weights[pos_indices] = self.train_cfg["pos_weight"]
+        if len(neg_indices) > 0:
+            label_weights[neg_indices] = 1.0
 
         # map up to original set of anchors
         if unmap_outputs:
@@ -1517,7 +1517,7 @@ class MaskRCNNRPN(nn.Module):
             bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
             bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
 
-        return (labels, label_weights, bbox_targets, bbox_weights, pos_inds, neg_inds, sampling_result)
+        return (labels, label_weights, bbox_targets, bbox_weights, pos_indices, neg_indices, sampling_result)
 
     def get_targets(
         self,
@@ -1597,8 +1597,8 @@ class MaskRCNNRPN(nn.Module):
         all_label_weights = []
         all_bbox_targets = []
         all_bbox_weights = []
-        pos_inds_list = []
-        neg_inds_list = []
+        pos_indices_list = []
+        neg_indices_list = []
         sampling_results_list = []
 
         for flat_anchors, valid_flags, gt_bboxes, gt_bboxes_ignore, gt_labels, img_meta in zip(
@@ -1614,8 +1614,8 @@ class MaskRCNNRPN(nn.Module):
                 label_weights,
                 bbox_targets,
                 bbox_weights,
-                pos_inds,
-                neg_inds,
+                pos_indices,
+                neg_indices,
                 sampling_result,
             ) = self._get_targets_single(
                 flat_anchors,
@@ -1631,8 +1631,8 @@ class MaskRCNNRPN(nn.Module):
             all_label_weights.append(label_weights)
             all_bbox_targets.append(bbox_targets)
             all_bbox_weights.append(bbox_weights)
-            pos_inds_list.append(pos_inds)
-            neg_inds_list.append(neg_inds)
+            pos_indices_list.append(pos_indices)
+            neg_indices_list.append(neg_indices)
             sampling_results_list.append(sampling_result)
 
         # rest_results = []  # user-added return values
@@ -1640,8 +1640,8 @@ class MaskRCNNRPN(nn.Module):
         if any([labels is None for labels in all_labels]):
             return None
         # sampled anchors of all images
-        num_total_pos = sum([max(inds.numel(), 1) for inds in pos_inds_list])
-        num_total_neg = sum([max(inds.numel(), 1) for inds in neg_inds_list])
+        num_total_pos = sum([max(indices.numel(), 1) for indices in pos_indices_list])
+        num_total_neg = sum([max(indices.numel(), 1) for indices in neg_indices_list])
         # split targets to a list w.r.t. multiple levels
         labels_list = images_to_levels(all_labels, num_level_anchors)
         label_weights_list = images_to_levels(all_label_weights, num_level_anchors)
@@ -1946,12 +1946,12 @@ class MaskRCNNRPN(nn.Module):
             anchors = multilevel_anchors[level_idx]
             if 0 < nms_pre < scores.shape[0]:
                 # sort is faster than topk
-                # _, topk_inds = scores.topk(cfg.nms_pre)
-                ranked_scores, rank_inds = scores.sort(descending=True)
-                topk_inds = rank_inds[:nms_pre]
+                # _, topk_indices = scores.topk(cfg.nms_pre)
+                ranked_scores, rank_indices = scores.sort(descending=True)
+                topk_indices = rank_indices[:nms_pre]
                 scores = ranked_scores[:nms_pre]
-                rpn_bbox_pred = rpn_bbox_pred[topk_inds, :]
-                anchors = anchors[topk_inds, :]
+                rpn_bbox_pred = rpn_bbox_pred[topk_indices, :]
+                anchors = anchors[topk_indices, :]
 
             multilevel_scores.append(scores)
             multilevel_bbox_preds.append(rpn_bbox_pred)
@@ -2153,11 +2153,11 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
                 roi_feats_t *= mask_exp
                 roi_feats += roi_feats_t
                 continue
-            inds = mask.nonzero(as_tuple=False).squeeze(1)
-            if inds.numel() > 0:
-                rois_ = rois[inds]
+            indices = mask.nonzero(as_tuple=False).squeeze(1)
+            if indices.numel() > 0:
+                rois_ = rois[indices]
                 roi_feats_t = self.roi_layers[i](feats[i], rois_)
-                roi_feats[inds] = roi_feats_t
+                roi_feats[indices] = roi_feats_t
             else:
                 # Sometimes some pyramid levels will not be used for RoI
                 # feature extraction and this will cause an incomplete
@@ -2312,7 +2312,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
 
     def get_targets(self, sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg, concat=True):
         """Calculate the ground truth for all samples in a batch according to the sampling_results. Almost the same as
-        the implementation in bbox_head, we passed additional parameters pos_inds_list and neg_inds_list to
+        the implementation in bbox_head, we passed additional parameters pos_indices_list and neg_indices_list to
         `_get_target_single` function.
 
         Args:
@@ -2394,9 +2394,9 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
-            pos_inds = (labels >= 0) & (labels < bg_class_ind)
+            pos_indices = (labels >= 0) & (labels < bg_class_ind)
             # do not perform bounding box regression for BG anymore.
-            if pos_inds.any():
+            if pos_indices.any():
                 if self.reg_decoded_bbox:
                     # When the regression loss (e.g. `IouLoss`,
                     # `GIouLoss`, `DIouLoss`) is applied directly on
@@ -2404,20 +2404,20 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
                     # already encoded coordinates to absolute format.
                     bbox_pred = self.bbox_coder.decode(rois[:, 1:], bbox_pred)
                 if self.reg_class_agnostic:
-                    pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds.type(torch.bool)]
+                    pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_indices.type(torch.bool)]
                 else:
                     pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1, 4)[
-                        pos_inds.type(torch.bool), labels[pos_inds.type(torch.bool)]
+                        pos_indices.type(torch.bool), labels[pos_indices.type(torch.bool)]
                     ]
                 losses["loss_bbox"] = self.loss_bbox(
                     pos_bbox_pred,
-                    bbox_targets[pos_inds.type(torch.bool)],
-                    bbox_weights[pos_inds.type(torch.bool)],
+                    bbox_targets[pos_indices.type(torch.bool)],
+                    bbox_weights[pos_indices.type(torch.bool)],
                     avg_factor=bbox_targets.size(0),
                     reduction_override=reduction_override,
                 )
             else:
-                losses["loss_bbox"] = bbox_pred[pos_inds].sum()
+                losses["loss_bbox"] = bbox_pred[pos_indices].sum()
         return losses
 
 
@@ -2463,8 +2463,8 @@ class MaskRCNNFCNMaskHead(nn.Module):
 
     def get_targets(self, sampling_results, gt_masks, rcnn_train_cfg):
         pos_proposals = [res.pos_bboxes for res in sampling_results]
-        pos_assigned_gt_inds = [res.pos_assigned_gt_inds for res in sampling_results]
-        mask_targets = mask_target(pos_proposals, pos_assigned_gt_inds, gt_masks, rcnn_train_cfg)
+        pos_assigned_gt_indices = [res.pos_assigned_gt_indices for res in sampling_results]
+        mask_targets = mask_target(pos_proposals, pos_assigned_gt_indices, gt_masks, rcnn_train_cfg)
         return mask_targets
 
     def loss(self, mask_pred, mask_targets, labels):
@@ -2600,18 +2600,18 @@ class MaskRCNNRoIHead(nn.Module):
 
         return rois, proposals, logits, pred_boxes
 
-    def _mask_forward(self, x, rois=None, pos_inds=None, bbox_feats=None):
+    def _mask_forward(self, x, rois=None, pos_indices=None, bbox_feats=None):
         """Mask head forward function used in both training and testing."""
-        if not ((rois is not None) ^ (pos_inds is not None and bbox_feats is not None)):
-            raise ValueError("Either rois or (pos_inds and bbox_feats) should be specified")
+        if not ((rois is not None) ^ (pos_indices is not None and bbox_feats is not None)):
+            raise ValueError("Either rois or (pos_indices and bbox_feats) should be specified")
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
             # if self.with_shared_head:
             #     mask_feats = self.shared_head(mask_feats)
         else:
             if bbox_feats is None:
-                raise ValueError("bbox_feats must be specified when pos_inds is specified")
-            mask_feats = bbox_feats[pos_inds]
+                raise ValueError("bbox_feats must be specified when pos_indices is specified")
+            mask_feats = bbox_feats[pos_indices]
 
         mask_pred = self.mask_head(mask_feats)
 
@@ -2624,14 +2624,14 @@ class MaskRCNNRoIHead(nn.Module):
             pos_rois = bbox2roi([res.pos_bboxes for res in sampling_results])
             mask_results = self._mask_forward(x, pos_rois)
         else:
-            pos_inds = []
+            pos_indices = []
             device = bbox_feats.device
             for res in sampling_results:
-                pos_inds.append(torch.ones(res.pos_bboxes.shape[0], device=device, dtype=torch.uint8))
-                pos_inds.append(torch.zeros(res.neg_bboxes.shape[0], device=device, dtype=torch.uint8))
-            pos_inds = torch.cat(pos_inds)
+                pos_indices.append(torch.ones(res.pos_bboxes.shape[0], device=device, dtype=torch.uint8))
+                pos_indices.append(torch.zeros(res.neg_bboxes.shape[0], device=device, dtype=torch.uint8))
+            pos_indices = torch.cat(pos_indices)
 
-            mask_results = self._mask_forward(x, pos_inds=pos_inds, bbox_feats=bbox_feats)
+            mask_results = self._mask_forward(x, pos_indices=pos_indices, bbox_feats=bbox_feats)
 
         mask_targets = self.mask_head.get_targets(sampling_results, gt_masks, self.train_cfg)
         pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
