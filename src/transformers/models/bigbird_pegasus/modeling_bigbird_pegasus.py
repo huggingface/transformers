@@ -389,12 +389,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = [
                 self._bigbird_block_rand_mask(
-                    self.max_seqlen,
-                    self.max_seqlen,
-                    from_block_size,
-                    to_block_size,
-                    n_rand_blocks,
-                    last_idx=1024,
+                    self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
             ]
