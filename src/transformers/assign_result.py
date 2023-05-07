@@ -22,9 +22,10 @@ class AssignResult:
 
     Example:
         >>> # An assign result between 4 predicted boxes and 9 true boxes >>> # where only two boxes were assigned. >>>
-        num_gts = 9 >>> max_overlaps = torch.LongTensor([0, .5, .9, 0]) >>> gt_indices = torch.LongTensor([-1, 1, 2, 0])
-        >>> labels = torch.LongTensor([0, 3, 4, 0]) >>> self = AssignResult(num_gts, gt_indices, max_overlaps, labels) >>>
-        print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9, gt_indices.shape=(4,), max_overlaps.shape=(4,),
+        num_gts = 9 >>> max_overlaps = torch.LongTensor([0, .5, .9, 0]) >>> gt_indices = torch.LongTensor([-1, 1, 2,
+        0]) >>> labels = torch.LongTensor([0, 3, 4, 0]) >>> self = AssignResult(num_gts, gt_indices, max_overlaps,
+        labels) >>> print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9, gt_indices.shape=(4,),
+        max_overlaps.shape=(4,),
                       labels.shape=(4,))>
         >>> # Force addition of gt labels (when adding gt as proposals) >>> new_labels = torch.LongTensor([3, 4, 5])
         >>> self.add_gt_(new_labels) >>> print(str(self)) # xdoctest: +IGNORE_WANT <AssignResult(num_gts=9,
