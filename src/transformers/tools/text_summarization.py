@@ -17,7 +17,7 @@ class TextSummarizationTool(PipelineTool):
     ```
     """
 
-    default_checkpoint = "philschmid/flan-t5-base-samsum"
+    default_checkpoint = "philschmid/bart-large-cnn-samsum"
     description = TEXT_SUMMARIZATION_CESCRIPTION
     name = "sumamrizer"
     pre_processor_class = AutoTokenizer
@@ -26,13 +26,14 @@ class TextSummarizationTool(PipelineTool):
     inputs = ["text"]
     outputs = ["text"]
 
-    def encode(self, raw_inputs):
-        return self.pre_processor(raw_inputs, return_tensors="pt", truncation=True)
+    def encode(self, text):
+        return self.pre_processor(text, return_tensors="pt", truncation=True)
 
     def forward(self, inputs):
         return self.model.generate(**inputs)[0]
 
     def decode(self, outputs):
+        print(outputs)
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
 
