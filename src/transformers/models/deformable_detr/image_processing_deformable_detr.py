@@ -1279,7 +1279,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
-    def post_process(self, outputs, target_sizes, top_k: int = 100):
+    def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
         top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
@@ -1291,9 +1291,6 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
-            top_k (`int`, *optional*, defaults to 100):
-                Keep only top k bounding boxes.
-
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -1311,8 +1308,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         prob = out_logits.sigmoid()
-        k_value = min(top_k, prob.view(out_logits.shape[0], -1).size(1))
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), k_value, dim=1)
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
