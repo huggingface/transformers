@@ -552,10 +552,10 @@ class MaskRCNNAnchorGenerator(nn.Module):
                 The device where the anchors will be put on.
 
         Returns:
-            `List[torch.Tensor]`: Anchors in multiple feature levels. \
-                The sizes of each tensor should be [N, 4], where \ N = width * height * num_base_anchors, width and
-                height \ are the sizes of the corresponding feature level, \ num_base_anchors is the number of anchors
-                for that level.
+            `List[torch.Tensor]`:
+                Anchors in multiple feature levels. The sizes of each tensor should be [N, 4], where N = width * height
+                * num_base_anchors. Width and height are the sizes of the corresponding feature level, num_base_anchors
+                is the number of anchors for that level.
         """
         if self.num_levels != len(featmap_sizes):
             raise ValueError(f"Expected {self.num_levels} feature levels, got {len(featmap_sizes)}")
@@ -2839,13 +2839,11 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         https://github.com/open-mmlab/mmdetection/blob/ff9bc39913cb3ff5dde79d3933add7dc2561bab7/mmdet/models/detectors/base.py#L176
 
         Args:
-            losses (dict):
+            losses (`dict`):
                 Raw output of the network, which usually contain losses and other necessary information.
 
         Returns:
-            tuple[Tensor, dict]: (loss, log_vars), loss is the loss tensor \
-                which may be a weighted sum of all losses, log_vars contains \ all the variables to be sent to the
-                logger.
+            `torch.Tensor`: The overall loss which is a weighted sum of all losses.
         """
         log_vars = OrderedDict()
         for loss_name, loss_value in losses.items():
