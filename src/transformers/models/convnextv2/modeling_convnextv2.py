@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -100,14 +101,14 @@ class ConvNextV2GRN(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
-        self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
-        self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
-        hidden_states = self.gamma * (hidden_states * norm_features) + self.beta + hidden_states
+        hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
         return hidden_states
 
@@ -508,16 +509,14 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         self.embeddings = ConvNextV2Embeddings(config)
         self.encoder = ConvNextV2Encoder(config)
 
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
-        if config.out_indices is not None:
-            self.out_indices = config.out_indices
-        else:
-            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            config.out_features, config.out_indices, self.stage_names
+        )
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self.out_features, self.channels):
+        for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = ConvNextV2LayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
