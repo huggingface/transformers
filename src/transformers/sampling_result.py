@@ -7,7 +7,8 @@ import torch
 class SamplingResult:
     """Bounding box sampling result.
 
-    Source: https://github.com/open-mmlab/mmdetection/blob/ecac3a77becc63f23d9f6980b2a36f86acd00a8a/mmdet/models/task_modules/samplers/sampling_result.py#L51.
+    Source:
+    https://github.com/open-mmlab/mmdetection/blob/ecac3a77becc63f23d9f6980b2a36f86acd00a8a/mmdet/models/task_modules/samplers/sampling_result.py#L51.
     """
 
     def __init__(self, pos_indices, neg_indices, bboxes, gt_bboxes, assign_result, gt_flags):
@@ -60,8 +61,7 @@ class SamplingResult:
         return torch.cat([self.pos_bboxes, self.neg_bboxes])
 
     def to(self, device):
-        """Change the device of the data inplace.
-        """
+        """Change the device of the data inplace."""
         _dict = self.__dict__
         for key, value in _dict.items():
             if isinstance(value, torch.Tensor):
