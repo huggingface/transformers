@@ -64,6 +64,7 @@
       - local: tasks/multiple_choice
         title: Multiple choice
       title: Task guides
+    - isExpanded: false
     title: Natural Language Processing
   - sections:
     - local: tasks/audio_classification
