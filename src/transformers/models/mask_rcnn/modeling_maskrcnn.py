@@ -137,19 +137,19 @@ def unmap(data, count, inds, fill=0):
     return ret
 
 
-def select_single_mlvl(multilevel_tensors, batch_id, detach=True):
+def select_single_multilevel(multilevel_tensors, batch_id, detach=True):
     """Extract a multi-scale single image tensor from a multi-scale batch tensor based on batch index.
 
     Note: The default value of detach is True, because the proposal gradient needs to be detached during the training
     of the two-stage model. E.g Cascade Mask R-CNN.
 
     Args:
-        multilevel_tensors (`List[Tensor]`):
+        multilevel_tensors (`List[torch.Tensor]`):
             Batch tensor for all scale levels, each is a 4D-tensor.
         batch_id (`int`):
             Batch index.
         detach (`bool`, *optional*, defaults to `True`):
-            Whether to detach the gradient. Default True.
+            Whether to detach the gradient.
 
     Returns:
         list[Tensor]: Multi-scale single image tensor.
@@ -159,10 +159,10 @@ def select_single_mlvl(multilevel_tensors, batch_id, detach=True):
     num_levels = len(multilevel_tensors)
 
     if detach:
-        mlvl_tensor_list = [multilevel_tensors[i][batch_id].detach() for i in range(num_levels)]
+        multilevel_tensor_list = [multilevel_tensors[i][batch_id].detach() for i in range(num_levels)]
     else:
-        mlvl_tensor_list = [multilevel_tensors[i][batch_id] for i in range(num_levels)]
-    return mlvl_tensor_list
+        multilevel_tensor_list = [multilevel_tensors[i][batch_id] for i in range(num_levels)]
+    return multilevel_tensor_list
 
 
 def images_to_levels(target, num_levels):
@@ -172,8 +172,8 @@ def images_to_levels(target, num_levels):
     target = torch.stack(target, 0)
     level_targets = []
     start = 0
-    for n in num_levels:
-        end = start + n
+    for level in num_levels:
+        end = start + level
         # level_targets.append(target[:, start:end].squeeze(0))
         level_targets.append(target[:, start:end])
         start = end
@@ -234,11 +234,14 @@ def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1
 
     proposals = proposals.float()
     ground_truth = ground_truth.float()
+
+    # predicted boxes
     px = (proposals[..., 0] + proposals[..., 2]) * 0.5
     py = (proposals[..., 1] + proposals[..., 3]) * 0.5
     pw = proposals[..., 2] - proposals[..., 0]
     ph = proposals[..., 3] - proposals[..., 1]
 
+    # ground truth boxes
     gx = (ground_truth[..., 0] + ground_truth[..., 2]) * 0.5
     gy = (ground_truth[..., 1] + ground_truth[..., 3]) * 0.5
     gw = ground_truth[..., 2] - ground_truth[..., 0]
@@ -765,19 +768,19 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
 # Everything related to IoU calculator #
 
 
-def cast_tensor_type(x, scale=1.0, dtype=None):
+def cast_tensor_type(tensor, scale=1.0, dtype=None):
     if dtype == "fp16":
         # scale is for preventing overflows
-        x = (x / scale).half()
-    return x
+        tensor = (tensor / scale).half()
+    return tensor
 
 
-def fp16_clamp(x, min=None, max=None):
-    if not x.is_cuda and x.dtype == torch.float16:
+def fp16_clamp(tensor, min=None, max=None):
+    if not tensor.is_cuda and tensor.dtype == torch.float16:
         # clamp for cpu float16, tensor fp16 has no clamp implementation
-        return x.float().clamp(min, max).half()
+        return tensor.float().clamp(min, max).half()
 
-    return x.clamp(min, max)
+    return tensor.clamp(min, max)
 
 
 class MaskRCNNBboxOverlaps2D:
@@ -891,33 +894,33 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
     area2 = (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
 
     if is_aligned:
-        lt = torch.max(bboxes1[..., :2], bboxes2[..., :2])  # [B, rows, 2]
-        rb = torch.min(bboxes1[..., 2:], bboxes2[..., 2:])  # [B, rows, 2]
+        top_left = torch.max(bboxes1[..., :2], bboxes2[..., :2])  # [B, rows, 2]
+        bottom_right = torch.min(bboxes1[..., 2:], bboxes2[..., 2:])  # [B, rows, 2]
 
-        wh = fp16_clamp(rb - lt, min=0)
-        overlap = wh[..., 0] * wh[..., 1]
+        width_height = fp16_clamp(bottom_right - top_left, min=0)
+        overlap = width_height[..., 0] * width_height[..., 1]
 
         if mode in ["iou", "giou"]:
             union = area1 + area2 - overlap
         else:
             union = area1
         if mode == "giou":
-            enclosed_lt = torch.min(bboxes1[..., :2], bboxes2[..., :2])
-            enclosed_rb = torch.max(bboxes1[..., 2:], bboxes2[..., 2:])
+            enclosed_top_left = torch.min(bboxes1[..., :2], bboxes2[..., :2])
+            enclosed_bottom_right = torch.max(bboxes1[..., 2:], bboxes2[..., 2:])
     else:
-        lt = torch.max(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])  # [B, rows, cols, 2]
-        rb = torch.min(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])  # [B, rows, cols, 2]
+        top_left = torch.max(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])  # [B, rows, cols, 2]
+        bottom_right = torch.min(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])  # [B, rows, cols, 2]
 
-        wh = fp16_clamp(rb - lt, min=0)
-        overlap = wh[..., 0] * wh[..., 1]
+        width_height = fp16_clamp(bottom_right - top_left, min=0)
+        overlap = width_height[..., 0] * width_height[..., 1]
 
         if mode in ["iou", "giou"]:
             union = area1[..., None] + area2[..., None, :] - overlap
         else:
             union = area1[..., None]
         if mode == "giou":
-            enclosed_lt = torch.min(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])
-            enclosed_rb = torch.max(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])
+            enclosed_top_left = torch.min(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])
+            enclosed_bottom_right = torch.max(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])
 
     eps = union.new_tensor([eps])
     union = torch.max(union, eps)
@@ -925,8 +928,8 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
     if mode in ["iou", "iof"]:
         return ious
     # calculate gious
-    enclose_wh = fp16_clamp(enclosed_rb - enclosed_lt, min=0)
-    enclose_area = enclose_wh[..., 0] * enclose_wh[..., 1]
+    enclose_width_height = fp16_clamp(enclosed_bottom_right - enclosed_top_left, min=0)
+    enclose_area = enclose_width_height[..., 0] * enclose_width_height[..., 1]
     enclose_area = torch.max(enclose_area, eps)
     gious = ious - (enclose_area - union) / enclose_area
     return gious
@@ -1044,7 +1047,7 @@ class MaskRCNNMaxIoUAssigner:
         return assign_result
 
     def assign_wrt_overlaps(self, overlaps, gt_labels=None):
-        """Assign w.r.t. the overlaps of bboxes with gts.
+        """Assign w.r.t. the overlaps of bboxes with ground truths.
 
         Args:
             overlaps (`torch.Tensor`):
@@ -1431,28 +1434,39 @@ class MaskRCNNRPN(nn.Module):
         """Compute regression and classification targets for anchors in a single image.
 
         Args:
-            flat_anchors (Tensor):
-                Multi-level anchors of the image, which are concatenated into a single tensor of shape (num_anchors ,4)
-            valid_flags (Tensor):
+            flat_anchors (`torch.Tensor`):
+                Multi-level anchors of the image, which are concatenated into a single tensor of shape (num_anchors,
+                4).
+            valid_flags (`torch.Tensor`):
                 Multi level valid flags of the image, which are concatenated into a single tensor of shape
                 (num_anchors,).
-            gt_bboxes (Tensor):
+            gt_bboxes (`torch.Tensor`):
                 Ground truth bboxes of the image, shape (num_gts, 4).
-            gt_bboxes_ignore (Tensor):
+            gt_bboxes_ignore (`torch.Tensor`):
                 Ground truth bboxes to be ignored, shape (num_ignored_gts, 4).
-            img_meta (dict): Meta info of the image.
-            gt_labels (Tensor):
+            gt_labels (`torch.Tensor`):
                 Ground truth labels of each box, shape (num_gts,).
-            label_channels (int): Channel of label.
-            unmap_outputs (bool):
+            img_meta (`dict`):
+                Meta info of the image.
+            label_channels (`int`, *optional*, defaults to 1):
+                Number of channels of the ground truth labels.
+            unmap_outputs (`bool`, *optional*, defaults to `True`):
                 Whether to map outputs back to the original set of anchors.
 
         Returns:
-            tuple:
-                labels_list (list[Tensor]): Labels of each level label_weights_list (list[Tensor]): Label weights of
-                each level bbox_targets_list (list[Tensor]): BBox targets of each level bbox_weights_list
-                (list[Tensor]): BBox weights of each level num_total_pos (int): Number of positive samples in all
-                images num_total_neg (int): Number of negative samples in all images
+            `tuple` comprising various elements:
+                labels_list (`List[torch.Tensor]`):
+                    Labels of each level.
+                label_weights_list (`List[torch.Tensor]`):
+                    Label weights of each level.
+                bbox_targets_list (`List[torch.Tensor]`):
+                    Bbox targets of each level.
+                bbox_weights_list (`List[torch.Tensor]`):
+                    Bbox weights of each level
+                num_total_pos (`int`):
+                    Number of positive samples in all images.
+                num_total_neg (`int`):
+                    Number of negative samples in all images.
         """
         inside_flags = anchor_inside_flags(
             flat_anchors, valid_flags, img_meta["img_shape"][-2:], self.train_cfg["allowed_border"]
@@ -1520,36 +1534,43 @@ class MaskRCNNRPN(nn.Module):
         """Compute regression and classification targets for anchors in multiple images.
 
         Args:
-            anchor_list (list[list[Tensor]]):
+            anchor_list (`List[List[torch.Tensor]]`):
                 Multi level anchors of each image. The outer list indicates images, and the inner list corresponds to
                 feature levels of the image. Each element of the inner list is a tensor of shape (num_anchors, 4).
-            valid_flag_list (list[list[Tensor]]):
+            valid_flag_list (`List[List[torch.Tensor]]`):
                 Multi level valid flags of each image. The outer list indicates images, and the inner list corresponds
                 to feature levels of the image. Each element of the inner list is a tensor of shape (num_anchors, )
-            gt_bboxes_list (list[Tensor]):
+            gt_bboxes_list (`List[torch.Tensor]`):
                 Ground truth bboxes of each image.
-            img_metas (list[dict]):
+            img_metas (`List[dict]`):
                 Meta info of each image.
-            gt_bboxes_ignore_list (list[Tensor]):
+            gt_bboxes_ignore_list (`List[torch.Tensor]`):
                 Ground truth bboxes to be ignored.
-            gt_labels_list (list[Tensor]):
+            gt_labels_list (`List[torch.Tensor]`):
                 Ground truth labels of each box.
-            label_channels (int):
-                Channel of label.
-            unmap_outputs (bool):
+            label_channels (`int`, *optional*, defaults to 1):
+                Number of channels in the ground truth labels.
+            unmap_outputs (`bool`, *optional*, defaults to `True`):
                 Whether to map outputs back to the original set of anchors.
 
         Returns:
-            tuple: Usually returns a tuple containing learning targets.
-                - labels_list (list[Tensor]): Labels of each level.
-                - label_weights_list (list[Tensor]): Label weights of each level.
-                - bbox_targets_list (list[Tensor]): BBox targets of each level.
-                - bbox_weights_list (list[Tensor]): BBox weights of each level.
-                - num_total_pos (int): Number of positive samples in all images.
-                - num_total_neg (int): Number of negative samples in all images.
+            `tuple` comprising various elements:
+                - labels_list (`List[torch.Tensor]`):
+                    Labels of each level.
+                - label_weights_list (`List[torch.Tensor]`):
+                    Label weights of each level.
+                - bbox_targets_list (`List[torch.Tensor]`):
+                    Bbox targets of each level.
+                - bbox_weights_list (`List[torch.Tensor]`):
+                    Bbox weights of each level.
+                - num_total_pos (`int`):
+                    Number of positive samples in all images.
+                - num_total_neg (`int`):
+                    Number of negative samples in all images.
+
             additional_returns: This function enables user-defined returns from
                 `self._get_targets_single`. These returns are currently refined to properties at each feature map (i.e.
-                having HxW dimension). The results will be concatenated after the end
+                having HxW dimension). The results will be concatenated after the end.
         """
         num_imgs = len(img_metas)
         if not (len(anchor_list) == len(valid_flag_list) == num_imgs):
@@ -1641,25 +1662,26 @@ class MaskRCNNRPN(nn.Module):
         """Compute loss of a single scale level.
 
         Args:
-            cls_score (Tensor): Box scores for each scale level
-                Has shape (N, num_anchors * num_classes, H, W).
-            bbox_pred (Tensor): Box energies / deltas for each scale
-                level with shape (N, num_anchors * 4, H, W).
-            anchors (Tensor): Box reference for each scale level with shape
-                (N, num_total_anchors, 4).
-            labels (Tensor): Labels of each anchors with shape
-                (N, num_total_anchors).
-            label_weights (Tensor): Label weights of each anchor with shape
-                (N, num_total_anchors)
-            bbox_targets (Tensor): BBox regression targets of each anchor
-                weight shape (N, num_total_anchors, 4).
-            bbox_weights (Tensor): BBox regression loss weights of each anchor
-                with shape (N, num_total_anchors, 4).
-            num_total_samples (int): If sampling, num total samples equal to
-                the number of total anchors; Otherwise, it is the number of positive anchors.
+            cls_score (`torch.Tensor`):
+                Box scores for each scale level. Has shape (N, num_anchors * num_classes, height, width).
+            bbox_pred (`torch.Tensor`):
+                Box energies / deltas for each scale. Has shape (N, num_anchors * 4, height, width).
+            anchors (`torch.Tensor`):
+                Box reference for each scale level with shape (N, num_total_anchors, 4).
+            labels (`torch.Tensor`):
+                Labels of each anchors with shape (N, num_total_anchors).
+            label_weights (`torch.Tensor`):
+                Label weights of each anchor with shape (N, num_total_anchors)
+            bbox_targets (`torch.Tensor`):
+                BBox regression targets of each anchor weight shape (N, num_total_anchors, 4).
+            bbox_weights (`torch.Tensor`):
+                BBox regression loss weights of each anchor with shape (N, num_total_anchors, 4).
+            num_total_samples (`int`):
+                If sampling, number of total samples equal to the number of total anchors; Otherwise, it is the number
+                of positive anchors.
 
         Returns:
-            dict[str, Tensor]: A dictionary of loss components.
+            `dict[str, torch.Tensor]`: A dictionary of loss components.
         """
         # classification loss
         labels = labels.reshape(-1)
@@ -1683,21 +1705,22 @@ class MaskRCNNRPN(nn.Module):
         """Compute losses of the head.
 
         Args:
-            cls_scores (list[Tensor]):
-                Box scores for each scale level. Has shape (N, num_anchors * num_classes, H, W)
-            bbox_preds (list[Tensor]):
-                Box energies / deltas for each scale level with shape (N, num_anchors * 4, H, W)
-            gt_bboxes (list[Tensor]):
-                Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]):
-                Class indices corresponding to each box
-            img_metas (list[dict]):
+            cls_scores (`List[torch.Tensor]):
+                Box scores for each scale level. Has shape (N, num_anchors * num_classes, height, width).
+            bbox_preds (`List[torch.Tensor]`):
+                Box energies / deltas for each scale level with shape (N, num_anchors * 4, height, width).
+            gt_bboxes (`List[torch.Tensor]`):
+                Ground truth bboxes for each image with shape (num_gts, 4) in [top_left_x, top_left_y, bottom_right_x,
+                bottom_right_y] format.
+            gt_labels (`List[torch.Tensor]`):
+                Class indices corresponding to each box.
+            img_metas (`List[dict]`):
                 Meta information of each image, e.g., image size, scaling factor, etc.
-            gt_bboxes_ignore (None | list[Tensor]):
-                Specify which bounding boxes can be ignored when computing the loss. Default: None
+            gt_bboxes_ignore (None | `List[torch.Tensor]`, *optional*):
+                Specify which bounding boxes can be ignored when computing the loss.
 
         Returns:
-            dict[str, Tensor]: A dictionary of loss components.
+            `dict[str, torch.Tensor]`: A dictionary of loss components.
         """
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         if len(featmap_sizes) != self.prior_generator.num_levels:
@@ -1782,25 +1805,29 @@ class MaskRCNNRPN(nn.Module):
         used in NMS, such as CenterNess in FCOS, IoU branch in ATSS.
 
         Args:
-            cls_scores (list[Tensor]): Classification scores for all
-                scale levels, each is a 4D-tensor, has shape (batch_size, num_priors * num_classes, H, W).
-            bbox_preds (list[Tensor]): Box energies / deltas for all
-                scale levels, each is a 4D-tensor, has shape (batch_size, num_priors * 4, H, W).
-            score_factors (list[Tensor], Optional): Score factor for
-                all scale level, each is a 4D-tensor, has shape (batch_size, num_priors * 1, H, W). Default None.
-            img_metas (list[dict], Optional): Image meta info. Default None.
-            cfg (mmcv.Config, Optional): Test / postprocessing configuration,
-                if None, test_cfg would be used. Default None.
-            rescale (bool): If True, return boxes in original image space.
-                Default False.
-            with_nms (bool): If True, do nms before return boxes.
-                Default True.
+            cls_scores (`List[torch.Tensor]`):
+                Classification scores for all scale levels, each is a 4D-tensor, has shape (batch_size, num_priors *
+                num_classes, height, width).
+            bbox_preds (`List[torch.Tensor]`):
+                Box energies / deltas for all scale levels, each is a 4D-tensor, has shape (batch_size, num_priors * 4,
+                height, width).
+            score_factors (`List[torch.Tensor]`, *optional*):
+                Score factor for all scale level, each is a 4D-tensor, has shape (batch_size, num_priors * 1, height,
+                width).
+            img_metas (`List[dict]`, *optional*):
+                Image meta info. Default None.
+            cfg (`mmcv.Config`, *optional*):
+                Test / postprocessing configuration. If None, `test_cfg` is used.
+            rescale (`bool`, *optional*, defaults to `False`):
+                If True, return boxes in original image space.
+            with_nms (`bool`, *optional*, defaults to `True`):
+                If `True`, do NMS (non-maximum suppression) before return boxes.
 
         Returns:
-            list[list[Tensor, Tensor]]: Each item in result_list is 2-tuple.
-                The first item is an (n, 5) tensor, where the first 4 columns are bounding box positions (tl_x, tl_y,
-                br_x, br_y) and the 5-th column is a score between 0 and 1. The second item is a (n,) tensor where each
-                item is the predicted class label of the corresponding box.
+            `List[List[torch.Tensor, torch.Tensor]]`: Each item in result_list is 2-tuple.
+                The first item is an (n, 5) tensor, where the first 4 columns are bounding box positions (top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y) and the 5-th column is a score between 0 and 1. The second
+                item is a (n,) tensor where each item is the predicted class label of the corresponding box.
         """
         if len(cls_scores) != len(bbox_preds):
             raise ValueError(
@@ -1817,7 +1844,7 @@ class MaskRCNNRPN(nn.Module):
         num_levels = len(cls_scores)
 
         featmap_sizes = [cls_scores[i].shape[-2:] for i in range(num_levels)]
-        mlvl_priors = self.prior_generator.grid_priors(
+        multilevel_priors = self.prior_generator.grid_priors(
             featmap_sizes, dtype=cls_scores[0].dtype, device=cls_scores[0].device
         )
 
@@ -1825,10 +1852,10 @@ class MaskRCNNRPN(nn.Module):
 
         for img_id in range(len(img_metas)):
             img_meta = img_metas[img_id]
-            cls_score_list = select_single_mlvl(cls_scores, img_id)
-            bbox_pred_list = select_single_mlvl(bbox_preds, img_id)
+            cls_score_list = select_single_multilevel(cls_scores, img_id)
+            bbox_pred_list = select_single_multilevel(bbox_preds, img_id)
             if with_score_factors:
-                score_factor_list = select_single_mlvl(score_factors, img_id)
+                score_factor_list = select_single_multilevel(score_factors, img_id)
             else:
                 score_factor_list = [None for _ in range(num_levels)]
 
@@ -1836,7 +1863,7 @@ class MaskRCNNRPN(nn.Module):
                 cls_score_list,
                 bbox_pred_list,
                 score_factor_list,
-                mlvl_priors,
+                multilevel_priors,
                 img_meta,
                 cfg,
                 rescale,
@@ -1851,7 +1878,7 @@ class MaskRCNNRPN(nn.Module):
         cls_score_list,
         bbox_pred_list,
         score_factor_list,
-        mlvl_anchors,
+        multilevel_anchors,
         img_meta,
         cfg,
         rescale=False,
@@ -1861,27 +1888,28 @@ class MaskRCNNRPN(nn.Module):
         """Transform outputs of a single image into bbox predictions.
 
         Args:
-            cls_score_list (list[Tensor]):
-                Box scores from all scale levels of a single image, each item has shape (num_anchors * num_classes, H,
-                W).
-            bbox_pred_list (list[Tensor]):
-                Box energies / deltas from all scale levels of a single image, each item has shape (num_anchors * 4, H,
-                W).
-            score_factor_list (list[Tensor]):
+            cls_score_list (`List[torch.Tensor]`):
+                Box scores from all scale levels of a single image, each item has shape (num_anchors * num_classes,
+                height, width).
+            bbox_pred_list (`List[torch.Tensor]`):
+                Box energies / deltas from all scale levels of a single image, each item has shape (num_anchors * 4,
+                height, width).
+            score_factor_list (`List[torch.Tensor]`):
                 Score factor from all scale levels of a single image. RPN head does not need this value.
-            mlvl_anchors (list[Tensor]):
+            multilevel_anchors (`List[torch.Tensor]`):
                 Anchors of all scale level each item has shape (num_anchors, 4).
             img_meta (dict): Image meta info.
-            cfg (mmcv.Config):
-                Test / postprocessing configuration. If None, test_cfg would be used.
+            cfg (`mmcv.Config`, *optional*):
+                Test / postprocessing configuration. If None, `test_cfg` is used.
             rescale (bool, *optional*, defaults to `False`):
-                If True, return boxes in original image space.
-            with_nms (bool, *optional*, defaults to `True`):
-                If True, do nms before return boxes.
+                If `True`, return boxes in original image space.
+            with_nms (`bool`, *optional*, defaults to `True`):
+                If True, do NMS (non-maximum suppression) before returning boxes.
 
         Returns:
-            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
-                are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
+            `torch.Tensor`:
+                Labeled boxes in shape (n, 5), where the first 4 columns are bounding box positions (top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y) and the 5-th column is a score between 0 and 1.
         """
         cfg = self.test_cfg if cfg is None else cfg
         cfg = copy.deepcopy(cfg)
@@ -1890,9 +1918,9 @@ class MaskRCNNRPN(nn.Module):
         # bboxes from different level should be independent during NMS,
         # level_ids are used as labels for batched NMS to separate them
         level_ids = []
-        mlvl_scores = []
-        mlvl_bbox_preds = []
-        mlvl_valid_anchors = []
+        multilevel_scores = []
+        multilevel_bbox_preds = []
+        multilevel_valid_anchors = []
         nms_pre = cfg.get("nms_pre", -1)
         for level_idx in range(len(cls_score_list)):
             rpn_cls_score = cls_score_list[level_idx]
@@ -1915,7 +1943,7 @@ class MaskRCNNRPN(nn.Module):
                 scores = rpn_cls_score.softmax(dim=1)[:, 0]
             rpn_bbox_pred = rpn_bbox_pred.permute(1, 2, 0).reshape(-1, 4)
 
-            anchors = mlvl_anchors[level_idx]
+            anchors = multilevel_anchors[level_idx]
             if 0 < nms_pre < scores.shape[0]:
                 # sort is faster than topk
                 # _, topk_inds = scores.topk(cfg.nms_pre)
@@ -1925,38 +1953,45 @@ class MaskRCNNRPN(nn.Module):
                 rpn_bbox_pred = rpn_bbox_pred[topk_inds, :]
                 anchors = anchors[topk_inds, :]
 
-            mlvl_scores.append(scores)
-            mlvl_bbox_preds.append(rpn_bbox_pred)
-            mlvl_valid_anchors.append(anchors)
+            multilevel_scores.append(scores)
+            multilevel_bbox_preds.append(rpn_bbox_pred)
+            multilevel_valid_anchors.append(anchors)
             level_ids.append(scores.new_full((scores.size(0),), level_idx, dtype=torch.long))
 
-        return self._bbox_post_process(mlvl_scores, mlvl_bbox_preds, mlvl_valid_anchors, level_ids, cfg, img_shape)
+        return self._bbox_post_process(
+            multilevel_scores, multilevel_bbox_preds, multilevel_valid_anchors, level_ids, cfg, img_shape
+        )
 
-    def _bbox_post_process(self, mlvl_scores, mlvl_bboxes, mlvl_valid_anchors, level_ids, cfg, img_shape, **kwargs):
-        """bbox post-processing method.
+    def _bbox_post_process(
+        self, multilevel_scores, multilevel_bboxes, multilevel_valid_anchors, level_ids, cfg, img_shape, **kwargs
+    ):
+        """Bounding box post-processing method.
+
+
+        Do the nms operation for bboxes in same level.
 
         Args:
-        Do the nms operation for bboxes in same level.
-            mlvl_scores (list[Tensor]):
+            multilevel_scores (`List[torch.Tensor]`):
                 Box scores from all scale levels of a single image, each item has shape (num_bboxes, ).
-            mlvl_bboxes (list[Tensor]):
+            multilevel_bboxes (`List[torch.Tensor]`):
                 Decoded bboxes from all scale levels of a single image, each item has shape (num_bboxes, 4).
-            mlvl_valid_anchors (list[Tensor]):
+            multilevel_valid_anchors (`List[torch.Tensor]`):
                 Anchors of all scale level each item has shape (num_bboxes, 4).
-            level_ids (list[Tensor]):
+            level_ids (`List[torch.Tensor]`):
                 Indexes from all scale levels of a single image, each item has shape (num_bboxes, ).
-            cfg (mmcv.Config):
-                Test / postprocessing configuration. If None, `self.test_cfg` would be used.
-            img_shape (tuple(int)):
+            cfg (`mmcv.Config`):
+                Test / postprocessing configuration. If None, `self.test_cfg` is used.
+            img_shape (`Tuple[int]`):
                 The shape of model's input image.
 
         Returns:
-            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
-                are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
+            Tensor:
+                Labeled boxes in shape (n, 5), where the first 4 columns are bounding box positions (top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y) and the 5-th column is a score between 0 and 1.
         """
-        scores = torch.cat(mlvl_scores)
-        anchors = torch.cat(mlvl_valid_anchors)
-        rpn_bbox_pred = torch.cat(mlvl_bboxes)
+        scores = torch.cat(multilevel_scores)
+        anchors = torch.cat(multilevel_valid_anchors)
+        rpn_bbox_pred = torch.cat(multilevel_bboxes)
         proposals = self.bbox_coder.decode(anchors, rpn_bbox_pred, max_shape=img_shape)
         ids = torch.cat(level_ids)
 
@@ -2004,9 +2039,10 @@ class RoIAlign(nn.Module):
     def forward(self, input: torch.Tensor, rois: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            input: NCHW images
-            rois: Bx5 boxes. First column is the index into N.\
-                The other 4 columns are xyxy.
+            input (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
+                Images.
+            rois (`torch.Tensor` of shape `(num_rois, 5)`):
+                Bx5 boxes. First column is the index into N. The other 4 columns are xyxy.
         """
         return torchvision.ops.roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned
@@ -2041,14 +2077,15 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
     def build_roi_layers(self, layer_cfg, featmap_strides):
         """Build RoI operator to extract feature from each level feature map.
         Args:
-            layer_cfg (dict): Dictionary to construct and config RoI layer
-                operation. Options are modules under `mmcv/ops` such as `RoIAlign`.
-            featmap_strides (List[int]): The stride of input feature map w.r.t
-                to the original image size, which would be used to scale RoI coordinate (original image coordinate
-                system) to feature coordinate system.
+            layer_cfg (`dict`):
+                Dictionary to construct and config RoI layer operation. Options are modules under `mmcv/ops` such as
+                `RoIAlign`.
+            featmap_strides (`List[int]`):
+                The stride of input feature map w.r.t to the original image size, which would be used to scale RoI
+                coordinate (original image coordinate system) to feature coordinate system.
+
         Returns:
-            nn.ModuleList: The RoI extractor modules for each level feature
-                map.
+            `nn.ModuleList`: The RoI extractor modules for each level feature map.
         """
 
         cfg = layer_cfg.copy()
@@ -2059,16 +2096,20 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
         return roi_layers
 
     def map_roi_levels(self, rois, num_levels):
-        """Map rois to corresponding feature levels by scales.
+        """Map RoI's to corresponding feature levels by scales.
         - scale < finest_scale * 2: level 0
         - finest_scale * 2 <= scale < finest_scale * 4: level 1
         - finest_scale * 4 <= scale < finest_scale * 8: level 2
         - scale >= finest_scale * 8: level 3
+
         Args:
-            rois (Tensor): Input RoIs, shape (k, 5).
-            num_levels (int): Total level number.
+            rois (`torch.Tensor`):
+                Input RoIs, shape (k, 5).
+            num_levels (`int`):
+                Total number of levels.
+
         Returns:
-            Tensor: Level index (0-based) of each RoI, shape (k, )
+            `torch.Tensor`: Level index (0-based) of each RoI, shape (k, )
         """
         scale = torch.sqrt((rois[:, 3] - rois[:, 1]) * (rois[:, 4] - rois[:, 2]))
         target_lvls = torch.floor(torch.log2(scale / self.finest_scale + 1e-6))
@@ -2137,7 +2178,8 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
     https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/bbox_heads/convfc_bbox_head.py#L11.
 
     Args:
-        config (`MaskRCNNConfig`): Model configuration.
+        config (`MaskRCNNConfig`):
+            Model configuration.
         num_branch_fcs (`int`, *optional*, defaults to `2`):
             Number of fully-connected layers in the branch.
         reg_class_agnostic (`bool`, *optional*, defaults to `False`):
@@ -2212,23 +2254,31 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         """Calculate the ground truth for proposals in the single image according to the sampling results.
 
         Args:
-            pos_bboxes (Tensor): Contains all the positive boxes,
-                has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
-            neg_bboxes (Tensor): Contains all the negative boxes,
-                has shape (num_neg, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
-            pos_gt_bboxes (Tensor): Contains gt_boxes for
-                all positive samples, has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
-            pos_gt_labels (Tensor): Contains gt_labels for
-                all positive samples, has shape (num_pos, ).
-            cfg (obj:`ConfigDict`): `train_cfg` of R-CNN.
+            pos_bboxes (`torch.Tensor`):
+                Contains all the positive boxes, has shape (num_pos, 4), the last dimension 4 represents [top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y].
+            neg_bboxes (`torch.Tensor`):
+                Contains all the negative boxes, has shape (num_neg, 4), the last dimension 4 represents [top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y].
+            pos_gt_bboxes (`torch.Tensor`):
+                Contains ground truth boxes for all positive samples, has shape (num_pos, 4), the last dimension 4
+                represents [top_left_x, top_left_y, bottom_right_x, bottom_right_y].
+            pos_gt_labels (`torch.Tensor`):
+                Contains ground truth labels for all positive samples, has shape (num_pos, ).
+            cfg (obj:`ConfigDict`):
+                Training configuration of R-CNN.
 
         Returns:
-            Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following Tensors:
-                - labels(Tensor): Gt_labels for all proposals, has shape (num_proposals,).
-                - label_weights(Tensor): Labels_weights for all proposals, has shape (num_proposals,).
-                - bbox_targets(Tensor):Regression target for all proposals, has shape (num_proposals, 4), the last
-                  dimension 4 represents [tl_x, tl_y, br_x, br_y].
-                - bbox_weights(Tensor):Regression weights for all proposals, has shape (num_proposals, 4).
+            `Tuple[torch.Tensor]`: Ground truth for proposals in a single image. Containing the following tensors:
+                - labels (`torch.Tensor`):
+                    Ground truth labels for all proposals, has shape (num_proposals,).
+                - label_weights (`torch.Tensor`):
+                    Labels_weights for all proposals, has shape (num_proposals,).
+                - bbox_targets (`torch.Tensor`):
+                    Regression target for all proposals, has shape (num_proposals, 4), the last dimension 4 represents
+                    [top_left_x, top_left_y, bottom_right_x, bottom_right_y].
+                - bbox_weights (`torch.Tensor`):
+                    Regression weights for all proposals, has shape (num_proposals, 4).
         """
         num_pos = pos_bboxes.size(0)
         num_neg = neg_bboxes.size(0)
@@ -2269,28 +2319,30 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
             sampling_results (`List[SamplingResults]`):
                 Assign results of all images in a batch after sampling.
             gt_bboxes (`List[torch.Tensor]`):
-                Ground truth boxes of all images in a batch, each tensor has shape (num_gt, 4), the last dimension 4
-                represents [tl_x, tl_y, br_x, br_y].
+                Ground truth boxes of all images in a batch, each tensor has shape (num_ground_truths, 4), the last
+                dimension 4 represents [top_left_x, top_left_y, bottom_right_x, bottom_right_y].
             gt_labels (`List[torch.Tensor]`):
-                Ground truth labels of all images in a batch, each tensor has shape (num_gt,).
+                Ground truth labels of all images in a batch, each tensor has shape (num_ground_truths,).
             rcnn_train_cfg (`ConfigDict`):
                 Training configuration of R-CNN.
-            concat (`bool`, **optional*, defaults to `True`):
+            concat (`bool`, *optional*, defaults to `True`):
                 Whether to concatenate the results of all the images in a single batch.
 
         Returns:
             Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following list of Tensors:
-                - labels (list[Tensor],Tensor): Gt_labels for all proposals in a batch, each tensor in list has shape
-                  (num_proposals,) when `concat=False`, otherwise just a single tensor has shape (num_all_proposals,).
-                - label_weights (list[Tensor]): Labels_weights for all proposals in a batch, each tensor in list has
-                  shape (num_proposals,) when `concat=False`, otherwise just a single tensor has shape
-                  (num_all_proposals,).
-                - bbox_targets (list[Tensor],Tensor): Regression target for all proposals in a batch, each tensor in
-                  list has shape (num_proposals, 4) when `concat=False`, otherwise just a single tensor has shape
-                  (num_all_proposals, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
-                - bbox_weights (list[tensor],Tensor): Regression weights for all proposals in a batch, each tensor in
-                  list has shape (num_proposals, 4) when `concat=False`, otherwise just a single tensor has shape
-                  (num_all_proposals, 4).
+                - labels (`List[torch.Tensor]`, `torch.Tensor`):
+                    Ground truth for all proposals in a batch, each tensor in list has shape (num_proposals,) when
+                    `concat=False`, otherwise just a single tensor with shape (num_all_proposals,).
+                - label_weights (`List[torch.Tensor]`):
+                    Label weights for all proposals in a batch, each tensor in list has shape (num_proposals,) when
+                    `concat=False`, otherwise just a single tensor with shape (num_all_proposals,).
+                - bbox_targets (`List[torch.Tensor]` or `torch.Tensor`):
+                    Regression targets for all proposals in a batch, each tensor in list has shape (num_proposals, 4)
+                    when `concat=False`, otherwise just a single tensor with shape (num_all_proposals, 4), the last
+                    dimension 4 represents [top_left_x, top_left_y, bottom_right_x, bottom_right_y].
+                - bbox_weights (`List[torch.Tensor]` or `torch.Tensor`):
+                    Regression weights for all proposals in a batch, each tensor in list has shape (num_proposals, 4)
+                    when `concat=False`, otherwise just a single tensor with shape (num_all_proposals, 4).
         """
         pos_bboxes_list = [res.pos_bboxes for res in sampling_results]
         neg_bboxes_list = [res.neg_bboxes for res in sampling_results]
@@ -2399,14 +2451,14 @@ class MaskRCNNFCNMaskHead(nn.Module):
 
         self.loss_mask = CrossEntropyLoss(use_mask=True, loss_weight=1.0)
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         for conv, activation in zip(self.convs, self.activations):
-            x = conv(x)
-            x = activation(x)
+            hidden_state = conv(hidden_state)
+            hidden_state = activation(hidden_state)
 
-        x = self.upsample(x)
-        x = self.relu(x)
-        mask_pred = self.conv_logits(x)
+        hidden_state = self.upsample(hidden_state)
+        hidden_state = self.relu(hidden_state)
+        mask_pred = self.conv_logits(hidden_state)
         return mask_pred
 
     def get_targets(self, sampling_results, gt_masks, rcnn_train_cfg):
@@ -2524,9 +2576,10 @@ class MaskRCNNRoIHead(nn.Module):
                 Test configuration of R-CNN.
 
         Returns:
-            tuple[list[Tensor], list[Tensor]]: The first list contains
-                the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
-                dimension 5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor in the second list is the labels
+            `Tuple[List[torch.Tensor]`, `List[torch.Tensor]`]: The first list contains the boxes of the corresponding
+            image
+                in a batch, each tensor has the shape (num_boxes, 5) and last dimension 5 represent (top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y, score). Each tensor in the second list contains the labels
                 with shape (num_boxes, ). The length of both lists should be equal to batch_size.
         """
         rois = bbox2roi(proposals)
@@ -2685,16 +2738,17 @@ class MaskRCNNRoIHead(nn.Module):
 
         Args:
             hidden_states (`Tuple[torch.Tensor]`):
-                Features from upstream network. Each has shape (batch_size, c, h, w).
+                Features from upstream network. Each has shape `(batch_size, num_channels, height, width)`.
             proposal_list (`List[torch.Tensor`]):
-                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2,
-                score).
+                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represent (top_left_x,
+                top_left_y, bottom_right_x, bottom_right_y, score).
 
         Returns:
-            list[list[np.ndarray]] or list[tuple]: When no mask branch, it is bbox results of each image and classes
-            with type `list[list[np.ndarray]]`. The outer list corresponds to each image. The inner list corresponds to
-            each class. When the model has mask branch, it contains bbox results and mask results. The outer list
-            corresponds to each image, and first element of tuple is bbox results, second element is mask results.
+            `List[List[np.ndarray]]` or `List[Tuple]`: When no mask branch, it is bbox results of each image and
+            classes with type `List[List[np.ndarray]]`. The outer list corresponds to each image. The inner list
+            corresponds to each class. When the model has a mask branch, it contains the bbox results and mask results.
+            The outer list corresponds to each image, and first element of tuple is bbox results, second element is
+            mask results.
         """
         rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposal_list, self.test_cfg)
 
