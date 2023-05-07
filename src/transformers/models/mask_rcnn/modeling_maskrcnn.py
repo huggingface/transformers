@@ -27,13 +27,13 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn.modules.utils import _pair
 
-from ... import AutoBackbone
-
 # TODO decide whether to define these utilities
-from ...assign_result import AssignResult
-from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
+from transformers.models.mask_rcnn.assign_result import AssignResult
+from transformers.models.mask_rcnn.loss_utils import CrossEntropyLoss, L1Loss, accuracy
+from transformers.models.mask_rcnn.sampling_result import SamplingResult
+
+from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
-from ...sampling_result import SamplingResult
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -48,8 +48,8 @@ from .configuration_maskrcnn import MaskRCNNConfig
 if is_torchvision_available():
     import torchvision
 
-    from ...mask_target import mask_target
-    from ...nms import batched_nms
+    from transformers.models.mask_rcnn.mask_target import mask_target
+    from transformers.models.mask_rcnn.nms import batched_nms
 
 
 logger = logging.get_logger(__name__)
@@ -1318,7 +1318,11 @@ class MaskRCNNRPN(nn.Module):
         self.loss_cls = CrossEntropyLoss(
             use_sigmoid=True
         )  # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
-        self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
+        if config.rpn_loss_bbox.get("type") == "L1Loss":
+            loss_weight = config.rpn_loss_bbox.get("loss_weight", 1.0)
+            self.loss_bbox = L1Loss(loss_weight=loss_weight)
+        else:
+            raise ValueError(f"Unsupported rpn_loss_bbox type: {config.rpn_loss_bbox.get('type')}")
 
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
