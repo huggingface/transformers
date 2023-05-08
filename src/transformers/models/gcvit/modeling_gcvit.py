@@ -310,6 +310,7 @@ class GCViTFeatExtract(nn.Module):
             x = self.pool(x)
         return x
 
+
 class GCViTEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
@@ -375,6 +376,7 @@ class GCViTReducePatchSize(nn.Module):
         """
 
         super().__init__()
+        self.norm1 = norm_layer(dim)
         self.conv = nn.Sequential(
             nn.Conv2d(dim, dim, 3, 1, 1,
                       groups=dim, bias=False),
@@ -389,15 +391,16 @@ class GCViTReducePatchSize(nn.Module):
 
         self.reduction = nn.Conv2d(dim, dim_out, 3, 2, 1, bias=False)
         self.norm2 = norm_layer(dim_out)
-        self.norm1 = norm_layer(dim)
+        
 
     def forward(self, x):
         x = x.contiguous()
+        x = x.permute(0, 2, 3, 1) #(B, H, W, C)
         x = self.norm1(x)
-        x = x.permute(0, 3, 1, 2) #(B, H, W, C)
+        x = x.permute(0, 3, 1, 2) #(B, C, H, W)
         x = x + self.conv(x)
         x = self.reduction(x)
-        x = x.permute(0, 2, 3, 1) #(B, C, H, W)
+        x = x.permute(0, 2, 3, 1)
         x = self.norm2(x)
         return x
 
@@ -417,7 +420,7 @@ class GCViTPatchEmbeddings(nn.Module):
         self.image_size = image_size
         self.num_channels = num_channels
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=3, stride=2)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=3, stride=2, padding=1)
         self.conv_down = GCViTReducePatchSize(dim = hidden_size, keep_dim=True)
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
@@ -428,13 +431,13 @@ class GCViTPatchEmbeddings(nn.Module):
             )
 
         embeddings = self.projection(pixel_values)
-        # embeddings = embeddings.transpose(1, 2)
         embeddings = self.conv_down(embeddings)
-        _, _, height, width = embeddings.shape
+        embeddings = embeddings.permute(0,3,1,2)
+        embeddings = embeddings.squeeze()
+        _, height, width = embeddings.shape
         output_dimensions = (height, width)
-        # Check if we really need to flatten it
-        embeddings = embeddings.flatten(2)
         return embeddings, output_dimensions
+
 
 # Almost copied from transformers.models.swin.modeling_swin.Swinv2SelfAttention
 class GCViTSelfAttention(nn.Module):
@@ -537,6 +540,7 @@ class GCViTSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
 
 class GCViTGlobalSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
@@ -962,6 +966,7 @@ class GCViTGlobalQueryGen(nn.Module):
         B = x.shape[0]
         x = x.reshape(B, 1, self.N, self.num_heads, self.dim_head).permute(0, 1, 3, 2, 4)
         return x
+
 
 class GCViTEncoder(nn.Module):
     def __init__(self, config):
@@ -1448,3 +1453,7 @@ class GCViTForImageClassification(GCViTPreTrainedModel):
             attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
+inp = torch.rand(size=(1, 224, 224, 3))
+layer = GCViTReducePatchSize(keep_dim=True)
+out = layer(inp)
+print('input: ',inp.shape, '\noutput: ',out.shape)
