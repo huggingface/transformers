@@ -1307,15 +1307,17 @@ class GenerationMixin:
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
-            if (
-                generation_config.pad_token_id is not None and (
+            if generation_config.pad_token_id is not None and (
                 # if `input_ids` was given, check if the last id in any sequence is `pad_token_id`
                 torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
                 # If shape of `inputs_tensor` is (Batch, Sequence) then `input_ids` was given, else `inputs_embeds` was given
-                if len(inputs_tensor.shape) == 2 else
+                if len(inputs_tensor.shape) == 2
+                else
                 # if `inputs_embeds` was given, check if the last embed in any sequence is *all* zeros
-                torch.any(torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id, dim=1) == inputs_tensor.shape[2])
-            )):
+                torch.any(
+                    torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id, dim=1) == inputs_tensor.shape[2]
+                )
+            ):
                 logger.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
