@@ -1,0 +1,307 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Transformers Agent
+
+Transformers version v4.30.0 introduces a new API, building on the concept of *tools* and *agents*.
+
+In short, it provides a natural language API on top of transformers: we define a set of curated tools, and design an 
+agent to interpret natural language and to use these tools. It is extensible by design; we curated some relevant tools, 
+but we'll show you how the system can be extended easily to use any tool.
+
+Let's start with a few examples of what can be achieved with this new API. It is particularly powerful when it comes 
+to multimodal tasks, so let's take it for a spin to generate images and read text out loud.
+
+```py
+agent.run("Caption the following image", image=image)
+```
+
+| **Input**                                                                                                                   | **Output**                        |
+|-----------------------------------------------------------------------------------------------------------------------------|-----------------------------------|
+| <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beaver.png" width=200> | A beaver is swimming in the water |
+
+---
+
+```py
+agent.run("Read the following text out loud", text=text)
+```
+| **Input**                                                                                                               | **Output**                                   |
+|-------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| A beaver is swimming in the water | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
+
+---
+
+```py
+agent.run(
+    "In the following `document`, where will the TRRF Scientific Advisory Council Meeting take place?",
+    document=document,
+)
+```
+| **Input**                                                                                                                   | **Output**     |
+|-----------------------------------------------------------------------------------------------------------------------------|----------------|
+| <img src="https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/0/image/image.jpg" width=200> | ballroom foyer |
+
+## Quickstart
+
+Before being able to use `agent.run`, you will need to instantiate an agent, which is a large language model (LLM). 
+We recommend using the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) checkpoint as it works very well 
+for the task at hand and is open-source, but please find other examples below.
+
+Start by logging-in to have access to the Inference API:
+
+```py
+from huggingface_hub import login
+
+login("<TOKEN>")
+```
+
+Then, instantiate the agent
+
+```py
+from transformers.tools import HfAgent
+
+starcoder = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+```
+
+You're now good to go! Let's dive into the two APIs that you now have at your disposal.
+
+### Single execution (run)
+
+The single execution method is when using the `.run` method of the agent:
+
+```py
+agent.run("Draw me a picture of rivers and lakes")
+```
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200>
+
+This is great to perform single instructions. Every `.run` operation is independent, so running it several times in a
+row is unlikely to be problematic.
+
+### Chat-based execution (chat)
+
+The agent also has a chat-based approach, using the `.chat` method:
+
+```py
+agent.chat("Draw me a picture of rivers and lakes")
+agent.chat("Transform the picture so that there is a rock in there")
+```
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200> <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes_and_beaver.png" width=200>
+
+<br/>
+
+This is an interesting approach when you want to keep the state across instructions. It's better for experimentation, 
+but will tend to be much better at single instructions rather than complex instructions (which the `.run` method is 
+better at handling).
+
+### ⚠️ Remote execution
+
+For demonstration purposes and so that this can be used with all setups, we have created remote executors for several 
+of the default tools the agent has access to. These are created using 
+[inference endpoints](https://huggingface.co/inference-endpoints). To see how to setup remote executors tools yourself,
+we recommend reading the custom tool guide [TODO LINK].
+
+In order to run with remote tools, specifying `remote=True` to either `.run` or `.chat` is sufficient.
+
+For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
+
+```python
+agent.run("Draw me a picture of rivers and lakes", remote=True)
+```
+
+The same can be said for `.chat`:
+```py
+agent.chat("Draw me a picture of rivers and lakes", remote=True)
+```
+
+### What's happening here? What are tools, and what are agents?
+
+The "agent" here is a large language model, and we're prompting it so that it has access to a specific set of tools.
+
+Tools are very simple: they're a single function, with a name, and a description. We then use these tools description 
+to prompt the agent. Through the prompt, we show the agent how it would leverage tools in order to perform what was 
+requests in the query.
+
+### A curated set of tools
+
+We identify a set of tools that can empower such agents. Here is an updated list of the tools we have integrated 
+in `transformers`:
+
+- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document (Donut)
+- **Text question answering**: given a long text and a question, answer the question in the text (Flan-T5)
+- **Unconditional image captioning**: Caption the image! (BLIP)
+- **Image question answering**: given an image, answer a question on this image (VILT)
+- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt (CLIPSeg)
+- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text (Whisper)
+- **Text to speech**: convert text to speech (SpeechT5)
+- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most (BART)
+- **Text summarization**: summarize a long text in one or a few sentences (BART)
+- **Translation**: translate the text into a given language (NLLB)
+
+These tools have an integration in transformers, and can be used manually as well, for example:
+
+```py
+from transformers import load_tool
+
+tool = load_tool('text-to-speech')
+audio = tool("This is a text to speech tool")
+
+play(audio)
+```
+
+### Custom tools
+
+While we identify a curated set of tools, we strongly believe that the main value provided by this implementation is 
+the ability to quickly create and share custom tools.
+
+By pushing the code of a tool to a huggingface Space or a model repository, you're then able to leverage the tool 
+directly with the agent. For demonstration purposes (and because they're super powerful), we've pushed a few 
+transformers-agnostic tools in the `huggingface-tools` organization:
+
+- **Text downloader**: to download a text from a web URL
+- **Text to image**: generate an image according to a prompt, leveraging stable diffusion
+- **Image transformation**: TODO
+- **Image inpainting**: TODO
+
+The text-to-image tool we have been using since the beginning is actually a remote tool that lives in 
+[*huggingface-tools/text-to-image*](https://huggingface.co/spaces/huggingface-tools/text-to-image)! We will
+continue releasing such tools on this and other organization, to further supercharge this implementation.
+
+We explain how to push your own tools to the Hub in order to leverage them in the following guide Using Custom Tools.
+
+### Leveraging different agents
+
+We showcase here how to use the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) model as an LLM, but 
+it isn't the only model available.
+We also support the OpenAssistant model and OpenAI's davinci models (3.5 and 4).
+
+We're planning on supporting local language models in an ulterior version.
+
+The tools defined in this implementation are agnostic to the agent used; we are showcasing the agents that work with 
+our prompts below, but the tools can also be used with Langchain, Minichain, or any other Agent-based library.
+
+#### Example code for the OpenAssistant model
+
+```py
+from transformers import HfAgent
+
+agent = HfAgent(url_endpoint="https://open-assistant.ngrok.io", token="<HF_TOKEN>")
+```
+
+#### Example code for OpenAI models
+
+```py
+from transformers import OpenAiAgent
+
+agent = OpenAiAgent(model="text-davinci-003", api_key="<API_KEY>")
+```
+
+### Code generation
+
+So far we have shown how to use the agents to perform actions for you. However, the agent is really only generating code
+that we then execute using a very restricted Python interpreter. In case you would like to use the code generated in 
+a different setting, the agent can be prompted to return the code, along with tool definition and accurate imports.
+
+For example, the following instruction
+```python
+agent.run("Draw me a picture of rivers and lakes", return_code=True)
+```
+
+returns the following code
+
+```python
+from transformers import load_tool
+
+image_generator = load_tool("huggingface-tools/text-to-image")
+
+image = image_generator(prompt="rivers and lakes")
+```
+
+### Custom prompts
+
+The performance of the agent is directly linked to the prompt itself. We structure the prompt so that it works well 
+with what we intend for the agent to do; but for maximum customization we also offer the ability to specify a different prompt when instantiating the agent.
+
+The agent has two prompts: one for the `.run` method, and one for the `.chat` method. Both are customizable.
+
+Here is how the two prompts are structured, and how to update them:
+
+#### Single-execution prompt
+
+The single-execution prompt is defined as such:
+- Introduction: how the agent should behave, explanation of the concept of tools. Mentions to the agent that it should 
+  first explain what it tries to do, before outputting the Python code needed to perform.
+- Description of all the tools. This is defined by a `<<all_tools>>` token that will be manually replaced at runtime 
+  with the tools defined/chosen by the user.
+- Example of tasks and their solution
+- Current example, and request for solution.
+
+In order to specify a custom single-execution prompt, one would so the following:
+
+```py
+template = """ [...] """
+
+agent = HfAgent(your_endpoint, run_prompt_template=template)
+```
+
+<Tip>
+
+Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
+of the tools it has available to it.
+
+</Tip>
+
+#### Chat-execution prompt
+
+The chat-execution prompt is defined as such:
+- Introduction: how the agent should behave, specifically as a chat-based assistant. Explanation of the concept of 
+  tools. Mentions to the agent that it should first explain what it tries to do, before outputting the Python code 
+  needed to perform.
+- Description of all the tools. This is defined by a `<<all_tools>>` token that will be manually replaced at 
+  runtime with the tools defined/chosen by the user.
+- Example of chat-based tasks and their solution
+- Current example, and request for solution.
+
+In order to specify a custom single-execution prompt, one would so the following:
+
+```
+template = """ [...] """
+
+agent = HfAgent(
+	url_endpoint=your_endpoint,
+	token=your_hf_token,
+	chat_prompt_template=template
+)
+```
+
+<Tip>
+
+Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be 
+aware of the tools it has available to it.
+
+</Tip>
+
+### Using gradio_tools with the agent
+
+[gradio_tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging 
+Face Spaces as tools.
+
+TODO complete this
+
+### Using Langchain tools with the agent
+
+We love [Langchain](https://python.langchain.com/en/latest/index.html), and think it does a great job at implementing 
+many tools that could empower this implementation. We show examples of how to leverage popular Langchain tools with 
+this API.
+
+TODO complete this
