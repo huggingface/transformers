@@ -1417,7 +1417,7 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         if encoder_outputs is None:
-            encoer_outputs = self.encoder(
+            encoder_outputs = self.encoder(
                 input_features,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
