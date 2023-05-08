@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-## Agents and Tools
+## Transformers Agent
 
 Transformers version v4.30.0 introduces a new API, building on the concept of *tools* and *agents*.
 
@@ -32,7 +32,7 @@ agent.run("Caption the following image", image=image)
 ---
 
 ```py
-agent.run("Read the following text out loud")
+agent.run("Read the following text out loud", text=text)
 ```
 | **Input**                                                                                                               | **Output**                                   |
 |-------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
@@ -204,7 +204,7 @@ agent = HfAgent(url_endpoint="https://open-assistant.ngrok.io", token="<HF_TOKEN
 ```py
 from transformers import OpenAiAgent
 
-agent = OpenAiAgent(model="gpt-3.5-turbo", api_key="<API_KEY>")
+agent = OpenAiAgent(model="text-davinci-003", api_key="<API_KEY>")
 ```
 
 ### Code generation
@@ -223,7 +223,7 @@ returns the following code
 ```python
 from transformers import load_tool
 
-image_generator = load_tool("text-to-image", repo_id="huggingface-tools/text-to-image")
+image_generator = load_tool("huggingface-tools/text-to-image")
 
 image = image_generator(prompt="rivers and lakes")
 ```
