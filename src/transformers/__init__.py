@@ -609,7 +609,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
-    "tools": [],
+    "tools": ["Agent", "HfAgent", "OpenAiAgent", "PipelineTool", "RemoteTool", "Tool", "load_tool"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -4330,6 +4330,9 @@ if TYPE_CHECKING:
         SpecialTokensMixin,
         TokenSpan,
     )
+
+    # Tools
+    from .tools import Agent, HfAgent, OpenAiAgent, PipelineTool, RemoteTool, Tool, load_tool
 
     # Trainer
     from .trainer_callback import (

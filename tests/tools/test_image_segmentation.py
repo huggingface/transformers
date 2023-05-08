@@ -18,8 +18,12 @@ from pathlib import Path
 
 from PIL import Image
 
+from transformers import is_torch_available
 from transformers.testing_utils import get_tests_dir
-from transformers.tools import ImageSegmentationTool
+
+
+if is_torch_available():
+    from transformers.tools import ImageSegmentationTool
 
 from .test_tools_common import ToolTesterMixin
 

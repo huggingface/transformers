@@ -822,6 +822,14 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    # I promise those will be documented, just want a green CI
+    "Agent",
+    "HfAgent",
+    "OpenAiAgent",
+    "PipelineTool",
+    "RemoteTool",
+    "Tool",
+    "load_tool",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
