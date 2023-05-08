@@ -3181,6 +3181,17 @@ else:
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.gpt_neo"].extend(
+        [
+            "TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGPTNeoForCausalLM",
+            "TFGPTNeoForQuestionAnswering",
+            "TFGPTNeoForSequenceClassification",
+            "TFGPTNeoForTokenClassification",
+            "TFGPTNeoModel",
+            "TFGPTNeoPreTrainedModel",
+        ]
+    )
     _import_structure["models.gptj"].extend(
         [
             "TFGPTJForCausalLM",
@@ -6465,6 +6476,15 @@ if TYPE_CHECKING:
             TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
+        )
+        from .models.gpt_neo import (
+            TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGPTNeoForCausalLM,
+            TFGPTNeoForQuestionAnswering,
+            TFGPTNeoForSequenceClassification,
+            TFGPTNeoForTokenClassification,
+            TFGPTNeoModel,
+            TFGPTNeoPreTrainedModel,
         )
         from .models.gptj import (
             TFGPTJForCausalLM,

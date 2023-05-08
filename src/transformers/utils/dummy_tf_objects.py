@@ -1366,6 +1366,51 @@ class TFGPT2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFGPTNeoForCausalLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGPTNeoForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGPTNeoForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGPTNeoForTokenClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGPTNeoModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGPTNeoPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFGPTJForCausalLM(metaclass=DummyObject):
     _backends = ["tf"]
 
