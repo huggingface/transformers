@@ -15,8 +15,6 @@
 
 import unittest
 
-import torch
-
 from transformers.tools import TextToSpeechTool
 
 from .test_tools_common import ToolTesterMixin
