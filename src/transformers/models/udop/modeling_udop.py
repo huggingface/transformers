@@ -29,7 +29,6 @@ from torch.nn import CrossEntropyLoss
 
 from transformers import UdopConfig
 from transformers.modeling_outputs import (
-    BaseModelOutput,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -37,7 +36,12 @@ from transformers.modeling_outputs import (
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -177,7 +181,7 @@ UDOP_ENCODER_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class BaseModelOutputWithAttentionMask(BaseModelOutput):
+class BaseModelOutputWithAttentionMask(ModelOutput):
     """
     Class for the model's outputs that may also contain a past key/values (to speed up sequential decoding). Includes
     an additional attention mask.
@@ -1499,6 +1503,7 @@ class UdopStack(UdopPreTrainedModel):
                 ]
                 if v is not None
             )
+
         return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
             attention_mask=attention_mask,
@@ -1963,7 +1968,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(UDOP_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BaseModelOutputWithAttentionMask, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Tensor = None,
@@ -1976,7 +1981,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
         Returns:
 
@@ -1993,6 +1998,10 @@ class UdopEncoderModel(UdopPreTrainedModel):
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(
