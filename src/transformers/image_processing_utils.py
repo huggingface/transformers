@@ -25,6 +25,7 @@ from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
+    add_model_info_to_auto_map,
     cached_file,
     copy_func,
     download_url,
@@ -309,6 +310,11 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
+        if "auto_map" in image_processor_dict and not is_local:
+            image_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                image_processor_dict["auto_map"], pretrained_model_name_or_path
+            )
+
         return image_processor_dict, kwargs
 
     @classmethod
@@ -461,7 +467,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
 
-VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"})
+VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
 
 
 def is_valid_size_dict(size_dict):
@@ -495,6 +501,10 @@ def convert_to_size_dict(
         return {"height": size[0], "width": size[1]}
     elif isinstance(size, (tuple, list)) and not height_width_order:
         return {"height": size[1], "width": size[0]}
+    elif size is None and max_size is not None:
+        if default_to_square:
+            raise ValueError("Cannot specify both default_to_square=True and max_size")
+        return {"longest_edge": max_size}
 
     raise ValueError(f"Could not convert size input to size dict: {size}")
 

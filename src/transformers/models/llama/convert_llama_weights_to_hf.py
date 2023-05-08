@@ -104,7 +104,7 @@ def write_model(model_path, input_base_path, model_size):
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     if model_size == "7B":
-        # Not shared
+        # Not sharded
         # (The sharded implementation would also work, but this is simpler.)
         loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
     else:
@@ -244,7 +244,7 @@ def write_model(model_path, input_base_path, model_size):
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
     # Initialize the tokenizer based on the `spm` model
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    print("Saving a {tokenizer_class} to {tokenizer_path}")
+    print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)
 

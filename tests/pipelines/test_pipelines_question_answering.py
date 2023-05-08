@@ -34,10 +34,21 @@ from transformers.testing_utils import (
 from .test_pipelines_common import ANY
 
 
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
+
 @is_pipeline_test
 class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, LxmertConfig):
