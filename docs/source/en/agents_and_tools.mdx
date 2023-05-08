@@ -241,8 +241,10 @@ agent = HfAgent(your_endpoint, run_prompt_template=template)
 ```
 
 <Tip>
+
 Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
 of the tools it has available to it.
+
 </Tip>
 
 #### Chat-execution prompt
@@ -269,8 +271,10 @@ agent = HfAgent(
 ```
 
 <Tip>
+
 Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be 
 aware of the tools it has available to it.
+
 </Tip>
 
 ### Using gradio_tools with the agent
