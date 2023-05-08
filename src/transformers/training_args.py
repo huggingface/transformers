@@ -143,13 +143,13 @@ class OptimizerNames(ExplicitEnum):
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
-    ADAMW_8BIT = "adamw_8bit" # just an alias for adamw_bnb_8bit
-    LION_8BIT = 'lion_8bit'
-    LION = 'lion_32bit'
+    ADAMW_8BIT = "adamw_8bit"  # just an alias for adamw_bnb_8bit
+    LION_8BIT = "lion_8bit"
+    LION = "lion_32bit"
     PAGED_ADAMW = "paged_adamw_32bit"
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
-    PAGED_LION = 'paged_lion_32bit'
-    PAGED_LION_8BIT = 'paged_lion_8bit'
+    PAGED_LION = "paged_lion_32bit"
+    PAGED_LION_8BIT = "paged_lion_8bit"
 
 
 @dataclass
