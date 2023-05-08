@@ -31,6 +31,102 @@ use:
 
 ### Adding new tools
 
+In this section we'll add a new tool so that the agent may benefit from it.
+
+#### Creating a new tool
+
+We'll first start by creating a tool. We'll add the not-so-useful yet fun task of fetching the model on the Hugging Face
+Hub with the most downloads for a given task.
+
+We can do that with the following code:
+
+```python
+from huggingface_hub import list_models
+
+task = 'text-classification'
+
+model = next(iter(list_models(filter=task, sort='downloads', direction=-1)))
+print(f"{model.id} with {model.downloads} downloads over the past 30 days.")
+```
+
+For the task `text-classification`, this returns `'facebook/bart-large-mnli with 3427611 downloads over the past 30 
+days.'`, for `translation` it returns `'t5-base with 8474765 downloads over the past 30 days.'`.
+
+How do we convert this to a tool that the agent can leverage? All tools depend of the superclass `Tool` that holds the
+main attributes necessary. We'll create a class that inherits from it:
+
+```python
+from transformers import Tool
+
+class HFModelDownloadsTool(Tool):
+    pass
+```
+
+This class has a few needs:
+- An attribute `name`, which corresponds to the name of the tool itself. To be in tune with other tools which have a
+  performative name, we'll name it `text-download-counter`.
+- An attribute `description`, which will be used to populate the prompt of the agent.
+- `inputs` and `outputs` attributes. Defining this will help the python interpreter make educated choices about types,
+  and will allow for a gradio-demo to be spawned when we push our tool to the Hub. They're both a list of expected
+  values, which can be `text`, `image`, or `audio`.
+- A `__call__` method which contains the inference code. This is the code we've played with above!
+
+Here's what our class looks like now:
+
+```python
+from transformers import Tool
+from huggingface_hub import list_models
+
+class HFModelDownloadsTool(Tool):
+  name = 'model-download-counter'
+  description = (
+    "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
+    "It takes the name of the category (such as text-classification, depth-estimation, etc), and "
+    "returns the name of the checkpoint alongside its 30-day download numbers."
+  )
+
+  inputs = ['text']
+  outputs = ['text']
+
+  def __call__(self, task: str):
+    model = next(iter(list_models(filter=task, sort='downloads', direction=-1)))
+    return f"{model.id} with {model.downloads} downloads over the past 30 days."
+```
+
+We now have our tool handy. Save it in a file and import it from your main script. I'm naming this file
+`model_downloads.py`, so the resulting import code looks like this:
+
+```python
+from model_downloads import HFModelDownloadsTool
+
+tool = HFModelDownloadsTool()
+```
+In order to let others benefit from it and for simpler initialization, we recommend pushing it to the Hub under your 
+namespace. To do so, just call `push_to_hub` on the `tool` variable:
+
+```python
+tool.push_to_hub('lysandre/hf-model-downloads')
+```
+
+You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
+
+#### Having the agent use the tool
+
+We now have our tool that lives on the Hub which can be instantiated as such:
+
+```python
+from transformers import load_tool
+
+tool = load_tool('lysandre/hf-model-downloads')
+```
+
+In order to use it in the agent, simply pass it in the `additional_tools` parameter of the agent initialization method:
+
+```python
+from transformers.tools import HfAgent
+
+agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder", additional_tools=[tool])
+```
 
 ### Replacing existing tools
 
@@ -41,7 +137,6 @@ text-transformation tool:
 from transformers.tools import HfAgent
 
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-
 
 image = agent.chat("Create a picture of a river passing through a ravine")
 ```
