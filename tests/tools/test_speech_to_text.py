@@ -15,15 +15,15 @@
 
 import unittest
 
-import torch
-
 from transformers import is_torch_available
+
+from .test_tools_common import ToolTesterMixin
 
 
 if is_torch_available():
-    from transformers.tools import SpeechToTextTool
+    import torch
 
-from .test_tools_common import ToolTesterMixin
+    from transformers.tools import SpeechToTextTool
 
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
