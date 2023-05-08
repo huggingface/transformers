@@ -125,9 +125,8 @@ def get_tool_creation_code(code, toolbox, remote=False):
         if name not in code or isinstance(tool, Tool):
             continue
 
-        line = f'{name} = load_tool("{tool.task}"'
-        if tool.repo_id is not None:
-            line += f', repo_id="{tool.repo_id}"'
+        task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+        line = f'{name} = load_tool("{task_or_repo_id}"'
         if remote:
             line += ", remote=True)"
         line += ")"
@@ -264,7 +263,7 @@ class OpenAiAgent(Agent):
 
     def __init__(
         self,
-        model="gpt-3.5-turbo",
+        model="text-davinci-003",
         api_key=None,
         chat_prompt_template=None,
         run_prompt_template=None,
