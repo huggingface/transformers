@@ -22,7 +22,7 @@ class TextClassificationTool(PipelineTool):
         "should be the text to classify, and `labels`, which should be the list of labels to use for classification. "
         "It returns the most likely label in the list of provided `labels` for the input text."
     )
-    name = "text-classifier"
+    name = "text_classifier"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 

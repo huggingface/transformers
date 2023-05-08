@@ -8,7 +8,7 @@ import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..utils import logging
-from .base import TASK_MAPPING, Tool, load_tool
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool
 from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
 from .python_interpreter import evaluate
 
@@ -60,12 +60,12 @@ def get_remote_tools(organization="huggingface-tools"):
     tools = {}
     for space_info in spaces:
         repo_id = space_info.id
-        resolved_config_file = hf_hub_download(repo_id, "tool_config.json", repo_type="space")
+        resolved_config_file = hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space")
         with open(resolved_config_file, encoding="utf-8") as reader:
             config = json.load(reader)
 
-        for task, task_info in config.items():
-            tools[task_info["name"]] = PreTool(task=task, description=task_info["description"], repo_id=repo_id)
+        task = repo_id.split("/")[-1]
+        tools[config["name"]] = PreTool(task=task, description=config["description"], repo_id=repo_id)
 
     return tools
 
@@ -113,7 +113,8 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
         if isinstance(tool, Tool):
             resolved_tools[name] = tool
         else:
-            resolved_tools[name] = load_tool(tool.task, repo_id=tool.repo_id, remote=remote)
+            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+            resolved_tools[name] = load_tool(task_or_repo_id, remote=remote)
 
     return resolved_tools
 
