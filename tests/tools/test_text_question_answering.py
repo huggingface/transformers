@@ -19,7 +19,7 @@ from transformers import is_torch_available
 
 
 if is_torch_available():
-    from transformers.tools import GenerativeQuestionAnsweringTool
+    from transformers.tools import TextQuestionAnsweringTool
 
 from .test_tools_common import ToolTesterMixin
 
@@ -33,9 +33,9 @@ On April 28, 2021, the company launched the BigScience Research Workshop in coll
 """
 
 
-class GenerativeQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
+class TextQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = GenerativeQuestionAnsweringTool()
+        self.tool = TextQuestionAnsweringTool()
         self.tool.setup()
 
     def test_exact_match_arg(self):

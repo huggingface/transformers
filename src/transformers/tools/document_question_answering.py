@@ -11,16 +11,13 @@ if is_vision_available():
     from PIL import Image
 
 
-DOCUMENT_QUESTION_ANSWERING_DESCRIPTION = (
-    "This is a tool that answers a question about an document (pdf). It takes an input named `document` which should be the "
-    "document containing the information, as well as a `question` that is the question about the document. It returns a text "
-    "that contains the answer to the question."
-)
-
-
 class DocumentQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "naver-clova-ix/donut-base-finetuned-docvqa"
-    description = DOCUMENT_QUESTION_ANSWERING_DESCRIPTION
+    description = (
+        "This is a tool that answers a question about an document (pdf). It takes an input named `document` which "
+        "should be the document containing the information, as well as a `question` that is the question about the "
+        "document. It returns a text that contains the answer to the question."
+    )
     name = "document_qa"
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel

@@ -1,8 +1,5 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import OldRemoteTool, PipelineTool
-
-
-TEXT_SUMMARIZATION_CESCRIPTION = "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, and returns a summary of the text."
+from .base import PipelineTool
 
 
 class TextSummarizationTool(PipelineTool):
@@ -18,7 +15,10 @@ class TextSummarizationTool(PipelineTool):
     """
 
     default_checkpoint = "philschmid/bart-large-cnn-samsum"
-    description = TEXT_SUMMARIZATION_CESCRIPTION
+    description = (
+        "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, "
+        "and returns a summary of the text."
+    )
     name = "sumamrizer"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
@@ -35,25 +35,3 @@ class TextSummarizationTool(PipelineTool):
     def decode(self, outputs):
         print(outputs)
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-
-class RemoteTextSummarizationTool(OldRemoteTool):
-    """
-    Example:
-
-    ```py
-    from transformers.tools import RemoteTextClassificationTool
-
-    classifier = RemoteTextClassificationTool()
-    classifier("This is a super nice API!", labels=["positive", "negative"])
-    ```
-    """
-
-    default_checkpoint = "philschmid/flan-t5-base-samsum"
-    description = TEXT_SUMMARIZATION_CESCRIPTION
-
-    def prepare_inputs(self, text):
-        return {"inputs": text}
-
-    def extract_outputs(self, outputs):
-        return outputs[0]["summary_text"]

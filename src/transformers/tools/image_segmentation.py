@@ -9,15 +9,12 @@ if is_vision_available():
     from PIL import Image
 
 
-IMAGE_SEGMENTATION_DESCRIPTION = (
-    "This is a tool that creates a segmentation mask using an image and a prompt. It takes two arguments named "
-    "`image` which should be the original image, and `prompt` which should be a text describing what should be "
-    "identified in the segmentation mask. The tool returns the mask as a black-and-white image."
-)
-
-
 class ImageSegmentationTool(PipelineTool):
-    description = IMAGE_SEGMENTATION_DESCRIPTION
+    description = (
+        "This is a tool that creates a segmentation mask using an image and a prompt. It takes two arguments named "
+        "`image` which should be the original image, and `prompt` which should be a text describing what should be "
+        "identified in the segmentation mask. The tool returns the mask as a black-and-white image."
+    )
     default_checkpoint = "CIDAS/clipseg-rd64-refined"
     name = "image_segmenter"
     pre_processor_class = AutoProcessor
