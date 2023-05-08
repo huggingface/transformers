@@ -83,36 +83,28 @@ class EnumTest(enum.Enum):
     B = 2
 
 
+@dataclasses.dataclass
+class ClassTest:
+    hf_arg_str: str = hf_argparser.HfArg(default="default_str", aliases=["--str", "-s"])
+    hf_arg_int: int = hf_argparser.HfArg(default=2, aliases=["--int", "-i"])
+    hf_arg_bool: bool = hf_argparser.HfArg(default=False, aliases=["-b"])
+    hf_arg_opt_bool: bool | None = hf_argparser.HfArg(default=None, aliases=["-ob"])
+    hf_arg_enum: EnumTest = hf_argparser.HfArg(default=EnumTest.UNSET, aliases=["-e"])
+
+
 class TestHfArgumentParser(TestCasePlus):
-    argparser: hf_argparser.HfArgumentParser
     tmp_dir: str
-    args_file: str
+
+    def _write_test_file(self, filename: str, data: str) -> str:
+        args_file = os.path.join(self.tmp_dir, filename)
+        with open(args_file, mode="w", encoding="utf-8") as f:
+            f.write(data)
+        return args_file
 
     def setUp(self):
         super().setUp()
-
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str", aliases=["--str", "-s"])
-            hf_arg_int: int = hf_argparser.HfArg(default=2, aliases=["--int", "-i"])
-            hf_arg_bool: bool = hf_argparser.HfArg(default=False, aliases=["-b"])
-            hf_arg_opt_bool: bool | None = hf_argparser.HfArg(default=None, aliases=["-ob"])
-            hf_arg_enum: EnumTest = hf_argparser.HfArg(default=EnumTest.UNSET, aliases=["-e"])
-
-        self.argparser = hf_argparser.HfArgumentParser(TestClass)
-
         # Add a test args file.
         self.tmp_dir = self.get_auto_remove_tmp_dir(after=True)
-        self.args_file = os.path.join(self.tmp_dir, "argsfile.args")
-        with open(self.args_file, mode="w", encoding="utf-8") as f:
-            f.write(
-                """
-                --str=file_str
-                --int=5173
-                """
-            )
-
-        # Mock out sys.argv so that it can be tested.
 
     TestTuple = namedtuple(
         "TestTuple",
@@ -167,14 +159,24 @@ class TestHfArgumentParser(TestCasePlus):
         args_file_flag: str,
     ):
         del name  # unused
-        args_file = self.args_file if args_filename else ""
-        if args_file_flag:
-            args.append(self.args_file)
 
-        instances = self.argparser.parse_args_into_dataclasses(
+        args_file = self._write_test_file(
+            "argsfile.args",
+            """
+            --str=file_str
+            --int=5173
+            """,
+        )
+
+        args_filename = args_file if args_filename else ""
+        if args_file_flag:
+            args.append(args_file)
+
+        parser = hf_argparser.HfArgumentParser(ClassTest)
+        instances = parser.parse_args_into_dataclasses(
             args=args,
             return_remaining_strings=return_remaining_strings,
-            args_filename=args_file,
+            args_filename=args_filename,
             args_file_flag=args_file_flag,
         )
 
@@ -187,33 +189,46 @@ class TestHfArgumentParser(TestCasePlus):
             self.assertEqual(instances[1], expected_remaining_strings)
 
     def test_parse_args_into_dataclasses_remaining_strings_raises_error(self):
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         with self.assertRaisesRegex(ValueError, "arguments are not used"):
-            self.argparser.parse_args_into_dataclasses(args=["extra"])
+            parser.parse_args_into_dataclasses(args=["extra"])
 
     @mock.patch.object(sys, "argv", [])
     def test_parse_args_into_dataclasses_look_for_args_file(self):
-        prefix = os.path.join(os.path.dirname(self.args_file), "argsfile")
+        args_file = self._write_test_file(
+            "argsfile.args",
+            """
+            --str=file_str
+            --int=5173
+            """,
+        )
+
+        prefix = os.path.join(os.path.dirname(args_file), "argsfile")
         sys.argv = [prefix]
 
-        instances = self.argparser.parse_args_into_dataclasses()
+        parser = hf_argparser.HfArgumentParser(ClassTest)
+        instances = parser.parse_args_into_dataclasses()
 
         self.assertEqual(instances[0].hf_arg_str, "file_str")
         self.assertEqual(instances[0].hf_arg_int, 5173)
 
     def test_parse_args_into_dataclasses_bool_accepts_string(self):
-        instances = self.argparser.parse_args_into_dataclasses(args=["-b=y"])
+        parser = hf_argparser.HfArgumentParser(ClassTest)
+        instances = parser.parse_args_into_dataclasses(args=["-b=y"])
 
         self.assertEqual(instances[0].hf_arg_bool, True)
 
     def test_parse_args_into_dataclasses_opt_bool_accepts_string(self):
-        instances = self.argparser.parse_args_into_dataclasses(args=["-ob=y"])
+        parser = hf_argparser.HfArgumentParser(ClassTest)
+        instances = parser.parse_args_into_dataclasses(args=["-ob=y"])
 
         self.assertEqual(instances[0].hf_arg_opt_bool, True)
 
     def test_parse_args_into_dataclasses_enum(self):
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         # I don't know if this was the intent, but -e=B fails, and -e=2 does not
         # result in hf_arg_enum=EnumTest.B.
-        instances = self.argparser.parse_args_into_dataclasses(args=["-e=2"])
+        instances = parser.parse_args_into_dataclasses(args=["-e=2"])
 
         self.assertEqual(instances[0].hf_arg_enum, EnumTest.B.value)
 
@@ -278,13 +293,7 @@ class TestHfArgumentParser(TestCasePlus):
         self.assertEqual(instances[0].hf_arg, 1.2)
 
     def test_parse_dict(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
-
-        parser = hf_argparser.HfArgumentParser(TestClass)
-
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         instances = parser.parse_dict(
             args={"hf_arg_str": "arg_str", "hf_arg_int": 7, "extra": True},
             allow_extra_keys=True,
@@ -294,91 +303,61 @@ class TestHfArgumentParser(TestCasePlus):
         self.assertEqual(instances[0].hf_arg_int, 7)
 
     def test_parse_dict_rejects_extra_keys(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
-
-        parser = hf_argparser.HfArgumentParser(TestClass)
+        parser = hf_argparser.HfArgumentParser(ClassTest)
 
         with self.assertRaisesRegex(ValueError, "keys are not used"):
             parser.parse_dict(args={"extra": True})
 
     def test_parse_json_file(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
+        args_file = self._write_test_file(
+            "argsfile.json",
+            """
+            {
+                "hf_arg_str": "json_str_ĝ",
+                "hf_arg_int":7509,
+                "extra":true
+            }
+            """,
+        )
 
-        args_file = os.path.join(self.tmp_dir, "argsfile.json")
-        with open(args_file, mode="w", encoding="utf-8") as f:
-            f.write(
-                """
-                {
-                    "hf_arg_str": "json_str_ĝ",
-                    "hf_arg_int":7509,
-                    "extra":true
-                }
-                """)
-
-        parser = hf_argparser.HfArgumentParser(TestClass)
-
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         instances = parser.parse_json_file(args_file, allow_extra_keys=True)
 
         self.assertEqual(instances[0].hf_arg_str, "json_str_ĝ")
         self.assertEqual(instances[0].hf_arg_int, 7509)
 
     def test_parse_json_file_rejects_extra_keys(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
+        args_file = self._write_test_file("argsfile.json", """{"extra":true}""")
 
-        args_file = os.path.join(self.tmp_dir, "argsfile.json")
-        with open(args_file, mode="w", encoding="utf-8") as f:
-            f.write("""{"extra":true}""")
-
-        parser = hf_argparser.HfArgumentParser(TestClass)
-
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         with self.assertRaisesRegex(ValueError, "keys are not used"):
             parser.parse_json_file(args_file)
 
     def test_parse_yaml_file(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
-
-        args_file = os.path.join(self.tmp_dir, "argsfile.yaml")
-        with open(args_file, mode="w", encoding="utf-8") as f:
-            f.write(
-                """
+        args_file = self._write_test_file(
+            "argsfile.yaml",
+            """
                 hf_arg_str: json_str
                 hf_arg_int: 7509
                 extra: true
-                """)
+                """,
+        )
 
-        parser = hf_argparser.HfArgumentParser(TestClass)
-
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         instances = parser.parse_yaml_file(args_file, allow_extra_keys=True)
 
         self.assertEqual(instances[0].hf_arg_str, "json_str")
         self.assertEqual(instances[0].hf_arg_int, 7509)
 
     def test_parse_yaml_file_rejects_extra_keys(self):
-        @dataclasses.dataclass
-        class TestClass:
-            hf_arg_str: str = hf_argparser.HfArg(default="default_str")
-            hf_arg_int: int = hf_argparser.HfArg(default=2)
-
         args_file = os.path.join(self.tmp_dir, "argsfile.yaml")
         with open(args_file, mode="w", encoding="utf-8") as f:
             f.write(
-            """
+                """
             extra: true
-            """)
+            """
+            )
 
-        parser = hf_argparser.HfArgumentParser(TestClass)
-
+        parser = hf_argparser.HfArgumentParser(ClassTest)
         with self.assertRaisesRegex(ValueError, "keys are not used"):
             parser.parse_yaml_file(args_file)
