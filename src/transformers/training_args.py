@@ -139,16 +139,16 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
-    ADAMW_BNB = "adamw_bnb_8bit"
-    PAGED_ADAMW = "paged_adamw_32bit"
-    PAGED_ADAMW_BNB = "paged_adamw_8bit"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
-    LION_BNB = 'lion_8bit'
-    LION = 'lion_32bit'
-    PAGED_LION = 'paged_lion_32bit'
-    PAGED_LION_BNB = 'paged_lion_8bit'
     SGD = "sgd"
     ADAGRAD = "adagrad"
+    ADAMW_BNB = "adamw_bnb_8bit"
+    LION_BNB = 'lion_8bit'
+    LION = 'lion_32bit'
+    PAGED_ADAMW = "paged_adamw_32bit"
+    PAGED_ADAMW_BNB = "paged_adamw_8bit"
+    PAGED_LION = 'paged_lion_32bit'
+    PAGED_LION_BNB = 'paged_lion_8bit'
 
 
 @dataclass
