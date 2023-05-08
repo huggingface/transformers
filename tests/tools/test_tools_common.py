@@ -32,9 +32,13 @@ def create_inputs(input_types: List[str]):
         if input_type == "text":
             inputs.append("Text input")
         elif input_type == "image":
-            inputs.append(Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"))
+            inputs.append(
+                Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
+            )
         elif input_type == "audio":
             inputs.append(torch.ones(3000))
+        elif isinstance(input_type, list):
+            inputs.append(create_inputs(input_type))
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
 
@@ -49,7 +53,7 @@ def output_types(outputs: List):
             output_types.append("text")
         elif isinstance(output, Image.Image):
             output_types.append("image")
-        elif isinstance(output, torch.Module):
+        elif isinstance(output, torch.Tensor):
             output_types.append("audio")
         else:
             raise ValueError(f"Invalid output: {output}")
@@ -64,7 +68,11 @@ class ToolTesterMixin:
 
         inputs = self.tool.inputs
         for _input in inputs:
-            self.assertTrue(_input in authorized_types)
+            if isinstance(_input, list):
+                for __input in _input:
+                    self.assertTrue(__input in authorized_types)
+            else:
+                self.assertTrue(_input in authorized_types)
 
         outputs = self.tool.outputs
         for _output in outputs:
