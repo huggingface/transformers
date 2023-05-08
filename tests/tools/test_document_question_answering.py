@@ -17,7 +17,11 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers.tools import DocumentQuestionAnsweringTool
+from transformers import is_torch_available
+
+
+if is_torch_available():
+    from transformers.tools import DocumentQuestionAnsweringTool
 
 from .test_tools_common import ToolTesterMixin
 

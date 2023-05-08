@@ -330,7 +330,7 @@ class OpenAiAgent(Agent):
         return [answer["text"] for answer in result["choices"]]
 
 
-class EndpointAgent(Agent):
+class HfAgent(Agent):
     def __init__(
         self, url_endpoint, token=None, chat_prompt_template=None, run_prompt_template=None, additional_tools=None
     ):

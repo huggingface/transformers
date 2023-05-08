@@ -15,7 +15,11 @@
 
 import unittest
 
-from transformers.tools import TextToSpeechTool
+from transformers import is_torch_available
+
+
+if is_torch_available():
+    from transformers.tools import TextToSpeechTool
 
 from .test_tools_common import ToolTesterMixin
 
