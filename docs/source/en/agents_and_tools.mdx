@@ -109,24 +109,9 @@ better at handling).
 
 The "agent" here is a large language model, and we're prompting it so that it has access to a specific set of tools.
 
-Tools are very simple: they're a single function, with a name, and a description. An image captioning tool would be 
-designed as follows:
-
-```py
-class ImageCaptioningTool:
-    description = "This is a tool that captions images ..."
-
-    inputs = ["image"]
-    outputs = ["text"]
-
-    def __call__(self, image) -> str:
-        # Call the image captioning model
-        image_caption = self.model(image)
-        return image_caption
-```
-
-We then use these tools description to prompt the agent. Through the prompt, we show the agent how it would leverage 
-tools in order to perform what was requests in the query.
+Tools are very simple: they're a single function, with a name, and a description. We then use these tools description 
+to prompt the agent. Through the prompt, we show the agent how it would leverage tools in order to perform what was 
+requests in the query.
 
 ### A curated set of tools
 
@@ -147,9 +132,9 @@ in `transformers`:
 These tools have an integration in transformers, and can be used manually as well, for example:
 
 ```py
-from transformers.tools import TextToSpeechTool
+from transformers import load_tool
 
-tool = TextToSpeechTool()
+tool = load_tool('text-to-speech')
 audio = tool("This is a text to speech tool")
 
 play(audio)
