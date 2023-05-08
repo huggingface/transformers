@@ -2474,6 +2474,11 @@ if is_torch_available():
         "lr": TrainingArguments.learning_rate,
     }
 
+    default_lion_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "lr": TrainingArguments.learning_rate,
+    }
+
     default_anyprecision_kwargs = {
         "use_kahan_summation": False,
         "momentum_dtype": torch.float32,
@@ -2607,8 +2612,128 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                 default_adam_kwargs,
             )
 
+    def test_bnb_paged_adam(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_BNB, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION_BNB, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION_BNB, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
     def test_bnb_adam8bit_no_bnb(self):
         args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_BNB, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION_BNB, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if bnb is installed.
