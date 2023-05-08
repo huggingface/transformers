@@ -1,13 +1,15 @@
+import base64
 import importlib
 import io
 import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, InferenceApi, create_commit, create_repo, hf_hub_download
-from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
+from huggingface_hub import CommitOperationAdd, HfFolder, InferenceApi, create_commit, create_repo, hf_hub_download
+from huggingface_hub.utils import RepositoryNotFoundError, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
+from ..image_utils import is_pil_image
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
@@ -30,15 +32,6 @@ if is_accelerate_available():
 
 
 TOOL_CONFIG_FILE = "tool_config.json"
-
-
-def supports_remote(task_name):
-    if task_name not in TASK_MAPPING:
-        return False
-    main_module = importlib.import_module("transformers")
-    tools_module = main_module.tools
-    tool_class = TASK_MAPPING[task_name]
-    return hasattr(tools_module, f"Remote{tool_class}")
 
 
 def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
@@ -130,6 +123,8 @@ class Tool:
 
     @classmethod
     def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, remote=False, **kwargs):
+        if remote and model_repo_id is None:
+            raise ValueError("To use this tool remotely, please pass along the url endpoint to `model_repo_id`.")
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -191,14 +186,14 @@ class Tool:
                 raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
 
         tool_class = custom_tools[task]["tool_class"]
-        if isinstance(tool_class, (list, tuple)):
-            tool_class = tool_class[1] if remote else tool_class[0]
         tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
         if model_repo_id is not None:
             repo_id = model_repo_id
         elif hub_kwargs["repo_type"] == "space":
             repo_id = None
 
+        if remote:
+            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         return tool_class(repo_id, token=token, **kwargs)
 
     def push_to_hub(
@@ -307,17 +302,29 @@ class OldRemoteTool(Tool):
 class RemoteTool(Tool):
     default_url = None
 
-    def __init__(self, endpoint_url=None, token=None):
+    def __init__(self, endpoint_url=None, token=None, tool_class=None):
         if endpoint_url is None:
             endpoint_url = self.default_url
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
+        self.tool_class = tool_class
 
     def prepare_inputs(self, *args, **kwargs):
         if len(args) > 1:
             raise ValueError("A `RemoteTool` can only accept one positional input.")
         elif len(args) == 1:
-            return {"data": args[0]}
+            if is_pil_image(args[0]):
+                byte_io = io.BytesIO()
+                args[0].save(byte_io, format="PNG")
+                return {"inputs": byte_io.getvalue()}
+            return {"inputs": args[0]}
+
+        inputs = kwargs.copy()
+        for key, value in inputs.items():
+            if is_pil_image(value):
+                byte_io = io.BytesIO()
+                value.save(byte_io, format="PNG")
+                inputs[key] = byte_io.getvalue()
 
         return {"inputs": kwargs}
 
@@ -325,11 +332,12 @@ class RemoteTool(Tool):
         return outputs
 
     def __call__(self, *args, **kwargs):
+        output_image = self.tool_class is not None and self.tool_class.outputs == ["image"]
         inputs = self.prepare_inputs(*args, **kwargs)
         if isinstance(inputs, dict):
-            outputs = self.client(**inputs)
+            outputs = self.client(**inputs, output_image=output_image)
         else:
-            outputs = self.client(inputs)
+            outputs = self.client(inputs, output_image=output_image)
         if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
             outputs = outputs[0]
         return self.extract_outputs(outputs)
@@ -474,18 +482,14 @@ TASK_MAPPING = {
 def load_tool(task_or_repo_id, repo_id=None, remote=False, token=None, **kwargs):
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
-        if remote:
-            if not supports_remote(task_or_repo_id):
-                raise NotImplementedError(
-                    f"{task_or_repo_id} does not support the inference API or inference endpoints yet."
-                )
-            tool_class_name = f"Remote{tool_class_name}"
-
         main_module = importlib.import_module("transformers")
         tools_module = main_module.tools
         tool_class = getattr(tools_module, tool_class_name)
 
-        return tool_class(repo_id, token=token, **kwargs)
+        if remote:
+            return RemoteTool(repo_id, token=token, tool_class=tool_class)
+        else:
+            return tool_class(repo_id, token=token, **kwargs)
     else:
         return Tool.from_hub(task_or_repo_id, repo_id=repo_id, token=token, remote=remote, **kwargs)
 
@@ -505,7 +509,9 @@ def add_description(description):
 ## Will move to the Hub
 class EndpointClient:
     def __init__(self, endpoint_url: str, token: Optional[str] = None):
-        self.headers = build_hf_headers(token=token)
+        if token is None:
+            token = HfFolder().get_token()
+        self.headers = {"authorization": f"Bearer {token}", "Content-Type": "application/json"}
         self.endpoint_url = endpoint_url
 
     def __call__(
@@ -513,7 +519,7 @@ class EndpointClient:
         inputs: Optional[Union[str, Dict, List[str], List[List[str]]]] = None,
         params: Optional[Dict] = None,
         data: Optional[bytes] = None,
-        raw_response: bool = False,
+        output_image: bool = False,
     ) -> Any:
         # Build payload
         payload = {}
@@ -525,13 +531,8 @@ class EndpointClient:
         # Make API call
         response = get_session().post(self.endpoint_url, headers=self.headers, json=payload, data=data)
 
-        # Let the user handle the response
-        if raw_response:
-            return response
-
         # By default, parse the response for the user.
-        content_type = response.headers.get("Content-Type") or ""
-        if content_type.startswith("image"):
+        if output_image:
             if not is_vision_available():
                 raise ImportError(
                     f"Task '{self.task}' returned as image but Pillow is not installed."
@@ -542,12 +543,6 @@ class EndpointClient:
 
             from PIL import Image
 
-            return Image.open(io.BytesIO(response.content))
-        elif content_type == "application/json":
-            return response.json()
+            return Image.open(io.BytesIO(base64.b64decode(response.content)))
         else:
-            raise NotImplementedError(
-                f"{content_type} output type is not implemented yet. You can pass"
-                " `raw_response=True` to get the raw `Response` object and parse the"
-                " output by yourself."
-            )
+            return response.json()
