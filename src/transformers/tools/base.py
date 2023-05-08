@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, HfFolder, InferenceApi, create_commit, create_repo, hf_hub_download
+from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
@@ -265,40 +265,6 @@ class Tool:
             )
 
 
-class OldRemoteTool(Tool):
-    default_checkpoint = None
-
-    def __init__(self, repo_id=None, token=None):
-        if repo_id is None:
-            repo_id = self.default_checkpoint
-        self.repo_id = repo_id
-        self.client = InferenceApi(repo_id, token=token)
-
-    def prepare_inputs(self, *args, **kwargs):
-        if len(args) > 1:
-            raise ValueError("A `RemoteTool` can only accept one positional input.")
-        elif len(args) == 1:
-            return {"data": args[0]}
-
-        return {"inputs": kwargs}
-
-    def extract_outputs(self, outputs):
-        return outputs
-
-    def __call__(self, *args, **kwargs):
-        if not self.is_initialized:
-            self.setup()
-
-        inputs = self.prepare_inputs(*args, **kwargs)
-        if isinstance(inputs, dict):
-            outputs = self.client(**inputs)
-        else:
-            outputs = self.client(inputs)
-        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
-            outputs = outputs[0]
-        return self.extract_outputs(outputs)
-
-
 class RemoteTool(Tool):
     default_url = None
 
@@ -461,17 +427,16 @@ def get_default_device():
 
 
 TASK_MAPPING = {
-    "generative-qa": "GenerativeQuestionAnsweringTool",
+    "document-question-answering": "DocumentQuestionAnsweringTool",
     "image-captioning": "ImageCaptioningTool",
+    "image-question-answering": "ImageQuestionAnsweringTool",
     "image-segmentation": "ImageSegmentationTool",
-    # "language-identification": "LanguageIdentificationTool",
     "speech-to-text": "SpeechToTextTool",
+    "summarization": "TextSummarizationTool",
     "text-classification": "TextClassificationTool",
+    "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
-    "summarization": "TextSummarizationTool",
-    "image-question-answering": "ImageQuestionAnsweringTool",
-    "document-question-answering": "DocumentQuestionAnsweringTool",
 }
 
 

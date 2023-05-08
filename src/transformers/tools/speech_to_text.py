@@ -1,16 +1,13 @@
 from ..models.whisper import WhisperForConditionalGeneration, WhisperProcessor
-from .base import OldRemoteTool, PipelineTool
-
-
-SPEECH_TO_TEXT_DESCRIPTION = (
-    "This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the "
-    "transcribed text."
-)
+from .base import PipelineTool
 
 
 class SpeechToTextTool(PipelineTool):
     default_checkpoint = "openai/whisper-base"
-    description = SPEECH_TO_TEXT_DESCRIPTION
+    description = (
+        "This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the "
+        "transcribed text."
+    )
     name = "transcriber"
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
@@ -26,14 +23,3 @@ class SpeechToTextTool(PipelineTool):
 
     def decode(self, outputs):
         return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0]
-
-
-class RemoteSpeechToTextTool(OldRemoteTool):
-    default_checkpoint = "openai/whisper-base"
-    description = SPEECH_TO_TEXT_DESCRIPTION
-
-    def extract_outputs(self, outputs):
-        return outputs["text"]
-
-    def prepare_inputs(self, audio):
-        return {"data": audio}

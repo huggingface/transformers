@@ -1,8 +1,7 @@
 import torch
 
-from transformers.utils import is_datasets_available
-
 from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
+from ..utils import is_datasets_available
 from .base import PipelineTool
 
 
@@ -10,15 +9,12 @@ if is_datasets_available():
     from datasets import load_dataset
 
 
-TEXT_TO_SPEECH_DESCRIPTION = (
-    "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
-    "text to read (in English) and returns a waveform object containing the sound."
-)
-
-
 class TextToSpeechTool(PipelineTool):
     default_checkpoint = "microsoft/speecht5_tts"
-    description = TEXT_TO_SPEECH_DESCRIPTION
+    description = (
+        "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
+        "text to read (in English) and returns a waveform object containing the sound."
+    )
     name = "text_reader"
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech

@@ -1,14 +1,7 @@
 import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
-from .base import OldRemoteTool, PipelineTool
-
-
-TEXT_CLASSIFIER_DESCRIPTION = (
-    "This is a tool that classifies an English text using provided labels. It takes two inputs: `text`, which should "
-    "be the text to classify, and `labels`, which should be the list of labels to use for classification. It returns "
-    "the most likely label in the list of provided `labels` for the input text."
-)
+from .base import PipelineTool
 
 
 class TextClassificationTool(PipelineTool):
@@ -24,7 +17,11 @@ class TextClassificationTool(PipelineTool):
     """
 
     default_checkpoint = "facebook/bart-large-mnli"
-    description = TEXT_CLASSIFIER_DESCRIPTION
+    description = (
+        "This is a tool that classifies an English text using provided labels. It takes two inputs: `text`, which "
+        "should be the text to classify, and `labels`, which should be the list of labels to use for classification. "
+        "It returns the most likely label in the list of provided `labels` for the input text."
+    )
     name = "text-classifier"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
@@ -55,32 +52,3 @@ class TextClassificationTool(PipelineTool):
         logits = outputs.logits
         label_id = torch.argmax(logits[:, 2]).item()
         return self._labels[label_id]
-
-
-class RemoteTextClassificationTool(OldRemoteTool):
-    """
-    Example:
-
-    ```py
-    from transformers.tools import RemoteTextClassificationTool
-
-    classifier = RemoteTextClassificationTool()
-    classifier("This is a super nice API!", labels=["positive", "negative"])
-    ```
-    """
-
-    default_checkpoint = "facebook/bart-large-mnli"
-    description = TEXT_CLASSIFIER_DESCRIPTION
-
-    def prepare_inputs(self, text, labels):
-        return {"inputs": text, "params": {"candidate_labels": labels}}
-
-    def extract_outputs(self, outputs):
-        label = None
-        max_score = 0
-        for lbl, score in zip(outputs["labels"], outputs["scores"]):
-            if score > max_score:
-                label = lbl
-                max_score = score
-
-        return label
