@@ -109,8 +109,6 @@ class GCViTConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_scale=None,
-        norm_layer="layernorm2d",
-        norm_layer_cl="layernorm",
         layer_norm_eps=1e-5,
         **kwargs,
     ):
@@ -132,8 +130,6 @@ class GCViTConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.layer_scale = layer_scale
-        self.norm_layer = norm_layer
-        self.norm_layer_cl = norm_layer_cl
         # we set the hidden_size attribute in order to make GCViT work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
