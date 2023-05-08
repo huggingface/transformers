@@ -368,8 +368,8 @@ def spectrogram(
             `np.complex64`.
 
     Returns:
-        `nd.array` containing a spectrogram of shape `(num_frequency_bins, length)` for a regular spectrogram or
-        shape `(num_mel_filters, length)` for a mel spectrogram.
+        `nd.array` containing a spectrogram of shape `(num_frequency_bins, length)` for a regular spectrogram or shape
+        `(num_mel_filters, length)` for a mel spectrogram.
     """
     window_length = len(window)
 
@@ -554,6 +554,7 @@ def amplitude_to_db(
 
 ### deprecated functions below this line ###
 
+
 def get_mel_filter_banks(
     nb_frequency_bins: int,
     nb_mel_filters: int,
@@ -576,6 +577,7 @@ def get_mel_filter_banks(
         norm=norm,
         mel_scale=mel_scale,
     )
+
 
 def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
     """
