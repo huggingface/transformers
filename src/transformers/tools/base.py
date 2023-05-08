@@ -124,7 +124,13 @@ class Tool:
     @classmethod
     def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, remote=False, **kwargs):
         if remote and model_repo_id is None:
-            raise ValueError("To use this tool remotely, please pass along the url endpoint to `model_repo_id`.")
+            endpoints = get_default_endpoints()
+            if task_or_repo_id not in endpoints:
+                raise ValueError(
+                    f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
+                    "`repo_id` argument."
+                )
+            model_repo_id = endpoints[task_or_repo_id]
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -440,6 +446,13 @@ TASK_MAPPING = {
 }
 
 
+def get_default_endpoints():
+    endpoints_file = cached_file("huggingface-tools/default-endpoints", "default_endpoints.json", repo_type="dataset")
+    with open(endpoints_file, "r", encoding="utf-8") as f:
+        endpoints = json.load(f)
+    return endpoints
+
+
 def load_tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=None, **kwargs):
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
@@ -451,6 +464,14 @@ def load_tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, t
             repo_id = model_repo_id
 
         if remote:
+            if repo_id is None:
+                endpoints = get_default_endpoints()
+                if task_or_repo_id not in endpoints:
+                    raise ValueError(
+                        f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
+                        "`repo_id` argument."
+                    )
+                repo_id = endpoints[task_or_repo_id]
             return RemoteTool(repo_id, token=token, tool_class=tool_class)
         else:
             return tool_class(repo_id, token=token, **kwargs)
@@ -467,6 +488,7 @@ def add_description(description):
 
     def inner(func):
         func.description = description
+        func.name = func.__name__
         return func
 
     return inner
