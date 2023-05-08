@@ -454,6 +454,7 @@ def custom_object_save(obj, folder, config=None):
             "this code in a separate module so we can include it in the saved folder and make it easier to share via "
             "the Hub."
         )
+        return
 
     def _set_auto_map_in_config(_config):
         module_name = obj.__class__.__module__
