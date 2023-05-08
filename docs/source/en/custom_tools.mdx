@@ -43,9 +43,9 @@ We can do that with the following code:
 ```python
 from huggingface_hub import list_models
 
-task = 'text-classification'
+task = "text-classification"
 
-model = next(iter(list_models(filter=task, sort='downloads', direction=-1)))
+model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
@@ -56,6 +56,7 @@ main attributes necessary. We'll create a class that inherits from it:
 
 ```python
 from transformers import Tool
+
 
 class HFModelDownloadsTool(Tool):
     pass
@@ -76,20 +77,21 @@ Here's what our class looks like now:
 from transformers import Tool
 from huggingface_hub import list_models
 
+
 class HFModelDownloadsTool(Tool):
-  name = 'model-download-counter'
-  description = (
-    "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
-    "It takes the name of the category (such as text-classification, depth-estimation, etc), and "
-    "returns the name of the checkpoint."
-  )
+    name = "model-download-counter"
+    description = (
+        "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
+        "It takes the name of the category (such as text-classification, depth-estimation, etc), and "
+        "returns the name of the checkpoint."
+    )
 
-  inputs = ['text']
-  outputs = ['text']
+    inputs = ["text"]
+    outputs = ["text"]
 
-  def __call__(self, task: str):
-    model = next(iter(list_models(filter=task, sort='downloads', direction=-1)))
-    return model.id
+    def __call__(self, task: str):
+        model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
+        return model.id
 ```
 
 We now have our tool handy. Save it in a file and import it from your main script. I'm naming this file
@@ -104,7 +106,7 @@ In order to let others benefit from it and for simpler initialization, we recomm
 namespace. To do so, just call `push_to_hub` on the `tool` variable:
 
 ```python
-tool.push_to_hub('lysandre/hf-model-downloads')
+tool.push_to_hub("lysandre/hf-model-downloads")
 ```
 
 You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
@@ -116,7 +118,7 @@ We now have our tool that lives on the Hub which can be instantiated as such:
 ```python
 from transformers import load_tool
 
-tool = load_tool('lysandre/hf-model-downloads')
+tool = load_tool("lysandre/hf-model-downloads")
 ```
 
 In order to use it in the agent, simply pass it in the `additional_tools` parameter of the agent initialization method:
@@ -126,7 +128,9 @@ from transformers.tools import HfAgent
 
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder", additional_tools=[tool])
 
-agent.run("Can you read out loud the name of the model that has the most download in the 'text-to-video' task on the Hugging Face Hub?")
+agent.run(
+    "Can you read out loud the name of the model that has the most download in the 'text-to-video' task on the Hugging Face Hub?"
+)
 ```
 which outputs the following:
 ```
@@ -159,7 +163,7 @@ Replacing existing tools can be done simply by assigning a new item to the agent
 from transformers import HfAgent, load_tool
 
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-agent.toolbox['image-transformation'] = load_tool('diffusers/controlnet-canny-tool')
+agent.toolbox["image-transformation"] = load_tool("diffusers/controlnet-canny-tool")
 ```
 
 <Tip>
