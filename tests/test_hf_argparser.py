@@ -19,6 +19,7 @@ import enum
 import os.path
 import sys
 from collections import namedtuple
+from typing import Optional, Union
 from unittest import mock
 
 from parameterized import parameterized
@@ -44,7 +45,7 @@ class TestHfArgparserGlobals(TestCasePlus):
             ("bool_str_0", "0", False),
         ]
     )
-    def test_string_to_bool(self, name: str, value: bool | str, expected: bool):
+    def test_string_to_bool(self, name: str, value: Union[bool, str], expected: bool):
         del name  # unused
         self.assertEqual(hf_argparser.string_to_bool(value), expected)
 
@@ -88,7 +89,7 @@ class ClassTest:
     hf_arg_str: str = hf_argparser.HfArg(default="default_str", aliases=["--str", "-s"])
     hf_arg_int: int = hf_argparser.HfArg(default=2, aliases=["--int", "-i"])
     hf_arg_bool: bool = hf_argparser.HfArg(default=False, aliases=["-b"])
-    hf_arg_opt_bool: bool | None = hf_argparser.HfArg(default=None, aliases=["-ob"])
+    hf_arg_opt_bool: Optional[bool] = hf_argparser.HfArg(default=None, aliases=["-ob"])
     hf_arg_enum: EnumTest = hf_argparser.HfArg(default=EnumTest.UNSET, aliases=["-e"])
 
 
@@ -154,7 +155,7 @@ class TestHfArgumentParser(TestCasePlus):
         expected_str: str,
         expected_int: int,
         return_remaining_strings: bool,
-        expected_remaining_strings: list[str] | None,
+        expected_remaining_strings: Optional[list[str]],
         args_filename: bool,
         args_file_flag: str,
     ):
@@ -235,7 +236,7 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses_rejects_nonoptional_nonstr_union(self):
         @dataclasses.dataclass
         class TestClass:
-            hf_arg: bool | int = hf_argparser.HfArg()
+            hf_arg: Union[bool, int] = hf_argparser.HfArg()
 
         with self.assertRaisesRegex(ValueError, "Union"):
             hf_argparser.HfArgumentParser(TestClass)
@@ -243,7 +244,7 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses_rejects_more_than_two_type_union(self):
         @dataclasses.dataclass
         class TestClass:
-            hf_arg: bool | int | None = hf_argparser.HfArg()
+            hf_arg: Union[bool, int, None] = hf_argparser.HfArg()
 
         with self.assertRaisesRegex(ValueError, "Union"):
             hf_argparser.HfArgumentParser(TestClass)
@@ -251,7 +252,7 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses_accepts_optional(self):
         @dataclasses.dataclass
         class TestClass:
-            hf_arg: None | int = hf_argparser.HfArg(aliases=["-i"])
+            hf_arg: Optional[int] = hf_argparser.HfArg(aliases=["-i"])
 
         parser = hf_argparser.HfArgumentParser(TestClass)
 
@@ -262,7 +263,7 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses_filters_out_str_from_union(self):
         @dataclasses.dataclass
         class TestClass:
-            hf_arg: str | int = hf_argparser.HfArg(aliases=["-i"])
+            hf_arg: Union[str, int] = hf_argparser.HfArg(aliases=["-i"])
 
         parser = hf_argparser.HfArgumentParser(TestClass)
 
