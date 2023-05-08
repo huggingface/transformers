@@ -99,7 +99,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         # If -> execute the right branch
         return evaluate_if(expression, state, tools)
     elif hasattr(ast, "Index") and isinstance(expression, ast.Index):
-        return expression.value
+        return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.JoinedStr):
         return "".join([str(evaluate_ast(v, state, tools)) for v in expression.values])
     elif isinstance(expression, ast.List):
