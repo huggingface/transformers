@@ -16,16 +16,17 @@
 import unittest
 from pathlib import Path
 
-from PIL import Image
-
-from transformers import is_torch_available
+from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir
+
+from .test_tools_common import ToolTesterMixin
 
 
 if is_torch_available():
     from transformers.tools import ImageQuestionAnsweringTool
 
-from .test_tools_common import ToolTesterMixin
+if is_vision_available():
+    from PIL import Image
 
 
 class ImageQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
