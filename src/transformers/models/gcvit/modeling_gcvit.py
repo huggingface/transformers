@@ -1453,7 +1453,3 @@ class GCViTForImageClassification(GCViTPreTrainedModel):
             attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
-inp = torch.rand(size=(1, 224, 224, 3))
-layer = GCViTReducePatchSize(keep_dim=True)
-out = layer(inp)
-print('input: ',inp.shape, '\noutput: ',out.shape)
