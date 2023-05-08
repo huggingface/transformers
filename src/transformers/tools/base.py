@@ -122,15 +122,15 @@ class Tool:
             f.write("\n".join(imports) + "\n")
 
     @classmethod
-    def from_hub(cls, task_or_repo_id, repo_id=None, model_repo_id=None, token=None, remote=False, **kwargs):
+    def from_hub(cls, repo_id, model_repo_id=None, token=None, remote=False, **kwargs):
         if remote and model_repo_id is None:
             endpoints = get_default_endpoints()
-            if task_or_repo_id not in endpoints:
+            if repo_id not in endpoints:
                 raise ValueError(
-                    f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
-                    "`repo_id` argument."
+                    f"Could not infer a default endpoint for {repo_id}, you need to pass one using the "
+                    "`model_repo_id` argument."
                 )
-            model_repo_id = endpoints[task_or_repo_id]
+            model_repo_id = endpoints[repo_id]
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -142,11 +142,6 @@ class Tool:
             "local_files_only",
         ]
         hub_kwargs = {k: v for k, v in kwargs.items() if k in hub_kwargs_names}
-        if repo_id is None:
-            repo_id = task_or_repo_id
-            task = None
-        else:
-            task = task_or_repo_id
 
         # Try to get the tool config first.
         hub_kwargs["repo_type"] = get_repo_type(repo_id, **hub_kwargs)
@@ -177,30 +172,20 @@ class Tool:
             config = json.load(reader)
 
         if not is_tool_config:
-            if "custom_tools" not in config:
+            if "custom_tool" not in config:
                 raise EnvironmentError(
                     f"{repo_id} does not provide a mapping to custom tools in its configuration `config.json`."
                 )
-            custom_tools = config["custom_tools"]
+            custom_tool = config["custom_tool"]
         else:
-            custom_tools = config
-        if task is None:
-            if len(custom_tools) == 1:
-                task = list(custom_tools.keys())[0]
-            else:
-                tasks_available = "\n".join([f"- {t}" for t in custom_tools.keys()])
-                raise ValueError(f"Please select a task among the one available in {repo_id}:\n{tasks_available}")
+            custom_tool = config
 
-        tool_class = custom_tools[task]["tool_class"]
+        tool_class = custom_tool["tool_class"]
         tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
-        if model_repo_id is not None:
-            repo_id = model_repo_id
-        elif hub_kwargs["repo_type"] == "space":
-            repo_id = None
 
         if remote:
             return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
-        return tool_class(repo_id, token=token, **kwargs)
+        return tool_class(model_repo_id, token=token, **kwargs)
 
     def push_to_hub(
         self,
@@ -453,32 +438,27 @@ def get_default_endpoints():
     return endpoints
 
 
-def load_tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=None, **kwargs):
+def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         main_module = importlib.import_module("transformers")
         tools_module = main_module.tools
         tool_class = getattr(tools_module, tool_class_name)
 
-        if repo_id is None and model_repo_id is not None:
-            repo_id = model_repo_id
-
         if remote:
-            if repo_id is None:
+            if model_repo_id is None:
                 endpoints = get_default_endpoints()
                 if task_or_repo_id not in endpoints:
                     raise ValueError(
                         f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
-                        "`repo_id` argument."
+                        "`model_repo_id` argument."
                     )
-                repo_id = endpoints[task_or_repo_id]
-            return RemoteTool(repo_id, token=token, tool_class=tool_class)
+                model_repo_id = endpoints[task_or_repo_id]
+            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         else:
-            return tool_class(repo_id, token=token, **kwargs)
+            return tool_class(model_repo_id, token=token, **kwargs)
     else:
-        return Tool.from_hub(
-            task_or_repo_id, repo_id=repo_id, token=token, remote=remote, model_repo_id=model_repo_id, **kwargs
-        )
+        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, remote=remote, **kwargs)
 
 
 def add_description(description):
