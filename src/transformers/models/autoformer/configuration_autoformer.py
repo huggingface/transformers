@@ -225,9 +225,6 @@ class AutoformerConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
 
-        self.output_attentions = False
-        self.output_hidden_states = False
-
         self.use_cache = use_cache
 
         # Autoformer

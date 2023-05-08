@@ -1944,7 +1944,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            use_cache=True,
+            use_cache=False,
         )
 
         decoder = self.model.get_decoder()
