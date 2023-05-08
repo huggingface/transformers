@@ -112,8 +112,8 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
 
         if isinstance(tool, Tool):
             resolved_tools[name] = tool
-
-        resolved_tools[name] = load_tool(tool.task, repo_id=tool.repo_id, remote=remote)
+        else:
+            resolved_tools[name] = load_tool(tool.task, repo_id=tool.repo_id, remote=remote)
 
     return resolved_tools
 
