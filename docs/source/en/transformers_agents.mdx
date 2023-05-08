@@ -50,7 +50,7 @@ agent.run(
 |-----------------------------------------------------------------------------------------------------------------------------|----------------|
 | <img src="https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/0/image/image.jpg" width=200> | ballroom foyer |
 
-### Quickstart
+## Quickstart
 
 Before being able to use `agent.run`, you will need to instantiate an agent, which is a large language model (LLM). 
 We recommend using the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) checkpoint as it works very well 
@@ -74,7 +74,7 @@ starcoder = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcod
 
 You're now good to go! Let's dive into the two APIs that you now have at your disposal.
 
-#### Single execution (run)
+### Single execution (run)
 
 The single execution method is when using the `.run` method of the agent:
 
@@ -87,7 +87,7 @@ agent.run("Draw me a picture of rivers and lakes")
 This is great to perform single instructions. Every `.run` operation is independent, so running it several times in a
 row is unlikely to be problematic.
 
-#### Chat-based execution (chat)
+### Chat-based execution (chat)
 
 The agent also has a chat-based approach, using the `.chat` method:
 
@@ -101,9 +101,28 @@ agent.chat("Transform the picture so that there is a rock in there")
 <br/>
 
 This is an interesting approach when you want to keep the state across instructions. It's better for experimentation, 
-but will tend to be much better at single instructions rather than complex instructions (which the `run` method is 
+but will tend to be much better at single instructions rather than complex instructions (which the `.run` method is 
 better at handling).
 
+### ⚠️ Remote execution
+
+For demonstration purposes and so that this can be used with all setups, we have created remote executors for several 
+of the default tools the agent has access to. These are created using 
+[inference endpoints](https://huggingface.co/inference-endpoints). To see how to setup remote executors tools yourself,
+we recommend reading the custom tool guide [TODO LINK].
+
+In order to run with remote tools, specifying `remote=True` to either `.run` or `.chat` is sufficient.
+
+For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
+
+```python
+agent.run("Draw me a picture of rivers and lakes", remote=True)
+```
+
+The same can be said for `.chat`:
+```py
+agent.chat("Draw me a picture of rivers and lakes", remote=True)
+```
 
 ### What's happening here? What are tools, and what are agents?
 
@@ -134,16 +153,11 @@ These tools have an integration in transformers, and can be used manually as wel
 ```py
 from transformers import load_tool
 
-tool = load_tool("text-to-speech")
+tool = load_tool('text-to-speech')
 audio = tool("This is a text to speech tool")
 
 play(audio)
 ```
-
-For the release, we offer a remote counterpart for the tools, removing the need for local execution. This demonstration 
-is made using inference-endpoints.
-
-TODO [to complete/show how to use remote tools]
 
 ### Custom tools
 

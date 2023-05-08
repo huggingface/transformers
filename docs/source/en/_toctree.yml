@@ -21,8 +21,8 @@
     title: Set up distributed training with 🤗 Accelerate
   - local: model_sharing
     title: Share your model
-  - local: agents_and_tools
-    title: Agents and Tools
+  - local: transformers_agents
+    title: Agents
   title: Tutorials
 - sections:
   - sections:
@@ -101,6 +101,8 @@
       title: Notebooks with examples
     - local: community
       title: Community resources
+    - local: custom_tools
+      title: Custom Tools
     - local: troubleshooting
       title: Troubleshoot
   title: Developer guides

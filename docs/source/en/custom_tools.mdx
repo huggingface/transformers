@@ -1,0 +1,52 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Custom Tools
+
+<Tip>
+
+If you are not aware of what tools and agents are in the context of transformers, we recommend you read the
+[Transformers Agents](transformers_agents) page first.
+
+</Tip>
+
+Creating and using custom tools is paramount to empowering the agent and having it perform new tasks. In this guide
+we'll take a look at how to use custom tools, as well as how to create one yourself.
+
+## Using custom tools
+
+In this section, we'll be leveraging two existing custom tools that are not included in the default toolbox. We'll
+use:
+- The [diffusers/controlnet-canny-tool](https://huggingface.co/spaces/diffusers/controlnet-canny-tool) in order to
+  replace the existing text-transformation tool.
+
+### Adding new tools
+
+
+### Replacing existing tools
+
+In this section we'll take a look at replacing the text-transformation tool. So far, that's how we would leverage the
+text-transformation tool:
+
+```python
+from transformers.tools import HfAgent
+
+agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+
+
+image = agent.chat("Create a picture of a river passing through a ravine")
+```
+
+## Creating new custom tools
+
+
+
