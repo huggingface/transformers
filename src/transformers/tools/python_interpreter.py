@@ -97,7 +97,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.If):
         # If -> execute the right branch
-        evaluate_if(expression, state, tools)
+        return evaluate_if(expression, state, tools)
     elif isinstance(expression, ast.JoinedStr):
         return "".join([str(evaluate_ast(v, state, tools)) for v in expression.values])
     elif isinstance(expression, ast.List):
@@ -150,6 +150,8 @@ def evaluate_call(call, state, tools):
 def evaluate_subscript(subscript, state, tools):
     index = evaluate_ast(subscript.slice, state, tools)
     value = evaluate_ast(subscript.value, state, tools)
+    if isinstance(value, (list, tuple)):
+        return value[int(index)]
     if index in value:
         return value[index]
     if isinstance(index, str) and isinstance(value, Mapping):
@@ -202,9 +204,15 @@ def evaluate_condition(condition, state, tools):
 
 
 def evaluate_if(if_statement, state, tools):
+    result = None
     if evaluate_condition(if_statement.test, state, tools):
         for line in if_statement.body:
-            evaluate_ast(line, state, tools)
+            line_result = evaluate_ast(line, state, tools)
+            if line_result is not None:
+                result = line_result
     else:
         for line in if_statement.orelse:
-            evaluate_ast(line, state, tools)
+            line_result = evaluate_ast(line, state, tools)
+            if line_result is not None:
+                result = line_result
+    return result
