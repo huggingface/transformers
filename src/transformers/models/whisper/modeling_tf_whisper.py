@@ -1449,6 +1449,6 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         return TFSequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
