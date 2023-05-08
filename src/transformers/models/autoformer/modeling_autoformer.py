@@ -1537,7 +1537,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = AutoformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = AutoformerModel.from_pretrained("huggingface/autoformer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
@@ -1546,7 +1546,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
         ...     past_time_features=batch["past_time_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
         ...     future_values=batch["future_values"],
         ...     future_time_features=batch["future_time_features"],
         ... )
@@ -1740,7 +1739,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = AutoformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
@@ -1969,14 +1968,17 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
         repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-        past_values_shape = repeated_past_values.shape
-        repeated_past_values = repeated_past_values.reshape(past_values_shape[0], past_values_shape[1], -1)
-        seasonal_input, trend_input = self.model.decomposition_layer(repeated_past_values)
+        lagged_sequence = self.model.get_lagged_subsequences(
+            sequence=repeated_past_values, subsequences_length=self.config.context_length
+        )
+        lags_shape = lagged_sequence.shape
+        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+        seasonal_input, trend_input = self.model.decomposition_layer(reshaped_lagged_sequence)
 
-        mean = torch.mean(repeated_past_values, dim=1).unsqueeze(1).repeat(1, self.config.prediction_length, 1)
+        mean = torch.mean(reshaped_lagged_sequence, dim=1).unsqueeze(1).repeat(1, self.config.prediction_length, 1)
         zeros = torch.zeros(
-            [repeated_past_values.shape[0], self.config.prediction_length, repeated_past_values.shape[2]],
-            device=repeated_past_values.device,
+            [reshaped_lagged_sequence.shape[0], self.config.prediction_length, reshaped_lagged_sequence.shape[2]],
+            device=reshaped_lagged_sequence.device,
         )
 
         dec_input = torch.cat(

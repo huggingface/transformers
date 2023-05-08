@@ -422,25 +422,26 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class AutoformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = AutoformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
+        model = AutoformerModel.from_pretrained("huggingface/autoformer-tourism-monthly").to(torch_device)
         batch = prepare_batch()
 
         with torch.no_grad():
-            output = model(
+            output, _ = model(
                 past_values=batch["past_values"],
                 past_time_features=batch["past_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
             )[0]
 
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+        expected_shape = torch.Size(
+            (64, model.config.prediction_length + model.config.label_length, model.config.feature_size)
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3125, -1.2884, -1.1118], [-0.5801, -1.4907, -0.7782], [0.0849, -1.6557, -0.9755]], device=torch_device
+            [[0.3593, -1.3398, 0.6330], [0.2279, 1.5396, -0.1792], [0.0450, 1.3225, -0.2335]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -453,14 +454,12 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
                 past_time_features=batch["past_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
-                future_time_features=batch["future_time_features"],
-            )[1]
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+            ).encoder_last_hidden_state
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.9127, -0.2056, -0.5259], [1.0572, 1.4104, -0.1964], [0.1358, 2.0348, 0.5739]], device=torch_device
+            [[-0.0734, -0.9036, 0.8358], [4.7186, 2.4113, 1.9581], [1.7953, 2.3558, 1.2970]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -470,7 +469,6 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model.generate(
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
                 past_time_features=batch["past_time_features"],
                 past_values=batch["past_values"],
                 future_time_features=batch["future_time_features"],
@@ -479,6 +477,6 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([2289.5203, 2778.3054, 4648.1313], device=torch_device)
+        expected_slice = torch.tensor([3130.6763, 4056.5293, 7053.0786], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))

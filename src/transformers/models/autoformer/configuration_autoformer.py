@@ -31,8 +31,8 @@ class AutoformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`AutoformerModel`]. It is used to instantiate an
     Autoformer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Time Series Transformer
-    [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
+    configuration with the defaults will yield a similar configuration to that of the Autoformer
+    [huggingface/autoformer-tourism-monthly](https://huggingface.co/huggingface/autoformer-tourism-monthly)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
