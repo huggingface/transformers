@@ -53,7 +53,9 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
         return "space"
 
 
-APP_FILE_TEMPLATE = """from transformers.tools.base import launch_gradio_demo from {module_name} import {class_name}
+# docstyle-ignore
+APP_FILE_TEMPLATE = """from transformers.tools.base import launch_gradio_demo
+from {module_name} import {class_name}
 
 launch_gradio_demo({class_name})
 """
@@ -82,9 +84,14 @@ class Tool:
         # loading a big model.
         self.is_initialized = True
 
-    def save(self, output_dir, task_name=None):
+    def save(self, output_dir):
         os.makedirs(output_dir, exist_ok=True)
         # Save module file
+        if self.__module__ == "__main__":
+            raise ValueError(
+                f"We can't save the code defining {self} in {output_dir} as it's been defined in __main__. You "
+                "have to put this code in a separate module so we can include it in the saved folder."
+            )
         module_files = custom_object_save(self, output_dir)
 
         module_name = self.__class__.__module__
@@ -99,12 +106,7 @@ class Tool:
         else:
             tool_config = {}
 
-        if task_name is None:
-            class_name = self.__class__.__name__.replace("Tool", "")
-            chars = [f"_{c.lower()}" if c.isupper() else c for c in class_name]
-            task_name = "".join(chars)[1:]
-
-        tool_config[task_name] = {"tool_class": full_name, "description": self.description, "name": self.name}
+        tool_config = {"tool_class": full_name, "description": self.description, "name": self.name}
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
 
