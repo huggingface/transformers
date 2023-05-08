@@ -258,6 +258,16 @@ class Tool:
                 repo_type="space",
             )
 
+    @staticmethod
+    def from_gradio(gradio_tool):
+        class GradioToolWrapper(Tool):
+            def __init__(self, _gradio_tool):
+                super().__init__()
+                self.name = _gradio_tool.name
+                self.description = _gradio_tool.description
+
+        GradioToolWrapper.__call__ = gradio_tool.run
+        return GradioToolWrapper(gradio_tool)
 
 class RemoteTool(Tool):
     default_url = None
