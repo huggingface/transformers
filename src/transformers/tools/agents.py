@@ -8,7 +8,7 @@ import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..utils import logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
 from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
 from .python_interpreter import evaluate
 
@@ -114,7 +114,8 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
             resolved_tools[name] = tool
         else:
             task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-            resolved_tools[name] = load_tool(task_or_repo_id, remote=remote)
+            _remote = remote and supports_remote(task_or_repo_id)
+            resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
     return resolved_tools
 
