@@ -6146,6 +6146,23 @@ class SamPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PerSamModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerSamPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

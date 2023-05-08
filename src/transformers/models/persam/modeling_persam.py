@@ -48,8 +48,8 @@ PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.sam.modeling_sam.SamVisionEncoderOutput with Sam->PerSam,sam->persam
 class PerSamVisionEncoderOutput(ModelOutput):
     """
-    Base class for persam vision model's outputs that also contains image embeddings obtained by applying the projection
-    layer to the pooler_output.
+    Base class for persam vision model's outputs that also contains image embeddings obtained by applying the
+    projection layer to the pooler_output.
 
     Args:
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
@@ -205,9 +205,9 @@ class PerSamAttention(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        downpersample_rate = config.attention_downpersample_rate if downpersample_rate is None else downpersample_rate
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
 
-        self.internal_dim = config.hidden_size // downpersample_rate
+        self.internal_dim = config.hidden_size // downsample_rate
         self.num_attention_heads = config.num_attention_heads
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
