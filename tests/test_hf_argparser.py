@@ -14,17 +14,17 @@
 # limitations under the License.
 
 import argparse
-from collections import namedtuple
 import dataclasses
 import enum
 import os.path
 import sys
+from collections import namedtuple
 from unittest import mock
 
 from parameterized import parameterized
+
 from transformers import hf_argparser
 from transformers.testing_utils import TestCasePlus
-import yaml
 
 
 class TestHfArgparserGlobals(TestCasePlus):
