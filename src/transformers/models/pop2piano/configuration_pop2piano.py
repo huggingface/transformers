@@ -94,6 +94,10 @@ class Pop2PianoConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
+        composer_n_vocab (`int`, *optional*, defaults to 21):
+            Number of composers.
+        composer_to_feature_token (`dict`, *optional*, defaults to `COMPOSER_TO_FEATURE_TOKEN`):
+            composer_to_feature_token holds the feature value for each composer.
     """
 
     model_type = "pop2piano"
@@ -114,12 +118,14 @@ class Pop2PianoConfig(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
-        feed_forward_proj="gated-gelu",
+        feed_forward_proj="gated-gelu",  # noqa
         is_encoder_decoder=True,
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
+        composer_n_vocab=21,
+        composer_to_feature_token=COMPOSER_TO_FEATURE_TOKEN,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -136,11 +142,9 @@ class Pop2PianoConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
-        act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = dense_act_fn
-        self.is_gated_act = act_info[0] == "gated"
-        self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
+        self.composer_n_vocab = composer_n_vocab
+        self.composer_to_feature_token = composer_to_feature_token
 
         super().__init__(
             pad_token_id=pad_token_id,

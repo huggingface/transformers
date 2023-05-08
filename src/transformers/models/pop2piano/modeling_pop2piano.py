@@ -231,7 +231,7 @@ class Pop2PianoDenseGatedActDense(nn.Module):
 class Pop2PianoLayerFF(nn.Module):
     def __init__(self, config: Pop2PianoConfig):
         super().__init__()
-        if config.is_gated_act or config.feed_forward_proj.split("-")[0] == "gated":
+        if config.feed_forward_proj.split("-")[0] == "gated":
             self.DenseReluDense = Pop2PianoDenseGatedActDense(config)
         else:
             self.DenseReluDense = Pop2PianoDenseActDense(config)
@@ -699,7 +699,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, Pop2PianoLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, ConcatEmbeddingToMel):
+        elif isinstance(module, Pop2PianoConcatEmbeddingToMel):
             module.embedding.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoForConditionalGeneration):
             # Mesh TensorFlow embeddings initialization
@@ -987,11 +987,11 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         )
 
 
-class ConcatEmbeddingToMel(nn.Module):
+class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """Embedding Matrix for `composer` tokens."""
 
     def __init__(self, embedding_offset, n_vocab, n_dim) -> None:
-        super(ConcatEmbeddingToMel, self).__init__()
+        super().__init__()
         self.embedding = nn.Embedding(num_embeddings=n_vocab, embedding_dim=n_dim)
         self.embedding_offset = embedding_offset
 
@@ -1042,11 +1042,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         self.config = config
         self.model_dim = config.d_model
 
-        n_dim = 512
-        composer_n_vocab = len(config.composer_to_feature_token)
+        composer_n_vocab = config.composer_n_vocab
         embedding_offset = min(config.composer_to_feature_token.values())
-        self.mel_conditioner = ConcatEmbeddingToMel(
-            embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=n_dim
+
+        self.mel_conditioner = Pop2PianoConcatEmbeddingToMel(
+            embedding_offset=embedding_offset, n_vocab=composer_n_vocab, n_dim=self.model_dim
         )
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1093,9 +1093,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def get_mel_conditioner_outputs(self, input_features, composer):
+    def get_mel_conditioner_outputs(self, input_features, composer, generation_config):
+        try:
+            composer_to_feature_token = generation_config.composer_to_feature_token
+        except AttributeError:
+            composer_to_feature_token = self.config.composer_to_feature_token
+
         # select composer randomly if not already given
-        composer_to_feature_token = self.config.composer_to_feature_token
         if composer is None:
             composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
         elif composer not in composer_to_feature_token.keys():
@@ -1219,16 +1223,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     def generate(
         self,
         input_features: BatchFeature,
-        inputs_embeds=None,
         composer="composer1",
-        n_bars: int = 2,
         max_length: int = 256,
-        inputs: Optional[torch.Tensor] = None,
         generation_config=None,
         **kwargs,
     ):
         """
-        Generates sequences of token ids for models with a language modeling head.
+        Generates token ids for midi outputs.
 
         <Tip warning={true}>
 
@@ -1242,21 +1243,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         Parameters:
             input_features (`BatchFeature`):
                 `input_features` returned by `Pop2PianoFeatureExtractor.__call__`
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_features` you can choose to directly pass an embedded
-                representation. It is advised to use `input_features` and not `inputs_embeds` since `inputs_embeds`
-                requires values which are passed through `LogMelSpectrogram` and `ConcatEmbeddingToMel`.
             composer (`str`, *optional*, defaults to `"composer1"`):
-                This value is passed to `ConcatEmbeddingToMel` to generate different embeddings for each `"composer"`.
-            n_bars (`int`, *optional*, defaults to 2);
-                Helps to determine the `max_length` if `max_length` is not given.
+                This value is passed to `Pop2PianoConcatEmbeddingToMel` to generate different embeddings for each
+                `"composer"`.
             max_length (`int`, *optional*):
                 Number of tokens to be generated.
-            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
-                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
-                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
-                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
-                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -1294,22 +1285,22 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
         >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        >>> fe_output = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+        >>> fe_output = feature_extractor(
+        ...     raw_audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"]
+        ... ).to("cuda")
         >>> model_output = model.generate(fe_output, composer="composer1")
         ```"""
-        if input_features is not None and inputs_embeds is not None:
-            raise ValueError("Both input_features and inputs_embeds received. Please give only input_features")
 
         if generation_config is None:
             generation_config = self.generation_config
 
         inputs_embeds = self.get_mel_conditioner_outputs(
-            input_features=input_features["input_features"], composer=composer
+            input_features=input_features["input_features"], composer=composer, generation_config=generation_config
         )
 
         return super().generate(
-            inputs,
-            generation_config,
+            inputs=None,
+            generation_config=generation_config,
             inputs_embeds=inputs_embeds,
             max_length=max_length,
             **kwargs,

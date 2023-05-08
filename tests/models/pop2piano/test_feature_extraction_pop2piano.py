@@ -130,7 +130,7 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             dtype=np.float32,
         )
 
-        input_features = feature_extractor(speech_input, audio_sr=16_000, return_tensors="np")
+        input_features = feature_extractor(speech_input, sampling_rate=16_000, return_tensors="np")
         self.assertTrue(input_features.input_features.ndim == 3)
         self.assertEqual(input_features.input_features.shape[-1], 512)
 
@@ -140,11 +140,13 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_integration(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         speech_samples = ds.sort("id").select([0])["audio"]
-        input_speech, sampling_rate = [x["array"] for x in speech_samples], [
+        input_speech, sampling_rate = [x["array"] for x in speech_samples][0], [
             x["sampling_rate"] for x in speech_samples
-        ]
+        ][0]
         feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        input_features = feaure_extractor(input_speech, audio_sr=sampling_rate[0], return_tensors="pt").input_features
+        input_features = feaure_extractor(
+            input_speech, sampling_rate=sampling_rate, return_tensors="pt"
+        ).input_features
 
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [[-7.1493, -6.8701, -4.3214], [-5.9473, -5.7548, -3.8438], [-6.1324, -5.9018, -4.3778]]

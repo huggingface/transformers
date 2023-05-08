@@ -38,7 +38,8 @@ Tips:
 1. Pop2Piano is an Encoder-Decoder based model like T5.
 2. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
 3. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
-4. Please note that HuggingFace implementation of Pop2Piano(both Pop2PianoForConditionalGeneration and Pop2PianoFeatureExtractor) can only work with one raw_audio sequence at a time. So if you want to process multiple files, please feed them one by one.
+4. Please note that HuggingFace implementation of Pop2Piano can only work with one raw audio sequence at a time. If you want to process multiple files, please feed them one by one to the feature extractor and then the model.
+5. Setting the sampling rate to 44.1kHz when loading the audio file can give good performance.
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
@@ -57,7 +58,9 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
 >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
->>> fe_output = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+>>> fe_output = feature_extractor(raw_audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"]).to(
+...     "cuda"
+... )
 >>> model_output = model.generate(fe_output, composer="composer1")
 >>> tokenizer_output = tokenizer(
 ...     relative_tokens=model_output.cpu(),
@@ -79,7 +82,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
 
->>> fe_output = feature_extractor(raw_audio, audio_sr=sr).to("cuda")
+>>> fe_output = feature_extractor(raw_audio=raw_audio, sampling_rate=sr).to("cuda")
 >>> model_output = model.generate(fe_output, composer="composer1")
 >>> tokenizer_output = tokenizer(
 ...     relative_tokens=model_output.cpu(),

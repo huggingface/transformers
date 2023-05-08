@@ -70,7 +70,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        output_fe = feature_extractor(ds["audio"][0]["array"], audio_sr=ds["audio"][0]["sampling_rate"]).to("cuda")
+        output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"]).to(
+            "cuda"
+        )
         output_model = model.generate(output_fe, composer="composer1")
         output_tokenizer = tokenizer(
             relative_tokens=output_model.cpu(),

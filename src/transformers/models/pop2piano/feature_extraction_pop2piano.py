@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Feature extractor class for Pop2Piano"""
 
-import warnings
 from typing import List, Optional, Union
 
 import librosa
@@ -52,9 +51,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     Args:
     This class extracts rhythm and does preprocesses before being passed through the transformer model.
         sampling_rate (`int`, *optional*, defaults to 22050):
-            Sample rate of audio signal.
-        use_mel (`bool`, *optional*, defaults to `True`):
-            Whether to preprocess for `LogMelSpectrogram` or not. For the current implementation this must be `True`.
+            Target Sampling rate of audio signal. It's the sampling rate that we forward to the model.
         padding_value (`int`, *optional*, defaults to 0):
             Padding value used to pad the audio. Should correspond to silences.
         fft_window_size (`int`, *optional*, defaults to 4096):
@@ -66,14 +63,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         nb_mel_filters (`int`, *optional*, defaults to 512):
             Number of Mel filers to generate.
         n_bars (`int`, *optional*, defaults to 2):
-            Determines `n_steps` in method `preprocess_mel`. Per `n_step` th beat is taken from each sequence.
+            Determines interval between each sequence.
     """
     model_input_names = ["input_features"]
 
     def __init__(
         self,
         sampling_rate: int = 22050,
-        use_mel: int = True,
         padding_value: int = 0,
         fft_window_size: int = 4096,
         hop_length: int = 1024,
@@ -89,14 +85,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
-        self.n_bars = n_bars
         self.sampling_rate = sampling_rate
-        self.use_mel = use_mel
         self.padding_value = padding_value
         self.fft_window_size = fft_window_size
         self.hop_length = hop_length
         self.frequency_min = frequency_min
         self.nb_mel_filters = nb_mel_filters
+        self.n_bars = n_bars
 
     def log_mel_spectogram(self, sequence):
         """Generates MelSpectrogram then applies log base e."""
@@ -120,12 +115,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             spectrogram.append(spec)
 
         spec_shape = spec.shape
-        spectrogram = torch.Tensor(spectrogram).view(-1, *spec_shape)
-        log_melspec = (
-            torch.matmul(spectrogram.transpose(-1, -2), torch.from_numpy(mel_fb))
-            .transpose(-1, -2)
-            .clamp(min=1e-6)
-            .log()
+        spectrogram = np.array(spectrogram).reshape(-1, *spec_shape)
+        log_melspec = np.log(
+            np.clip(
+                np.transpose(np.matmul(np.transpose(spectrogram, (0, -1, -2)), mel_fb), (0, -1, -2)),
+                a_min=1e-6,
+                a_max=None,
+            )
         )
 
         return log_melspec
@@ -174,7 +170,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         n_bars,
         padding_value,
     ):
-        """Preprocessing for `LogMelSpectrogram`"""
+        """Preprocessing for log-mel spectrogram"""
 
         n_steps = n_bars * 4
         n_target_step = len(beatstep)
@@ -196,42 +192,33 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     def single_preprocess(
         self,
         beatstep,
-        feature_tokens=None,
         audio=None,
-        n_bars=None,
     ):
         """Preprocessing method for a single sequence."""
 
-        if feature_tokens is None and audio is None:
-            raise ValueError("Both `feature_tokens` and `audio` can't be None at the same time!")
-        if feature_tokens is not None:
-            if len(feature_tokens.shape) != 1:
-                raise ValueError(f"Expected `feature_tokens` shape to be (n, ) but found {feature_tokens.shape}")
         if audio is not None:
             if len(audio.shape) != 1:
-                raise ValueError(f"Expected `audio` shape to be (n, ) but found {feature_tokens.shape}")
-        n_bars = self.n_bars if n_bars is None else n_bars
+                raise ValueError(
+                    f"Expected `audio` to be a single channel audio input of shape to be (n, ) but found {audio.shape}."
+                )
 
         if beatstep[0] > 0.01:
-            warnings.warn(f"Inference Warning : beatstep[0] is not 0 ({beatstep[0]}). all beatstep will be shifted.")
+            logger.warning(f"`beatstep[0]` is not 0. All beatstep will be shifted by {beatstep[0]}.")
             beatstep = beatstep - beatstep[0]
 
-        if self.use_mel:
-            batch, ext_beatstep = self.preprocess_mel(
-                audio,
-                beatstep,
-                n_bars=n_bars,
-                padding_value=self.padding_value,
-            )
-        else:
-            raise NotImplementedError("use_mel must be True")
+        batch, ext_beatstep = self.preprocess_mel(
+            audio,
+            beatstep,
+            n_bars=self.n_bars,
+            padding_value=self.padding_value,
+        )
 
         return batch, ext_beatstep
 
     def __call__(
         self,
         raw_audio: Union[np.ndarray, List[float], List[np.ndarray]],
-        audio_sr: int,
+        sampling_rate: int,
         steps_per_beat: int = 2,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         **kwargs,
@@ -242,7 +229,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         only accepts one raw_audio at a time.
             raw_audio (`np.ndarray`, `List`):
                 Denotes the raw_audio.
-            audio_sr (`int`):
+            sampling_rate (`int`):
                 Denotes the Sampling Rate of `raw_audio`.
             steps_per_beat (`int`, *optional*, defaults to 2):
                 Denotes Steps per beat.
@@ -251,10 +238,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
-        warnings.warn("If you are not getting optimal performence, please try audio sampling_rate as 44100.")
-        warnings.warn(
-            "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
+        is_batched = bool(
+            isinstance(raw_audio, (list, tuple))
+            and (isinstance(raw_audio[0], np.ndarray) or isinstance(raw_audio[0], (tuple, list)))
         )
+        if is_batched:
+            raise ValueError(
+                "Pop2PianoFeatureExtractor only takes one raw_audio at a time, if you want to extract features from more than a single audio then you might need to call it multiple times."
+            )
 
         # If it's [np.ndarray]
         if isinstance(raw_audio, list) and isinstance(raw_audio[0], np.ndarray):
@@ -263,29 +254,25 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
         beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
-        if self.sampling_rate != audio_sr and self.sampling_rate is not None:
-            # Change audio_sr to self.sampling_rate
+        if self.sampling_rate != sampling_rate and self.sampling_rate is not None:
+            # Change sampling_rate to self.sampling_rate
             raw_audio = librosa.core.resample(
-                raw_audio, orig_sr=audio_sr, target_sr=self.sampling_rate, res_type="kaiser_best"
+                raw_audio, orig_sr=sampling_rate, target_sr=self.sampling_rate, res_type="kaiser_best"
             )
 
-        audio_sr = self.sampling_rate
-        start_sample = int(beatsteps[0] * audio_sr)
-        end_sample = int(beatsteps[-1] * audio_sr)
+        sampling_rate = self.sampling_rate
+        start_sample = int(beatsteps[0] * sampling_rate)
+        end_sample = int(beatsteps[-1] * sampling_rate)
         _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
-        fzs = None
 
         batch, ext_beatstep = self.single_preprocess(
-            feature_tokens=fzs,
-            audio=_audio,
             beatstep=beatsteps - beatsteps[0],
-            n_bars=self.n_bars,
+            audio=_audio,
         )
 
         # Apply LogMelSpectogram
-        batch = self.log_mel_spectogram(batch).transpose(-1, -2)
+        batch = np.transpose(self.log_mel_spectogram(batch), (0, -1, -2))
 
-        batch = batch.cpu().numpy()
         output = BatchFeature(
             {
                 "input_features": batch,
