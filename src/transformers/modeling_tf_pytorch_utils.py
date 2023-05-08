@@ -246,6 +246,7 @@ def load_pytorch_state_dict_in_tf2_model(
     output_loading_info=False,
     _prefix=None,
     tf_to_pt_weight_rename=None,
+    ignore_mismatched_sizes=False,
 ):
     """Load a pytorch state_dict in a TF 2.0 model."""
     import tensorflow as tf
@@ -319,7 +320,13 @@ def load_pytorch_state_dict_in_tf2_model(
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
 
-        array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
+        try:
+            array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
+        except tf.errors.InvalidArgumentError:
+            if not ignore_mismatched_sizes:
+                raise
+            else:
+                continue
 
         tf_loaded_numel += tensor_size(array)
 
