@@ -164,6 +164,7 @@ from . import (
     roformer,
     rwkv,
     sam,
+    persam,
     segformer,
     sew,
     sew_d,

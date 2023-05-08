@@ -440,6 +440,14 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.persam": [
+        "PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PerSamConfig",
+        "PerSamMaskDecoderConfig",
+       
+        "PerSamPromptEncoderConfig",
+        "PerSamVisionConfig",
+    ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -2392,6 +2400,13 @@ else:
             "SamPreTrainedModel",
         ]
     )
+    _import_structure["models.persam"].extend(
+        [
+            "PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PerSamModel",
+            "PerSamPreTrainedModel",
+        ]
+    )
     _import_structure["models.segformer"].extend(
         [
             "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4214,6 +4229,14 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.persam import (
+        PERSAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PerSamConfig,
+        PerSamMaskDecoderConfig,
+       
+        PerSamPromptEncoderConfig,
+        PerSamVisionConfig,
+    )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
@@ -5844,6 +5867,11 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
+        )
+        from .models.persam import (
+            PERSAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PerSamModel,
+            PerSamPreTrainedModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
