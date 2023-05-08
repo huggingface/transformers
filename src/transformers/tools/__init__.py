@@ -1,5 +1,5 @@
 from .agents import Agent, EndpointAgent, OpenAiAgent
-from .base import PipelineTool, RemoteTool, load_tool
+from .base import PipelineTool, RemoteTool, Tool, load_tool
 from .document_question_answering import DocumentQuestionAnsweringTool
 from .generative_question_answering import GenerativeQuestionAnsweringTool, RemoteGenerativeQuestionAnsweringTool
 from .image_captioning import ImageCaptioningTool, RemoteImageCaptioningTool

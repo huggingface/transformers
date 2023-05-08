@@ -2,14 +2,13 @@ import importlib.util
 import json
 import os
 import time
-import warnings
 from dataclasses import dataclass
 
 import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..utils import logging
-from .base import TASK_MAPPING, Tool, load_tool, supports_remote
+from .base import TASK_MAPPING, Tool, load_tool
 from .prompts import CHAT_MESSAGE_PROMPT, CHAT_PROMPT_TEMPLATE, RUN_PROMPT_TEMPLATE
 from .python_interpreter import evaluate
 
@@ -114,10 +113,7 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
         if isinstance(tool, Tool):
             resolved_tools[name] = tool
 
-        tool_has_remote = tool.repo_id is None and supports_remote(tool.task)
-        if remote and not tool_has_remote:
-            warnings.warn(f"Loading `tool({tool.task})` locally as it does not support `remote=True` yet.")
-        resolved_tools[name] = load_tool(tool.task, repo_id=tool.repo_id, remote=(remote and tool_has_remote))
+        resolved_tools[name] = load_tool(tool.task, repo_id=tool.repo_id, remote=remote)
 
     return resolved_tools
 
