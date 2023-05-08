@@ -447,10 +447,13 @@ def load_tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, t
         tools_module = main_module.tools
         tool_class = getattr(tools_module, tool_class_name)
 
+        if repo_id is None and model_repo_id is not None:
+            repo_id = model_repo_id
+
         if remote:
-            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
+            return RemoteTool(repo_id, token=token, tool_class=tool_class)
         else:
-            return tool_class(repo_id, model=model_repo_id, token=token, **kwargs)
+            return tool_class(repo_id, token=token, **kwargs)
     else:
         return Tool.from_hub(
             task_or_repo_id, repo_id=repo_id, token=token, remote=remote, model_repo_id=model_repo_id, **kwargs
