@@ -314,19 +314,15 @@ class RemoteTool(Tool):
             raise ValueError("A `RemoteTool` can only accept one positional input.")
         elif len(args) == 1:
             if is_pil_image(args[0]):
-                byte_io = io.BytesIO()
-                args[0].save(byte_io, format="PNG")
-                return {"inputs": byte_io.getvalue()}
+                return {"inputs": self.client.encode_image(args[0])}
             return {"inputs": args[0]}
 
         inputs = kwargs.copy()
         for key, value in inputs.items():
             if is_pil_image(value):
-                byte_io = io.BytesIO()
-                value.save(byte_io, format="PNG")
-                inputs[key] = byte_io.getvalue()
+                inputs[key] = self.client.encode_image(value)
 
-        return {"inputs": kwargs}
+        return {"inputs": inputs}
 
     def extract_outputs(self, outputs):
         return outputs
@@ -479,7 +475,7 @@ TASK_MAPPING = {
 }
 
 
-def load_tool(task_or_repo_id, repo_id=None, remote=False, token=None, **kwargs):
+def load_tool(task_or_repo_id, repo_id=None, model_repo_id=None, remote=False, token=None, **kwargs):
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         main_module = importlib.import_module("transformers")
@@ -487,11 +483,13 @@ def load_tool(task_or_repo_id, repo_id=None, remote=False, token=None, **kwargs)
         tool_class = getattr(tools_module, tool_class_name)
 
         if remote:
-            return RemoteTool(repo_id, token=token, tool_class=tool_class)
+            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         else:
-            return tool_class(repo_id, token=token, **kwargs)
+            return tool_class(repo_id, model=model_repo_id, token=token, **kwargs)
     else:
-        return Tool.from_hub(task_or_repo_id, repo_id=repo_id, token=token, remote=remote, **kwargs)
+        return Tool.from_hub(
+            task_or_repo_id, repo_id=repo_id, token=token, remote=remote, model_repo_id=model_repo_id, **kwargs
+        )
 
 
 def add_description(description):
@@ -514,6 +512,26 @@ class EndpointClient:
         self.headers = {"authorization": f"Bearer {token}", "Content-Type": "application/json"}
         self.endpoint_url = endpoint_url
 
+    @staticmethod
+    def encode_image(image):
+        _bytes = io.BytesIO()
+        image.save(_bytes, format="PNG")
+        b64 = base64.b64encode(_bytes.getvalue())
+        return b64.decode("utf-8")
+
+    @staticmethod
+    def decode_image(raw_image):
+        if not is_vision_available():
+            raise ImportError(
+                "This tool returned an image but Pillow is not installed. Please install it (`pip install Pillow`)."
+            )
+
+        from PIL import Image
+
+        b64 = base64.b64decode(raw_image)
+        _bytes = io.BytesIO(b64)
+        return Image.open(_bytes)
+
     def __call__(
         self,
         inputs: Optional[Union[str, Dict, List[str], List[List[str]]]] = None,
@@ -533,16 +551,6 @@ class EndpointClient:
 
         # By default, parse the response for the user.
         if output_image:
-            if not is_vision_available():
-                raise ImportError(
-                    f"Task '{self.task}' returned as image but Pillow is not installed."
-                    " Please install it (`pip install Pillow`) or pass"
-                    " `raw_response=True` to get the raw `Response` object and parse"
-                    " the image by yourself."
-                )
-
-            from PIL import Image
-
-            return Image.open(io.BytesIO(base64.b64decode(response.content)))
+            return self.decode_image(response.content)
         else:
             return response.json()

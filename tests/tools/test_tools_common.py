@@ -16,10 +16,15 @@
 from pathlib import Path
 from typing import List
 
-import torch
-from PIL import Image
-
+from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir, is_tool_test
+
+
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
 
 
 authorized_types = ["text", "image", "audio"]
