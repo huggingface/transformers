@@ -1416,13 +1416,14 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
-        outputs = self.encoder(
-            input_features,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        if encoder_outputs is None:
+            outputs = self.encoder(
+                input_features,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
         if self.config.use_weighted_layer_sum:
             hidden_states = tf.stack(encoder_outputs, axis=1)
             norm_weights = tf.nn.softmax(self.layer_weights, axis=-1)
