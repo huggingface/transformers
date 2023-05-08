@@ -2598,12 +2598,12 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         modules = {
             "bitsandbytes": mock,
             "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Adam8bit": mock.optim.Adam8bit,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
                 TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                mock.optim.Adam8bit,
+                mock.optim.AdamW,
                 default_adam_kwargs,
             )
 
