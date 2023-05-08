@@ -190,32 +190,6 @@ def mel_filter_bank(
     return mel_filters
 
 
-def apply_mel_filters(
-    spectrogram: np.ndarray,
-    mel_filters: np.ndarray,
-    mel_floor: float = 1e-10,
-) -> np.ndarray:
-    """
-    Applies a mel filter bank to a spectrogram to create a mel spectrogram.
-
-    To create a log-mel spectrogram, call `np.log10(...)` on the output of this function. To convert to true decibels,
-    use `amplitude_to_db()` or `power_to_db()`, depending on whether this is an amplitude or power spectrogram.
-
-    Args:
-        spectrogram (`np.ndarray` of shape `(num_freq_bins, length)`):
-            The input amplitude or power spectrogram.
-        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`):
-            The mel filter bank.
-        mel_floor (`float`, *optional*, defaults to 1e-10):
-            Minimum value of mel frequency banks.
-
-    Returns:
-        `np.ndarray` of shape `(num_mel_filters, length)`: The mel spectrogram.
-    """
-    mel = np.maximum(mel_floor, np.dot(mel_filters.T, spectrogram))
-    return mel
-
-
 def optimal_fft_length(window_length: int) -> int:
     """
     Finds the best FFT input size for a given `window_length`. This function takes a given window length and, if not
@@ -290,7 +264,7 @@ def window_function(
 
 
 # TODO This method does not support batching yet as we are mainly focused on inference.
-def stft(
+def spectrogram(
     waveform: np.ndarray,
     window: np.ndarray,
     frame_length: int,
@@ -301,9 +275,25 @@ def stft(
     pad_mode: str = "reflect",
     onesided: bool = True,
     preemphasis: Optional[float] = None,
+    mel_filters: Optional[np.ndarray] = None,
+    mel_floor: float = 1e-10,
+    log_mel: Optional[str] = None,
+    reference: float = 1.0,
+    min_value: float = 1e-10,
+    db_range: Optional[float] = None,
+    dtype: np.dtype = np.float32,
 ) -> np.ndarray:
     """
     Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
+
+    This function can create the following kinds of spectrograms:
+
+      - amplitude spectrogram (`power = 1.0`)
+      - power spectrogram (`power = 2.0`)
+      - complex-valued spectrogram (`power = None`)
+      - log spectrogram (use `log_mel` argument)
+      - mel spectrogram (provide `mel_filters`)
+      - log-mel spectrogram (provide `mel_filters` and `log_mel`)
 
     How this works:
 
@@ -355,10 +345,31 @@ def stft(
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
+        mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
+            The mel filter bank. If supplied, applies a this filter bank to create a mel spectrogram.
+        mel_floor (`float`, *optional*, defaults to 1e-10):
+            Minimum value of mel frequency banks.
+        log_mel (`str`, *optional*):
+            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take
+            the natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be
+            used when `power` is not `None`.
+        reference (`float`, *optional*, defaults to 1.0):
+            Sets the input spectrogram value that corresponds to 0 dB. For example, use `np.max(spectrogram)` to set
+            the loudest part to 0 dB. Must be greater than zero.
+        min_value (`float`, *optional*, defaults to `1e-10`):
+            The spectrogram will be clipped to this minimum value before conversion to decibels, to avoid taking
+            `log(0)`. For a power spectrogram, the default of `1e-10` corresponds to a minimum of -100 dB. For an
+            amplitude spectrogram, the value `1e-5` corresponds to -100 dB. Must be greater than zero.
+        db_range (`float`, *optional*):
+            Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
+            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
+        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
+            Data type of the spectrogram tensor. If `power` is None, this argument is ignored and the dtype will be
+            `np.complex64`.
 
     Returns:
-        `np.ndarray` of shape `(num_frequency_bins, num_frames)` containing the spectrogram; its dtype is
-        `np.complex64` when `power` is None or `np.float64` otherwise.
+        `nd.array` containing a spectrogram of shape `(num_frequency_bins, length)` for a regular spectrogram or
+        shape `(num_mel_filters, length)` for a mel spectrogram.
     """
     window_length = len(window)
 
@@ -416,65 +427,10 @@ def stft(
     if power is not None:
         spectrogram = np.abs(spectrogram, dtype=np.float64) ** power
 
-    return spectrogram.T
-
-
-def spectrogram(
-    waveform: np.ndarray,
-    window: np.ndarray,
-    frame_length: int,
-    hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
-    center: bool = True,
-    pad_mode: str = "reflect",
-    onesided: bool = True,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
-    mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
-    reference: float = 1.0,
-    min_value: float = 1e-10,
-    db_range: Optional[float] = None,
-    dtype: np.dtype = np.float32,
-) -> np.ndarray:
-    """
-    Convenience function that creates a spectrogram from a waveform.
-
-    This function can create the following kinds of spectrograms:
-
-      - amplitude spectrogram (`power = 1.0`)
-      - power spectrogram (`power = 2.0`)
-      - complex-valued spectrogram (`power = None`)
-      - log spectrogram (use `log_mel` argument)
-      - mel spectrogram (provide `mel_filters`)
-      - log-mel spectrogram (provide `mel_filters` and `log_mel`)
-
-    Args:
-        log_mel (`str`, *optional*):
-            How to convert the spectrogram to log scale. Possible options are: `None` (don't convert), `"log"` (take
-            the natural logarithm) `"log10"` (take the base-10 logarithm), `"dB"` (convert to decibels). Can only be
-            used when `power` is not `None`.
-        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
-            Data type of the spectrogram tensor.
-
-    See the arguments of `stft` and `apply_mel_filters` for more information.
-    """
-    spectrogram = stft(
-        waveform,
-        window,
-        frame_length,
-        hop_length,
-        fft_length,
-        power,
-        center,
-        pad_mode,
-        onesided,
-        preemphasis,
-    )
+    spectrogram = spectrogram.T
 
     if mel_filters is not None:
-        spectrogram = apply_mel_filters(spectrogram, mel_filters, mel_floor)
+        spectrogram = np.maximum(mel_floor, np.dot(mel_filters.T, spectrogram))
 
     if power is not None and log_mel is not None:
         if log_mel == "log":
