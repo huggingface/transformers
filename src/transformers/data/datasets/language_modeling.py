@@ -499,7 +499,25 @@ class TextDatasetForNextSentencePrediction(Dataset):
                         is_random_next = False
                         for j in range(a_end, len(current_chunk)):
                             tokens_b.extend(current_chunk[j])
+                    
+                    def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
+                        """Truncates a pair of sequences to a maximum sequence length."""
+                        while True:
+                            total_length = len(tokens_a) + len(tokens_b)
+                            if total_length <= max_num_tokens:
+                                break
 
+                            trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+                            assert len(trunc_tokens) >= 1
+
+                            if random.random() < 0.5:
+                                del trunc_tokens[0]
+                            else:
+                                trunc_tokens.pop()
+                                
+                    #Call truncate_seq_pair function to truncate. This is necessary because in the end, chunk added can exceed the maximum length allowed for long documents.
+                    truncate_seq_pair(tokens_a, tokens_b, max_num_tokens)
+                    
                     if not (len(tokens_a) >= 1):
                         raise ValueError(f"Length of sequence a is {len(tokens_a)} which must be no less than 1")
                     if not (len(tokens_b) >= 1):
