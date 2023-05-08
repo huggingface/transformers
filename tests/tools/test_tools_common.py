@@ -19,7 +19,7 @@ from typing import List
 import torch
 from PIL import Image
 
-from transformers.testing_utils import get_tests_dir
+from transformers.testing_utils import get_tests_dir, is_tool_test
 
 
 authorized_types = ["text", "image", "audio"]
@@ -61,6 +61,7 @@ def output_types(outputs: List):
     return output_types
 
 
+@is_tool_test
 class ToolTesterMixin:
     def test_inputs_outputs(self):
         self.assertTrue(hasattr(self.tool, "inputs"))

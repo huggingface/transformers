@@ -148,6 +148,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
+_run_tool_tests = parse_flag_from_env("RUN_TOOL_TESTS", default=False)
 
 
 def is_pt_tf_cross_test(test_case):
@@ -219,6 +220,21 @@ def is_pipeline_test(test_case):
             return test_case
         else:
             return pytest.mark.is_pipeline_test()(test_case)
+
+
+def is_tool_test(test_case):
+    """
+    Decorator marking a test as a tool test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
+    """
+    if not _run_tool_tests:
+        return unittest.skip("test is a tool test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_tool_test()(test_case)
 
 
 def slow(test_case):
