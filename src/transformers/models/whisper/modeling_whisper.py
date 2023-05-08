@@ -1471,6 +1471,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
+        return_word_timestamps=None,
         **kwargs,
     ):
         """
@@ -1533,6 +1534,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+            return_word_timestamps (`bool`, *optional*):
+                Whether to return word-level timestamps with the text. It is not necessary to enable
+                `return_timestamps` for this, but if you do, it organizes the word-level timestamps per chunk.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
