@@ -233,7 +233,7 @@ class Tool:
             use_temp_dir = not os.path.isdir(working_dir)
 
         with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
-            files_timestamps = self._get_files_timestamps(work_dir)
+            files_timestamps = {f: os.path.getmtime(os.path.join(work_dir, f)) for f in os.listdir(work_dir)}
 
             # Save all files.
             self.save(work_dir)
