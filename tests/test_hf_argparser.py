@@ -19,7 +19,7 @@ import enum
 import os.path
 import sys
 from collections import namedtuple
-from typing import Optional, Union
+from typing import List, Optional, Union
 from unittest import mock
 
 from parameterized import parameterized
@@ -151,11 +151,11 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses(
         self,
         name: str,
-        args: list[str],
+        args: List[str],
         expected_str: str,
         expected_int: int,
         return_remaining_strings: bool,
-        expected_remaining_strings: Optional[list[str]],
+        expected_remaining_strings: Optional[List[str]],
         args_filename: bool,
         args_file_flag: str,
     ):
@@ -274,7 +274,7 @@ class TestHfArgumentParser(TestCasePlus):
     def test_parse_args_into_dataclasses_accepts_list(self):
         @dataclasses.dataclass
         class TestClass:
-            hf_arg: list[int] = hf_argparser.HfArg(aliases=["-i"])
+            hf_arg: List[int] = hf_argparser.HfArg(aliases=["-i"])
 
         parser = hf_argparser.HfArgumentParser(TestClass)
 
