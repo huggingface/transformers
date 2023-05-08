@@ -706,17 +706,13 @@ class BatchEncoding(UserDict):
             is_tensor = is_jax_tensor
         else:
 
-            def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0:
+            def as_tensor(value, dtype=None):
+                if isinstance(value, (list, tuple)) and len(value) > 0 and not isinstance(value[0], np.ndarray):
                     value_lens = [len(val) for val in value]
-                    if len(np.unique(value_lens)) != 1:
+                    if len(set(value_lens)) > 1:
                         # we have a ragged list so handle explicitly
-                        value = np.asarray([np.asarray(val) for val in value], dtype=object)
-                    else:
-                        value = np.asarray(value)
-                else:
-                    value = np.asarray(value)
-                return value
+                        value = as_tensor([np.asarray(val) for val in value], dtype=object)
+                return np.asarray(value, dtype=dtype)
 
             is_tensor = is_numpy_array
 
