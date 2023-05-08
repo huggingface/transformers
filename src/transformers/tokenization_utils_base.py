@@ -707,11 +707,13 @@ class BatchEncoding(UserDict):
         else:
 
             def as_tensor(value):
-                if isinstance(value, (list, tuple, np.ndarray)) and len(value) > 0:
+                if isinstance(value, (list, tuple)) and len(value) > 0:
                     value_lens = [len(val) for val in value]
                     if len(np.unique(value_lens)) != 1:
                         # we have a ragged list so handle explicitly
                         value = np.asarray([np.asarray(val) for val in value], dtype=object)
+                    else:
+                        value = np.asarray(value)
                 else:
                     value = np.asarray(value)
                 return value
