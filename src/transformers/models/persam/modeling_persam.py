@@ -201,7 +201,7 @@ class PerSamAttention(nn.Module):
     """
 
     # Copied from transformers.models.sam.modeling_sam.SamAttention.__init__
-    def __init__(self, config, downpersample_rate=None) -> None:
+    def __init__(self, config, downsample_rate=None) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -262,7 +262,7 @@ class PerSamAttention(nn.Module):
 
 class PerSamTwoWayAttentionBlock(nn.Module):
     # Copied from transformers.models.sam.modeling_sam.SamTwoWayAttentionBlock.__init__ with Sam->PerSam,sam->persam
-    def __init__(self, config, attention_downpersample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
+    def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False) -> None:
         """
         A transformer block with four layers:
             (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
@@ -271,8 +271,8 @@ class PerSamTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`PerSamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downpersample_rate (*optionalk*, int, defaults to 2):
-                The downpersample ratio of the block used to reduce the inner dim of the attention.
+            attention_downsample_rate (*optionalk*, int, defaults to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
         """
@@ -281,17 +281,17 @@ class PerSamTwoWayAttentionBlock(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = PerSamAttention(config, downpersample_rate=1)
+        self.self_attn = PerSamAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = PerSamAttention(config, downpersample_rate=attention_downpersample_rate)
+        self.cross_attn_token_to_image = PerSamAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.mlp = PerSamMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = PerSamAttention(config, downpersample_rate=attention_downpersample_rate)
+        self.cross_attn_image_to_token = PerSamAttention(config, downsample_rate=attention_downsample_rate)
 
         self.skip_first_layer_pe = skip_first_layer_pe
 

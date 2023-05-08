@@ -96,7 +96,7 @@ class PerSamMaskDecoderConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        attention_downpersample_rate (`int`, *optional*, defaults to 2):
+        attention_downsample_rate (`int`, *optional*, defaults to 2):
             The downpersampling rate of the attention layer.
         num_multimask_outputs (`int`, *optional*, defaults to 3):
             The number of outputs from the `PerSamMaskDecoder` module. In the Segment Anything paper, this is set to 3.
@@ -116,7 +116,7 @@ class PerSamMaskDecoderConfig(PretrainedConfig):
         mlp_dim=2048,
         num_hidden_layers=2,
         num_attention_heads=8,
-        attention_downpersample_rate=2,
+        attention_downsample_rate=2,
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
@@ -129,7 +129,7 @@ class PerSamMaskDecoderConfig(PretrainedConfig):
         self.mlp_dim = mlp_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.attention_downpersample_rate = attention_downpersample_rate
+        self.attention_downsample_rate = attention_downsample_rate
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
