@@ -19,7 +19,7 @@ class TextSummarizationTool(PipelineTool):
         "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, "
         "and returns a summary of the text."
     )
-    name = "sumamrizer"
+    name = "summarizer"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
@@ -33,5 +33,4 @@ class TextSummarizationTool(PipelineTool):
         return self.model.generate(**inputs)[0]
 
     def decode(self, outputs):
-        print(outputs)
         return self.pre_processor.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)

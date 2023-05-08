@@ -1,5 +1,6 @@
 import base64
 import importlib
+import inspect
 import io
 import json
 import os
@@ -267,14 +268,31 @@ class RemoteTool(Tool):
         self.tool_class = tool_class
 
     def prepare_inputs(self, *args, **kwargs):
-        if len(args) > 1:
-            raise ValueError("A `RemoteTool` can only accept one positional input.")
-        elif len(args) == 1:
-            if is_pil_image(args[0]):
-                return {"inputs": self.client.encode_image(args[0])}
-            return {"inputs": args[0]}
-
         inputs = kwargs.copy()
+        if len(args) > 0:
+            if self.tool_class is not None:
+                # Match args with the signature
+                signature = inspect.signature(self.tool_class.__call__).parameters
+                parameters = [
+                    k
+                    for k, p in signature.items()
+                    if p.kind not in [inspect._ParameterKind.VAR_POSITIONAL, inspect._ParameterKind.VAR_KEYWORD]
+                ]
+                if parameters[0] == "self":
+                    parameters = parameters[1:]
+                if len(args) > len(parameters):
+                    raise ValueError(
+                        f"{self.tool_class} only accepts {len(parameters)} arguments but {len(args)} were given."
+                    )
+                for arg, name in zip(args, parameters):
+                    inputs[name] = arg
+            elif len(args) > 1:
+                raise ValueError("A `RemoteTool` can only accept one positional input.")
+            elif len(args) == 1:
+                if is_pil_image(args[0]):
+                    return {"inputs": self.client.encode_image(args[0])}
+                return {"inputs": args[0]}
+
         for key, value in inputs.items():
             if is_pil_image(value):
                 inputs[key] = self.client.encode_image(value)
@@ -436,6 +454,11 @@ def get_default_endpoints():
     with open(endpoints_file, "r", encoding="utf-8") as f:
         endpoints = json.load(f)
     return endpoints
+
+
+def supports_remote(task_or_repo_id):
+    endpoints = get_default_endpoints()
+    return task_or_repo_id in endpoints
 
 
 def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
