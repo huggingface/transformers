@@ -3002,6 +3002,13 @@ class FNetPreTrainedModel(metaclass=DummyObject):
 FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class FocalNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FocalNetForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3280,6 +3287,13 @@ class GPTNeoForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTNeoForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3316,6 +3330,13 @@ GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class GPTNeoXForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

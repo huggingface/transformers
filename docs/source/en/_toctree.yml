@@ -71,6 +71,8 @@
         title: Image captioning
       - local: tasks/document_question_answering
         title: Document Question Answering
+      - local: tasks/text-to-speech
+        title: Text to speech
     title: Multimodal
     isExpanded: false
   title: Task Guides
