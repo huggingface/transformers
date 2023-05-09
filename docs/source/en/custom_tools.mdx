@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -65,7 +65,7 @@ It takes two inputs: `image`, which should be the image to transform, and `promp
 Name: 'image_transformer'
 ```
 
-The name and description is accurate and fits the style of the [curated set of tools](https://moon-ci-docs.huggingface.co/docs/transformers/pr_23214/en/transformers_agents#a-curated-set-of-tools).
+The name and description is accurate and fits the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
 Next, let's instantiate an agent with `controlnet_transformer` and `upscaler`:
 
 ```py
@@ -117,7 +117,7 @@ print("\n".join([f"- {a}" for a in agent.toolbox.keys()]))
 
 Note how `image_upscaler` is now part of the agents' toolbox.
 
-Let's now try out the new tools! We will re-use the image we generated in (Transformers Agents Quickstart)[`transformers_agents#single-execution-run`].
+Let's now try out the new tools! We will re-use the image we generated in (Transformers Agents Quickstart)[./transformers_agents#single-execution-run].
 
 ```py
 from diffusers.utils import load_image
@@ -171,7 +171,7 @@ Next, let's have a look into how you can create a new custom tool.
 
 ### Adding new tools
 
-In this section we'll add a new tool so that the agent may benefit from it.
+In this section we show how to create a new tool that can be added to the agent.
 
 #### Creating a new tool
 
