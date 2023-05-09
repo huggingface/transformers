@@ -359,6 +359,7 @@ class Trainer:
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 
                 ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+                ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
                 ds_plugin.hf_ds_config.trainer_config_process(self.args)
 
         self.accelerator.print(f"{self.accelerator=}")
