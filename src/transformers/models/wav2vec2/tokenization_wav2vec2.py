@@ -820,9 +820,13 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
                 values, a list of numpy arrayr or a list of list of float values.
         """
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) == 2
+        if is_batched_numpy:
+            assert (
+                len(raw_speech.shape) == 2
+            ), f"Only mono-channel audio is supported for input to {self.__class__.__name__}"
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         # make sure input is in list format
