@@ -284,7 +284,7 @@ Flax), PyTorch, dan/atau TensorFlow.
 |             BERT              |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |        Bert Generation        |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            BigBird            |       ✅       |       ✅       |       ✅        |         ❌         |      ✅      |
-|        BigBird-Pegasu         |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
+|        BigBird-Pegasus        |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            BioGpt             |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |              BiT              |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          Blenderbot           |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
