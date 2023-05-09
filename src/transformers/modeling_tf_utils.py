@@ -1252,13 +1252,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def serving_output(self, output):
         """
-        Prepare the output of the saved model. Each model must implement this function.
-
-        Args:
-            output ([`TFBaseModelOutput`]):
-                The output returned by the model.
+        Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
-        raise NotImplementedError
+
+        return output
 
     def can_generate(self) -> bool:
         """
