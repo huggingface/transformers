@@ -18,7 +18,7 @@ from transformers.modeling_outputs import (
 )
 
 # from .configuration_beit_3 import Beit3Config
-from transformers.models.beit_3.configuration_beit_3 import Beit3Config
+from transformers.models.beit3.configuration_beit_3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 
 

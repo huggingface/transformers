@@ -407,7 +407,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("bart", "BartForCausalLM"),
-        ("beit_3", "BEiT3ForCaptioning"),
+        ("beit3", "BEiT3ForCaptioning"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
         ("big_bird", "BigBirdForCausalLM"),
@@ -498,7 +498,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
-        ("beit_3", "BEiT3ForImageClassification"),
+        ("beit3", "BEiT3ForImageClassification"),
         ("bit", "BitForImageClassification"),
         ("clip", "CLIPForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),

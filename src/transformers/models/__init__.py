@@ -24,7 +24,7 @@ from . import (
     barthez,
     bartpho,
     beit,
-    beit_3,
+    beit3,
     bert,
     bert_generation,
     bert_japanese,

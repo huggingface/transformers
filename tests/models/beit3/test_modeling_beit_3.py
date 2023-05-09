@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import VisualBertConfig, is_torch_available
-from transformers.models.beit_3.configuration_beit_3 import Beit3Config
+from transformers.models.beit3.configuration_beit_3 import Beit3Config
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
