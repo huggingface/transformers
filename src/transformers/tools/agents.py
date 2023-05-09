@@ -314,6 +314,13 @@ class OpenAiAgent(Agent):
     """
     Agent that uses the openai API to generate code.
 
+    <Tip warning={true}>
+
+    The openAI models are used in generation mode, so even for the `chat()` API, it's better to use models like
+    `"text-davinci-003"` over the chat-GPT variant. Proper support for chat-GPT models will come in a next version. 
+
+    </Tip>
+
     Args:
         model (`str`, *optional*, defaults to `"text-davinci-003"`):
             The name of the openAI model to use.

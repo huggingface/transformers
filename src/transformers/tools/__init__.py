@@ -32,7 +32,7 @@ else:
 
 if TYPE_CHECKING:
     from .agents import Agent, HfAgent, OpenAiAgent
-    from .base import PipelineTool, RemoteTool, Tool, load_tool
+    from .base import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
 
     try:
         if not is_torch_available():
