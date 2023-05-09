@@ -252,8 +252,8 @@ class TrainingArguments:
         logging_first_step (`bool`, *optional*, defaults to `False`):
             Whether to log and evaluate the first `global_step` or not.
         logging_steps (`float`, *optional*, defaults to 500):
-            Number of update steps between two logs if `logging_strategy="steps"`. If smaller than 1, will be
-            interpreted as ratio of total training steps.
+            Number of update steps between two logs if `logging_strategy="steps"`. Should be an integer or a float in
+            range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
         logging_nan_inf_filter (`bool`, *optional*, defaults to `True`):
             Whether to filter `nan` and `inf` losses for logging. If set to `True` the loss of every step that is `nan`
             or `inf` is filtered and the average loss of the current logging window is taken instead.
@@ -272,8 +272,8 @@ class TrainingArguments:
                 - `"epoch"`: Save is done at the end of each epoch.
                 - `"steps"`: Save is done every `save_steps`.
         save_steps (`float`, *optional*, defaults to 500):
-            Number of updates steps before two checkpoint saves if `save_strategy="steps"`. If smaller than 1, will be
-            interpreted as ratio of total training steps.
+            Number of updates steps before two checkpoint saves if `save_strategy="steps"`. Should be an integer or a
+            float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             `output_dir`.
@@ -336,8 +336,8 @@ class TrainingArguments:
             or not.
         eval_steps (`float`, *optional*):
             Number of update steps between two evaluations if `evaluation_strategy="steps"`. Will default to the same
-            value as `logging_steps` if not set. If smaller than 1, will be interpreted as ratio of total training
-            steps.
+            value as `logging_steps` if not set. Should be an integer or a float in range `[0,1)`. If smaller than 1,
+            will be interpreted as ratio of total training steps.
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
@@ -724,13 +724,29 @@ class TrainingArguments:
         metadata={"help": "The logging strategy to use."},
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
-    logging_steps: float = field(default=500, metadata={"help": "Log every X updates steps. If smaller than 1, will be interpreted as ratio of total training steps."})
+    logging_steps: float = field(
+        default=500,
+        metadata={
+            "help": (
+                "Log every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
     )
-    save_steps: float = field(default=500, metadata={"help": "Save checkpoint every X updates steps. If smaller than 1, will be interpreted as ratio of total training steps."})
+    save_steps: float = field(
+        default=500,
+        metadata={
+            "help": (
+                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
     save_total_limit: Optional[int] = field(
         default=None,
         metadata={
@@ -857,7 +873,15 @@ class TrainingArguments:
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
-    eval_steps: Optional[float] = field(default=None, metadata={"help": "Run an evaluation every X steps. If smaller than 1, will be interpreted as ratio of total training steps."})
+    eval_steps: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`."
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
     dataloader_num_workers: int = field(
         default=0,
         metadata={
@@ -1188,14 +1212,25 @@ class TrainingArguments:
         # logging_steps must be non-zero for logging_strategy that is other than 'no'
         if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
             raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
-        
-        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps > 1 and self.logging_steps != int(self.logging_steps):
+
+        if (
+            self.logging_strategy == IntervalStrategy.STEPS
+            and self.logging_steps > 1
+            and self.logging_steps != int(self.logging_steps)
+        ):
             raise ValueError(f"--logging_steps must be an integer if bigger than 1: {self.logging_steps}")
-        if self.evaluation_strategy == IntervalStrategy.STEPS and self.eval_steps > 1 and self.eval_steps != int(self.eval_steps):
+        if (
+            self.evaluation_strategy == IntervalStrategy.STEPS
+            and self.eval_steps > 1
+            and self.eval_steps != int(self.eval_steps)
+        ):
             raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
-        if self.save_strategy == IntervalStrategy.STEPS and self.save_steps > 1 and self.save_steps != int(self.save_steps):
+        if (
+            self.save_strategy == IntervalStrategy.STEPS
+            and self.save_steps > 1
+            and self.save_steps != int(self.save_steps)
+        ):
             raise ValueError(f"--save_steps must be an integer if bigger than 1: {self.save_steps}")
-        
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
         if self.load_best_model_at_end:
@@ -1213,8 +1248,8 @@ class TrainingArguments:
                             f"{self.save_steps} and eval_steps {self.eval_steps}."
                         )
                     # Work around floating point precision issues
-                    LARGE_MULTIPLIER = 1_000_000 
-                    if (self.save_steps * LARGE_MULTIPLIER) % (self.eval_steps * LARGE_MULTIPLIER )!= 0:
+                    LARGE_MULTIPLIER = 1_000_000
+                    if (self.save_steps * LARGE_MULTIPLIER) % (self.eval_steps * LARGE_MULTIPLIER) != 0:
                         raise ValueError(
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
                             f"steps, but found {self.save_steps}, which is not a multiple of {self.eval_steps}."
