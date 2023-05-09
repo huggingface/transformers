@@ -1573,12 +1573,12 @@ else:
     )
     _import_structure["models.beit3"].extend(
         [
-            "BEiT3ForCaptioning",
-            "BEiT3ForImageClassification",
-            "BEiT3ForImageTextRetrieval",
-            "BEiT3ForVisualQuestionAnswering",
-            "BEiT3ForVisualReasoning",
-            "BEiT3Model",
+            "Beit3ForCaptioning",
+            "Beit3ForImageClassification",
+            "Beit3ForImageTextRetrieval",
+            "Beit3ForVisualQuestionAnswering",
+            "Beit3ForVisualReasoning",
+            "Beit3Model",
             "Beit3PreTrainedModel",
         ]
     )
