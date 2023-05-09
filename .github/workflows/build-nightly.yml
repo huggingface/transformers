@@ -1,0 +1,33 @@
+name: build-nightly
+run-name: ${{ github.workflow }} is to create nightly wheel file for pypi
+on:
+  push:
+    branches:
+      - 'main'
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  build-nightly:
+    runs-on: ubuntu-22.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::498127099666:role/WebIdentity-nm-github-actions-only
+          aws-region: us-east-1
+      - uses: actions/checkout@v3
+      - run: | 
+             pwd
+             sudo apt-get install python3-pip
+             pip3 --version
+             sudo pip3 install virtualenv
+             virtualenv venv
+             source venv/bin/activate
+             pip install -e .
+             make -B build
+             deactivate
+             ls dist/
+             aws s3 ls s3://nm-github-actions/
+             aws s3 cp dist/*nightly*.whl s3://nm-github-actions/transformers/
