@@ -15,24 +15,29 @@
 
 import unittest
 
-from transformers import is_torch_available
-
-
-if is_torch_available():
-    from transformers.tools import TextClassificationTool
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
 
 
 class TextClassificationToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = TextClassificationTool()
+        self.tool = load_tool("text-classification")
         self.tool.setup()
+        self.remote_tool = load_tool("text-classification", remote=True)
 
     def test_exact_match_arg(self):
         result = self.tool("That's quite cool", ["positive", "negative"])
         self.assertEqual(result, "positive")
 
+    def test_exact_match_arg_remote(self):
+        result = self.remote_tool("That's quite cool", ["positive", "negative"])
+        self.assertEqual(result, "positive")
+
     def test_exact_match_kwarg(self):
         result = self.tool(text="That's quite cool", labels=["positive", "negative"])
+        self.assertEqual(result, "positive")
+
+    def test_exact_match_kwarg_remote(self):
+        result = self.remote_tool(text="That's quite cool", labels=["positive", "negative"])
         self.assertEqual(result, "positive")

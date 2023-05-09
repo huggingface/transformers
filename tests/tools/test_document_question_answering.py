@@ -17,19 +17,16 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import is_torch_available
-
-
-if is_torch_available():
-    from transformers.tools import DocumentQuestionAnsweringTool
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
 
 
 class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = DocumentQuestionAnsweringTool()
+        self.tool = load_tool("document-question-answering")
         self.tool.setup()
+        self.remote_tool = load_tool("document-question-answering", remote=True)
 
     def test_exact_match_arg(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
@@ -38,9 +35,23 @@ class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
         result = self.tool(image, "When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")
 
+    def test_exact_match_arg_remote(self):
+        dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+        image = dataset[0]["image"]
+
+        result = self.remote_tool(image, "When is the coffee break?")
+        self.assertEqual(result, "11-14 to 11:39 a.m.")
+
     def test_exact_match_kwarg(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
         image = dataset[0]["image"]
 
         result = self.tool(image=image, question="When is the coffee break?")
+        self.assertEqual(result, "11-14 to 11:39 a.m.")
+
+    def test_exact_match_kwarg_remote(self):
+        dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+        image = dataset[0]["image"]
+
+        result = self.remote_tool(image=image, question="When is the coffee break?")
         self.assertEqual(result, "11-14 to 11:39 a.m.")

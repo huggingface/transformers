@@ -15,11 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
-
-
-if is_torch_available():
-    from transformers.tools import TextQuestionAnsweringTool
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
 
@@ -35,13 +31,22 @@ On April 28, 2021, the company launched the BigScience Research Workshop in coll
 
 class TextQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = TextQuestionAnsweringTool()
+        self.tool = load_tool("text-question-answering")
         self.tool.setup()
+        self.remote_tool = load_tool("text-question-answering", remote=True)
 
     def test_exact_match_arg(self):
         result = self.tool(TEXT, "What did Hugging Face do in April 2021?")
         self.assertEqual(result, "launched the BigScience Research Workshop")
 
+    def test_exact_match_arg_remote(self):
+        result = self.remote_tool(TEXT, "What did Hugging Face do in April 2021?")
+        self.assertEqual(result, "launched the BigScience Research Workshop")
+
     def test_exact_match_kwarg(self):
         result = self.tool(text=TEXT, question="What did Hugging Face do in April 2021?")
+        self.assertEqual(result, "launched the BigScience Research Workshop")
+
+    def test_exact_match_kwarg_remote(self):
+        result = self.remote_tool(text=TEXT, question="What did Hugging Face do in April 2021?")
         self.assertEqual(result, "launched the BigScience Research Workshop")

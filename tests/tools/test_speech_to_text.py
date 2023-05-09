@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, load_tool
 
 from .test_tools_common import ToolTesterMixin
 
@@ -23,12 +23,10 @@ from .test_tools_common import ToolTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers.tools import SpeechToTextTool
-
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = SpeechToTextTool()
+        self.tool = load_tool("speech-to-text")
         self.tool.setup()
 
     def test_exact_match_arg(self):
