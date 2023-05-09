@@ -707,9 +707,9 @@ class BatchEncoding(UserDict):
         else:
 
             def as_tensor(value, dtype=None):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and not isinstance(value[0], np.ndarray):
+                if isinstance(value, (list, tuple)) and len(value) > 0:
                     value_lens = [len(val) for val in value]
-                    if len(set(value_lens)) > 1:
+                    if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
                 return np.asarray(value, dtype=dtype)
