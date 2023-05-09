@@ -1358,8 +1358,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 )
 
         prob = out_logits.sigmoid()
-        k_value = min(top_k, prob.view(out_logits.shape[0], -1).size(1))
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), k_value, dim=1)
+        prob = prob.view(out_logits.shape[0], -1)
+        k_value = min(top_k, prob.size(1))
+        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
