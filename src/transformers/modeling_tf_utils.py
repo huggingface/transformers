@@ -1230,7 +1230,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def get_serving_input_signature(self) -> List[Dict[str, tf.TensorSpec]]:
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         sig = {}
-        if self.__name__.endswith("ForMultipleChoice"):
+        if self.__class__.__name__.endswith("ForMultipleChoice"):
             text_dims = 3
         else:
             text_dims = 2
