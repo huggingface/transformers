@@ -442,8 +442,8 @@ def is_onnx_available():
     return _onnx_available
 
 
-def is_opencv_available():
-    return _opencv_available
+def is_openai_available():
+    return importlib.util.find_spec("openai") is not None
 
 
 def is_flax_available():
@@ -510,10 +510,6 @@ def is_torch_tensorrt_fx_available():
 
 def is_datasets_available():
     return _datasets_available
-
-
-def is_diffusers_available():
-    return _diffusers_available
 
 
 def is_detectron2_available():
