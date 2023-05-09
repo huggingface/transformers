@@ -418,7 +418,7 @@ class HfAgent(Agent):
     Agent that uses and inference endpoint to generate code.
 
     Args:
-        url_endpoint (`str``):
+        url_endpoint (`str`):
             The name of the url endpoint to use.
         token (`str`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when

@@ -391,7 +391,7 @@ class RemoteTool(Tool):
 class PipelineTool(Tool):
     """
     A [`Tool`] tailored towards Transformer models. On top of the class attributes of the base class [`Tool`], you will
-    meed to specify:
+    need to specify:
 
     - **model_class** (`type`) -- The class to use to load the model in this tool.
     - **default_checkpoint** (`str`) -- The default checkpoint that should be used when the user doesn't specify one.
