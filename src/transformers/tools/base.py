@@ -465,7 +465,9 @@ class PipelineTool(Tool):
         self.is_initialized = False
 
     def setup(self):
-        # Instantiate me maybe
+        """
+        Instantiates the `pre_processor`, `model` and `post_processor` if necessary.
+        """
         if isinstance(self.pre_processor, str):
             self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
 
@@ -486,16 +488,22 @@ class PipelineTool(Tool):
         if self.device_map is None:
             self.model.to(self.device)
 
-    def post_init(self):
-        pass
-
     def encode(self, raw_inputs):
+        """
+        Uses the `pre_processor` to prepare the inputs for the `model`.
+        """
         return self.pre_processor(raw_inputs)
 
     def forward(self, inputs):
+        """
+        Sends the inputs through the `model`.
+        """
         return self.model(**inputs)
 
     def decode(self, outputs):
+        """
+        Uses the `post_processor` to decode the model output.
+        """
         return self.post_processor(outputs)
 
     def __call__(self, *args, **kwargs):
@@ -510,6 +518,13 @@ class PipelineTool(Tool):
 
 
 def launch_gradio_demo(tool_class: Tool):
+    """
+    Launches a gradio demo for a tool. The corresponding tool class needs to properly implement the class attributes
+    `inputs` and `outputs`.
+
+    Args:
+        tool_class (`type`): The class of the tool for which to launch the demo.
+    """
     try:
         import gradio as gr
     except ImportError:
@@ -569,6 +584,37 @@ def supports_remote(task_or_repo_id):
 
 
 def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
+    """
+    Main function to quickly load a tool, be it on the Hub or in the Transformers library.
+
+    Args:
+        task_or_repo_id (`str`):
+            The task for which to load the tool or a repo ID of a tool on the Hub. Tasks implemented in Transformers
+            are:
+
+            - `"document-question-answering"`
+            - `"image-captioning"`
+            - `"image-question-answering"`
+            - `"image-segmentation"`
+            - `"speech-to-text"`
+            - `"summarization"`
+            - `"text-classification"`
+            - `"text-question-answering"`
+            - `"text-to-speech"`
+            - `"translation"`
+        
+        model_repo_id (`str`, *optional*):
+            Use this argument to use a different model than the default one for the tool you selected.
+        remote (`bool`, *optional*, defaults to `False`):
+            Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
+        token (`str`, *optional*):
+            The token to identify you on hf.co. If unset, will use the token generated when running
+            `huggingface-cli login` (stored in `~/.huggingface`).
+        kwargs:
+            Additional keyword arguments that will be split in two: all arguments relevant to the Hub (such as
+            `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the
+            others will be passed along to its init.
+    """
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         main_module = importlib.import_module("transformers")
