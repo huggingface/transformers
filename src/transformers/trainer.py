@@ -1712,6 +1712,14 @@ class Trainer:
                 f" {args.max_steps}"
             )
 
+        # Compute absolute values for logging, eval, and save if given as ratio
+        if args.logging_steps and args.logging_steps < 1:
+            args.logging_steps = math.ceil(max_steps * args.logging_steps)
+        if args.eval_steps and args.eval_steps < 1:
+            args.eval_steps = math.ceil(max_steps * args.eval_steps)
+        if args.save_steps and args.save_steps < 1:
+            args.save_steps = math.ceil(max_steps * args.save_steps)
+
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
