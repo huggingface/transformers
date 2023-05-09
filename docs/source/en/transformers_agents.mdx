@@ -16,7 +16,7 @@ Transformers version v4.30.0 introduces a new API, building on the concept of *t
 
 In short, it provides a natural language API on top of transformers: we define a set of curated tools, and design an 
 agent to interpret natural language and to use these tools. It is extensible by design; we curated some relevant tools, 
-but we'll show you how the system can be extended easily to use any tool.
+but we'll show you how the system can be extended easily to use any tool developed by the community.
 
 Let's start with a few examples of what can be achieved with this new API. It is particularly powerful when it comes 
 to multimodal tasks, so let's take it for a spin to generate images and read text out loud.
@@ -61,7 +61,7 @@ Start by logging-in to have access to the Inference API:
 ```py
 from huggingface_hub import login
 
-login("<TOKEN>")
+login("<YOUR_TOKEN>")
 ```
 
 Then, instantiate the agent
@@ -69,14 +69,17 @@ Then, instantiate the agent
 ```py
 from transformers.tools import HfAgent
 
-starcoder = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
 ```
+
+This is using the inference API that Hugging Face provides for free at the moment, if you have your own inference
+endpoint for this model (or another one) you can replace the url above by your url endpoint.
 
 You're now good to go! Let's dive into the two APIs that you now have at your disposal.
 
 ### Single execution (run)
 
-The single execution method is when using the `.run` method of the agent:
+The single execution method is when using the [`~Agent.run`] method of the agent:
 
 ```py
 agent.run("Draw me a picture of rivers and lakes")
@@ -84,12 +87,35 @@ agent.run("Draw me a picture of rivers and lakes")
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200>
 
-This is great to perform single instructions. Every `.run` operation is independent, so running it several times in a
-row is unlikely to be problematic.
+It automatically select the tool (or tools) appropriate for the task you want to perform and run them appropriately. It
+can perform one or several tasks in the same instruction (though the more complex your instruction, the more likely
+the agent is to fail).
+
+```py
+agent.chat("Draw me a picture of the sea then transform the picture to add an island.")
+```
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sea_and_island.png" width=200>
+
+<br/>
+
+
+Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
+
+Note that your `agent` is just a large-language model, so small variations in your prompt might yield completely
+different results. It's important to explain as clearly as possible the task you want to perform.
+
+<Tip>
+
+We're showcasing StarCoder as the default in the documentation as the model is free to use and performs admirably well
+on simple tasks. However, the checkpoint doesn't hold up when handling more complex prompts. If you're facing such an
+issue, we recommend trying out the OpenAI model which, while sadly not open-source, performs better at this given time.
+
+</Tip>
 
 ### Chat-based execution (chat)
 
-The agent also has a chat-based approach, using the `.chat` method:
+The agent also has a chat-based approach, using the [`~Agent.chat`] method:
 
 ```py
 agent.chat("Draw me a picture of rivers and lakes")
@@ -106,8 +132,8 @@ agent.chat("Transform the picture so that there is a rock in there")
 <br/>
 
 This is an interesting approach when you want to keep the state across instructions. It's better for experimentation, 
-but will tend to be much better at single instructions rather than complex instructions (which the `.run` method is 
-better at handling).
+but will tend to be much better at single instructions rather than complex instructions (which the [`~Agent.run`]
+method is better at handling).
 
 ### ⚠️ Remote execution
 
@@ -116,7 +142,7 @@ of the default tools the agent has access to. These are created using
 [inference endpoints](https://huggingface.co/inference-endpoints). To see how to setup remote executors tools yourself,
 we recommend reading the custom tool guide [TODO LINK].
 
-In order to run with remote tools, specifying `remote=True` to either `.run` or `.chat` is sufficient.
+In order to run with remote tools, specifying `remote=True` to either [`~Agent.run`] or [`~Agent.chat`] is sufficient.
 
 For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
 
@@ -124,7 +150,8 @@ For example, the following command could be run on any device efficiently, witho
 agent.run("Draw me a picture of rivers and lakes", remote=True)
 ```
 
-The same can be said for `.chat`:
+The same can be said for [`~Agent.chat`]:
+
 ```py
 agent.chat("Draw me a picture of rivers and lakes", remote=True)
 ```
@@ -142,16 +169,16 @@ requests in the query.
 We identify a set of tools that can empower such agents. Here is an updated list of the tools we have integrated 
 in `transformers`:
 
-- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document (Donut)
-- **Text question answering**: given a long text and a question, answer the question in the text (Flan-T5)
-- **Unconditional image captioning**: Caption the image! (BLIP)
-- **Image question answering**: given an image, answer a question on this image (VILT)
-- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt (CLIPSeg)
-- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text (Whisper)
-- **Text to speech**: convert text to speech (SpeechT5)
-- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most (BART)
-- **Text summarization**: summarize a long text in one or a few sentences (BART)
-- **Translation**: translate the text into a given language (NLLB)
+- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](../model_doc/donut))
+- **Text question answering**: given a long text and a question, answer the question in the text ([Flan-T5](../model_doc/flan-t5))
+- **Unconditional image captioning**: Caption the image! ([BLIP](../model_doc/blip))
+- **Image question answering**: given an image, answer a question on this image ([VILT](../model_doc/vilt))
+- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](../model_doc/clipseg))
+- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](../model_doc/whisper))
+- **Text to speech**: convert text to speech ([SpeechT5](../model_doc/speecht5))
+- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most ([BART](../model_doc/bart))
+- **Text summarization**: summarize a long text in one or a few sentences ([BART](../model_doc/bart))
+- **Translation**: translate the text into a given language ([NLLB](../model_doc/nllb))
 
 These tools have an integration in transformers, and can be used manually as well, for example:
 
@@ -160,8 +187,6 @@ from transformers import load_tool
 
 tool = load_tool("text-to-speech")
 audio = tool("This is a text to speech tool")
-
-play(audio)
 ```
 
 ### Custom tools
@@ -169,7 +194,7 @@ play(audio)
 While we identify a curated set of tools, we strongly believe that the main value provided by this implementation is 
 the ability to quickly create and share custom tools.
 
-By pushing the code of a tool to a huggingface Space or a model repository, you're then able to leverage the tool 
+By pushing the code of a tool to a Hugging Face Space or a model repository, you're then able to leverage the tool 
 directly with the agent. For demonstration purposes (and because they're super powerful), we've pushed a few 
 transformers-agnostic tools in the `huggingface-tools` organization:
 
@@ -182,13 +207,13 @@ The text-to-image tool we have been using since the beginning is actually a remo
 [*huggingface-tools/text-to-image*](https://huggingface.co/spaces/huggingface-tools/text-to-image)! We will
 continue releasing such tools on this and other organization, to further supercharge this implementation.
 
-We explain how to push your own tools to the Hub in order to leverage them in the following guide Using Custom Tools.
+We explain how to write and push to the Hub your own tools to the Hub in order to leverage them in the
+[following guide](custom_tools).
 
 ### Leveraging different agents
 
 We showcase here how to use the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) model as an LLM, but 
-it isn't the only model available.
-We also support the OpenAssistant model and OpenAI's davinci models (3.5 and 4).
+it isn't the only model available. We also support the OpenAssistant model and OpenAI's davinci models (3.5 and 4).
 
 We're planning on supporting local language models in an ulterior version.
 
