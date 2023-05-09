@@ -166,6 +166,7 @@ jobs:
                       - v0.6-repository_consistency
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
+            - run: pip install pytest
             - save_cache:
                   key: v0.5-repository_consistency-{{ checksum "setup.py" }}
                   paths:
