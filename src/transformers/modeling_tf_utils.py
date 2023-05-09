@@ -1121,10 +1121,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dummy_inputs = {}
 
         serving_sig = self.get_serving_input_signature()
+        breakpoint()
         if self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 2:
-            dummy_inputs["input_ids"] = DUMMY_INPUTS
+            dummy_inputs["input_ids"] = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         elif self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 3:
-            dummy_inputs["input_ids"] = MULTIPLE_CHOICE_DUMMY_INPUTS
+            dummy_inputs["input_ids"] = tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)
         elif self.main_input_name == "pixel_values":
             image_shape = serving_sig[0]["pixel_values"].shape.as_list()
             if image_shape[0] is None:
