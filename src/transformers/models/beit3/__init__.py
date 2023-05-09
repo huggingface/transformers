@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_beit_3"] = [
+    _import_structure["modeling_beit3"] = [
         "BEiT3Model",
         "BEiT3ForVisualReasoning",
         "BEiT3ForImageClassification",

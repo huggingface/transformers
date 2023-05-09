@@ -17,7 +17,6 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
 )
 
-# from .configuration_beit_3 import Beit3Config
 from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 
