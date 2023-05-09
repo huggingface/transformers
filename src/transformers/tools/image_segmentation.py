@@ -11,9 +11,10 @@ if is_vision_available():
 
 class ImageSegmentationTool(PipelineTool):
     description = (
-        "This is a tool that creates a segmentation mask using an image and a prompt. It takes two arguments named "
-        "`image` which should be the original image, and `prompt` which should be a text describing what should be "
-        "identified in the segmentation mask. The tool returns the mask as a black-and-white image."
+        "This is a tool that creates a segmentation mask identifiying elements inside an image according to a prompt. "
+        "It takes two arguments named `image` which should be the original image, and `prompt` which should be a text "
+        "describing the elements what should be identified in the segmentation mask. The tool returns the mask as a "
+        "black-and-white image."
     )
     default_checkpoint = "CIDAS/clipseg-rd64-refined"
     name = "image_segmenter"

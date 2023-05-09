@@ -122,7 +122,7 @@ EVALUATION_TASKS = [
         task=[
             "Tell me out loud what the `image` contains.",
             "Describe the following `image` out loud.",
-            "Determine what is in the pictured stored in `image` then read it out loud.",
+            "Find what is in the picture stored in `image` then read it out loud.",
         ],
         inputs=["image"],
         answer=[
@@ -229,7 +229,7 @@ EVALUATION_CHATS = [
             task=[
                 "What does this `image` contain?",
                 "Describe the following `image`.",
-                "Determine what is in the picture stored in `image`",
+                "Find what is in the picture stored in `image`",
             ],
             inputs=["image"],
             answer=[
@@ -331,7 +331,7 @@ EVALUATION_CHATS = [
                 "Use `prompt` to transform this `image`.",
             ],
             inputs=["image", "prompt"],
-            answer="image_transformer(image, prompt)"
+            answer="image_transformer(image, prompt)",
         ),
     ],
     [
@@ -531,7 +531,8 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
         end_idx = min(start_idx + batch_size, len(eval_tasks))
         batch_tasks = eval_tasks[start_idx:end_idx]
 
-        results = agent.generate_code(batch_tasks)
+        prompts = [agent.format_prompt(task) for task in batch_tasks]
+        results = agent.generate_many(prompts, stop=["Task:"])
 
         for idx, result in enumerate(results):
             problem = EVALUATION_TASKS[eval_idx[start_idx + idx]]
@@ -626,7 +627,7 @@ def evaluate_chat_agent(agent, verbose=False, return_errors=False):
                     print(step_problem.task)
                 total_steps += 1
                 prompt = agent.format_prompt(step_problem.task, chat_mode=True)
-                result = agent._generate_one(prompt, stop=["Human:", "====="])
+                result = agent.generate_one(prompt, stop=["Human:", "====="])
                 agent.chat_history = prompt + result + "\n"
 
                 explanation, code = clean_code_for_chat(result)

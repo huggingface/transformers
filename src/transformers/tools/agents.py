@@ -246,7 +246,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task, chat_mode=True)
-        result = self._generate_one(prompt, stop=["Human:", "====="])
+        result = self.generate_one(prompt, stop=["Human:", "====="])
         self.chat_history = prompt + result + "\n"
         explanation, code = clean_code_for_chat(result)
 
@@ -294,7 +294,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task)
-        result = self._generate_one(prompt, stop=["Task:"])
+        result = self.generate_one(prompt, stop=["Task:"])
         explanation, code = clean_code_for_run(result)
 
         print(f"==Explanation from the agent==\n{explanation}")
@@ -307,6 +307,14 @@ class Agent:
         else:
             tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
             return f"{tool_code}\n{code}"
+
+    def generate_one(self, prompt, stop):
+        # This is the method to implement in your custom agent.
+        raise NotImplementedError
+
+    def generate_many(self, prompts, stop):
+        # Override if you have a way to do batch generation faster than one by one
+        return [self.generate_one(prompt, stop) for prompt in prompts]
 
 
 class OpenAiAgent(Agent):
@@ -371,22 +379,13 @@ class OpenAiAgent(Agent):
             additional_tools=additional_tools,
         )
 
-    def generate_code(self, task):
-        is_batched = isinstance(task, list)
-
-        if is_batched:
-            prompts = [self.format_prompt(one_task) for one_task in task]
-        else:
-            prompts = [self.format_prompt(task)]
-
+    def generate_many(self, prompts, stop):
         if "gpt" in self.model:
-            results = [self._chat_generate(prompt, stop="Task:") for prompt in prompts]
+            return [self._chat_generate(prompt, stop) for prompt in prompts]
         else:
-            results = self._completion_generate(prompts, stop="Task:")
+            return self._completion_generate(prompts, stop)
 
-        return results if is_batched else results[0]
-
-    def _generate_one(self, prompt, stop):
+    def generate_one(self, prompt, stop):
         if "gpt" in self.model:
             return self._chat_generate(prompt, stop)
         else:
@@ -456,19 +455,7 @@ class HfAgent(Agent):
             additional_tools=additional_tools,
         )
 
-    def generate_code(self, task):
-        is_batched = isinstance(task, list)
-
-        if is_batched:
-            prompts = [self.format_prompt(one_task) for one_task in task]
-        else:
-            prompts = [self.format_prompt(task)]
-
-        # Can probably batch those but can't test anymore right now as the endpoint has been limited in length.
-        results = [self._generate_one(prompt) for prompt in prompts]
-        return results if is_batched else results[0]
-
-    def _generate_one(self, prompt, stop):
+    def generate_one(self, prompt, stop):
         headers = {"Authorization": self.token}
         inputs = {
             "inputs": prompt,
