@@ -54,7 +54,6 @@ from .utils import (
 )
 from .utils.import_utils import is_optimum_neuron_available
 
-
 logger = logging.get_logger(__name__)
 log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
@@ -1213,24 +1212,18 @@ class TrainingArguments:
         if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
             raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
 
-        if (
-            self.logging_strategy == IntervalStrategy.STEPS
-            and self.logging_steps > 1
-            and self.logging_steps != int(self.logging_steps)
-        ):
-            raise ValueError(f"--logging_steps must be an integer if bigger than 1: {self.logging_steps}")
-        if (
-            self.evaluation_strategy == IntervalStrategy.STEPS
-            and self.eval_steps > 1
-            and self.eval_steps != int(self.eval_steps)
-        ):
-            raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
-        if (
-            self.save_strategy == IntervalStrategy.STEPS
-            and self.save_steps > 1
-            and self.save_steps != int(self.save_steps)
-        ):
-            raise ValueError(f"--save_steps must be an integer if bigger than 1: {self.save_steps}")
+        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps > 1:
+            if self.logging_steps != int(self.logging_steps):
+                raise ValueError(f"--logging_steps must be an integer if bigger than 1: {self.logging_steps}")
+            self.logging_steps = int(self.logging_steps)
+        if self.evaluation_strategy == IntervalStrategy.STEPS and self.eval_steps > 1:
+            if self.eval_steps != int(self.eval_steps):
+                raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
+            self.eval_steps = int(self.eval_steps)
+        if self.save_strategy == IntervalStrategy.STEPS and self.save_steps > 1:
+            if self.save_steps != int(self.save_steps):
+                raise ValueError(f"--save_steps must be an integer if bigger than 1: {self.save_steps}")
+            self.save_steps = int(self.save_steps)
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
         if self.load_best_model_at_end:
