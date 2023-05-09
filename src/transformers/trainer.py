@@ -337,14 +337,17 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
-        self.deepspeed = None
         self.is_in_train = False
 
         # create accelerator object
-        self.accelerator = Accelerator()
+        self.accelerator = Accelerator(deepspeed_plugin=self.args.deepspeed_plugin)
+
+        # deepspeed and accelerate flags covering both trainer args and accelerate launcher
+        self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
 
         # post accelerator creation setup
-        if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
+        if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get("limit_all_gathers", False)
             fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", False)
@@ -423,7 +426,7 @@ class Trainer:
         # Setup Sharded DDP training
         self.sharded_ddp = None
         if len(args.sharded_ddp) > 0:
-            if args.deepspeed:
+            if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --sharded_ddp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
@@ -449,7 +452,7 @@ class Trainer:
 
         self.fsdp = None
         if len(args.fsdp) > 0:
-            if args.deepspeed:
+            if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
@@ -497,10 +500,11 @@ class Trainer:
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
-            or args.deepspeed
+            or self.is_deepspeed_enabled
             or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
             or (self.fsdp is not None)
+            or self.is_fsdp_enabled
         ):
             self.place_model_on_device = False
 
@@ -544,7 +548,7 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
+        if ((self.sharded_ddp is not None) or self.is_deepspeed_enabled or (self.fsdp is not None)) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
@@ -637,7 +641,7 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
+        if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
             if self.sharded_ddp is not None:
                 if args.half_precision_backend == "cuda_amp":
@@ -1287,12 +1291,17 @@ class Trainer:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
-        if self.args.deepspeed:
+        if self.is_deepspeed_enabled:
+            if self.args.deepspeed is None:
+                raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
             # Rebuild the deepspeed config to reflect the updated training parameters
+            from accelerate.utils import DeepSpeedPlugin
+
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
+            self.accelerator.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
@@ -1410,10 +1419,6 @@ class Trainer:
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
                 return self.model_wrapped
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
-
-        # already initialized its own DDP and AMP
-        if self.deepspeed:
-            return self.deepspeed
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
         if unwrap_model(model) is not model:
@@ -1599,7 +1604,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
+        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and self.is_deepspeed_enabled is None:
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1679,16 +1684,11 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
         )
-        if args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            self.optimizer = optimizer
-            self.lr_scheduler = lr_scheduler
-        elif not delay_optimizer_creation:
+
+        if self.is_deepspeed_enabled:
+            self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
+
+        if not delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         self.state = TrainerState()
@@ -1719,12 +1719,18 @@ class Trainer:
         self.accelerator.print(f"{model=}\n{self.optimizer=}\n{self.lr_scheduler=}")
         self.accelerator.print(f"{model.forward=}")
 
-        if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
+        if self.is_fsdp_enabled:
             self.model = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
+
+        # deepspeed ckpt loading
+        if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
+            self.model_wrapped.load_checkpoint(
+                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+            )
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -1909,17 +1915,13 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
-                if self.deepspeed:
-                    self.deepspeed.step()
-
                 if total_batched_samples % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
                 ):
                     # Gradient clipping
-                    if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
+                    if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         # deepspeed does its own clipping
 
                         if self.do_grad_scaling:
@@ -1952,9 +1954,7 @@ class Trainer:
 
                     # Optimizer step
                     optimizer_was_run = True
-                    if self.deepspeed:
-                        pass  # called outside the loop
-                    elif is_torch_tpu_available():
+                    if is_torch_tpu_available():
                         if self.do_grad_scaling:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
@@ -1969,7 +1969,7 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    if optimizer_was_run and not self.deepspeed:
+                    if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
                         if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                             self.lr_scheduler.step()
@@ -2123,6 +2123,8 @@ class Trainer:
                     load_result = model.load_state_dict(state_dict, strict=True)
                     # release memory
                     del state_dict
+            elif self.is_fsdp_enabled:
+                self.accelerator.state.fsdp_plugin.load_model(self.accelerator, model, resume_from_checkpoint)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
@@ -2150,23 +2152,10 @@ class Trainer:
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
-            if self.deepspeed:
-                if self.model_wrapped is not None:
-                    # this removes the pre-hooks from the previous engine
-                    self.model_wrapped.destroy()
-                    self.model_wrapped = None
-
-                # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
-                deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                    self,
-                    num_training_steps=self.args.max_steps,
-                    resume_from_checkpoint=self.state.best_model_checkpoint,
+            if self.is_deepspeed_enabled:
+                self.model_wrapped.load_checkpoint(
+                    self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
                 )
-                self.model = deepspeed_engine.module
-                self.model_wrapped = deepspeed_engine
-                self.deepspeed = deepspeed_engine
-                self.optimizer = optimizer
-                self.lr_scheduler = lr_scheduler
             else:
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
@@ -2188,6 +2177,10 @@ class Trainer:
 
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
+                elif self.is_fsdp_enabled:
+                    self.accelerator.state.fsdp_plugin.load_model(
+                        self.accelerator, model, self.state.best_model_checkpoint
+                    )
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
@@ -2326,10 +2319,10 @@ class Trainer:
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
-        if self.deepspeed:
+        if self.is_deepspeed_enabled:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.deepspeed.save_checkpoint(output_dir)
+            self.model_wrapped.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
@@ -2357,7 +2350,7 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
                 if self.do_grad_scaling:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
-        elif self.args.should_save and not self.deepspeed:
+        elif self.args.should_save and not self.is_deepspeed_enabled:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             with warnings.catch_warnings(record=True) as caught_warnings:
@@ -2423,7 +2416,7 @@ class Trainer:
         if checkpoint is None:
             return
 
-        if self.deepspeed:
+        if self.is_deepspeed_enabled:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
@@ -2601,11 +2594,11 @@ class Trainer:
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
             kwargs = {"device": self.args.device}
-            if self.deepspeed and (torch.is_floating_point(data) or torch.is_complex(data)):
+            if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):
                 # NLP models inputs are int/uint and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
                 # may need special handling to match the dtypes of the model
-                kwargs.update({"dtype": self.args.hf_deepspeed_config.dtype()})
+                kwargs.update({"dtype": self.accelerator.state.deepspeed_plugin.hf_ds_config.dtype()})
             return data.to(**kwargs)
         return data
 
@@ -2681,7 +2674,7 @@ class Trainer:
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+        if self.args.gradient_accumulation_steps > 1 and not self.is_deepspeed_enabled:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
@@ -2690,9 +2683,6 @@ class Trainer:
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
-        elif self.deepspeed:
-            # loss gets scaled under gradient_accumulation_steps in deepspeed
-            loss = self.deepspeed.backward(loss)
         else:
             self.accelerator.backward(loss)
 
@@ -2774,16 +2764,16 @@ class Trainer:
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
             or self.fsdp is not None
-            or getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+            or self.is_fsdp_enabled
         ):
-            if getattr(self.accelerator.state, "fsdp_plugin", None) is not None:
+            if self.is_fsdp_enabled:
                 self.accelerator.state.fsdp_plugin.save_model(self.accelerator, self.model, output_dir)
             else:
                 state_dict = self.model.state_dict()
 
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
-        elif self.deepspeed:
+        elif self.is_deepspeed_enabled:
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2802,13 +2792,12 @@ class Trainer:
                 # now save the real model if stage3_gather_16bit_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
+                if not self.model_wrapped.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
                         "deepspeed.save_16bit_model didn't save the model, since"
                         " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                         " zero_to_fp32.py to recover weights"
                     )
-                    self.deepspeed.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -3088,15 +3077,9 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(
-                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
+        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            model = self.accelerator(self.model)
+            self.model_wrapped = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
@@ -3683,18 +3666,9 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
+        if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            model = self.accelerator(self.model)
+            self.model_wrapped = model
 
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 

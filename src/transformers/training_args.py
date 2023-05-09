@@ -1489,6 +1489,7 @@ class TrainingArguments:
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
 
+        self.deepspeed_plugin = None
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
@@ -1500,6 +1501,12 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+            # Accelerate DeepSpeed Plugin
+            from accelerate.utils import DeepSpeedPlugin
+
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
+            self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
 
         if self.push_to_hub_token is not None:
             warnings.warn(
