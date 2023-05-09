@@ -20,7 +20,7 @@ answer = image_qa(image=image, question=translated_question)
 print(f"The answer is {answer}")
 ```
 
-Task: "Identify the oldest person in the `document` and create an image showcasing the result as a banner."
+Task: "Identify the oldest person in the `document` and create an image showcasing the result."
 
 I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 
@@ -28,7 +28,7 @@ Answer:
 ```py
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
-image = image_generator("A banner showing " + answer)
+image = image_generator(answer)
 ```
 
 Task: "Generate an image using the text given in the variable `caption`."
@@ -125,7 +125,7 @@ Human: Can you generate an image with the result?
 Assistant: I will use the tool `image_generator` to do that.
 
 ```py
-image = image_generator(prompt="A banner showing " + answer)
+image = image_generator(answer)
 ```
 
 =====
