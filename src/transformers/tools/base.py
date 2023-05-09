@@ -602,18 +602,18 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
             - `"text-question-answering"`
             - `"text-to-speech"`
             - `"translation"`
-        
+
         model_repo_id (`str`, *optional*):
             Use this argument to use a different model than the default one for the tool you selected.
         remote (`bool`, *optional*, defaults to `False`):
             Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
         token (`str`, *optional*):
-            The token to identify you on hf.co. If unset, will use the token generated when running
-            `huggingface-cli login` (stored in `~/.huggingface`).
+            The token to identify you on hf.co. If unset, will use the token generated when running `huggingface-cli
+            login` (stored in `~/.huggingface`).
         kwargs:
             Additional keyword arguments that will be split in two: all arguments relevant to the Hub (such as
-            `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the
-            others will be passed along to its init.
+            `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the others
+            will be passed along to its init.
     """
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]

@@ -183,6 +183,7 @@ class Agent:
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
             one of the default tools, that default tool wioll be overridden.
     """
+
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
         _setup_default_tools()
 
@@ -222,6 +223,29 @@ class Agent:
         return prompt
 
     def chat(self, task, return_code=False, remote=False, **kwargs):
+        """
+        Sends a new request to the agent in a chat. Will use the previous ones in its history.
+
+        Args:
+            task (`str`): The task to perform
+            return_code (`bool`, *optional*, defaults to `False`):
+                Whether to just return code and not evaluate it.
+            remote (`bool`, *optional*, defaults to `False`):
+                Whether or not to use remote tools (inference endpoints) instead of local ones.
+            kwargs:
+                Any keyword argument to send to the agent when evaluating the code.
+
+        Example:
+
+        ```py
+        from transformers import HfAgent
+
+        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+        agent.chat("Draw me a picture of rivers and lakes")
+
+        agent.chat("Transform the picture so that there is a rock in there")
+        ```
+        """
         prompt = self.format_prompt(task, chat_mode=True)
         result = self._generate_one(prompt, stop=["Human:", "====="])
         self.chat_history = prompt + result + "\n"
@@ -241,11 +265,35 @@ class Agent:
                 return f"{tool_code}\n{code}"
 
     def prepare_for_new_chat(self):
+        """
+        Clears the history of prior calls to [`~Agent.chat`].
+        """
         self.chat_history = None
         self.chat_state = {}
         self.cached_tools = None
 
     def run(self, task, return_code=False, remote=False, **kwargs):
+        """
+        Sends a request to the agent.
+
+        Args:
+            task (`str`): The task to perform
+            return_code (`bool`, *optional*, defaults to `False`):
+                Whether to just return code and not evaluate it.
+            remote (`bool`, *optional*, defaults to `False`):
+                Whether or not to use remote tools (inference endpoints) instead of local ones.
+            kwargs:
+                Any keyword argument to send to the agent when evaluating the code.
+
+        Example:
+
+        ```py
+        from transformers import HfAgent
+
+        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+        agent.run("Draw me a picture of rivers and lakes")
+        ```
+        """
         prompt = self.format_prompt(task)
         result = self._generate_one(prompt, stop=["Task:"])
         explanation, code = clean_code_for_run(result)
@@ -264,12 +312,27 @@ class Agent:
 
 class OpenAiAgent(Agent):
     """
+    Agent that uses the openai API to generate code.
+
+    Args:
+        model (`str`, *optional*, defaults to `"text-davinci-003"`):
+            The name of the openAI model to use.
+        api_key (`str`, *optional*):
+            The API key to use. If unset, will look for the environment variable `"OPENAI_API_KEY"`.
+        chat_prompt_template (`str`, *optional*):
+            Pass along your own prompt if you want to override the default template for the `chat` method.
+        run_prompt_template (`str`, *optional*):
+            Pass along your own prompt if you want to override the default template for the `run` method.
+        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
+            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
+            one of the default tools, that default tool wioll be overridden.
+
     Example:
 
     ```py
-    from transformers.tools.agents import NewOpenAiAgent
+    from transformers import OpenAiAgent
 
-    agent = NewOpenAiAgent(model="text-davinci-003", api_key=xxx)
+    agent = OpenAiAgent(model="text-davinci-003", api_key=xxx)
     agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
     ```
     """
@@ -344,6 +407,33 @@ class OpenAiAgent(Agent):
 
 
 class HfAgent(Agent):
+    """
+    Agent that uses and inference endpoint to generate code.
+
+    Args:
+        url_endpoint (`str``):
+            The name of the url endpoint to use.
+        token (`str`, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
+            running `huggingface-cli login` (stored in `~/.huggingface`).
+        chat_prompt_template (`str`, *optional*):
+            Pass along your own prompt if you want to override the default template for the `chat` method.
+        run_prompt_template (`str`, *optional*):
+            Pass along your own prompt if you want to override the default template for the `run` method.
+        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
+            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
+            one of the default tools, that default tool wioll be overridden.
+
+    Example:
+
+    ```py
+    from transformers import HfAgent
+
+    agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+    agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
+    ```
+    """
+
     def __init__(
         self, url_endpoint, token=None, chat_prompt_template=None, run_prompt_template=None, additional_tools=None
     ):
