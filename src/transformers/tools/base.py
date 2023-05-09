@@ -338,7 +338,11 @@ class RemoteTool(Tool):
         if len(args) > 0:
             if self.tool_class is not None:
                 # Match args with the signature
-                signature = inspect.signature(self.tool_class.__call__).parameters
+                if issubclass(self.tool_class, PipelineTool):
+                    call_method = self.tool_class.encode
+                else:
+                    call_method = self.tool_class.__call__
+                signature = inspect.signature(call_method).parameters
                 parameters = [
                     k
                     for k, p in signature.items()
