@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - update_transformers_metadata*
+      - hot_fix_badass
 
 jobs:
   build_and_package:
