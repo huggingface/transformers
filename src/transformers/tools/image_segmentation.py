@@ -43,7 +43,7 @@ class ImageSegmentationTool(PipelineTool):
     outputs = ["image"]
 
     def __init__(self, *args, **kwargs):
-        requires_backends["vision"]
+        requires_backends(["vision"])
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", prompt: str):

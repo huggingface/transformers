@@ -376,7 +376,7 @@ tool = load_tool("lysandre/hf-model-downloads")
 In order to use it in the agent, simply pass it in the `additional_tools` parameter of the agent initialization method:
 
 ```python
-from transformers.tools import HfAgent
+from transformers import HfAgent
 
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder", additional_tools=[tool])
 
