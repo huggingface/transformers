@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import numpy as np
+import torch
 
 from ..models.clipseg import CLIPSegForImageSegmentation
 from ..utils import is_vision_available
