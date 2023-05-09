@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Custom Tools
+# Custom Tools and Prompts
 
 <Tip>
 
@@ -26,8 +26,119 @@ can vary as the APIs or underlying models are prone to change.
 
 </Tip>
 
-Creating and using custom tools is paramount to empowering the agent and having it perform new tasks. In this guide
-we'll take a look at how to use custom tools, as well as how to create one yourself.
+Creating and using custom tools and prompts is paramount to empowering the agent and having it perform new tasks.
+In this guide we'll take a look at:
+
+- How to customize the prompt
+- How to use custom tools
+- How to create custom tools
+
+## Customizing the prompt
+
+As explained in [Transformers Agents](transformers_agents) agents can run in [`~Agent.run`] and [`~Agent.chat`] mode.
+Both the run and chat mode underlie the same logic. The language model powering the agent is conditioned on a long prompt 
+and simply asked to complete the prompt by generating next tokens until the stop token is reached.
+The only difference between the `run` and `chat` mode is that during the `chat` mode the prompt is extended with 
+previous user inputs and model generations, which seemingly gives the agent a memory and allows it to refer to 
+past interactions.
+
+Let's take a closer look into how the prompt is structured to understand how it can be best customized.
+The prompt is structured broadly into four parts.
+
+- 1. Introduction: how the agent should behave, explanation of the concept of tools.
+- 2. Description of all the tools. This is defined by a `<<all_tools>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+- 3. A set of examples of tasks and their solution
+- 4. Current example, and request for solution.
+
+To better understand each part, let's look at a shortened version of how such a prompt can look like in practice.
+
+```
+I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
+[...]
+You can print intermediate results if it makes sense to do so.
+
+Tools:
+- document_qa: This is a tool that answers a question about an document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
+- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
+[...]
+
+Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
+
+I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
+
+Answer:
+```py
+translated_question = translator(question=question, src_lang="French", tgt_lang="English")
+print(f"The translated question is {translated_question}.")
+answer = image_qa(image=image, question=translated_question)
+print(f"The answer is {answer}")
+```
+
+Task: "Identify the oldest person in the `document` and create an image showcasing the result as a banner."
+
+I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
+
+Answer:
+```py
+answer = document_qa(document, question="What is the oldest person?")
+print(f"The answer is {answer}.")
+image = image_generator("A banner showing " + answer)
+```
+
+[...]
+
+Task: "Draw me a picture of rivers and lakes"
+
+I will use the following
+```
+
+The first part explains precisely how the model shall behave and what it should do. This part 
+most likely does not need to be customized.
+
+TODO(PVP) - explain better how the .description and .name influence the prompt
+
+### Customizing the tool descriptions
+
+The performance of the agent is directly linked to the prompt itself. We structure the prompt so that it works well 
+with what we intend for the agent to do; but for maximum customization we also offer the ability to specify a different prompt when instantiating the agent.
+
+### Customizing the single-execution prompt
+
+In order to specify a custom single-execution prompt, one would so the following:
+
+```py
+template = """ [...] """
+
+agent = HfAgent(your_endpoint, run_prompt_template=template)
+```
+
+<Tip>
+
+Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
+of the tools it has available to it.
+
+</Tip>
+
+#### Chat-execution prompt
+
+In order to specify a custom single-execution prompt, one would so the following:
+
+```
+template = """ [...] """
+
+agent = HfAgent(
+	url_endpoint=your_endpoint,
+	token=your_hf_token,
+	chat_prompt_template=template
+)
+```
+
+<Tip>
+
+Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be 
+aware of the tools it has available to it.
+
+</Tip>
 
 ## Using custom tools
 
