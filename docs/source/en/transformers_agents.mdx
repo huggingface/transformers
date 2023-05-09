@@ -264,19 +264,19 @@ While we identify a curated set of tools, we strongly believe that the main valu
 the ability to quickly create and share custom tools.
 
 By pushing the code of a tool to a Hugging Face Space or a model repository, you're then able to leverage the tool 
-directly with the agent. For demonstration purposes (and because they're super powerful), we've pushed a few 
-transformers-agnostic tools in the `huggingface-tools` organization:
+directly with the agent. We've added a few 
+**transformers-agnostic** tools to the `huggingface-tools` organization:
 
 - **Text downloader**: to download a text from a web URL
 - **Text to image**: generate an image according to a prompt, leveraging stable diffusion
-- **Image transformation**: TODO
-- **Image inpainting**: TODO
+- **Image transformation**: modify an image given an initial image and a prompt, leveraging instruct pix2pix stable diffusion
 
 The text-to-image tool we have been using since the beginning is actually a remote tool that lives in 
 [*huggingface-tools/text-to-image*](https://huggingface.co/spaces/huggingface-tools/text-to-image)! We will
 continue releasing such tools on this and other organization, to further supercharge this implementation.
 
-We explain how to write and push to the Hub your own tools to the Hub in order to leverage them in the
+The agents have by default access to tools that reside on `huggingface-tools`.
+We explain how to you can write and share your own tools as well as leverage any custom tool that resides on the Hub in [following guide](custom_tools).
 [following guide](custom_tools).
 
 ### Leveraging different agents
@@ -326,6 +326,7 @@ image_generator = load_tool("huggingface-tools/text-to-image")
 image = image_generator(prompt="rivers and lakes")
 ```
 
+that you can then modify and execute yourself.
 ### Custom prompts
 
 The performance of the agent is directly linked to the prompt itself. We structure the prompt so that it works well 

@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -65,7 +65,7 @@ It takes two inputs: `image`, which should be the image to transform, and `promp
 Name: 'image_transformer'
 ```
 
-The name and description is accurate and fits the style of the [curated set of tools](https://moon-ci-docs.huggingface.co/docs/transformers/pr_23214/en/transformers_agents#a-curated-set-of-tools).
+The name and description is accurate and fits the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
 Next, let's instantiate an agent with `controlnet_transformer` and `upscaler`:
 
 ```py
@@ -117,7 +117,7 @@ print("\n".join([f"- {a}" for a in agent.toolbox.keys()]))
 
 Note how `image_upscaler` is now part of the agents' toolbox.
 
-Let's now try out the new tools! We will re-use the image we generated in (Transformers Agents Quickstart)[`transformers_agents#single-execution-run`].
+Let's now try out the new tools! We will re-use the image we generated in (Transformers Agents Quickstart)[./transformers_agents#single-execution-run].
 
 ```py
 from diffusers.utils import load_image
@@ -171,7 +171,7 @@ Next, let's have a look into how you can create a new custom tool.
 
 ### Adding new tools
 
-In this section we'll add a new tool so that the agent may benefit from it.
+In this section we show how to create a new tool that can be added to the agent.
 
 #### Creating a new tool
 
@@ -370,14 +370,23 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-## Note about gradio-tools and langchain
+<Tip warning={true}>
 
-Gradio Tools, like Langchain, require *textual* inputs and outputs, even when working with different modalities.
+gradio-tools requires *textual* inputs and outputs, even when working with different modalities. This implementation
+works with image and audio objects. The two are currently incompatible, but will rapidly become compatible as we
+work to improve the support.
+
+</Tip>
+
+## Future compatibility with Langchain
+
+We love Langchain and think it has a very compelling suite of tools. In order to handle these tools,
+Langchain requires *textual* inputs and outputs, even when working with different modalities.
 This is often the serialized version (i.e., saved to disk) of the objects.
 
-This difference means that multi-modality isn't handled between transformers-agents and gradio-tools/langchain.
-We aim for this limitation to be resolved in future versions, and welcome any help from avid gradio-tools/langchain
+This difference means that multi-modality isn't handled between transformers-agents and langchain.
+We aim for this limitation to be resolved in future versions, and welcome any help from avid langchain
 users to help us achieve this compatibility.
 
-We love Langchain and gradio-tools, and would love to have better support. If you would like to help, please 
+We would love to have better support. If you would like to help, please 
 [open an issue](https://github.com/huggingface/transformers/issues/new) and share what you have in mind.
