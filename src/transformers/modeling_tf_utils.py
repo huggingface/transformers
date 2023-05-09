@@ -1205,12 +1205,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
         """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
-        if head_mask.shape.rank == 1:
+        if len(head_mask.shape) == 1:
             head_mask = head_mask[None, None, :, None, None]
             head_mask = tf.repeat(head_mask, repeats=num_hidden_layers, axis=0)
-        elif head_mask.shape.rank == 2:
+        elif len(head_mask.shape) == 2:
             head_mask = head_mask[:, None, :, None, None]
-        assert head_mask.shape.rank == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+        assert len(head_mask.shape) == 5, f"head_mask.dim != 5, instead {len(head_mask.shape)}"
         head_mask = tf.cast(head_mask, tf.float32)  # switch to float if need + fp16 compatibility
         return head_mask
 
