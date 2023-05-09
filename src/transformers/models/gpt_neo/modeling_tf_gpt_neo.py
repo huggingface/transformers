@@ -29,7 +29,7 @@ from ...modeling_tf_outputs import (
     TFSequenceClassifierOutputWithPast,
     TFTokenClassifierOutput,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs, TFCausalLanguageModelingLoss, TFQuestionAnsweringLoss, TFTokenClassificationLoss, TFSequenceClassificationLoss
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...tf_utils import shape_list
 from .configuration_gpt_neo import GPTNeoConfig
@@ -454,6 +454,14 @@ class TFGPTNeoModel(TFGPTNeoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
+                ),
+            )
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
@@ -515,7 +523,7 @@ class TFGPTNeoModel(TFGPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
+class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
         r"lm_head.weight",
@@ -547,7 +555,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
-            position_ids = tf.math.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+            position_ids = tf.math.cumsum(tf.cast(attention_mask, tf.int32), axis=-1) - 1
             position_ids = tf.where(attention_mask == 0, 1, position_ids)
             if past_key_values:
                 position_ids = position_ids[:, -1:]
@@ -617,11 +625,7 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel):
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :]
             shift_labels = labels[..., 1:]
-            # Flatten the tokens
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
-            loss = loss_fct(shift_labels, shift_logits)
-
-            loss = tf.reduce_mean(loss)
+            loss = self.hf_compute_loss(shift_labels, shift_logits)
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -729,18 +733,18 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            sequence_lengths = tf.fill(dims=(batch_size,), value=-1)
         else:
             if input_ids is not None:
-                sequence_lengths = tf.math.count_nonzero(input_ids != self.config.pad_token_id, axis=1) - 1
+                sequence_lengths = tf.math.count_nonzero(input_ids != self.config.pad_token_id, axis=1, dtype=tf.int32) - 1
             else:
-                sequence_lengths = -1
+                sequence_lengths = tf.fill(dims=(batch_size,), value=-1)
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = tf.gather_nd(logits, tf.stack([tf.range(batch_size, dtype=tf.int64), sequence_lengths], axis=1))
+        pooled_logits = tf.gather_nd(logits, tf.stack([tf.range(batch_size), sequence_lengths], axis=1))
 
         loss = None
         if labels is not None:
@@ -764,6 +768,8 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = tf.keras.losses.BinaryCrossentropy(from_logits=True)
                 loss = loss_fct(labels, pooled_logits)
+            if loss.shape.rank == 0:
+                loss = tf.expand_dims(loss, 0)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -784,7 +790,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoForTokenClassification(TFGPTNeoPreTrainedModel):
+class TFGPTNeoForTokenClassification(TFGPTNeoPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.num_labels = config.num_labels
@@ -847,9 +853,7 @@ class TFGPTNeoForTokenClassification(TFGPTNeoPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = tf.cast(labels, logits.dtype)
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            loss = loss_fct(labels, logits)
+            loss = self.hf_compute_loss(labels, logits)
 
         if not return_dict:
             output = (logits,) + transformer_outputs[2:]
@@ -870,7 +874,7 @@ class TFGPTNeoForTokenClassification(TFGPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
-class TFGPTNeoForQuestionAnswering(TFGPTNeoPreTrainedModel):
+class TFGPTNeoForQuestionAnswering(TFGPTNeoPreTrainedModel, TFQuestionAnsweringLoss):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
 
     def __init__(self, config, *args, **kwargs):
@@ -936,29 +940,16 @@ class TFGPTNeoForQuestionAnswering(TFGPTNeoPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        total_loss = None
+        loss = None
         if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.shape) > 1:
-                start_positions = tf.squeeze(start_positions, axis=-1)
-            if len(end_positions.shape) > 1:
-                end_positions = tf.squeeze(end_positions, axis=-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = shape_list(start_logits)[1]
-            start_positions = tf.clip_by_value(start_positions, 0, ignored_index)
-            end_positions = tf.clip_by_value(end_positions, 0, ignored_index)
-
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
-            start_loss = loss_fct(start_positions, start_logits)
-            end_loss = loss_fct(end_positions, end_logits)
-            total_loss = (tf.reduce_mean(start_loss) + tf.reduce_mean(end_loss)) / 2
+            loss = self.hf_compute_loss({"start_position": start_positions, "end_position": end_positions}, (start_logits, end_logits))
 
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
-            loss=total_loss,
+            loss=loss,
             start_logits=start_logits,
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,

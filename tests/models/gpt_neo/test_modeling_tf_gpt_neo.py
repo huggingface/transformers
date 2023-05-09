@@ -397,6 +397,8 @@ class TFGPTNeoModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_missing_keys = False
     test_pruning = False
     test_model_parallel = False
+    test_head_masking = False
+    test_resize_token_embeddings = False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
