@@ -370,14 +370,23 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-## Note about gradio-tools and langchain
+<Tip warning={true}>
 
-Gradio Tools, like Langchain, require *textual* inputs and outputs, even when working with different modalities.
+gradio-tools requires *textual* inputs and outputs, even when working with different modalities. This implementation
+works with image and audio objects. The two are currently incompatible, but will rapidly become compatible as we
+work to improve the support.
+
+</Tip>
+
+## Future compatibility with Langchain
+
+We love Langchain and think it has a very compelling suite of tools. In order to handle these tools,
+Langchain requires *textual* inputs and outputs, even when working with different modalities.
 This is often the serialized version (i.e., saved to disk) of the objects.
 
-This difference means that multi-modality isn't handled between transformers-agents and gradio-tools/langchain.
-We aim for this limitation to be resolved in future versions, and welcome any help from avid gradio-tools/langchain
+This difference means that multi-modality isn't handled between transformers-agents and langchain.
+We aim for this limitation to be resolved in future versions, and welcome any help from avid langchain
 users to help us achieve this compatibility.
 
-We love Langchain and gradio-tools, and would love to have better support. If you would like to help, please 
+We would love to have better support. If you would like to help, please 
 [open an issue](https://github.com/huggingface/transformers/issues/new) and share what you have in mind.
