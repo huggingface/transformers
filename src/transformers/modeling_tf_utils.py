@@ -1140,7 +1140,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-        self.serving = tf.function(self.eager_serving, input_signature=self.get_serving_input_signature())
+        if not hasattr(self, "serving"):  # Don't overwrite existing serving signatures
+            self.serving = tf.function(self.eager_serving, input_signature=self.get_serving_input_signature())
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
