@@ -31,7 +31,8 @@ class ImageQuestionAnsweringTool(PipelineTool):
         return self.pre_processor(image, question, return_tensors="pt")
 
     def forward(self, inputs):
-        return self.model(**inputs).logits
+        with torch.no_grad():
+            return self.model(**inputs).logits
 
     def decode(self, outputs):
         idx = outputs.argmax(-1).item()

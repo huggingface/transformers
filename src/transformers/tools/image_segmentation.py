@@ -35,7 +35,8 @@ class ImageSegmentationTool(PipelineTool):
         return self.pre_processor(text=[prompt], images=[image], padding=True, return_tensors="pt")
 
     def forward(self, inputs):
-        logits = self.model(**inputs).logits
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
         return logits
 
     def decode(self, outputs):

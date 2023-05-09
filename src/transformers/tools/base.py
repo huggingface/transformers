@@ -502,7 +502,8 @@ class PipelineTool(Tool):
         """
         Sends the inputs through the `model`.
         """
-        return self.model(**inputs)
+        with torch.no_grad():
+            return self.model(**inputs)
 
     def decode(self, outputs):
         """

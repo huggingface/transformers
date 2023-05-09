@@ -128,7 +128,7 @@ def get_tool_creation_code(code, toolbox, remote=False):
         task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
         line = f'{name} = load_tool("{task_or_repo_id}"'
         if remote:
-            line += ", remote=True)"
+            line += ", remote=True"
         line += ")"
         code_lines.append(line)
 
@@ -221,7 +221,7 @@ class Agent:
             prompt = prompt.replace("<<prompt>>", task)
         return prompt
 
-    def chat(self, task, return_code=False, remote=False, **kwargs):
+    def chat(self, task, *, return_code=False, remote=False, **kwargs):
         """
         Sends a new request to the agent in a chat. Will use the previous ones in its history.
 
@@ -271,7 +271,7 @@ class Agent:
         self.chat_state = {}
         self.cached_tools = None
 
-    def run(self, task, return_code=False, remote=False, **kwargs):
+    def run(self, task, *, return_code=False, remote=False, **kwargs):
         """
         Sends a request to the agent.
 
@@ -339,7 +339,7 @@ class OpenAiAgent(Agent):
             Pass along your own prompt if you want to override the default template for the `run` method.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool wioll be overridden.
+            one of the default tools, that default tool will be overridden.
 
     Example:
 
@@ -427,7 +427,7 @@ class HfAgent(Agent):
             Pass along your own prompt if you want to override the default template for the `run` method.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool wioll be overridden.
+            one of the default tools, that default tool will be overridden.
 
     Example:
 
