@@ -401,8 +401,8 @@ class HfArgumentParser(ArgumentParser):
 
                 - the dataclass instances in the same order as they were passed to the initializer.
         """
-        open_json_file = open(Path(json_file))
-        data = json.loads(open_json_file.read())
+        with open(Path(json_file), encoding="utf-8") as open_json_file:
+            data = json.loads(open_json_file.read())
         outputs = self.parse_dict(data, allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
 
