@@ -55,7 +55,7 @@ class IctConfig(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             Activation function (can be one of the activation functions defined in src/transformers/activations.py).
             Defaults to "quick_gelu".
-        embedding_dropout_prob (`int`, *optional*, defaults to 0.0):
+        embedding_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the embeddings.
         residual_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -71,6 +71,10 @@ class IctConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
+        output_height (`int`, *optional*, defaults to 256):
+            The height of the final image.
+        output_width (`int`, *optional*, defaults to 256):
+            The width of the final image.
 
     Example:
 
@@ -105,6 +109,8 @@ class IctConfig(PretrainedConfig):
         image_size=1024,
         num_channels=3,
         qkv_bias=False,
+        output_height=256,
+        output_width=256,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,3 +130,5 @@ class IctConfig(PretrainedConfig):
         self.image_size = image_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.output_height = output_height
+        self.output_width = output_width

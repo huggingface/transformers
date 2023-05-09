@@ -65,9 +65,11 @@ class IctModelTester:
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        image_size=64,
+        image_size=1024,
         num_channels=3,
         qkv_bias=False,
+        output_height=256,
+        output_width=256,
         scope=None,
         is_training=True,
     ):
@@ -88,14 +90,17 @@ class IctModelTester:
         self.image_size = image_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.output_height = output_height
+        self.output_width = output_width
 
+        self.seq_length = image_size
         self.scope = scope
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         pixel_values = ids_tensor([self.batch_size, self.image_size], self.vocab_size)
         bool_masked_pos = torch.randint(low=0, high=2, size=(pixel_values.shape[0], pixel_values.shape[1])).bool()
-        
+
         np.random.seed(6)
         clusters = np.random.rand(512, 3)
 
@@ -120,22 +125,24 @@ class IctModelTester:
             image_size=self.image_size,
             num_channels=self.num_channels,
             qkv_bias=self.qkv_bias,
+            output_height=self.output_height,
+            output_width=self.output_width,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, pixel_values, bool_masked_pos, clusters):
         model = IctModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(pixel_values, bool_masked_pos, clusters)
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, self.num_channels ,self.output_height, self.output_width))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             pixel_values,
-            bool_masked_pos,
-            clusters,
+            bool_masked_pos, 
+            clusters
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values, "bool_masked_pos": bool_masked_pos, "clusters": clusters}
         return config, inputs_dict
@@ -190,6 +197,7 @@ class IctModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        print(f"CUSTOM_LOG config_and_inputs: {config_and_inputs}")
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow

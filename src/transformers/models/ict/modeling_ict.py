@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 import torchvision.models as models
+from PIL import Image
 from torch import nn
 
 from ...activations import ACT2FN
@@ -242,6 +243,9 @@ class IctEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+            
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
@@ -265,13 +269,13 @@ class IctPretrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm, nn.Conv2d]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm, nn.Conv2d, nn.ConvTranspose2d]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data = nn.init.normal_(
                 module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
             ).to(module.weight.dtype)
-            if isinstance(module, (nn.Linear, nn.Conv2d)) and module.bias is not None:
+            if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -295,7 +299,7 @@ class IctTransformerModel(IctPretrainedModel):
         self.encoder = IctEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False) 
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -341,7 +345,7 @@ class IctTransformerModel(IctPretrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.head(sequence_output)
+        pooled_output = self.head(sequence_output)  
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -645,12 +649,33 @@ class IctGuidedUpsampler(IctPretrainedModel):
         super().__init__(config)
 
         self.generator = IctInpaintGenerator(config)
+        self.output_height = config.output_height
+        self.output_width = config.output_width
 
         self.post_init()
 
+    def resize(self, img, target_height, target_width):
+        img = img.cpu().detach().numpy()
+        img_height, img_width = img.shape[0:2]
+
+        if img_height != img_width:
+            # Center crop
+            side = min(img_height, img_width)
+            j = (img_height - side) // 2
+            i = (img_width - side) // 2
+            img = img[j : j + side, i : i + side, ...]
+        img = img.astype(np.uint8)
+        np_img = Image.fromarray(img)
+        img = np.array(np_img.resize((target_height, target_width), resample=Image.BICUBIC))
+        return torch.from_numpy(img)
+
     def forward(self, images, edges, masks):
+        images = torch.stack([self.resize(image, self.output_height, self.output_width) for image in images])
+        edges = torch.stack([self.resize(edge, self.output_height, self.output_width) for edge in edges])
+        masks = torch.stack([self.resize(mask, self.output_height, self.output_width) for mask in masks]).unsqueeze(-1)
         images_masked = (images * (1 - masks).float()) + masks
         images_masked = images_masked.permute(0, 3, 1, 2)
+        edges = edges.permute(0, 3, 1, 2)
         inputs = torch.cat((images_masked, edges), dim=1)
         outputs = self.generator(inputs)
         return outputs
@@ -700,10 +725,14 @@ class IctModel(IctPretrainedModel):
         self.config = config
         self.transformer = IctTransformerModel(config, use_mask_token=use_mask_token)
         self.guided_upsampler = IctGuidedUpsampler(config)
+        # self.clusters =
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.transformer.embeddings.token_embedding
+    
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -758,22 +787,28 @@ class IctModel(IctPretrainedModel):
         # current_img= clusters[pixel_values[i]].view(opts.image_size, opts.image_size, 3).numpy().astype(np.uint8)
         batch_size, sequence_length, num_channels = sequence_output.shape
         height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-
+        sequence_output = sequence_output.permute(0, 2, 1).reshape(
+            batch_size, num_channels, height, width
+        )  
+        
         clusters = np.rint(127.5 * (clusters + 1.0))
         clusters = torch.from_numpy(clusters)
-        pixel_values = torch.stack([clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]).to(torch.float32)
-        reconstructed_pixel_values = self.guided_upsampler(pixel_values, sequence_output, bool_masked_pos.reshape(-1, height, height).unsqueeze(-1).int())
+        recovered_pixel_values = torch.stack(
+            [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
+        )
 
+        reshaped_bool_masked_pos = bool_masked_pos.reshape(-1, height, height)
+        reconstructed_pixel_values = self.guided_upsampler(
+            recovered_pixel_values, recovered_pixel_values, reshaped_bool_masked_pos
+        )
         loss = None
         if bool_masked_pos is not None:
-            bool_masked_pos = bool_masked_pos.reshape(-1, self.config.image_size, self.config.image_size)
-            mask = bool_masked_pos.repeat_interleave(1, 1).repeat_interleave(1, 2).unsqueeze(1).contiguous()
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+            size = math.floor(self.config.image_size**0.5)
+            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+            bool_masked_pos.repeat_interleave(1, 1).repeat_interleave(1, 2).unsqueeze(1).contiguous()
 
         if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
+            output = (reconstructed_pixel_values,) + outputs[2:] # TODO Remove pooled_output? Or used that for masked modeling?
             return ((loss,) + output) if loss is not None else output
 
         return MaskedImageModelingOutput(
