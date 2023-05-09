@@ -114,7 +114,10 @@ Let's now try out the new tools! We will re-use the image we generated in (Trans
 
 ```py
 from diffusers.utils import load_image
-image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png")
+
+image = load_image(
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png"
+)
 ```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200> 
