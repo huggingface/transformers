@@ -352,6 +352,15 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get("limit_all_gathers", False)
             fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", False)
 
+        if self.is_deepspeed_enabled:
+            if getattr(self.args, "hf_deepspeed_config", None) is None:
+                from transformers.deepspeed import HfTrainerDeepSpeedConfig
+
+                ds_plugin = self.accelerator.state.deepspeed_plugin
+
+                ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+                ds_plugin.trainer_config_process(self.args)
+
         self.accelerator.print(f"{self.accelerator=}")
         self.accelerator.print(f"{self.accelerator.state=}")
 
