@@ -67,10 +67,6 @@ def image_segmenter(image, prompt):
     return f"This is the mask of {prompt} in {image}"
 
 
-def image_inpainter(image, mask, prompt):
-    return f"This is the inpainted of {image} using prompt {prompt} and mask {mask}"
-
-
 TEST_TOOLS = {
     "text_classifier": classifier,
     "translator": translator,
@@ -86,7 +82,6 @@ TEST_TOOLS = {
     "video_generator": video_generator,
     "document_qa": document_qa,
     "image_segmenter": image_segmenter,
-    "image_inpainter": image_inpainter,
 }
 
 
@@ -183,10 +178,7 @@ EVALUATION_TASKS = [
             "Use `prompt` to transform this `image`.",
         ],
         inputs=["image", "prompt"],
-        answer=[
-            "image_transformer(image, prompt)",
-            "image_inpainter(image, image_segmenter(image, 'beaver'), prompt)",
-        ],
+        answer="image_transformer(image, prompt)",
     ),
     Problem(
         task=[
@@ -339,10 +331,7 @@ EVALUATION_CHATS = [
                 "Use `prompt` to transform this `image`.",
             ],
             inputs=["image", "prompt"],
-            answer=[
-                "image_transformer(image, prompt)",
-                "image_inpainter(image, image_segmenter(image, 'beaver'), prompt)",
-            ],
+            answer="image_transformer(image, prompt)"
         ),
     ],
     [

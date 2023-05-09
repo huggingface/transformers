@@ -51,7 +51,6 @@ HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
     "text-download",
     "text-to-image",
     "text-to-video",
-    "image-inpainting",
 ]
 
 
