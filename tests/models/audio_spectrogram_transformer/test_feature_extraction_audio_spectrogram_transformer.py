@@ -160,6 +160,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = ASTFeatureExtractor()
-        input_values = feaure_extractor(input_speech, return_tensors="pt").input_values
+        feature_extractor = ASTFeatureExtractor()
+        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        self.assertEquals(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))

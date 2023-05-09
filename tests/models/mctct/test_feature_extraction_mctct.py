@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_torch
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -47,7 +47,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-@require_torchaudio
 class MCTCTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -102,7 +101,6 @@ class MCTCTFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = MCTCTFeatureExtractor if is_speech_available() else None
 
@@ -271,3 +269,38 @@ class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_integration(self):
+        # fmt: off
+        expected = np.array([
+            [
+                1.1280,  1.1319,  1.2744,  1.4369,  1.4328,  1.3671,  1.2889,  1.3046,
+                1.4419,  0.8387,  0.2995,  0.0404,  0.1068,  0.0472,  0.3728,  1.3356,
+                1.4491,  0.4770,  0.3997,  0.2776,  0.3184, -0.1243, -0.1170, -0.0828
+            ],
+            [
+                1.0826,  1.0565,  1.2110,  1.3886,  1.3416,  1.2009,  1.1894,  1.2707,
+                1.5153,  0.7005,  0.4916,  0.4017,  0.3743,  0.1935,  0.4228,  1.1084,
+                0.9768,  0.0608,  0.2044,  0.1723,  0.0433, -0.2360, -0.2478, -0.2643
+            ],
+            [
+                1.0590,  0.9923,  1.1185,  1.3309,  1.1971,  1.0067,  1.0080,  1.2036,
+                1.5397,  1.0383,  0.7672,  0.7551,  0.4878,  0.8771,  0.7565,  0.8775,
+                0.9042,  0.4595,  0.6157,  0.4954,  0.1857,  0.0307,  0.0199,  0.1033
+            ],
+        ])
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        input_features = feature_extractor(input_speech, sampling_rate=16000, return_tensors="pt").input_features
+        self.assertTrue(np.allclose(input_features[0, 100:103], expected, atol=1e-4))

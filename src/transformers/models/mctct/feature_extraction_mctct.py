@@ -20,9 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio
-from packaging import version
 
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType
@@ -30,13 +29,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-parsed_torchaudio_version_base = version.parse(version.parse(torchaudio.__version__).base_version)
-if not parsed_torchaudio_version_base >= version.parse("0.10"):
-    logger.warning(
-        f"You are using torchaudio=={torchaudio.__version__}, but torchaudio>=0.10.0 is required to use "
-        "MCTCTFeatureExtractor. This requires torch>=1.10.0. Please upgrade torch and torchaudio."
-    )
 
 
 class MCTCTFeatureExtractor(SequenceFeatureExtractor):
@@ -110,67 +102,8 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
 
-        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
-
-    @staticmethod
-    def _num_frames_calc(in_size, frame_size, frame_stride):
-        return int(1 + np.floor((in_size - frame_size) * 1 / frame_stride))
-
-    @staticmethod
-    def _frame_signal(one_waveform, n_frames, frame_signal_scale, window_length, sample_stride):
-        scale = frame_signal_scale
-        frames = np.zeros(n_frames * window_length)
-        for frame_idx in range(n_frames):
-            start = frame_idx * window_length
-            end = (frame_idx + 1) * window_length
-            wave_start = frame_idx * sample_stride
-            wave_end = frame_idx * sample_stride + window_length
-            frames[start:end] = scale * one_waveform[wave_start:wave_end]
-
-        return frames
-
-    @staticmethod
-    def _apply_preemphasis_inplace(frames, window_length, preemphasis_coeff):
-        if frames.size % window_length != 0:
-            raise ValueError(
-                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
-                f" window_length={window_length}."
-            )
-
-        n_frames = frames.size // window_length
-        for frame_idx in range(n_frames, 0, -1):
-            start = (frame_idx - 1) * window_length
-            end = frame_idx * window_length - 1
-            frames[start + 1 : end + 1] -= preemphasis_coeff * frames[start:end]
-            frames[start] *= 1 - preemphasis_coeff
-
-    @staticmethod
-    def _windowing(frames, window_length, window):
-        if frames.size % window_length != 0:
-            raise ValueError(
-                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
-                f" window_length={window_length}."
-            )
-
-        shaped = frames.reshape(-1, window_length)
-        shaped = window * shaped
-        return shaped
-
-    @staticmethod
-    def _dft(frames, K, n_frames, n_samples, n_fft):
-        dft = np.zeros([n_frames, K])
-
-        for frame in range(n_frames):
-            begin = frame * n_samples
-
-            inwards_buffer = frames[begin : begin + n_samples]
-            inwards_buffer = np.pad(inwards_buffer, (0, n_fft - n_samples), "constant")
-            out = np.fft.rfft(inwards_buffer)
-
-            dft[frame] = np.abs(out[:K])
-
-        return dft
 
     def _extract_mfsc_features(self, one_waveform: np.array) -> np.ndarray:
         """
@@ -183,36 +116,27 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
 
         window = window.numpy()
 
-        fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.n_freqs,
-            f_min=0.0,  # change this to zeros
-            f_max=self.sampling_rate / 2.0,
-            n_mels=self.feature_size,
-            sample_rate=self.sampling_rate,
+        fbanks = mel_filter_bank(
+            num_frequency_bins=self.n_freqs,
+            num_mel_filters=self.feature_size,
+            min_frequency=0.0,
+            max_frequency=self.sampling_rate / 2.0,
+            sampling_rate=self.sampling_rate,
         )
 
-        fbanks = fbanks.numpy()
-
-        n_frames = self._num_frames_calc(one_waveform.size, self.sample_size, self.sample_stride)
-
-        frames = self._frame_signal(
-            one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride
+        msfc_features = spectrogram(
+            one_waveform * self.frame_signal_scale,
+            window=window,
+            frame_length=self.sample_size,
+            hop_length=self.sample_stride,
+            fft_length=self.n_fft,
+            center=False,
+            preemphasis=self.preemphasis_coeff,
+            mel_filters=fbanks,
+            mel_floor=self.mel_floor,
+            log_mel="log",
         )
-
-        self._apply_preemphasis_inplace(frames, self.sample_size, self.preemphasis_coeff)
-
-        frames = self._windowing(frames, self.sample_size, window)
-
-        dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
-
-        # msfc_features = STFT * mel frequency banks.
-        msfc_features = np.einsum("...tf,fm->...tm", dft_out, fbanks)
-
-        # clamp feature values then log scale, as implemented in flashlight
-        msfc_features = np.maximum(msfc_features, self.mel_floor)
-        msfc_features = np.log(msfc_features)
-
-        return msfc_features
+        return msfc_features.T
 
     def _normalize_one(self, x, input_length, padding_value):
         # make sure we normalize float32 arrays
