@@ -190,7 +190,12 @@ class CircleCIJob:
 
         # return code `124` means the previous (pytest run) step is timeout
         if self.name == "pr_documentation_tests":
-            checkout_doctest_command = 'if [ -s reports/tests_pr_documentation_tests/failures_short.txt ]; then echo "some test failed"; exit -1; elif [ -s reports/tests_pr_documentation_tests/stats.txt ]; then echo "All tests pass!"; elif [ -f 124.txt ]; then echo "doctest timeout!"; else echo "other fatal error)"; exit -1; fi;'
+            checkout_doctest_command = 'if [ -s reports/tests_pr_documentation_tests/failures_short.txt ]; '
+            checkout_doctest_command += 'then echo "some test failed"; '
+            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/failures_short.txt; '
+            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/summary_short.txt; exit -1; '
+            checkout_doctest_command += 'elif [ -s reports/tests_pr_documentation_tests/stats.txt ]; then echo "All tests pass!"; '
+            checkout_doctest_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; else echo "other fatal error)"; exit -1; fi;'
             steps.append({"run": {"name": "Check doctest results", "command": checkout_doctest_command}})
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
