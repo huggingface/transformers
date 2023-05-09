@@ -334,7 +334,7 @@ class TrainingArguments:
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
-        eval_steps (`float`, *optional*):
+        eval_steps (`int` or `float`, *optional*):
             Number of update steps between two evaluations if `evaluation_strategy="steps"`. Will default to the same
             value as `logging_steps` if not set. Should be an integer or a float in range `[0,1)`. If smaller than 1,
             will be interpreted as ratio of total training steps.
