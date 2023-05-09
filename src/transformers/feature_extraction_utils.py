@@ -158,7 +158,7 @@ class BatchFeature(UserDict):
         else:
 
             def as_tensor(value, dtype=None):
-                if isinstance(value, (list, tuple)) and len(value) > 0:
+                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
                     value_lens = [len(val) for val in value]
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
