@@ -1116,7 +1116,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummy_inputs = {}
-        rng = np.random.default_rng(42)
+
         serving_sig = self.get_serving_input_signature()
         if self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 2:
             dummy_inputs["input_ids"] = DUMMY_INPUTS
@@ -1130,11 +1130,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 raise NotImplementedError(
                     f"Could not fully infer input tensor shape, dummy inputs must be defined manually for {self.__name__}"
                 )
+            rng = np.random.default_rng(42)
             VISION_DUMMY_INPUTS = rng.random(image_shape).astype(np.float32)
             dummy_inputs["pixel_values"] = tf.constant(VISION_DUMMY_INPUTS, dtype=tf.float32)
         else:
             raise NotImplementedError(
-                "Could not fully infer input shapes, dummy inputs must be defined manually for {self.__name__}"
+                f"Could not fully infer input shapes, dummy inputs must be defined manually for {self.__name__}"
             )
         return dummy_inputs
 
