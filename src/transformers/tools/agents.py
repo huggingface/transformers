@@ -181,7 +181,7 @@ class Agent:
             Pass along your own prompt if you want to override the default template for the `run` method.
         additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
             Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool wioll be overridden.
+            one of the default tools, that default tool will be overridden.
     """
 
     def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
