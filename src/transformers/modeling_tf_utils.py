@@ -2820,6 +2820,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 allow_missing_keys=True,
                 output_loading_info=output_loading_info,
                 _prefix=load_weight_prefix,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
