@@ -1209,10 +1209,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def get_serving_input_signature(self):
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         sig = {}
+        if self.__name__.endswith("ForMultipleChoice"):
+            text_dims = 3
+        else:
+            text_dims = 2
         if "input_ids" in model_inputs:
             for input_name in ("input_ids", "attention_mask", "token_type_ids"):
                 if input_name in model_inputs:
-                    sig[input_name] = tf.TensorSpec((None, None), tf.int32, name=input_name)
+                    sig[input_name] = tf.TensorSpec([None] * text_dims, tf.int32, name=input_name)
         if "pixel_values" in model_inputs:
             pixel_values_shape = [None, None, None, None]
             if hasattr(self.config, "vision_config"):
