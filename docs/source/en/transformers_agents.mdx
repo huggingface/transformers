@@ -294,7 +294,7 @@ our prompts below, but the tools can also be used with Langchain, Minichain, or 
 ```py
 from transformers import HfAgent
 
-agent = HfAgent(url_endpoint="https://open-assistant.ngrok.io", token="<HF_TOKEN>")
+agent = HfAgent(url_endpoint="https://OpenAssistant/oasst-sft-1-pythia-12b", token="<HF_TOKEN>")
 ```
 
 #### Example code for OpenAI models
@@ -389,18 +389,3 @@ Please make sure to have the `<<all_tools>>` string defined somewhere in the `te
 aware of the tools it has available to it.
 
 </Tip>
-
-### Using gradio_tools with the agent
-
-[gradio_tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging 
-Face Spaces as tools.
-
-TODO complete this
-
-### Using Langchain tools with the agent
-
-We love [Langchain](https://python.langchain.com/en/latest/index.html), and think it does a great job at implementing 
-many tools that could empower this implementation. We show examples of how to leverage popular Langchain tools with 
-this API.
-
-TODO complete this
