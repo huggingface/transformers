@@ -1580,7 +1580,6 @@ else:
             "BEiT3ForVisualReasoning",
             "BEiT3Model",
             "Beit3PreTrainedModel",
-            "Biet3ImageTextMatchingModelOutput",
         ]
     )
     _import_structure["models.bert"].extend(
@@ -6308,14 +6307,13 @@ if TYPE_CHECKING:
             BeitPreTrainedModel,
         )
         from .models.beit3 import (
-            BEiT3ForCaptioning,
-            BEiT3ForImageClassification,
-            BEiT3ForImageTextRetrieval,
-            BEiT3ForVisualQuestionAnswering,
-            BEiT3ForVisualReasoning,
-            BEiT3Model,
+            Beit3ForCaptioning,
+            Beit3ForImageClassification,
+            Beit3ForImageTextRetrieval,
+            Beit3ForVisualQuestionAnswering,
+            Beit3ForVisualReasoning,
+            Beit3Model,
             Beit3PreTrainedModel,
-            Biet3ImageTextMatchingModelOutput,
         )
         from .models.bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

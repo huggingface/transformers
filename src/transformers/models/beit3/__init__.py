@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_beit_3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
+    "configuration_beit3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
     "processing_beit3": ["Beit3Processor"],
 }
 
@@ -43,14 +43,13 @@ else:
         "BEiT3ForImageClassification",
         "BEiT3ForCaptioning",
         "BEiT3ForVisualQuestionAnswering",
-        "Biet3ImageTextMatchingModelOutput",
         "BEiT3ForImageTextRetrieval",
         "Beit3PreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_beit_3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config
+    from .configuration_beit3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config
     from .processing_beit3 import Beit3Processor
 
     try:
@@ -67,15 +66,14 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_beit_3 import (
-            BEiT3ForCaptioning,
-            BEiT3ForImageClassification,
-            BEiT3ForImageTextRetrieval,
-            BEiT3ForVisualQuestionAnswering,
-            BEiT3ForVisualReasoning,
-            BEiT3Model,
+        from .modeling_beit3 import (
+            Beit3ForCaptioning,
+            Beit3ForImageClassification,
+            Beit3ForImageTextRetrieval,
+            Beit3ForVisualQuestionAnswering,
+            Beit3ForVisualReasoning,
+            Beit3Model,
             Beit3PreTrainedModel,
-            Biet3ImageTextMatchingModelOutput,
         )
 
 

@@ -18,7 +18,7 @@ from transformers.modeling_outputs import (
 )
 
 # from .configuration_beit_3 import Beit3Config
-from transformers.models.beit3.configuration_beit_3 import Beit3Config
+from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 
 
@@ -260,11 +260,11 @@ class Beit3PreTrainedModel(PreTrainedModel):
         elif isinstance(
             module,
             (
-                BEiT3ForVisualReasoning,
-                BEiT3ForImageTextRetrieval,
-                BEiT3ForVisualQuestionAnswering,
-                BEiT3ForImageClassification,
-                BEiT3ForCaptioning,
+                Beit3ForVisualReasoning,
+                Beit3ForImageTextRetrieval,
+                Beit3ForVisualQuestionAnswering,
+                Beit3ForImageClassification,
+                Beit3ForCaptioning,
             ),
         ):
             module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -275,7 +275,7 @@ class Beit3PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class MultiwayNetwork(nn.Module):
+class Beit3MultiwayNetwork(nn.Module):
     def __init__(self, module, dim=1):
         super().__init__()
         self.dim = dim
@@ -299,16 +299,16 @@ class MultiwayNetwork(nn.Module):
         return torch.cat([y1, y2], dim=self.dim)
 
 
-class MutliwayEmbedding(MultiwayNetwork):
+class Beit3MutliwayEmbedding(Beit3MultiwayNetwork):
     def __init__(self, modules, dim=1):
-        super(MultiwayNetwork, self).__init__()
+        super(Beit3MultiwayNetwork, self).__init__()
         self.dim = dim
         self.first = modules[0]
         self.second = modules[1]
         self.split_position = -1
 
 
-class VisionEmbedding(nn.Module):
+class Beit3VisionEmbedding(nn.Module):
     """Image to Patch Embedding"""
 
     def __init__(self, config):
@@ -353,7 +353,7 @@ class VisionEmbedding(nn.Module):
         return x
 
 
-class PositionalEmbedding(nn.Embedding):
+class Beit3PositionalEmbedding(nn.Embedding):
     def forward(
         self,
         x,
@@ -373,7 +373,7 @@ class PositionalEmbedding(nn.Embedding):
         )
 
 
-class FeedForwardNetwork(nn.Module):
+class Beit3FeedForwardNetwork(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.embed_dim
@@ -404,7 +404,7 @@ class FeedForwardNetwork(nn.Module):
         return x
 
 
-class MultiheadAttention(nn.Module):
+class Beit3MultiheadAttention(nn.Module):
     def __init__(
         self,
         config,
@@ -422,12 +422,12 @@ class MultiheadAttention(nn.Module):
         self.encoder_decoder_attention = encoder_decoder_attention
         assert self.self_attention ^ self.encoder_decoder_attention
 
-        self.k_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
-        self.v_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
-        self.q_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
-        self.out_proj = MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.k_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.v_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.q_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.out_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.inner_attn_ln = (
-            MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
+            Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
             if subln and self.self_attention
             else None
         )
@@ -511,22 +511,22 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_dim = config.embed_dim
-        self.self_attn = MultiheadAttention(
+        self.self_attn = Beit3MultiheadAttention(
             config,
             self_attention=True,
             encoder_decoder_attention=False,
             subln=config.subln,
         )
-        self.self_attn_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
+        self.self_attn_layer_norm = Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
         self.dropout_module = torch.nn.Dropout(config.dropout)
 
         self.normalize_before = config.normalize_before
         self.ffn_dim = config.hidden_size
 
-        self.ffn = MultiwayNetwork(
-            FeedForwardNetwork(config),
+        self.ffn = Beit3MultiwayNetwork(
+            Beit3FeedForwardNetwork(config),
         )
-        self.final_layer_norm = MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
+        self.final_layer_norm = Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
         self.alpha = 1.0
 
     def residual_connection(self, x, residual):
@@ -590,7 +590,7 @@ class Beit3Encoder(nn.Module):
         for i in range(config.layers):
             self.layers.append(Beit3EncoderLayer(config))
         self.num_layers = len(self.layers)
-        self.layer_norm = MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
+        self.layer_norm = Beit3MultiwayNetwork(LayerNorm(embed_dim, eps=config.layernorm_eps))
 
         self.relative_position = None
 
@@ -683,7 +683,7 @@ class Beit3Encoder(nn.Module):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3Model(Beit3PreTrainedModel):
+class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         # self.args = args
@@ -691,12 +691,12 @@ class BEiT3Model(Beit3PreTrainedModel):
         # assert args.vocab_size > 0
         # assert not args.share_encoder_input_output_embed
         self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
-        self.vision_embedding = VisionEmbedding(config)
+        self.vision_embedding = Beit3VisionEmbedding(config)
         # being consistent with Fairseq, which starts from 2 for position embedding
-        embed_positions = MutliwayEmbedding(
+        embed_positions = Beit3MutliwayEmbedding(
             modules=[
-                PositionalEmbedding(self.vision_embedding.num_position_embeddings() + 2, config.embed_dim),
-                PositionalEmbedding(config.max_source_positions, config.embed_dim),
+                Beit3PositionalEmbedding(self.vision_embedding.num_position_embeddings() + 2, config.embed_dim),
+                Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim),
             ],
             dim=1,
         )
@@ -773,11 +773,11 @@ class BEiT3Model(Beit3PreTrainedModel):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3ForVisualReasoning(Beit3PreTrainedModel):
+class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(BEiT3ForVisualReasoning, self).__init__(config)
+        super(Beit3ForVisualReasoning, self).__init__(config)
         embed_dim = config.embed_dim
-        self.beit3 = BEiT3Model(config)
+        self.beit3 = Beit3Model(config)
         self.head = Beit3TwoLayerMLP(
             in_features=embed_dim * 4,
             hidden_features=embed_dim * 2,
@@ -844,13 +844,13 @@ class BEiT3ForVisualReasoning(Beit3PreTrainedModel):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3ForImageClassification(Beit3PreTrainedModel):
+class Beit3ForImageClassification(Beit3PreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config):
-        super(BEiT3ForImageClassification, self).__init__(config)
+        super(Beit3ForImageClassification, self).__init__(config)
         embed_dim = config.embed_dim
-        self.beit3 = BEiT3Model(config)
+        self.beit3 = Beit3Model(config)
         self.fc_norm = nn.LayerNorm(embed_dim)
         self.classifier = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
         self.num_labels = config.num_labels
@@ -911,11 +911,11 @@ class BEiT3ForImageClassification(Beit3PreTrainedModel):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3ForCaptioning(Beit3PreTrainedModel):
+class Beit3ForCaptioning(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(BEiT3ForCaptioning, self).__init__(config)
+        super(Beit3ForCaptioning, self).__init__(config)
         embed_dim = config.embed_dim
-        self.beit3 = BEiT3Model(config)
+        self.beit3 = Beit3Model(config)
         self.label_smoothing = config.label_smoothing
         self.output = nn.Linear(embed_dim, config.vocab_size)
         self.log_soft = nn.LogSoftmax(dim=1)
@@ -1030,12 +1030,12 @@ class Pooler(nn.Module):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3ForVisualQuestionAnswering(Beit3PreTrainedModel):
+class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(BEiT3ForVisualQuestionAnswering, self).__init__(config)
+        super(Beit3ForVisualQuestionAnswering, self).__init__(config)
         embed_dim = config.embed_dim
         self.num_labels = config.num_labels
-        self.beit3 = BEiT3Model(config)
+        self.beit3 = Beit3Model(config)
         self.pooler = Pooler(
             input_features=embed_dim,
             output_features=embed_dim,
@@ -1133,11 +1133,11 @@ class Biet3ImageTextMatchingModelOutput(ModelOutput):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT3_START_DOCSTRING,
 )
-class BEiT3ForImageTextRetrieval(Beit3PreTrainedModel):
+class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(BEiT3ForImageTextRetrieval, self).__init__(config)
+        super(Beit3ForImageTextRetrieval, self).__init__(config)
         embed_dim = config.embed_dim
-        self.beit3 = BEiT3Model(config)
+        self.beit3 = Beit3Model(config)
         self.language_head = nn.Linear(embed_dim, embed_dim, bias=False)
         self.vision_head = nn.Linear(embed_dim, embed_dim, bias=False)
         # self.language_head.apply(self._init_weights)

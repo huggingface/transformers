@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import VisualBertConfig, is_torch_available
-from transformers.models.beit3.configuration_beit_3 import Beit3Config
+from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -32,12 +32,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BEiT3ForCaptioning,
-        BEiT3ForImageClassification,
-        BEiT3ForImageTextRetrieval,
-        BEiT3ForVisualQuestionAnswering,
-        BEiT3ForVisualReasoning,
-        BEiT3Model,
+        Beit3ForCaptioning,
+        Beit3ForImageClassification,
+        Beit3ForImageTextRetrieval,
+        Beit3ForVisualQuestionAnswering,
+        Beit3ForVisualReasoning,
+        Beit3Model,
     )
 
 
@@ -181,7 +181,7 @@ class Beit3ModelTester:
         return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
 
     def create_and_check_model(self, config, input_dict):
-        model = BEiT3Model(config=config)
+        model = Beit3Model(config=config)
         model.to(torch_device)
         model.eval()
         model(**input_dict)
@@ -191,7 +191,7 @@ class Beit3ModelTester:
         # )
 
     def create_and_check_for_visual_reasoning(self, config, input_dict):
-        model = BEiT3ForVisualReasoning(config=config)
+        model = Beit3ForVisualReasoning(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
@@ -227,19 +227,19 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             # BEiT3Model,
-            BEiT3ForVisualReasoning,
-            BEiT3ForImageTextRetrieval,
-            BEiT3ForVisualQuestionAnswering,
-            BEiT3ForImageClassification,
-            BEiT3ForCaptioning,
+            Beit3ForVisualReasoning,
+            Beit3ForImageTextRetrieval,
+            Beit3ForVisualQuestionAnswering,
+            Beit3ForImageClassification,
+            Beit3ForCaptioning,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BEiT3Model,
-            "image-classification": BEiT3ForImageClassification,
+            "feature-extraction": Beit3Model,
+            "image-classification": Beit3ForImageClassification,
         }
         if is_torch_available()
         else {}

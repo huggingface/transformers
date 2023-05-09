@@ -25,15 +25,15 @@ BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Beit3Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
+    This is the configuration class to store the configuration of a [`Beit3Model`]. It is used to instantiate an BEiT3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BEiT
+    defaults will yield a similar configuration to that of the BEiT3
     [microsoft/beit3-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit3-base-patch16-224-pt22k)
     architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):
-            Vocabulary size of the BEiT model. Defines the number of different image tokens that can be used during
+            Vocabulary size of the BEiT3 model. Defines the number of different image tokens that can be used during
             pre-training.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -97,16 +97,16 @@ class Beit3Config(PretrainedConfig):
     ```python
     >>> from transformers import BeitConfig, BeitModel
 
-    >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
-    >>> configuration = BeitConfig()
+    >>> # Initializing a BEiT3 beit3-base-patch16-224-pt22k style configuration
+    >>> configuration = Beit3Config()
 
-    >>> # Initializing a model (with random weights) from the beit-base-patch16-224-pt22k style configuration
-    >>> model = BeitModel(configuration)
+    >>> # Initializing a model (with random weights) from the beit3-base-patch16-224-pt22k style configuration
+    >>> model = Beit3Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "beit"
+    model_type = "beit3"
 
     def __init__(
         self,
