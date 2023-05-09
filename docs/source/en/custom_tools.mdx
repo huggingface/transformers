@@ -27,7 +27,7 @@ we'll take a look at how to use custom tools, as well as how to create one yours
 In this section, we'll be leveraging two existing custom tools that are not included in the default toolbox. We'll
 use:
 - The [diffusers/controlnet-canny-tool](https://huggingface.co/spaces/diffusers/controlnet-canny-tool) in order to
-  replace the existing text-transformation tool.
+  replace the existing image-transformation tool.
 
 ### Adding new tools
 
@@ -64,7 +64,7 @@ class HFModelDownloadsTool(Tool):
 
 This class has a few needs:
 - An attribute `name`, which corresponds to the name of the tool itself. To be in tune with other tools which have a
-  performative name, we'll name it `text-download-counter`.
+  performative name, we'll name it `model_download_counter`.
 - An attribute `description`, which will be used to populate the prompt of the agent.
 - `inputs` and `outputs` attributes. Defining this will help the python interpreter make educated choices about types,
   and will allow for a gradio-demo to be spawned when we push our tool to the Hub. They're both a list of expected
@@ -79,7 +79,7 @@ from huggingface_hub import list_models
 
 
 class HFModelDownloadsTool(Tool):
-    name = "model-download-counter"
+    name = "model_download_counter"
     description = (
         "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
         "It takes the name of the category (such as text-classification, depth-estimation, etc), and "
@@ -94,7 +94,7 @@ class HFModelDownloadsTool(Tool):
         return model.id
 ```
 
-We now have our tool handy. Save it in a file and import it from your main script. I'm naming this file
+We now have our tool handy. Save it in a file and import it from your main script. Let's name this file
 `model_downloads.py`, so the resulting import code looks like this:
 
 ```python
@@ -102,6 +102,7 @@ from model_downloads import HFModelDownloadsTool
 
 tool = HFModelDownloadsTool()
 ```
+
 In order to let others benefit from it and for simpler initialization, we recommend pushing it to the Hub under your 
 namespace. To do so, just call `push_to_hub` on the `tool` variable:
 
@@ -171,7 +172,7 @@ agent.toolbox["image-transformation"] = load_tool("diffusers/controlnet-canny-to
 
 <Tip>
 
-Beware when replacing tools with others! This will also replace the prompt. This can be good if you have a better
+Beware when replacing tools with others! This will also adjust the agent's prompt. This can be good if you have a better
 prompt suited for the task, but it can also result in your tool being selected way more than others or for other
 tools to be selected instead of the one you have defined.
 
