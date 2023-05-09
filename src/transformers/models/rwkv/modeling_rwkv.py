@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Peng Bo and HuggingFace Inc. team.
+# Copyright 2023 Bo Peng and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -145,7 +145,6 @@ class RwkvLinearAttention(torch.autograd.Function):
                 forward_func = rwkv_cuda_kernel.forward_with_state_bf16
             else:
                 forward_func = rwkv_cuda_kernel.forward_with_state
-            # TODO: update CUDA kernel so it uses the initial state provided here.
             forward_func(time_decay, time_first, key, value, output, state)
         else:
             forward_func = rwkv_cuda_kernel.forward_bf16 if key.dtype == torch.bfloat16 else rwkv_cuda_kernel.forward
