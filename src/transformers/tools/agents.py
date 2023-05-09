@@ -317,7 +317,7 @@ class OpenAiAgent(Agent):
     <Tip warning={true}>
 
     The openAI models are used in generation mode, so even for the `chat()` API, it's better to use models like
-    `"text-davinci-003"` over the chat-GPT variant. Proper support for chat-GPT models will come in a next version. 
+    `"text-davinci-003"` over the chat-GPT variant. Proper support for chat-GPT models will come in a next version.
 
     </Tip>
 
