@@ -51,8 +51,6 @@ class CircleCIJob:
     resource_class: Optional[str] = "xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
-    # This should be only used for doctest job!
-    command_timeout: Optional[int] = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
@@ -109,15 +107,11 @@ class CircleCIJob:
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
-        pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
+        pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
-        test_command = ""
-        if self.command_timeout:
-            test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        
+        test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
@@ -167,37 +161,12 @@ class CircleCIJob:
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
             steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
 
-            test_command = ""
-            if self.timeout:
-                test_command = f"timeout {self.timeout} "
-            test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
-
-        if self.name == "pr_documentation_tests":
-            # can't use ` | tee tee tests_output.txt` as usual
-            test_command += " > tests_output.txt"
-            # Save the return code, so we can check if it is timeout in the next step.
-            test_command += '; touch "$?".txt'
-            # Never fail the test step for the doctest job. We will check the results in the next step, and fail that
-            # step instead if the actual test failures are found. This is to avoid the timeout being reported as test
-            # failure.
-            test_command = f"({test_command}) || true"
-        else:
-            test_command += " | tee tests_output.txt"
+        test_command += " | tee tests_output.txt"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
-
-        # return code `124` means the previous (pytest run) step is timeout
-        if self.name == "pr_documentation_tests":
-            checkout_doctest_command = 'if [ -s reports/tests_pr_documentation_tests/failures_short.txt ]; '
-            checkout_doctest_command += 'then echo "some test failed"; '
-            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/failures_short.txt; '
-            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/summary_short.txt; exit -1; '
-            checkout_doctest_command += 'elif [ -s reports/tests_pr_documentation_tests/stats.txt ]; then echo "All tests pass!"; '
-            checkout_doctest_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; else echo "other fatal error)"; exit -1; fi;'
-            steps.append({"run": {"name": "Check doctest results", "command": checkout_doctest_command}})
-
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
         job["steps"] = steps
@@ -432,51 +401,6 @@ repo_utils_job = CircleCIJob(
     tests_to_run="tests/repo_utils",
 )
 
-# At this moment, only the files that are in `utils/documentation_tests.txt` will be kept (together with a dummy file).
-py_command = 'import os; import json; fp = open("pr_documentation_tests.txt"); data_1 = fp.read().strip().split("\\n"); fp = open("utils/documentation_tests.txt"); data_2 = fp.read().strip().split("\\n"); to_test = [x for x in data_1 if x in set(data_2)] + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
-py_command = f"$(python3 -c '{py_command}')"
-command = f'echo "{py_command}" > pr_documentation_tests_filtered.txt'
-doc_test_job = CircleCIJob(
-    "pr_documentation_tests",
-    additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "pip install --upgrade pip",
-        "pip install -e .[dev]",
-        "pip install git+https://github.com/huggingface/accelerate",
-        "pip install --upgrade pytest pytest-sugar",
-        "find -name __pycache__ -delete",
-        "find . -name \*.pyc -delete",
-        # Add an empty file to keep the test step running correctly even no file is selected to be tested.
-        "touch dummy.py",
-        {
-            "name": "Get files to test",
-            "command":
-                "git remote add upstream https://github.com/huggingface/transformers.git && git fetch upstream \n"
-                "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '\.(py|mdx)$' | grep -Ev '^\..*|/\.' | grep -Ev '__' > pr_documentation_tests.txt"
-        },
-        {
-            "name": "List files beings changed: pr_documentation_tests.txt",
-            "command":
-                "cat pr_documentation_tests.txt"
-        },
-        {
-            "name": "Filter pr_documentation_tests.txt",
-            "command":
-                command
-        },
-        {
-            "name": "List files beings tested: pr_documentation_tests_filtered.txt",
-            "command":
-                "cat pr_documentation_tests_filtered.txt"
-        },
-    ],
-    tests_to_run="$(cat pr_documentation_tests_filtered.txt)",  # noqa
-    pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
-    command_timeout=1200,  # test cannot run longer than 1200 seconds
-    pytest_num_workers=1,
-)
-
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,
@@ -487,7 +411,6 @@ REGULAR_TESTS = [
     hub_job,
     onnx_job,
     exotic_models_job,
-    doc_test_job
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
