@@ -4,6 +4,7 @@ import inspect
 import io
 import json
 import os
+import tempfile
 from typing import Any, Dict, List, Optional, Union
 
 from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, hf_hub_download
@@ -19,7 +20,6 @@ from ..utils import (
     is_torch_available,
     is_vision_available,
     logging,
-    working_or_temp_dir,
 )
 
 
@@ -54,7 +54,7 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
 
 
 # docstyle-ignore
-APP_FILE_TEMPLATE = """from transformers.tools.base import launch_gradio_demo
+APP_FILE_TEMPLATE = """from transformers import launch_gradio_demo
 from {module_name} import {class_name}
 
 launch_gradio_demo({class_name})
@@ -63,7 +63,24 @@ launch_gradio_demo({class_name})
 
 class Tool:
     """
-    Example of a super 'Tool' class that could live in huggingface_hub
+    A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
+    following class attributes:
+
+    - **description** (`str`) -- A short description of what your tool does, the inputs it expects and the output(s) it
+      wil return. For instance 'This is a tool that downloads a file from a `url`. It takes the `url` as input, and
+      returns the text contained in the file'.
+    - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
+      `"text-classifier"` or `"image_generator"`.
+    - **inputs** (`List[str]`) -- The list of modalities expected for the inputs (in the same order as in the call).
+      Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo` or to make a
+      nice space from your tool.
+    - **outputs** (`List[str]`) -- The list of modalities returned but the tool (in the same order as the return of the
+      call method). Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo`
+      or to make a nice space from your tool.
+
+    You can also override the method [`~Tool.setup`] if your tool as an expensive operation to perform before being
+    usable (such as loading a model). [`~Tool.setup`] will be called the first time you use your tool, but not at
+    instantiation.
     """
 
     description: str = "This is a tool that ..."
@@ -76,15 +93,31 @@ class Tool:
         self.is_initialized = False
         pass
 
-    def __call__(self, *args, **kwargs):  # Might become run?
+    def __call__(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
 
     def setup(self):
-        # Do here any operation that is expensive and needs to be executed before you start using your tool. Such as
-        # loading a big model.
+        """
+        Overwrite this method here any operation that is expensive and needs to be executed before you start using your
+        tool. Such as loading a big model.
+        """
         self.is_initialized = True
 
     def save(self, output_dir):
+        """
+        Saves the relevant code files for your tool so it can be pushed to the Hub. This will copy the code of your
+        tool in `output_dir` as well as autogenerate:
+
+        - a config file named `tool_config.json`
+        - an `app.py` file so that your tool can be converted to a space
+        - a `requirements.txt` containing the names of the module used by your tool (as detected when inspecting its
+          code)
+
+        You should only use this method to save tools that are defined in a separate module (not `__main__`).
+
+        Args:
+            output_dir (`str`): The folder in which you want to save your tool.
+        """
         os.makedirs(output_dir, exist_ok=True)
         # Save module file
         if self.__module__ == "__main__":
@@ -126,6 +159,25 @@ class Tool:
 
     @classmethod
     def from_hub(cls, repo_id, model_repo_id=None, token=None, remote=False, **kwargs):
+        """
+        Loads a tool defined on the Hub.
+
+        Args:
+            repo_id (`str`):
+                The name of the repo on the Hub where your tool is defined.
+            model_repo_id (`str`, *optional*):
+                If your tool uses a model and you want to use a different model than the default, you can pass a second
+                repo ID or an endpoint url to this argument.
+            token (`str`, *optional*):
+                The token to identify you on hf.co. If unset, will use the token generated when running
+                `huggingface-cli login` (stored in `~/.huggingface`).
+            remote (`bool`, *optional*, defaults to `False`):
+                Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
+            kwargs:
+                Additional keyword arguments that will be split in two: all arguments relevant to the Hub (such as
+                `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the
+                others will be passed along to its init.
+        """
         if remote and model_repo_id is None:
             endpoints = get_default_endpoints()
             if repo_id not in endpoints:
@@ -193,62 +245,42 @@ class Tool:
     def push_to_hub(
         self,
         repo_id: str,
-        use_temp_dir: Optional[bool] = None,
         commit_message: str = "Upload tool",
         private: Optional[bool] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
     ) -> str:
         """
-        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        `repo_path_or_name`.
+        Upload the tool to the Hub.
 
         Parameters:
             repo_id (`str`):
                 The name of the repository you want to push your tool to. It should contain your organization name when
                 pushing to a given organization.
-            use_temp_dir (`bool`, *optional*):
-                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
-                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
-            commit_message (`str`, *optional*, defaults to `"Upload too"`):
+            commit_message (`str`, *optional*, defaults to `"Upload tool"`):
                 Message to commit while pushing.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private.
             token (`bool` or `str`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If unsel, will use the token generated
+                The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`).
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
         """
-        if os.path.isdir(repo_id):
-            working_dir = repo_id
-            repo_id = repo_id.split(os.path.sep)[-1]
-        else:
-            working_dir = repo_id.split("/")[-1]
-
         repo_url = create_repo(
             repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
         )
         repo_id = repo_url.repo_id
 
-        if use_temp_dir is None:
-            use_temp_dir = not os.path.isdir(working_dir)
-
-        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
-            files_timestamps = {f: os.path.getmtime(os.path.join(work_dir, f)) for f in os.listdir(work_dir)}
-
+        with tempfile.TemporaryDirectory() as work_dir:
             # Save all files.
             self.save(work_dir)
-
-            modified_files = [
-                f
+            os.listdir(work_dir)
+            operations = [
+                CommitOperationAdd(path_or_fileobj=os.path.join(work_dir, f), path_in_repo=f)
                 for f in os.listdir(work_dir)
-                if f not in files_timestamps or os.path.getmtime(os.path.join(work_dir, f)) > files_timestamps[f]
             ]
-            operations = []
-            for file in modified_files:
-                operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(work_dir, file), path_in_repo=file))
-            logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
+            logger.info(f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}")
             return create_commit(
                 repo_id=repo_id,
                 operations=operations,
@@ -260,6 +292,10 @@ class Tool:
 
     @staticmethod
     def from_gradio(gradio_tool):
+        """
+        Creates a [`Tool`] from a gradio tool.
+        """
+
         class GradioToolWrapper(Tool):
             def __init__(self, _gradio_tool):
                 super().__init__()
@@ -269,17 +305,35 @@ class Tool:
         GradioToolWrapper.__call__ = gradio_tool.run
         return GradioToolWrapper(gradio_tool)
 
+
 class RemoteTool(Tool):
-    default_url = None
+    """
+    A [`Tool`] that will make requests to an inference endpoint.
+
+    Args:
+        endpoint_url (`str`):
+            The url of the endpoint to use.
+        token (`str`, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
+            running `huggingface-cli login` (stored in `~/.huggingface`).
+        tool_class (`type`, *optional*):
+            The corresponding `tool_class` if this is a remote version of an existing tool. Will help determine when
+            the output should be converted to another type (like images).
+    """
 
     def __init__(self, endpoint_url=None, token=None, tool_class=None):
-        if endpoint_url is None:
-            endpoint_url = self.default_url
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
         self.tool_class = tool_class
 
     def prepare_inputs(self, *args, **kwargs):
+        """
+        Prepare the inputs received for the HTTP client sending data to the endpoint. Positional arguments will be
+        matched with the signature of the `tool_class` if it was provided at instantation. Images will be encoded into
+        bytes.
+
+        You can override this method in your custom class of [`RemoteTool`].
+        """
         inputs = kwargs.copy()
         if len(args) > 0:
             if self.tool_class is not None:
@@ -312,6 +366,10 @@ class RemoteTool(Tool):
         return {"inputs": inputs}
 
     def extract_outputs(self, outputs):
+        """
+        You can override this method in your custom class of [`RemoteTool`] to apply some custom post-processing of the
+        outputs of the endpoint.
+        """
         return outputs
 
     def __call__(self, *args, **kwargs):
@@ -327,6 +385,43 @@ class RemoteTool(Tool):
 
 
 class PipelineTool(Tool):
+    """
+    A [`Tool`] tailored towards Transformer models. On top of the class attributes of the base class [`Tool`], you will
+    meed to specify:
+
+    - **model_class** (`type`) -- The class to use to load the model in this tool.
+    - **default_checkpoint** (`str`) -- The default checkpoint that should be used when the user doesn't specify one.
+    - **pre_processor_class** (`type`, *optional*, defaults to [`AutoProcessor`]) -- The class to use to load the
+      pre-processor
+    - **post_processor_class** (`type`, *optional*, defaults to [`AutoProcessor`]) -- The class to use to load the
+      post-processor (when different from the pre-processor).
+
+    Args:
+        model (`str` or [`PreTrainedModel`], *optional*):
+            The name of the checkpoint to use for the model, or the instantiated model. If unset, will default to the
+            value of the class attribute `default_checkpoint`.
+        pre_processor (`str` or `Any`, *optional*):
+            The name of the checkpoint to use for the pre-processor, or the instantiated pre-processor (can be a
+            tokenizer, an image processor, a feature extractor or a processor). Will default to the value of `model` if
+            unset.
+        post_processor (`str` or `Any`, *optional*):
+            The name of the checkpoint to use for the post-processor, or the instantiated pre-processor (can be a
+            tokenizer, an image processor, a feature extractor or a processor). Will default to the `pre_processor` if
+            unset.
+        device (`int`, `str` or `torch.device`, *optional*):
+            The device on which to execute the model. Will default to any accelerator available (GPU, MPS etc...), the
+            CPU otherwise.
+        device_map (`str` or `dict`, *optional*):
+            If passed along, will be used to instantiate the model.
+        model_kwargs (`dict`, *optional*):
+            Any keyword argument to send to the model instantiation.
+        token (`str`, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
+            running `huggingface-cli login` (stored in `~/.huggingface`).
+        hub_kwargs:
+            Any additional keyword argument to send to the methods that will load the data from the Hub.
+    """
+
     pre_processor_class = AutoProcessor
     model_class = None
     post_processor_class = AutoProcessor

@@ -9,7 +9,7 @@ from ..utils import (
 
 _import_structure = {
     "agents": ["Agent", "HfAgent", "OpenAiAgent"],
-    "base": ["PipelineTool", "RemoteTool", "Tool", "load_tool"],
+    "base": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
 
 try:
