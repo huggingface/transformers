@@ -82,6 +82,14 @@ agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
 This is using the inference API that Hugging Face provides for free at the moment, if you have your own inference
 endpoint for this model (or another one) you can replace the url above by your url endpoint.
 
+<Tip>
+
+We're showcasing StarCoder as the default in the documentation as the model is free to use and performs admirably well
+on simple tasks. However, the checkpoint doesn't hold up when handling more complex prompts. If you're facing such an
+issue, we recommend trying out the OpenAI model which, while sadly not open-source, performs better at this given time.
+
+</Tip>
+
 You're now good to go! Let's dive into the two APIs that you now have at your disposal.
 
 ### Single execution (run)
@@ -112,13 +120,35 @@ Every [`~Agent.run`] operation is independent, so you can run it several times i
 Note that your `agent` is just a large-language model, so small variations in your prompt might yield completely
 different results. It's important to explain as clearly as possible the task you want to perform.
 
+If you'd like to keep a state across executions or to pass non-text objects to the agent, you can do so by specifying
+variables that you would like the agent to use. For example you could generate the first image of rivers and lakes, 
+and ask the model to update that picture to add an island by doing the following:
+
+```python
+picture = agent.run("Draw me a picture of rivers and lakes")
+updated_picture = agent.chat("Take that `picture` and add an island to it", picture=picture)
+```
+
 <Tip>
 
-We're showcasing StarCoder as the default in the documentation as the model is free to use and performs admirably well
-on simple tasks. However, the checkpoint doesn't hold up when handling more complex prompts. If you're facing such an
-issue, we recommend trying out the OpenAI model which, while sadly not open-source, performs better at this given time.
+This can be helpful when the model is unable to understand your request and mixes tools. An example would be:
+
+```python
+agent.run("Draw me the picture of a capybara swimming in the sea")
+```
+
+Here, the model could interpret it two ways:
+- Have the `text-to-image` generate a capybara swimming in the sea
+- Or, have the `text-to-image` generate capybara, then use the `image-transformation` tool to have it swim in the sea
+
+In case you would like to force the first scenario, you could do so by passing it the prompt as an argument:
+
+```python
+agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in the sea")
+```
 
 </Tip>
+
 
 ### Chat-based execution (chat)
 
@@ -141,6 +171,8 @@ agent.chat("Transform the picture so that there is a rock in there")
 This is an interesting approach when you want to keep the state across instructions. It's better for experimentation, 
 but will tend to be much better at single instructions rather than complex instructions (which the [`~Agent.run`]
 method is better at handling).
+
+This method can also take arguments if you would like to pass non-text types or specific prompts.
 
 ### ⚠️ Remote execution
 
@@ -165,11 +197,41 @@ agent.chat("Draw me a picture of rivers and lakes", remote=True)
 
 ### What's happening here? What are tools, and what are agents?
 
+#### Agents
+
 The "agent" here is a large language model, and we're prompting it so that it has access to a specific set of tools.
+
+LLMs are pretty good at generating small samples of code, so this API takes advantage of that by prompting the 
+LLM to give a small sample of code performing a task with a set of tools. This prompt is then completed by the 
+task you give your agent and the description of the tools you give it. This way it gets access to the doc of the 
+tools you are using, especially their expected inputs and outputs and can generate the relevant code.
+
+#### Tools
 
 Tools are very simple: they're a single function, with a name, and a description. We then use these tools description 
 to prompt the agent. Through the prompt, we show the agent how it would leverage tools in order to perform what was 
 requests in the query.
+
+This is using brand-new tools and not pipelines, because the agent writes better code with very atomic tools. 
+Pipelines are more refactored and often combine several tasks in one. Tools are really meant to be focused one 
+very simple task only.
+
+#### Code-execution?!
+
+This code is then executed with our small Python interpreter on the set of inputs passed along with your tools. 
+We hear you screaming "Arbitrary code execution!" in the back, but let us explain why that is not the case.
+
+The only functions that can be called are the tools you provided and the print function, so you're already 
+limited in what can be executed. You should be safe if it's limited to Hugging Face tools. 
+
+Then, we don't allow any attribute lookup or imports (which shouldn't be needed anyway for passing along 
+inputs/outputs to a small set of functions) so all the most obvious attacks (and you'd need to prompt the LLM 
+to output them anyway) shouldn't be an issue. If you want to be on the super safe side, you can execute the 
+run() method with the additional argument return_code=True, in which case the agent will just return the code 
+to execute and you can decide whether to do it or not.
+
+The execution will stop at any line trying to perform an illegal operation or if there is a regular Python error 
+with the code generated by the agent.
 
 ### A curated set of tools
 
