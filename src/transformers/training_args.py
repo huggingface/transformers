@@ -1189,11 +1189,11 @@ class TrainingArguments:
         if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
             raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
         
-        if self.logging_steps > 1 and self.logging_steps != int(self.logging_steps):
+        if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps > 1 and self.logging_steps != int(self.logging_steps):
             raise ValueError(f"--logging_steps must be an integer if bigger than 1: {self.logging_steps}")
-        if self.eval_steps > 1 and self.eval_steps != int(self.eval_steps):
+        if self.evaluation_strategy == IntervalStrategy.STEPS and self.eval_steps > 1 and self.eval_steps != int(self.eval_steps):
             raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
-        if self.save_steps > 1 and self.save_steps != int(self.save_steps):
+        if self.save_strategy == IntervalStrategy.STEPS and self.save_steps > 1 and self.save_steps != int(self.save_steps):
             raise ValueError(f"--save_steps must be an integer if bigger than 1: {self.save_steps}")
         
 
