@@ -34,7 +34,7 @@ def evaluate(code: str, tools: Dict[str, Callable], state=None, chat_mode=False)
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
 
-    This function will recurse trough the nodes of the tree provided.
+    This function will recurse through the nodes of the tree provided.
 
     Args:
         code (`str`):

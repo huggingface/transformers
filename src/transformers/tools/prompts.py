@@ -115,7 +115,7 @@ answer = image_qa(text=question, image=image)
 print(f"The answer is {answer}")
 ```
 
-Human: I tried this code but it worked but didn't give me a good result. The question is in French
+Human: I tried this code, it worked but didn't give me a good result. The question is in French
 
 Assistant: In this case, the question needs to be translated first. I will use the tool `translator` to do this.
 

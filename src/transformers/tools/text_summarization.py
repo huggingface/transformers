@@ -25,8 +25,8 @@ class TextSummarizationTool(PipelineTool):
     ```py
     from transformers.tools import TextSummarizationTool
 
-    classifier = TextSummarizationTool()
-    classifier(long_text)
+    summarizer = TextSummarizationTool()
+    summarizer(long_text)
     ```
     """
 

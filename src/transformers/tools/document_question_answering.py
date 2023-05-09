@@ -72,9 +72,8 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
     def decode(self, outputs):
         sequence = self.pre_processor.batch_decode(outputs)[0]
-        sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "").replace(
-            self.pre_processor.tokenizer.pad_token, ""
-        )
+        sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "")
+        sequence = sequence.replace(self.pre_processor.tokenizer.pad_token, "")
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
         sequence = self.pre_processor.token2json(sequence)
 

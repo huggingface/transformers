@@ -83,7 +83,7 @@ class Tool:
     following class attributes:
 
     - **description** (`str`) -- A short description of what your tool does, the inputs it expects and the output(s) it
-      wil return. For instance 'This is a tool that downloads a file from a `url`. It takes the `url` as input, and
+      will return. For instance 'This is a tool that downloads a file from a `url`. It takes the `url` as input, and
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
@@ -107,15 +107,14 @@ class Tool:
 
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
-        pass
 
     def __call__(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
 
     def setup(self):
         """
-        Overwrite this method here any operation that is expensive and needs to be executed before you start using your
-        tool. Such as loading a big model.
+        Overwrite this method here for any operation that is expensive and needs to be executed before you start using 
+        your tool. Such as loading a big model.
         """
         self.is_initialized = True
 

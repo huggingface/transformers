@@ -28,7 +28,7 @@ if is_datasets_available():
 class TextToSpeechTool(PipelineTool):
     default_checkpoint = "microsoft/speecht5_tts"
     description = (
-        "This is a tool that reads an English text out loud. It takes an input named `text` which whould contain the "
+        "This is a tool that reads an English text out loud. It takes an input named `text` which should contain the "
         "text to read (in English) and returns a waveform object containing the sound."
     )
     name = "text_reader"

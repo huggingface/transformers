@@ -171,7 +171,7 @@ def clean_code_for_run(result):
     code = code.strip()
 
     code_lines = code.split("\n")
-    if code_lines[0] in ["```", "```py"]:
+    if code_lines[0] in ["```", "```py", "```python"]:
         code_lines = code_lines[1:]
     if code_lines[-1] == "```":
         code_lines = code_lines[:-1]
@@ -341,7 +341,7 @@ class OpenAiAgent(Agent):
 
     Args:
         model (`str`, *optional*, defaults to `"text-davinci-003"`):
-            The name of the openAI model to use.
+            The name of the OpenAI model to use.
         api_key (`str`, *optional*):
             The API key to use. If unset, will look for the environment variable `"OPENAI_API_KEY"`.
         chat_prompt_template (`str`, *optional*):
@@ -371,7 +371,7 @@ class OpenAiAgent(Agent):
         additional_tools=None,
     ):
         if not is_openai_available():
-            raise ImportError("Using `OpenAIAgent` requires `openai`: `pip install openai`.")
+            raise ImportError("Using `OpenAiAgent` requires `openai`: `pip install openai`.")
 
         if api_key is None:
             api_key = os.environ.get("OPENAI_API_KEY", None)
