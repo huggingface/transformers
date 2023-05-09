@@ -14,15 +14,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 
 from ..models.clipseg import CLIPSegForImageSegmentation
-from ..utils import is_vision_available
+from ..utils import requires_backends
 from .base import PipelineTool
 
 
-if is_vision_available():
+if TYPE_CHECKING:
     from PIL import Image
 
 
@@ -41,9 +43,7 @@ class ImageSegmentationTool(PipelineTool):
     outputs = ["image"]
 
     def __init__(self, *args, **kwargs):
-        if not is_vision_available():
-            raise ImportError("Pillow should be installed in order to use the ImageSegmentationTool.")
-
+        requires_backends["vision"]
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", prompt: str):
@@ -59,4 +59,4 @@ class ImageSegmentationTool(PipelineTool):
         array = outputs.cpu().detach().numpy()
         array[array <= 0] = 0
         array[array > 0] = 1
-        return Image.fromarray((np.dstack([array, array, array]) * 255).astype(np.uint8))
+        return Image.fromarray((array * 255).astype(np.uint8))

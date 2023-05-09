@@ -14,12 +14,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..models.auto import AutoModelForVision2Seq, AutoProcessor
-from ..utils import is_vision_available
+from typing import TYPE_CHECKING
+
+from ..models.auto import AutoModelForVision2Seq
+from ..utils import requires_backends
 from .base import PipelineTool
 
 
-if is_vision_available():
+if TYPE_CHECKING:
     from PIL import Image
 
 
@@ -30,16 +32,13 @@ class ImageCaptioningTool(PipelineTool):
         "image to caption, and returns a text that contains the description in English."
     )
     name = "image_captioner"
-    pre_processor_class = AutoProcessor
     model_class = AutoModelForVision2Seq
 
     inputs = ["image"]
     outputs = ["text"]
 
     def __init__(self, *args, **kwargs):
-        if not is_vision_available():
-            raise ValueError("Pillow must be installed to use the ImageCaptioningTool.")
-
+        requires_backends["vision"]
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image"):

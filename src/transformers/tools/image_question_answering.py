@@ -14,14 +14,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
+
 import torch
 
 from ..models.auto import AutoModelForVisualQuestionAnswering, AutoProcessor
-from ..utils import is_vision_available
+from ..utils import requires_backends
 from .base import PipelineTool
 
 
-if is_vision_available():
+if TYPE_CHECKING:
     from PIL import Image
 
 
@@ -40,9 +42,7 @@ class ImageQuestionAnsweringTool(PipelineTool):
     outputs = ["text"]
 
     def __init__(self, *args, **kwargs):
-        if not is_vision_available():
-            raise ValueError("Pillow must be installed to use the ImageQuestionAnsweringTool.")
-
+        requires_backends["vision"]
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", question: str):

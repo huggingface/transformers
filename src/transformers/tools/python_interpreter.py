@@ -45,6 +45,8 @@ def evaluate(code: str, tools: Dict[str, Callable], state=None, chat_mode=False)
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` should contain the initial inputs but will be
             updated by this function to contain all variables as they are evaluated.
+        chat_mode (`bool`, *optional*, defaults to `False`):
+            Whether or not the function is called from `Agent.chat`.
     """
     try:
         expression = ast.parse(code)
