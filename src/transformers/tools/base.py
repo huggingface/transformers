@@ -113,7 +113,7 @@ class Tool:
 
     def setup(self):
         """
-        Overwrite this method here for any operation that is expensive and needs to be executed before you start using 
+        Overwrite this method here for any operation that is expensive and needs to be executed before you start using
         your tool. Such as loading a big model.
         """
         self.is_initialized = True
