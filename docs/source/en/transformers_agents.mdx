@@ -79,12 +79,6 @@ from transformers.tools import HfAgent
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
 ```
 
-<Tip>
-
-We're showcasing StarCoder as the default in the documentation as the model is free to use and performs admirably well on simple tasks. However, the checkpoint doesn't hold up when handling more complex prompts. If you're facing such an issue, we recommend trying out the OpenAI model which, while sadly not open-source, performs better at this given time.
-
-</Tip>
-
 This is using the inference API that Hugging Face provides for free at the moment, if you have your own inference
 endpoint for this model (or another one) you can replace the url above by your url endpoint.
 
