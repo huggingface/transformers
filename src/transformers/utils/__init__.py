@@ -27,6 +27,7 @@ from .doc import (
     copy_func,
     replace_return_docstrings,
 )
+from .doctest_utils import HfDocTestParser
 from .generic import (
     ContextManagers,
     ExplicitEnum,
