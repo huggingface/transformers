@@ -124,7 +124,9 @@ what the tool does and the second states what input arguments and return values 
 
 A good tool name and tool description are very important for the agent to correctly use it. Note that the only
 information the agent has about the tool is its name and description, so one should make sure that both 
-are precisely written and match the style of the existing tools in the toolbox.
+are precisely written and match the style of the existing tools in the toolbox. In particular make sure the description
+mentions all the arguments expected by name in code-style, along with the expected type and a description of what they
+are.
 
 <Tip>
 
@@ -137,7 +139,7 @@ The third part includes a set of curated examples that show the agent exactly wh
 for what kind of user request. The large language models empowering the agent are extremely good at 
 recognizing patterns in a prompt and repeating the pattern with new data. Therefore, it is very important
 that the examples are written in a way that maximizes the likelihood of the agent to generating correct,
-  executable code in practice. 
+executable code in practice. 
 
 Let's have a look at one example:
 
@@ -466,7 +468,8 @@ The set of curated tools already has an `image_transformer` tool which is hereby
 
 Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
 because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
-as the overwritten tool in this case.
+as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
+tool are updated.
 
 </Tip>
 
@@ -627,14 +630,14 @@ In order to let others benefit from it and for simpler initialization, we recomm
 namespace. To do so, just call `push_to_hub` on the `tool` variable:
 
 ```python
-tool.push_to_hub("lysandre/hf-model-downloads")
+tool.push_to_hub("hf-model-downloads")
 ```
 
 You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
 
 #### Having the agent use the tool
 
-We now have our tool that lives on the Hub which can be instantiated as such:
+We now have our tool that lives on the Hub which can be instantiated as such (change the user name for your tool):
 
 ```python
 from transformers import load_tool
