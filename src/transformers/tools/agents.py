@@ -264,7 +264,6 @@ class Agent:
         """
         prompt = self.format_prompt(task, chat_mode=True)
         result = self.generate_one(prompt, stop=["Human:", "====="])
-        import ipdb; ipdb.set_trace()
         self.chat_history = prompt + result + "\n"
         explanation, code = clean_code_for_chat(result)
 
