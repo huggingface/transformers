@@ -101,8 +101,8 @@ class PvtPatchEmbeddings(nn.Module):
     def __init__(
         self,
         config: PvtConfig,
-        image_size: Mapping[int, Iterable[int]],
-        patch_size: Mapping[int, Iterable[int]],
+        image_size: Union[int, Iterable[int]],
+        patch_size: Union[int, Iterable[int]],
         stride: int,
         num_channels: int,
         hidden_size: int,
