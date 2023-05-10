@@ -494,7 +494,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("barthez", "BARThez"),
         ("bartpho", "BARTpho"),
         ("beit", "BEiT"),
-        ("beit3", "BEiT3"),
+        ("beit3", "Beit3"),
         ("bert", "BERT"),
         ("bert-generation", "Bert Generation"),
         ("bert-japanese", "BertJapanese"),
