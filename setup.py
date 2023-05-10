@@ -342,7 +342,6 @@ extras["all"] = (
     + extras["flax"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
-    + extras["safetensors"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -364,7 +363,6 @@ extras["dev-torch"] = (
     + extras["torch"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
-    + extras["safetensors"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -383,7 +381,6 @@ extras["dev-tensorflow"] = (
     + extras["tf"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
-    + extras["safetensors"]
     + extras["vision"]
     + extras["quality"]
     + extras["docs_specific"]
@@ -414,7 +411,6 @@ extras["torchhub"] = deps_list(
     "sentencepiece",
     "torch",
     "tokenizers",
-    "safetensors",
     "tqdm",
 )
 
