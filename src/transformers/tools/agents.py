@@ -18,6 +18,7 @@ import importlib.util
 import json
 import os
 import time
+from typing import Dict
 from dataclasses import dataclass
 
 import requests
@@ -199,7 +200,7 @@ class Agent:
 
         self.chat_prompt_template = CHAT_MESSAGE_PROMPT if chat_prompt_template is None else chat_prompt_template
         self.run_prompt_template = RUN_PROMPT_TEMPLATE if run_prompt_template is None else run_prompt_template
-        self.toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
+        self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         if additional_tools is not None:
             if isinstance(additional_tools, (list, tuple)):
                 additional_tools = {t.name: t for t in additional_tools}
@@ -207,7 +208,7 @@ class Agent:
                 additional_tools = {additional_tools.name: additional_tools}
 
             replacements = {name: tool for name, tool in additional_tools.items() if name in HUGGINGFACE_DEFAULT_TOOLS}
-            self.toolbox.update(additional_tools)
+            self._toolbox.update(additional_tools)
             if len(replacements) > 1:
                 names = "\n".join([f"- {n}: {t}" for n, t in replacements.items()])
                 logger.warn(
@@ -218,6 +219,11 @@ class Agent:
                 logger.warn(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
 
         self.prepare_for_new_chat()
+
+    @property
+    def toolbox(self) -> Dict[str, Tool]:
+        """ Get all tool currently available to the agent """
+        return self._toolbox
 
     def format_prompt(self, task, chat_mode=False):
         description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
@@ -258,6 +264,7 @@ class Agent:
         """
         prompt = self.format_prompt(task, chat_mode=True)
         result = self.generate_one(prompt, stop=["Human:", "====="])
+        import ipdb; ipdb.set_trace()
         self.chat_history = prompt + result + "\n"
         explanation, code = clean_code_for_chat(result)
 
