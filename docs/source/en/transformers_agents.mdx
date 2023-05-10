@@ -133,7 +133,7 @@ updated_picture = agent.chat("Take that `picture` and add an island to it", pict
 
 This can be helpful when the model is unable to understand your request and mixes tools. An example would be:
 
-```python
+```py
 agent.run("Draw me the picture of a capybara swimming in the sea")
 ```
 
@@ -143,7 +143,7 @@ Here, the model could interpret in two ways:
 
 In case you would like to force the first scenario, you could do so by passing it the prompt as an argument:
 
-```python
+```py
 agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in the sea")
 ```
 
@@ -179,13 +179,13 @@ This method can also take arguments if you would like to pass non-text types or 
 For demonstration purposes and so that this can be used with all setups, we have created remote executors for several 
 of the default tools the agent has access. These are created using 
 [inference endpoints](https://huggingface.co/inference-endpoints). To see how to set up remote executors tools yourself,
-we recommend reading the custom tool guide [custom_tools].
+we recommend reading the [custom tool guide](./custom_tools).
 
 In order to run with remote tools, specifying `remote=True` to either [`~Agent.run`] or [`~Agent.chat`] is sufficient.
 
 For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
 
-```python
+```py
 agent.run("Draw me a picture of rivers and lakes", remote=True)
 ```
 
@@ -277,7 +277,6 @@ continue releasing such tools on this and other organizations, to further superc
 
 The agents have by default access to tools that reside on `huggingface-tools`.
 We explain how to you can write and share your tools as well as leverage any custom tool that resides on the Hub in [following guide](custom_tools).
-[following guide](custom_tools).
 
 ### Leveraging different agents
 

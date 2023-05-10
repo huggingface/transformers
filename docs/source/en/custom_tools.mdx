@@ -54,7 +54,7 @@ The prompt is structured broadly into four parts.
 
 To better understand each part, let's look at a shortened version of how the `run` prompt can look like:
 
-```
+````
 I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
 [...]
 You can print intermediate results if it makes sense to do so.
@@ -92,7 +92,7 @@ image = image_generator("A banner showing " + answer)
 Task: "Draw me a picture of rivers and lakes"
 
 I will use the following
-```
+````
 
 The introduction (the text before *"Tools:"*) explains precisely how the model shall behave and what it should do.
 This part most likely does not need to be customized as the agent shall always behave the same way.
@@ -131,7 +131,7 @@ are precisely written and match the style of the existing tools in the toolbox.
 Check the naming and description of the curated Transformers tools to better understand what name and 
 description a tool is expected to have. You can see all tools with the [`Agent.toolbox`] property.
 
-<\Tip>
+</Tip>
 
 The third part includes a set of curated examples that show the agent exactly what code it should produce
 for what kind of user request. The large language models empowering the agent are extremely good at 
@@ -141,18 +141,18 @@ that the examples are written in a way that maximizes the likelihood of the agen
 
 Let's have a look at one example:
 
-```
+````
 Task: "Identify the oldest person in the `document` and create an image showcasing the result as a banner."
 
 I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 
 Answer:
-``` 
 ```py
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
 image = image_generator("A banner showing " + answer)
 ```
+````
 
 The pattern the model is prompted to repeat has three parts: The task statement, the agent's explanation of 
 what it intends to do, and finally the generated code. Every example that is part of the prompt has this exact 
@@ -184,7 +184,7 @@ exactly in the same way it was previously done in the examples.
 Without going into too much detail, the chat template has the same prompt structure with the 
 examples having a slightly different style, *e.g.*:
 
-```
+````
 [...]
 
 =====
@@ -193,30 +193,26 @@ Human: Answer the question in the variable `question` about the image stored in 
 
 Assistant: I will use the tool `image_qa` to answer the question on the input image.
 
-```
 ```py
 answer = image_qa(text=question, image=image)
 print(f"The answer is {answer}")
-```
 ```
 
 Human: I tried this code, it worked but didn't give me a good result. The question is in French
 
 Assistant: In this case, the question needs to be translated first. I will use the tool `translator` to do this.
 
-```
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
 print(f"The translated question is {translated_question}.")
 answer = image_qa(text=translated_question, image=image)
 print(f"The answer is {answer}")
 ```
-```
 
 =====
 
 [...]
-```
+````
 
 Contrary, to the examples of the `run` prompt, each `chat` prompt example has one or more exchanges between the 
 *Human* and the *Assistant*. Every exchange is structured similarly to the example of the `run` prompt. 
@@ -366,7 +362,7 @@ slightly more complex use cases like generating an image of multiple objects.
 Both the agent itself and the underlying prompt will be further improved in the coming 
 months making sure that agents become more robust to a variety of user inputs.
 
-<\Tip>
+</Tip>
 
 ### Customizing the whole prompt
 
