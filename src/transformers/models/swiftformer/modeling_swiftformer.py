@@ -60,8 +60,11 @@ SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class SwiftFormerPatchEmbedding(nn.Module):
     """
-    Patch Embedding Layer that is implemented by two layers of conv. Output: sequence of layers with final shape of
-    [batch_size, channels, height/4, width/4]
+    Patch Embedding Layer constructed of two 2D convolutional layers.
+
+    Input: tensor of shape `[batch_size, in_channels, height, width]`
+
+    Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
     """
 
     def __init__(self, config: SwiftFormerConfig):
@@ -120,8 +123,11 @@ class SwiftFormerDropPath(nn.Module):
 
 class SwiftFormerEmbeddings(nn.Module):
     """
-    Patch Embedding that is implemented by a layer of conv. Input: tensor in shape [batch_size, channels, height,
-    width] Output: tensor in shape [batch_size, channels, height/stride, width/stride]
+    Embeddings layer consisting of a single 2D convolutional and batch normalization layer.
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height/stride, width/stride]`
     """
 
     def __init__(self, config: SwiftFormerConfig, index: int):
@@ -150,8 +156,10 @@ class SwiftFormerEmbeddings(nn.Module):
 
 class SwiftFormerConvEncoder(nn.Module):
     """
-    Implementation of SwiftFormerConvEncoder with 3*3 and 1*1 convolutions. Input: tensor with shape [batch_size,
-    channels, height, width] Output: tensor with shape [batch_size, channels, height, width]
+    `SwiftFormerConvEncoder` with 3*3 and 1*1 convolutions.
+
+    Input: tensor of shape `[batch_size, channels, height, width]` Output: tensor of shape `[batch_size, channels,
+    height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, dim: int):
@@ -179,8 +187,11 @@ class SwiftFormerConvEncoder(nn.Module):
 
 class SwiftFormerMlp(nn.Module):
     """
-    Implementation of MLP layer with 1*1 convolutions. Input: tensor with shape [batch_size, channels, height, width]
-    Output: tensor with shape [batch_size, channels, height, width]
+    MLP layer with 1*1 convolutions.
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, in_features: int):
@@ -188,7 +199,7 @@ class SwiftFormerMlp(nn.Module):
         hidden_features = int(in_features * config.mlp_ratio)
         self.norm1 = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
         self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
-        act_layer = ACT2CLS[config.act_layer]
+        act_layer = ACT2CLS[config.hidden_act]
         self.act = act_layer()
         self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
         self.drop = nn.Dropout(p=0.0)
@@ -205,8 +216,11 @@ class SwiftFormerMlp(nn.Module):
 
 class SwiftFormerEfficientAdditiveAttention(nn.Module):
     """
-    Efficient Additive Attention module for SwiftFormer. Input: tensor in shape [batch_size, channels, height, width]
-    Output: tensor in shape [batch_size, channels, height, width]
+    Efficient Additive Attention module for SwiftFormer.
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, dim: int = 512):
@@ -243,8 +257,10 @@ class SwiftFormerEfficientAdditiveAttention(nn.Module):
 class SwiftFormerLocalRepresentation(nn.Module):
     """
     Local Representation module for SwiftFormer that is implemented by 3*3 depth-wise and point-wise convolutions.
-    Input: tensor in shape [batch_size, channels, height, width] Output: tensor in shape [batch_size, channels, height,
-    width]
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, dim: int):
@@ -272,8 +288,11 @@ class SwiftFormerLocalRepresentation(nn.Module):
 class SwiftFormerEncoderBlock(nn.Module):
     """
     SwiftFormer Encoder Block for SwiftFormer. It consists of (1) Local representation module, (2)
-    SwiftFormerEfficientAdditiveAttention, and (3) MLP block. Input: tensor in shape [batch_size, channels, height,
-    width] Output: tensor in shape [batch_size, channels, height, width]
+    SwiftFormerEfficientAdditiveAttention, and (3) MLP block.
+
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels,height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0) -> None:
@@ -319,22 +338,26 @@ class SwiftFormerEncoderBlock(nn.Module):
 
 class SwiftFormerStage(nn.Module):
     """
-    Implementation of each SwiftFormer stages. Here, SwiftFormerEncoderBlock used as the last block in all stages,
-    while SwiftFormerConvEncoder used in the rest of the blocks. Input: tensor in shape [batch_size, channels, height,
-    width] Output: tensor in shape [batch_size, channels, height, width]
+    A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
+    `SwiftFormerEncoderBlock`.
+
+    Input: tensor in shape `[batch_size, channels, height, width]`
+
+    Output: tensor in shape `[batch_size, channels, height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, index: int) -> None:
         super().__init__()
 
-        layers = config.layers
+        layer_depths = config.depths
         dim = config.embed_dims[index]
+        depth = layer_depths[index]
 
         blocks = []
-        for block_idx in range(layers[index]):
-            block_dpr = config.drop_path_rate * (block_idx + sum(layers[:index])) / (sum(layers) - 1)
+        for block_idx in range(depth):
+            block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
 
-            if layers[index] - block_idx <= 1:
+            if depth - block_idx <= 1:
                 blocks.append(SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
             else:
                 blocks.append(SwiftFormerConvEncoder(config, dim=dim))
@@ -358,14 +381,14 @@ class SwiftFormerEncoder(nn.Module):
 
         embed_dims = config.embed_dims
         downsamples = config.downsamples
-        layers = config.layers
+        layer_depths = config.depths
 
         # Transformer model
         network = []
-        for i in range(len(layers)):
+        for i in range(len(layer_depths)):
             stage = SwiftFormerStage(config=config, index=i)
             network.append(stage)
-            if i >= len(layers) - 1:
+            if i >= len(layer_depths) - 1:
                 break
             if downsamples[i] or embed_dims[i] != embed_dims[i + 1]:
                 # downsampling between two stages

@@ -45,7 +45,7 @@ class SwiftFormerConfig(PretrainedConfig):
     Args:
         input_channels (`int`, *optional*, defaults to 3):
             The number of input channels
-        layers (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
+        depths (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
             Depth of each stage
         embed_dims (`List[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
             The embedding dimension at each stage
@@ -53,7 +53,7 @@ class SwiftFormerConfig(PretrainedConfig):
             Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
         downsamples (`List[bool]`, *optional*, defaults to `[True, True, True, True]`)
             Whether or not to downsample inputs between two stages.
-        act_layer (`str`, *optional*, defaults to `"gelu"`):
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string). `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         down_patch_size (`int`, *optional*, defaults to 3):
             The size of patches in downsampling layers.
@@ -67,7 +67,7 @@ class SwiftFormerConfig(PretrainedConfig):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-5):
             Factor by which outputs from token mixers are scaled.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-3):
+        batch_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the batch normalization layers.
 
 
@@ -90,11 +90,11 @@ class SwiftFormerConfig(PretrainedConfig):
     def __init__(
         self,
         input_channels=3,
-        layers=[3, 3, 6, 4],
+        depths=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
         mlp_ratio=4,
         downsamples=[True, True, True, True],
-        act_layer="gelu",
+        hidden_act="gelu",
         down_patch_size=3,
         down_stride=2,
         down_pad=1,
@@ -106,11 +106,11 @@ class SwiftFormerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.input_channels = input_channels
-        self.layers = layers
+        self.depths = depths
         self.embed_dims = embed_dims
         self.mlp_ratio = mlp_ratio
         self.downsamples = downsamples
-        self.act_layer = act_layer
+        self.hidden_act = hidden_act
         self.down_patch_size = down_patch_size
         self.down_stride = down_stride
         self.down_pad = down_pad

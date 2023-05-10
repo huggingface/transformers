@@ -102,19 +102,19 @@ def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, o
 
     # size of the architecture
     if swiftformer_name == "swiftformer_xs":
-        config.layers = [3, 3, 6, 4]
+        config.depths = [3, 3, 6, 4]
         config.embed_dims = [48, 56, 112, 220]
 
     elif swiftformer_name == "swiftformer_s":
-        config.layers = [3, 3, 9, 6]
+        config.depths = [3, 3, 9, 6]
         config.embed_dims = [48, 64, 168, 224]
 
     elif swiftformer_name == "swiftformer_l1":
-        config.layers = [4, 3, 10, 5]
+        config.depths = [4, 3, 10, 5]
         config.embed_dims = [48, 96, 192, 384]
 
     elif swiftformer_name == "swiftformer_l3":
-        config.layers = [4, 4, 12, 6]
+        config.depths = [4, 4, 12, 6]
         config.embed_dims = [64, 128, 320, 512]
 
     # load state_dict of original model, remove and rename some keys

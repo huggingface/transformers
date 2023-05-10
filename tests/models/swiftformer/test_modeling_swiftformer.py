@@ -87,11 +87,11 @@ class SwiftFormerModelTester:
 
     def get_config(self):
         return SwiftFormerConfig(
-            layers=self.layer_depths,
+            depths=self.layer_depths,
             embed_dims=self.embed_dims,
             mlp_ratio=4,
             downsamples=[True, True, True, True],
-            act_layer="gelu",
+            hidden_act="gelu",
             num_labels=self.num_labels,
             down_patch_size=3,
             down_stride=2,
