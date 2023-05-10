@@ -1589,7 +1589,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         ):
             forced_decoder_ids = self.generation_config.forced_decoder_ids
         else:
-            forced_decoder_ids = kwargs.get(forced_decoder_ids, "None")
+            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
 
         if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
             forced_decoder_ids = []
