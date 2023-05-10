@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.29.0.dev0"
+__version__ = "4.30.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -431,6 +431,7 @@ _import_structure = {
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -608,6 +609,16 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
         "TokenSpan",
+    ],
+    "tools": [
+        "Agent",
+        "HfAgent",
+        "OpenAiAgent",
+        "PipelineTool",
+        "RemoteTool",
+        "Tool",
+        "launch_gradio_demo",
+        "load_tool",
     ],
     "trainer_callback": [
         "DefaultFlowCallback",
@@ -2364,6 +2375,14 @@ else:
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.rwkv"].extend(
+        [
+            "RWKV_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RwkvForCausalLM",
+            "RwkvModel",
+            "RwkvPreTrainedModel",
+        ]
+    )
     _import_structure["models.sam"].extend(
         [
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3780,6 +3799,7 @@ else:
             "FlaxWhisperForConditionalGeneration",
             "FlaxWhisperModel",
             "FlaxWhisperPreTrainedModel",
+            "FlaxWhisperForAudioClassification",
         ]
     )
     _import_structure["models.xglm"].extend(
@@ -4169,6 +4189,7 @@ if TYPE_CHECKING:
     )
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -4329,6 +4350,9 @@ if TYPE_CHECKING:
         SpecialTokensMixin,
         TokenSpan,
     )
+
+    # Tools
+    from .tools import Agent, HfAgent, OpenAiAgent, PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
 
     # Trainer
     from .trainer_callback import (
@@ -5783,6 +5807,12 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.rwkv import (
+            RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RwkvForCausalLM,
+            RwkvModel,
+            RwkvPreTrainedModel,
+        )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
@@ -6905,7 +6935,12 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
-        from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
+        from .models.whisper import (
+            FlaxWhisperForAudioClassification,
+            FlaxWhisperForConditionalGeneration,
+            FlaxWhisperModel,
+            FlaxWhisperPreTrainedModel,
+        )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

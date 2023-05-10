@@ -38,8 +38,8 @@
         title: 번역
       - local: tasks/summarization
         title: 요약
-      - local: in_translation
-        title: (번역중) Multiple Choice
+      - local: tasks/multiple_choice
+        title: 객관식 문제(Multiple Choice)
     title: 자연어처리
     isExpanded: false
   - sections:
