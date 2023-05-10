@@ -158,8 +158,9 @@ class SwiftFormerConvEncoder(nn.Module):
     """
     `SwiftFormerConvEncoder` with 3*3 and 1*1 convolutions.
 
-    Input: tensor of shape `[batch_size, channels, height, width]` Output: tensor of shape `[batch_size, channels,
-    height, width]`
+    Input: tensor of shape `[batch_size, channels, height, width]`
+
+    Output: tensor of shape `[batch_size, channels, height, width]`
     """
 
     def __init__(self, config: SwiftFormerConfig, dim: int):
