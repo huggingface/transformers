@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "accelerate": "accelerate>=0.17.0",
+    "accelerate": "accelerate>=0.19.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "black": "black~=23.1",
@@ -46,7 +46,7 @@ deps = {
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "phonemizer": "phonemizer",
-    "protobuf": "protobuf<=3.20.2",
+    "protobuf": "protobuf<=3.20.3",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",
     "pydantic": "pydantic",
