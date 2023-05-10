@@ -264,7 +264,9 @@ class Agent:
         """
         prompt = self.format_prompt(task, chat_mode=True)
         result = self.generate_one(prompt, stop=["Human:", "====="])
-        self.chat_history = prompt + result + "\n"
+        self.chat_history = prompt + result
+        if not self.chat_history.endswith("\n"):
+            self.chat_history += "\n"
         explanation, code = clean_code_for_chat(result)
 
         print(f"==Explanation from the agent==\n{explanation}")
