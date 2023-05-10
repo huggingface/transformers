@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate.state import PartialState, AcceleratorState
+    from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
