@@ -35,9 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
-    from transformers.models.pvt.modeling_pvt import (
-        PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
