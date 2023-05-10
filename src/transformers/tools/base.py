@@ -285,7 +285,7 @@ class Tool:
         repo_url = create_repo(
             repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
         )
-        metadata_update(repo_id, {'tags': ['tool']}, repo_type='space')
+        metadata_update(repo_id, {"tags": ["tool"]}, repo_type="space")
         repo_id = repo_url.repo_id
 
         with tempfile.TemporaryDirectory() as work_dir:
