@@ -121,13 +121,9 @@ class PvtPatchEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.randn(1, num_patches + 1 if cls_token else num_patches, hidden_size)
         )
-
         self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_size)) if cls_token else None
-
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=stride, stride=patch_size)
-
         self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
