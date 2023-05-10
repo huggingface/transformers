@@ -579,6 +579,7 @@ def main():
         cache_dir=model_args.cache_dir,
         config=config,
         use_auth_token=data_args.use_auth_token,
+        ignore_mismatched_sizes=True  # Ignore error when checkpoint output size is different from current (new) model
     )
 
     # freeze encoder
