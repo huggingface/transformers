@@ -117,8 +117,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
@@ -289,7 +288,7 @@ class Beit3VisionEmbedding(nn.Module):
         else:
             return self.num_patches + 1
 
-    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None)-> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None) -> torch.Tensor:
         hidden_states = self.proj(hidden_states).flatten(2).transpose(1, 2)
 
         batch_size, seq_len, _ = hidden_states.size()
@@ -372,9 +371,7 @@ class Beit3MultiheadAttention(nn.Module):
         self.query_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.out_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.inner_attn_ln = (
-            Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
-            if config.subln
-            else None
+            Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps)) if config.subln else None
         )
         self.dropout_module = torch.nn.Dropout(config.attention_dropout)
 
@@ -653,7 +650,6 @@ class Beit3Model(Beit3PreTrainedModel):
         incremental_state=None,
         positions=None,
     ):
-
         if textual_tokens is None:
             x = self.vision_embedding(pixel_values, vision_masked_position)
             encoder_padding_mask = None

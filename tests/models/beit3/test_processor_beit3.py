@@ -22,7 +22,6 @@ import numpy as np
 import pytest
 
 from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from transformers.models.xlm_roberta.tokenization_xlm_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 

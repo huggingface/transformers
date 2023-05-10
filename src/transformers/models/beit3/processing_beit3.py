@@ -16,13 +16,10 @@
 Image/Text processor class for Beit3
 """
 
-from typing import List
 
-import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 
 class Beit3Processor(ProcessorMixin):
