@@ -41,15 +41,12 @@ else:
     _import_structure["modeling_bros"] = [
         "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BrosForMaskedLM",
-        "BrosForCausalLM",
-        "BrosForMultipleChoice",
-        "BrosForQuestionAnswering",
+        "BrosForPreTraining",
         "BrosForSequenceClassification",
         "BrosForTokenClassification",
-        "BrosLayer",
         "BrosModel",
+        "BrosLMHeadModel",
         "BrosPreTrainedModel",
-        "load_tf_weights_in_bros",
     ]
 
 
@@ -76,15 +73,12 @@ if TYPE_CHECKING:
         from .modeling_bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosForMaskedLM,
-            BrosForCausalLM,
-            BrosForMultipleChoice,
-            BrosForQuestionAnswering,
+            BrosForPreTraining,
             BrosForSequenceClassification,
             BrosForTokenClassification,
-            BrosLayer,
+            BrosLMHeadModel,
             BrosModel,
             BrosPreTrainedModel,
-            load_tf_weights_in_bros,
         )
 
 
