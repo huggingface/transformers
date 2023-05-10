@@ -145,7 +145,7 @@ def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
         unittest.TestCase().assertTrue(hasattr(tokenizer, "sp_model_kwargs"))
         unittest.TestCase().assertIsNotNone(tokenizer.sp_model_kwargs)
         unittest.TestCase().assertTrue(isinstance(tokenizer.sp_model_kwargs, dict))
-        unittest.TestCase().assertEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
+        unittest.TestCase().assertDictEqual(tokenizer.sp_model_kwargs, sp_model_kwargs)
         check_subword_sampling(tokenizer, test_sentencepiece_ignore_case=test_sentencepiece_ignore_case)
 
     except Exception:
@@ -168,7 +168,7 @@ def _test_pickle_subword_regularization_tokenizer(in_queue, out_queue, timeout):
         unittest.TestCase().assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
         unittest.TestCase().assertIsNotNone(tokenizer_new.sp_model_kwargs)
         unittest.TestCase().assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
-        unittest.TestCase().assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
+        unittest.TestCase().assertDictEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
         check_subword_sampling(tokenizer_new, test_sentencepiece_ignore_case=test_sentencepiece_ignore_case)
 
     except Exception:
