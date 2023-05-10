@@ -67,7 +67,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled, deepspeed_load_checkpoint
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -340,7 +340,10 @@ class Trainer:
         self.is_in_train = False
 
         # create accelerator object
-        self.accelerator = Accelerator(deepspeed_plugin=self.args.deepspeed_plugin)
+        self.accelerator = Accelerator(
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
+        )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
@@ -1746,9 +1749,7 @@ class Trainer:
 
         # deepspeed ckpt loading
         if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
-            self.model_wrapped.load_checkpoint(
-                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-            )
+            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -1909,16 +1910,7 @@ class Trainer:
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                if (
-                    (total_batched_samples % args.gradient_accumulation_steps != 0)
-                    and args.parallel_mode == ParallelMode.DISTRIBUTED
-                    and args._no_sync_in_gradient_accumulation
-                    and hasattr(model, "no_sync")
-                ):
-                    # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
-                    with model.no_sync():
-                        tr_loss_step = self.training_step(model, inputs)
-                else:
+                with self.accelerator.accumulate(model):
                     tr_loss_step = self.training_step(model, inputs)
 
                 if (
@@ -1933,6 +1925,9 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
+                # should this be under the accumulate context manager?
+                # the `or` condition of `steps_in_epoch <= args.gradient_accumulation_steps` is not covered
+                # in accelerate
                 if total_batched_samples % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
@@ -2171,9 +2166,7 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path) or os.path.exists(best_safe_model_path):
             if self.is_deepspeed_enabled:
-                self.model_wrapped.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-                )
+                deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
             else:
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
@@ -2710,10 +2703,6 @@ class Trainer:
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-        if self.args.gradient_accumulation_steps > 1 and not self.is_deepspeed_enabled:
-            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-            loss = loss / self.args.gradient_accumulation_steps
 
         if self.do_grad_scaling:
             self.scaler.scale(loss).backward()

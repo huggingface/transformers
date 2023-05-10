@@ -64,7 +64,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate import PartialState
+    from accelerate.state import PartialState, AcceleratorState
     from accelerate.utils import DistributedType
 
 if is_torch_tpu_available(check_device=False):
@@ -1660,6 +1660,8 @@ class TrainingArguments:
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
+        AcceleratorState._reset_state()
+        PartialState._reset_state()
         if not is_sagemaker_mp_enabled() and not is_accelerate_available(check_partial_state=True):
             raise ImportError(
                 "Using the `Trainer` with `PyTorch` requires `accelerate`: Run `pip install --upgrade accelerate`"
