@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "accelerate": "accelerate>=0.17.0",
+    "accelerate": "accelerate>=0.19.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "black": "black~=23.1",
@@ -85,5 +85,6 @@ deps = {
     "tqdm": "tqdm>=4.27",
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
+    "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
 }
