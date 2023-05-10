@@ -703,7 +703,6 @@ def _load_state_dict_into_meta_model(
             param_device = device_map[module_name]
 
 
-        #print(load_in_8bit)
         if param_device == "disk":
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
@@ -713,13 +712,11 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            print(param.dtype)
             if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
                 fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
             else:
                 fp16_statistics = None
 
-            #print(fp16_statistics, 'stats2')
             if "SCB" not in param_name:
                 set_module_kbit_tensor_to_device(
                     model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
@@ -2232,6 +2229,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " pip install bitsandbytes` "
                 )
 
+            if torch_dtype is None:
+                torch_dtype = 'auto'
+
             if device_map is None:
                 raise ValueError(
                     "A device map needs to be passed to run convert models into 8-bit and 4-bit formats. Please run"
@@ -2297,6 +2297,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_8bit = quantization_config.load_in_8bit
 
             if load_in_8bit:
+                if torch_dtype is None:
+                    torch_dtype = 'auto'
+
                 if device_map is None:
                     device_map = "auto"
 
