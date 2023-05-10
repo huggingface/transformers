@@ -725,8 +725,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Check for special tokens
         prompt_text_ids = batch_encoding["input_ids"][1:]
-        min_special_id = min(self.all_special_ids)
-        special_token_id = next((x for x in prompt_text_ids if x >= min_special_id), None)
+        special_token_id = next((x for x in prompt_text_ids if x >= self.all_special_ids[0]), None)
         if special_token_id is not None:
             token = self.convert_ids_to_tokens(special_token_id)
             raise ValueError(f"Encountered text in the prompt corresponding to disallowed special token: {token}.")

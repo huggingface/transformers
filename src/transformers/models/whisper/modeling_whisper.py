@@ -1469,7 +1469,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        prompt_ids: Optional[torch.Tensor] = None,
+        prompt_ids: Optional[Union[torch.Tensor, np.ndarray]] = None,
         **kwargs,
     ):
         """
