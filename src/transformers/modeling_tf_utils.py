@@ -1256,12 +1256,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
         if isinstance(output, ModelOutput):
-            if 'hidden_states' in output:
+            if "hidden_states" in output:
                 try:
                     output.hidden_states = tf.convert_to_tensor(output.hidden_states)
                 except ValueError:
                     pass  # Layers may not have the same dimensions
-            if 'attentions' in output:
+            if "attentions" in output:
                 try:
                     output.attentions = tf.convert_to_tensor(output.attentions)
                 except ValueError:
