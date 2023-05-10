@@ -275,6 +275,7 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
+extras["safetensors"] = deps_list("safetensors")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
@@ -309,7 +310,6 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-xdist",
-        "timeout-decorator",
         "parameterized",
         "psutil",
         "datasets",
@@ -325,7 +325,6 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
-        "safetensors",
         "beautifulsoup4",
     )
     + extras["retrieval"]
@@ -342,6 +341,7 @@ extras["all"] = (
     + extras["flax"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
+    + extras["safetensors"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -363,6 +363,7 @@ extras["dev-torch"] = (
     + extras["torch"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
+    + extras["safetensors"]
     + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
@@ -381,6 +382,7 @@ extras["dev-tensorflow"] = (
     + extras["tf"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
+    + extras["safetensors"]
     + extras["vision"]
     + extras["quality"]
     + extras["docs_specific"]
@@ -411,6 +413,7 @@ extras["torchhub"] = deps_list(
     "sentencepiece",
     "torch",
     "tokenizers",
+    "safetensors",
     "tqdm",
 )
 
@@ -429,6 +432,7 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
