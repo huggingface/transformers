@@ -17,10 +17,6 @@ Speech processor class for Whisper
 """
 
 
-from typing import List
-
-import regex
-
 from ...processing_utils import ProcessorMixin
 
 
@@ -97,21 +93,5 @@ class WhisperProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def get_prompt_ids(self, text: str):
-        """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
-        _verify_no_special_tokens(text, self.tokenizer.all_special_tokens)
-        prompt_token = "<|startofprev|>"
-        batch_encoding = self.tokenizer(prompt_token, text.strip(), add_prefix_space=True, add_special_tokens=False)
-        batch_encoding.convert_to_tensors(tensor_type="pt")
-        return batch_encoding["input_ids"]
-
-
-def _verify_no_special_tokens(text: str, all_special_tokens: List[str]):
-    escaped_special_tokens = [regex.escape(token) for token in all_special_tokens]
-    escaped_timestamp_pattern = r"<\|\d+\.\d+\|>"  # e.g., <|4.0|>
-    escaped_special_tokens.extend([escaped_timestamp_pattern, regex.escape("<|nospeech|>")])
-    patterns = "|".join(escaped_special_tokens)
-    special_token_regex = regex.compile(f"({patterns})")
-    if match := special_token_regex.search(text):
-        token = match.group()
-        raise ValueError(f"Encountered text in the prompt corresponding to disallowed special token {token!r}.")
+    def get_prompt_ids(self, text: str, return_tensors="np"):
+        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)

@@ -171,7 +171,7 @@ class WhisperProcessorTest(unittest.TestCase):
         def _test_prompt_error_raised_helper(prompt, special_token):
             with pytest.raises(ValueError) as excinfo:
                 processor.get_prompt_ids(prompt)
-            expected = f"Encountered text in the prompt corresponding to disallowed special token '{special_token}'."
+            expected = f"Encountered text in the prompt corresponding to disallowed special token: {special_token}."
             self.assertEqual(expected, str(excinfo.value))
 
         _test_prompt_error_raised_helper("<|startofprev|> test", "<|startofprev|>")

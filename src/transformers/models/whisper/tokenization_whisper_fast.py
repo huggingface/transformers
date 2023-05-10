@@ -24,7 +24,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr, _strip_prompt
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
 
 logger = logging.get_logger(__name__)
@@ -314,7 +314,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
         if kwargs["skip_special_tokens"]:
             prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-            kwargs["token_ids"] = _strip_prompt(kwargs["token_ids"], prompt_token_id, self.all_special_ids)
+            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+            kwargs["token_ids"] = self._strip_prompt(kwargs["token_ids"], prompt_token_id, decoder_start_token_id)
 
         text = super()._decode(*args, **kwargs)
 
@@ -489,3 +490,15 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             return_language=return_language,
             time_precision=time_precision,
         )
+
+    @staticmethod
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
+    def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+        if has_prompt:
+            if decoder_start_token_id in token_ids:
+                return token_ids[token_ids.index(decoder_start_token_id) :]
+            else:
+                return []
+
+        return token_ids

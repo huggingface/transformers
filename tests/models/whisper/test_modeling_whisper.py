@@ -1013,6 +1013,44 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
+    def test_generate_with_prompt_ids_and_task_and_language(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.asarray(range(5))
+        language = "<|de|>"
+        task = "translate"
+        lang_id = 6
+        task_id = 7
+        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
+        model.generation_config.__setattr__("task_to_id", {task: task_id})
+
+        output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            lang_id,
+            task_id,
+        ]
+        self.assertTrue(all(row[: len(expected_output_start)] == expected_output_start for row in output.tolist()))
+
+    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.asarray(range(5))
+        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
+
+        output = model.generate(input_features, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids)
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            *[token for _rank, token in forced_decoder_ids],
+        ]
+        self.assertTrue(all(row[: len(expected_output_start)] == expected_output_start for row in output.tolist()))
+
 
 @require_torch
 @require_torchaudio
@@ -1447,7 +1485,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(processor.decode(output_with_prompt[0]), expected_with_prompt)
 
     @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids_case_one(self):
+    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1459,86 +1497,23 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "test prompt"
         prompt_ids = processor.get_prompt_ids(prompt)
 
-        output = model.generate(input_features, task=task, language=f"<|{language}|>", prompt_ids=prompt_ids)
+        output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
         text = processor.decode(output[0])
 
         self.assertTrue(prompt in text)
         self.assertTrue(all([token in text for token in expected_tokens]))
 
     @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids_case_two(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt").input_features
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
-
-        forced_decoder_ids = processor.get_decoder_prompt_ids(task=task, language=language)
-        output = model.generate(input_features, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all([token in text for token in expected_tokens]))
-
-    @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids_case_three(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt").input_features
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
-
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(task=task, language=language)
-        output = model.generate(input_features, prompt_ids=prompt_ids)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all([token in text for token in expected_tokens]))
-
-    @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids_case_four(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-        input_speech = self._load_datasamples(1)
-        input_features = processor(input_speech, return_tensors="pt").input_features
-        task = "translate"
-        language = "de"
-        expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
-        prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
-
-        model.config.forced_decoder_ids = None
-        model.generation_config.forced_decoder_ids = processor.get_decoder_prompt_ids(task=task, language=language)
-        output = model.generate(input_features, prompt_ids=prompt_ids)
-        text = processor.decode(output[0])
-
-        self.assertTrue(prompt in text)
-        self.assertTrue(all([token in text for token in expected_tokens]))
-
-    @slow
-    def test_generate_with_prompt_ids_and_forced_decoder_ids_case_five(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+    def test_generate_with_prompt_ids_and_no_non_prompt_forced_decoder_ids(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt").input_features
         prompt = "test prompt"
         prompt_ids = processor.get_prompt_ids(prompt)
 
-        model.config.forced_decoder_ids = None
-        model.generation_config.forced_decoder_ids = None
-        output = model.generate(input_features, prompt_ids=prompt_ids)
+        output = model.generate(input_features, prompt_ids=prompt_ids, return_timestamps=True)
         text = processor.decode(output[0])
 
         self.assertTrue(prompt in text)
