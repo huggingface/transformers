@@ -43,6 +43,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
+    config.addinivalue_line("markers", "tool_tests: mark the tool tests that are run on their specific schedule")
 
 
 def pytest_addoption(parser):
