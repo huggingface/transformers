@@ -1321,8 +1321,9 @@ class TestCasePlus(unittest.TestCase):
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
-        AcceleratorState._reset_state()
-        PartialState._reset_state()
+        if is_accelerate_available():
+            AcceleratorState._reset_state()
+            PartialState._reset_state()
 
 
 def mockenv(**kwargs):
