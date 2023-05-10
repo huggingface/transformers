@@ -318,7 +318,7 @@ def get_cached_module_file(
 
     if len(new_files) > 0:
         new_files = "\n".join([f"- {f}" for f in new_files])
-        repo_type_str = "" if repo_type is None else f"{repo_type}/"
+        repo_type_str = "" if repo_type is None else f"{repo_type}s/"
         url = f"https://huggingface.co/{repo_type_str}{pretrained_model_name_or_path}"
         logger.warning(
             f"A new version of the following files was downloaded from {url}:\n{new_files}"
