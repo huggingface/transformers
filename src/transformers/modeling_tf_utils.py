@@ -1244,7 +1244,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 vision_config = self.config.vision_config
             else:
                 vision_config = self.config
-            pixel_values_shape[1] = vision_config.get("num_channels", None)
+            if hasattr(vision_config, "num_channels"):
+                pixel_values_shape[1] = vision_config.num_channels
             if hasattr(vision_config, "image_size"):
                 pixel_values_shape[2] = pixel_values_shape[3] = vision_config.image_size
             sig["pixel_values"] = tf.TensorSpec(pixel_values_shape, tf.float32, name="pixel_values")
