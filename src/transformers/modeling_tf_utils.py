@@ -1131,14 +1131,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 image_shape[0] = 3  # matches DUMMY_INPUTS
             if None in image_shape[1:]:
                 raise NotImplementedError(
-                    f"Could not fully infer input tensor shape, dummy inputs must be defined manually for {self.__name__}"
+                    f"Could not fully infer input tensor shape; dummy inputs or serving sig must be defined manually for {self.__class__.__name__}"
                 )
             rng = np.random.default_rng(42)
             VISION_DUMMY_INPUTS = rng.random(image_shape).astype(np.float32)
             dummy_inputs["pixel_values"] = tf.constant(VISION_DUMMY_INPUTS, dtype=tf.float32)
         else:
             raise NotImplementedError(
-                f"Could not fully infer input shapes, dummy inputs must be defined manually for {self.__name__}"
+                f"Could not fully infer input shapes, dummy inputs must be defined manually for {self.__class__.__name__}"
             )
         return dummy_inputs
 
