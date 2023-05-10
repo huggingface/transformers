@@ -39,32 +39,26 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
-
+            
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-
         pixel_values1 (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
-        pixel_values1 (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values2 (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
         padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
-
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
@@ -76,17 +70,14 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
-
 """
 
 BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
@@ -98,34 +89,26 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
         language_masked_pos (`torch.LongTensor` of shape `({0})`):
             language_masked_pos for denoting tokens for captioning
 
             - 1 indicates the token is **Present**,
             - 0 indicates the token is **absent**.
-
         text_len (`torch.LongTensor` of shape `({0})`):
             Length of text for captioning
-
         incremental_state (`Dict`):
             A Dictionary containing the incremental states layerwise
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
-
 """
 
 BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
@@ -135,30 +118,23 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
             [What are input IDs?](../glossary#input-ids)
-
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
         padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
-
 """
 
 BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
@@ -170,24 +146,19 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-
         padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
 """
 
 
@@ -199,28 +170,26 @@ def set_split_position(position):
     return apply_fn
 
 
-class Beit3TwoLayerMLP(nn.Module):
+class Beit3MLP(nn.Module):
     def __init__(
         self,
         in_features,
         hidden_features,
         out_features,
-        norm_layer,
-        norm_input=True,
     ):
         super().__init__()
-        self.norm1 = norm_layer(in_features) if norm_input else nn.Identity()
+        self.norm1 = nn.LayerNorm(in_features)
         self.dense1 = nn.Linear(in_features, hidden_features)
-        self.norm2 = norm_layer(hidden_features)
+        self.norm2 = nn.LayerNorm(hidden_features)
         self.act = nn.GELU()
         self.dense2 = nn.Linear(hidden_features, out_features)
 
-    def forward(self, x):
-        x = self.norm1(x)
-        x = self.dense1(x)
-        x = self.norm2(x)
-        x = self.act(x)
-        return self.dense2(x)
+    def forward(self, hidden_states):
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.dense1(hidden_states)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.act(hidden_states)
+        return self.dense2(hidden_states)
 
 
 class Beit3PreTrainedModel(PreTrainedModel):
@@ -235,7 +204,7 @@ class Beit3PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -274,17 +243,17 @@ class Beit3MultiwayNetwork(nn.Module):
         self.second.reset_parameters()
         self.split_position = -1
 
-    def forward(self, x, **kwargs):
+    def forward(self, hidden_states, **kwargs):
         if self.split_position == -1:
-            return self.first(x, **kwargs)
+            return self.first(hidden_states, **kwargs)
         if self.split_position == 0:
-            return self.second(x, **kwargs)
-        x1, x2 = torch.split(
-            x,
-            [self.split_position, x.size(self.dim) - self.split_position],
+            return self.second(hidden_states, **kwargs)
+        text_hidden, image_hidden = torch.split(
+            hidden_states,
+            [self.split_position, hidden_states.size(self.dim) - self.split_position],
             dim=self.dim,
         )
-        y1, y2 = self.first(x1, **kwargs), self.second(x2, **kwargs)
+        y1, y2 = self.first(text_hidden, **kwargs), self.second(image_hidden, **kwargs)
         return torch.cat([y1, y2], dim=self.dim)
 
 
@@ -320,36 +289,31 @@ class Beit3VisionEmbedding(nn.Module):
         else:
             return self.num_patches + 1
 
-    def forward(self, x, masked_position=None):
-        batch_size, num_channels, height, width = x.shape
-        assert (
-            height == self.img_size[0] and width == self.img_size[1]
-        ), f"Input image size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x).flatten(2).transpose(1, 2)
+    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None)-> torch.Tensor:
+        hidden_states = self.proj(hidden_states).flatten(2).transpose(1, 2)
 
-        batch_size, seq_len, _ = x.size()
+        batch_size, seq_len, _ = hidden_states.size()
 
         if masked_position is not None:
-            assert self.mask_token is not None
             mask_token = self.mask_token.expand(batch_size, seq_len, -1)
             w = masked_position.unsqueeze(-1).type_as(mask_token)
-            x = x * (1 - w) + mask_token * w
+            hidden_states = hidden_states * (1 - w) + mask_token * w
 
         if self.cls_token is not None:
-            cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-            x = torch.cat((cls_tokens, x), dim=1)
+            cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+            hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
 
-        return x
+        return hidden_states
 
 
 class Beit3PositionalEmbedding(nn.Embedding):
     def forward(
         self,
-        x,
-        positions=None,
+        hidden_states: torch.Tensor,
+        positions: torch.Tensor = None,
     ):
         if positions is None:
-            positions = torch.arange(2, x.size(1) + 2, device=x.device).long().unsqueeze(0)
+            positions = torch.arange(2, hidden_states.size(1) + 2, device=hidden_states.device).long().unsqueeze(0)
         return F.embedding(
             positions,
             self.weight,
@@ -378,27 +342,24 @@ class Beit3FeedForwardNetwork(nn.Module):
         if self.ffn_layernorm is not None:
             self.ffn_layernorm.reset_parameters()
 
-    def forward(self, x):
-        x_shape = x.shape
-        x = x.reshape(-1, x.size(-1))
-        x = self.fc1(x)
-        x = self.activation_fn(x.float()).type_as(x)
-        x = self.activation_dropout(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        x_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states.float()).type_as(hidden_states)
+        hidden_states = self.activation_dropout(hidden_states)
         if self.ffn_layernorm is not None:
-            x = self.ffn_layernorm(x)
-        x = self.fc2(x)
-        x = x.view(x_shape)
-        x = self.dropout(x)
-        return x
+            hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = hidden_states.view(x_shape)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class Beit3MultiheadAttention(nn.Module):
     def __init__(
         self,
         config,
-        self_attention=False,
-        encoder_decoder_attention=False,
-        subln=False,
     ):
         super().__init__()
         self.embed_dim = config.embed_dim
@@ -406,17 +367,13 @@ class Beit3MultiheadAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
 
-        self.self_attention = self_attention
-        self.encoder_decoder_attention = encoder_decoder_attention
-        assert self.self_attention ^ self.encoder_decoder_attention
-
-        self.k_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
-        self.v_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
-        self.q_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.key_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.value_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
+        self.query_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.out_proj = Beit3MultiwayNetwork(nn.Linear(self.embed_dim, self.embed_dim, bias=True))
         self.inner_attn_ln = (
             Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
-            if subln and self.self_attention
+            if config.subln
             else None
         )
         self.dropout_module = torch.nn.Dropout(config.attention_dropout)
@@ -429,39 +386,35 @@ class Beit3MultiheadAttention(nn.Module):
         incremental_state=None,
         key_padding_mask=None,
         attn_mask=None,
-        rel_pos=None,
+        relative_pos=None,
     ):
-        bsz, tgt_len, embed_dim = query.size()
-        assert embed_dim == self.embed_dim, f"query dim {embed_dim} != {self.embed_dim}"
+        batch_size, target_length, embed_dim = query.size()
 
         key_bsz, src_len, _ = key.size()
-        assert key_bsz == bsz, f"{query.size(), key.size()}"
-        assert value is not None
-        assert bsz, src_len == value.shape[:2]
 
-        q = self.q_proj(query)
-        k = self.k_proj(key)
-        v = self.v_proj(value)
-        q *= self.scaling
+        query = self.query_proj(query)
+        key = self.key_proj(key)
+        value = self.value_proj(value)
+        query *= self.scaling
 
-        q = q.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.view(bsz, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        q = q.reshape(bsz * self.num_heads, tgt_len, self.head_dim)
-        k = k.reshape(bsz * self.num_heads, src_len, self.head_dim)
-        v = v.reshape(bsz * self.num_heads, src_len, self.head_dim)
+        query = query.view(batch_size, target_length, self.num_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query = query.reshape(batch_size * self.num_heads, target_length, self.head_dim)
+        key = key.reshape(batch_size * self.num_heads, src_len, self.head_dim)
+        value = value.reshape(batch_size * self.num_heads, src_len, self.head_dim)
 
         if incremental_state is not None:
             if "prev_key" in incremental_state:
-                prev_key = incremental_state["prev_key"].view(bsz * self.num_heads, -1, self.head_dim)
-                prev_value = incremental_state["prev_value"].view(bsz * self.num_heads, -1, self.head_dim)
-                k = torch.cat([prev_key, k], dim=1)
-                v = torch.cat([prev_value, v], dim=1)
-            incremental_state["prev_key"] = k.view(bsz, self.num_heads, -1, self.head_dim)
-            incremental_state["prev_value"] = v.view(bsz, self.num_heads, -1, self.head_dim)
-            src_len = k.size(1)
+                prev_key = incremental_state["prev_key"].view(batch_size * self.num_heads, -1, self.head_dim)
+                prev_value = incremental_state["prev_value"].view(batch_size * self.num_heads, -1, self.head_dim)
+                key = torch.cat([prev_key, key], dim=1)
+                value = torch.cat([prev_value, value], dim=1)
+            incremental_state["prev_key"] = key.view(batch_size, self.num_heads, -1, self.head_dim)
+            incremental_state["prev_value"] = value.view(batch_size, self.num_heads, -1, self.head_dim)
+            src_len = key.size(1)
 
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        attn_weights = torch.bmm(query, key.transpose(1, 2))
 
         if attn_mask is not None:
             attn_weights = torch.nan_to_num(attn_weights)
@@ -469,28 +422,28 @@ class Beit3MultiheadAttention(nn.Module):
             attn_weights += attn_mask
 
         if key_padding_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
             )
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size * self.num_heads, target_length, src_len)
 
-        if rel_pos is not None:
-            rel_pos = rel_pos.view(attn_weights.size())
-            attn_weights = attn_weights + rel_pos
+        if relative_pos is not None:
+            relative_pos = relative_pos.view(attn_weights.size())
+            attn_weights = attn_weights + relative_pos
 
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
-        attn = torch.bmm(attn_probs, v)
-        attn = attn.transpose(0, 1).reshape(tgt_len, bsz, embed_dim).transpose(0, 1)
+        attn = torch.bmm(attn_probs, value)
+        attn = attn.transpose(0, 1).reshape(target_length, batch_size, embed_dim).transpose(0, 1)
 
         if self.inner_attn_ln is not None:
             attn = self.inner_attn_ln(attn)
 
         attn = self.out_proj(attn)
-        attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
+        attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len).transpose(1, 0)
 
         return attn, attn_weights
 
@@ -499,12 +452,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_dim = config.embed_dim
-        self.self_attn = Beit3MultiheadAttention(
-            config,
-            self_attention=True,
-            encoder_decoder_attention=False,
-            subln=config.subln,
-        )
+        self.self_attn = Beit3MultiheadAttention(config)
         self.self_attn_layer_norm = Beit3MultiwayNetwork(LayerNorm(self.embed_dim, eps=config.layernorm_eps))
         self.dropout_module = torch.nn.Dropout(config.dropout)
 
@@ -522,10 +470,10 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
 
     def forward(
         self,
-        x,
+        hidden_states,
         encoder_padding_mask,
         attn_mask=None,
-        rel_pos=None,
+        relative_pos=None,
         multiway_split_position=None,
         incremental_state=None,
     ):
@@ -535,29 +483,29 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         if attn_mask is not None:
             attn_mask = attn_mask.masked_fill(attn_mask.to(torch.bool), -1e8)
 
-        residual = x
-        x = self.self_attn_layer_norm(x)
-        x, _ = self.self_attn(
-            query=x,
-            key=x,
-            value=x,
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            query=hidden_states,
+            key=hidden_states,
+            value=hidden_states,
             key_padding_mask=encoder_padding_mask,
             attn_mask=attn_mask,
-            rel_pos=rel_pos,
+            relative_pos=relative_pos,
             incremental_state=incremental_state,
         )
-        x = self.dropout_module(x)
+        hidden_states = self.dropout_module(hidden_states)
 
-        x = self.residual_connection(x, residual)
+        hidden_states = self.residual_connection(hidden_states, residual)
 
-        residual = x
-        x = self.final_layer_norm(x)
-        x = self.ffn(x)
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.ffn(hidden_states)
 
-        x = self.residual_connection(x, residual)
+        hidden_states = self.residual_connection(hidden_states, residual)
         if not self.normalize_before:
-            x = self.final_layer_norm(x)
-        return x
+            hidden_states = self.final_layer_norm(hidden_states)
+        return hidden_states
 
 
 class Beit3Encoder(nn.Module):
@@ -612,7 +560,6 @@ class Beit3Encoder(nn.Module):
         incremental_state=None,
         positions=None,
     ):
-        assert src_tokens is not None or token_embeddings is not None
         if encoder_padding_mask is None:
             if src_tokens is not None:
                 encoder_padding_mask = torch.zeros_like(src_tokens, device=src_tokens.device).bool()
@@ -633,9 +580,9 @@ class Beit3Encoder(nn.Module):
         if return_all_hiddens:
             encoder_states.append(x)
 
-        rel_pos_bias = None
+        relative_pos_bias = None
         if self.relative_position is not None:
-            rel_pos_bias = self.relative_position(batch_size=x.size(0), qlen=x.size(1), klen=x.size(1))
+            relative_pos_bias = self.relative_position(batch_size=x.size(0), qlen=x.size(1), klen=x.size(1))
 
         # incremental_state is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
@@ -643,12 +590,11 @@ class Beit3Encoder(nn.Module):
                 x,
                 encoder_padding_mask=encoder_padding_mask if incremental_state is None else None,
                 attn_mask=attn_mask,
-                rel_pos=rel_pos_bias,
+                relative_pos=relative_pos_bias,
                 multiway_split_position=multiway_split_position,
                 incremental_state=incremental_state[idx] if incremental_state is not None else None,
             )
             if return_all_hiddens:
-                assert encoder_states is not None
                 encoder_states.append(x)
 
         if self.layer_norm is not None:
@@ -707,7 +653,6 @@ class Beit3Model(Beit3PreTrainedModel):
         incremental_state=None,
         positions=None,
     ):
-        assert textual_tokens is not None or pixel_values is not None
 
         if textual_tokens is None:
             x = self.vision_embedding(pixel_values, vision_masked_position)
@@ -748,7 +693,7 @@ class Beit3Model(Beit3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    """Beit3 Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
     predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
@@ -759,11 +704,10 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         super(Beit3ForVisualReasoning, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.head = Beit3TwoLayerMLP(
+        self.head = Beit3MLP(
             in_features=embed_dim * 4,
             hidden_features=embed_dim * 2,
             out_features=config.num_labels,
-            norm_layer=nn.LayerNorm,
         )
         self.post_init()
 
