@@ -21,7 +21,7 @@ can vary as the APIs or underlying models are prone to change.
 
 Transformers version v4.29.0, building on the concept of *tools* and *agents*.
 
-In short, it provides a natural language API on top of transformers: we define a set of curated tools, and design an 
+In short, it provides a natural language API on top of transformers: we define a set of curated tools and design an 
 agent to interpret natural language and to use these tools. It is extensible by design; we curated some relevant tools, 
 but we'll show you how the system can be extended easily to use any tool developed by the community.
 
@@ -63,7 +63,7 @@ Before being able to use `agent.run`, you will need to instantiate an agent, whi
 We recommend using the [bigcode/starcoder](https://huggingface.co/bigcode/starcoder) checkpoint as it works very well 
 for the task at hand and is open-source, but please find other examples below.
 
-Start by logging-in to have access to the Inference API:
+Start by logging in to have access to the Inference API:
 
 ```py
 from huggingface_hub import login
@@ -79,8 +79,8 @@ from transformers import HfAgent
 agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
 ```
 
-This is using the inference API that Hugging Face provides for free at the moment, if you have your own inference
-endpoint for this model (or another one) you can replace the url above by your url endpoint.
+This is using the inference API that Hugging Face provides for free at the moment if you have your inference
+endpoint for this model (or another one) you can replace the URL above with your URL endpoint.
 
 <Tip>
 
@@ -102,7 +102,7 @@ agent.run("Draw me a picture of rivers and lakes")
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200>
 
-It automatically select the tool (or tools) appropriate for the task you want to perform and run them appropriately. It
+It automatically selects the tool (or tools) appropriate for the task you want to perform and runs them appropriately. It
 can perform one or several tasks in the same instruction (though the more complex your instruction, the more likely
 the agent is to fail).
 
@@ -121,7 +121,7 @@ Note that your `agent` is just a large-language model, so small variations in yo
 different results. It's important to explain as clearly as possible the task you want to perform.
 
 If you'd like to keep a state across executions or to pass non-text objects to the agent, you can do so by specifying
-variables that you would like the agent to use. For example you could generate the first image of rivers and lakes, 
+variables that you would like the agent to use. For example, you could generate the first image of rivers and lakes, 
 and ask the model to update that picture to add an island by doing the following:
 
 ```python
@@ -133,17 +133,17 @@ updated_picture = agent.chat("Take that `picture` and add an island to it", pict
 
 This can be helpful when the model is unable to understand your request and mixes tools. An example would be:
 
-```python
+```py
 agent.run("Draw me the picture of a capybara swimming in the sea")
 ```
 
-Here, the model could interpret it two ways:
+Here, the model could interpret in two ways:
 - Have the `text-to-image` generate a capybara swimming in the sea
 - Or, have the `text-to-image` generate capybara, then use the `image-transformation` tool to have it swim in the sea
 
 In case you would like to force the first scenario, you could do so by passing it the prompt as an argument:
 
-```python
+```py
 agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in the sea")
 ```
 
@@ -177,15 +177,15 @@ This method can also take arguments if you would like to pass non-text types or 
 ### ⚠️ Remote execution
 
 For demonstration purposes and so that this can be used with all setups, we have created remote executors for several 
-of the default tools the agent has access to. These are created using 
-[inference endpoints](https://huggingface.co/inference-endpoints). To see how to setup remote executors tools yourself,
-we recommend reading the custom tool guide [TODO LINK].
+of the default tools the agent has access. These are created using 
+[inference endpoints](https://huggingface.co/inference-endpoints). To see how to set up remote executors tools yourself,
+we recommend reading the [custom tool guide](./custom_tools).
 
 In order to run with remote tools, specifying `remote=True` to either [`~Agent.run`] or [`~Agent.chat`] is sufficient.
 
 For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
 
-```python
+```py
 agent.run("Draw me a picture of rivers and lakes", remote=True)
 ```
 
@@ -202,18 +202,18 @@ agent.chat("Draw me a picture of rivers and lakes", remote=True)
 The "agent" here is a large language model, and we're prompting it so that it has access to a specific set of tools.
 
 LLMs are pretty good at generating small samples of code, so this API takes advantage of that by prompting the 
-LLM to give a small sample of code performing a task with a set of tools. This prompt is then completed by the 
+LLM gives a small sample of code performing a task with a set of tools. This prompt is then completed by the 
 task you give your agent and the description of the tools you give it. This way it gets access to the doc of the 
-tools you are using, especially their expected inputs and outputs and can generate the relevant code.
+tools you are using, especially their expected inputs and outputs, and can generate the relevant code.
 
 #### Tools
 
-Tools are very simple: they're a single function, with a name, and a description. We then use these tools description 
-to prompt the agent. Through the prompt, we show the agent how it would leverage tools in order to perform what was 
-requests in the query.
+Tools are very simple: they're a single function, with a name, and a description. We then use these tools' descriptions 
+to prompt the agent. Through the prompt, we show the agent how it would leverage tools to perform what was 
+requested in the query.
 
 This is using brand-new tools and not pipelines, because the agent writes better code with very atomic tools. 
-Pipelines are more refactored and often combine several tasks in one. Tools are really meant to be focused on
+Pipelines are more refactored and often combine several tasks in one. Tools are meant to be focused on
 one very simple task only.
 
 #### Code-execution?!
@@ -271,13 +271,12 @@ directly with the agent. We've added a few
 - **Text to image**: generate an image according to a prompt, leveraging stable diffusion
 - **Image transformation**: modify an image given an initial image and a prompt, leveraging instruct pix2pix stable diffusion
 
-The text-to-image tool we have been using since the beginning is actually a remote tool that lives in 
+The text-to-image tool we have been using since the beginning is a remote tool that lives in 
 [*huggingface-tools/text-to-image*](https://huggingface.co/spaces/huggingface-tools/text-to-image)! We will
-continue releasing such tools on this and other organization, to further supercharge this implementation.
+continue releasing such tools on this and other organizations, to further supercharge this implementation.
 
 The agents have by default access to tools that reside on `huggingface-tools`.
-We explain how to you can write and share your own tools as well as leverage any custom tool that resides on the Hub in [following guide](custom_tools).
-[following guide](custom_tools).
+We explain how to you can write and share your tools as well as leverage any custom tool that resides on the Hub in [following guide](custom_tools).
 
 ### Leveraging different agents
 
@@ -307,7 +306,7 @@ agent = OpenAiAgent(model="text-davinci-003", api_key="<API_KEY>")
 
 ### Code generation
 
-So far we have shown how to use the agents to perform actions for you. However, the agent is really only generating code
+So far we have shown how to use the agents to perform actions for you. However, the agent is only generating code
 that we then execute using a very restricted Python interpreter. In case you would like to use the code generated in 
 a different setting, the agent can be prompted to return the code, along with tool definition and accurate imports.
 
