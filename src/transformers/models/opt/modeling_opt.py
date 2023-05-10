@@ -115,14 +115,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
 
         # cut positions if `past_key_values_length` is > 0
-        if past_key_values_length > 0:
-            if attention_mask.shape[1] <= past_key_values_length:
-                raise ValueError(
-                    f"The sequence length within `past_key_values` ({past_key_values_length}) must be smaller than "
-                    f"the attention mask length ({attention_mask.shape[1]}). Usually, the attention mask has shape "
-                    "`[batch_size, curent inputs length + past inputs length]`."
-                )
-            positions = positions[:, past_key_values_length:]
+        positions = positions[:, past_key_values_length:]
 
         return super().forward(positions + self.offset)
 
@@ -649,6 +642,11 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        elif attention_mask.shape[1] != mask_seq_length:
+            raise ValueError(
+                f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                f"{mask_seq_length} (sum of the lengths of current and past inputs)"
+            )
         causal_attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )

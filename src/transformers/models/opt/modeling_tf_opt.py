@@ -109,17 +109,7 @@ class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
         positions = tf.math.cumsum(attention_mask, axis=1) * attention_mask - 1
 
         # cut positions if `past_key_values_length` is > 0
-        if past_key_values_length > 0:
-            tf.debugging.assert_less_equal(
-                attention_mask.shape[1],
-                past_key_values_length,
-                message=(
-                    f"The sequence length within `past_key_values` ({past_key_values_length}) must be smaller than "
-                    f"the attention mask length ({attention_mask.shape[1]}). Usually, the attention mask has shape "
-                    "`[batch_size, curent inputs length + past inputs length]`."
-                ),
-            )
-            positions = positions[:, past_key_values_length:]
+        positions = positions[:, past_key_values_length:]
 
         return super().call(positions + self.offset)
 
@@ -655,6 +645,15 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
+        else:
+            tf.debugging.assert_less_equal(
+                attention_mask.shape[1],
+                past_key_values_length + input_shape[1],
+                message=(
+                    f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                    f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
+                ),
+            )
 
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
 
