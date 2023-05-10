@@ -1748,7 +1748,6 @@ class Trainer:
         if model is not self.model:
             self.model_wrapped = model
 
-
         # deepspeed ckpt loading
         if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
