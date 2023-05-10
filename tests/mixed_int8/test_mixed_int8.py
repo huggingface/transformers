@@ -97,7 +97,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
             self.model_name, torch_dtype=torch.float16, device_map="auto"
         )
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16)
 
     def tearDown(self):
         r"""
@@ -217,7 +217,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto", torch_dtype=torch.float16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
     def test_int8_serialization(self):
@@ -284,6 +284,8 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
         self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+        print(model.transformer.h[0].mlp.dense_4h_to_h.weight.SCB)
+
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -409,7 +411,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
             self.model_name, load_in_8bit=True, device_map="auto"
         )
         # CausalLM model
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto", torch_dtype=torch.float16)
         # Seq2seq model
         self.seq_to_seq_model = AutoModelForSeq2SeqLM.from_pretrained(
             self.seq_to_seq_name, load_in_8bit=True, device_map="auto"
@@ -468,7 +470,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_8bit": True},
+            model_kwargs={"device_map": "auto", "load_in_8bit": True, 'torch_dtype' : torch.float16},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
