@@ -173,6 +173,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "mask_index",
         "image_size",
         "use_cache",
+        "out_features",
+        "out_indices",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

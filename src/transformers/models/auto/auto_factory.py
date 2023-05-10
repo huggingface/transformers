@@ -530,6 +530,9 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
         if not use_timm:
             raise ValueError("use_timm_backbone must be True for timm backbones")
 
+        if kwargs.get("out_features", None) is not None:
+            raise ValueError("Cannot specify out_features for timm backbones")
+
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
         use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
@@ -545,13 +548,9 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        # We set the defaults as None if they are not specified in the kwargs to enable
-        # passing just one of `out_features` or `out_indices` to the model.
-        kwargs["out_indices"] = kwargs.get("out_indices", None)
-        kwargs["out_features"] = kwargs.get("out_features", None)
-
         if kwargs.get("use_timm_backbone", False):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 

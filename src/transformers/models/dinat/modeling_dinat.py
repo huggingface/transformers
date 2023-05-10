@@ -39,7 +39,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinat import DinatConfig
 
 

@@ -56,7 +56,6 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
-    ExplicitEnum,
     ModelOutput,
     PushToHubMixin,
     cached_file,
@@ -1019,126 +1018,6 @@ class ModuleUtilsMixin:
         """
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
-
-
-class BackboneType(ExplicitEnum):
-    TIMM = "timm"
-    TRANSFORMERS = "transformers"
-
-
-class BackboneMixin:
-    backbone_type: Optional[BackboneType] = None
-
-    def _init_timm_backbone(self, config) -> None:
-        """
-        Initialize the backbone model from timm The backbone must already be loaded to self._backbone
-        """
-        if getattr(self, "_backbone", None) is None:
-            raise ValueError("self._backbone must be set before calling _init_timm_backbone")
-
-        # These will diagree with the defaults for the transformers models e.g. for resnet50
-        # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
-        # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
-        self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
-        self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
-        self.out_features = self._backbone.feature_info.module_name()
-
-        # Here we remap the out_indices to the indices of the stages in self.stage_names and self.num_channels
-        # to match the transformers model.
-        self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
-
-        # Verify backbone and config correspond
-        config_out_indices = (-1,) if config.out_indices is None else config.out_indices
-        if len(self.out_indices) != len(config_out_indices):
-            raise ValueError(
-                f"out_indices in the config file must match the number of output layers in the backbone. "
-                f"Got {len(config_out_indices)} out_indices for {len(self.out_indices)} output layers."
-            )
-        config_out_features = [self.stage_names[idx] for idx in config_out_indices]
-        if config_out_features != self.out_features:
-            raise ValueError(
-                f"out_indices in the config file must map to the the output layers in the backbone. "
-                f"Got {self.out_features} for {self.out_indices} output layers. Expected {config_out_features} for "
-                f"{config_out_indices} output layers."
-            )
-
-    def _init_transformers_backbone(self, config) -> None:
-        stage_names = getattr(config, "stage_names")
-        out_features = getattr(config, "out_features", None)
-        out_indices = getattr(config, "out_indices", None)
-
-        if stage_names is None:
-            raise ValueError("stage_names must be set in the config file for transformers backbones")
-
-        if out_features is not None:
-            if any(feat not in stage_names for feat in out_features):
-                raise ValueError(f"out_features must be a subset of stage_names: {stage_names} got {out_features}")
-
-        if out_indices is not None:
-            if any(idx >= len(stage_names) for idx in out_indices):
-                raise ValueError("out_indices must be valid indices for stage_names {stage_names}, got {out_indices}")
-
-        if out_features is not None and out_indices is not None:
-            if len(out_features) != len(out_indices):
-                raise ValueError("out_features and out_indices should have the same length if both are set")
-            elif out_features != [stage_names[idx] for idx in out_indices]:
-                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
-
-        # Set out_indices and out_features if they are not set
-        if out_indices is None and out_features is None:
-            out_indices = [len(stage_names) - 1]
-            out_features = [stage_names[-1]]
-        elif out_indices is None and out_features is not None:
-            out_indices = [stage_names.index(layer) for layer in stage_names if layer in out_features]
-        elif out_features is None and out_indices is not None:
-            out_features = [stage_names[idx] for idx in out_indices]
-
-        self.stage_names = stage_names
-        self.out_indices = tuple(out_indices)
-        self.out_features = out_features
-        # Number of channels for each stage. This is set in the transformer backbone model init
-        self.num_features = None
-
-    def _init_backbone(self, config) -> None:
-        """
-        Method to initialize the backbone. This method is called by the constructor of the base class after the
-        pretrained model weights have been loaded.
-        """
-        self.config = config
-
-        self.use_timm_backbone = getattr(config, "use_timm_backbone", False)
-        self.backbone_type = BackboneType.TIMM if self.use_timm_backbone else BackboneType.TRANSFORMERS
-
-        if self.backbone_type == BackboneType.TIMM:
-            self._init_timm_backbone(config)
-        elif self.backbone_type == BackboneType.TRANSFORMERS:
-            self._init_transformers_backbone(config)
-        else:
-            raise ValueError(f"backbone_type {self.backbone_type} not supported.")
-
-    @property
-    def out_feature_channels(self):
-        # the current backbones will output the number of channels for each stage
-        # even if that stage is not in the out_features list.
-        return {stage: self.num_features[i] for i, stage in enumerate(self.stage_names)}
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
-
-    def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
-
-    def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
-        raise NotImplementedError("This method should be implemented by the derived class.")
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
