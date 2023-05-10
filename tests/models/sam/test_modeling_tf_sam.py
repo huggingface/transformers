@@ -394,26 +394,6 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamModel does not support training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
