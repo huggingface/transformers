@@ -1255,18 +1255,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         Prepare the output of the saved model. Can be overridden if specific serving modifications are required.
         """
+        config_variables = {
+            "hidden_states": "output_hidden_states",
+            "attentions": "output_attentions",
+            "past_key_values": "use_cache",
+        }
         if isinstance(output, ModelOutput):
-            if "hidden_states" in output:
-                try:
-                    output.hidden_states = tf.convert_to_tensor(output.hidden_states)
-                except ValueError:
-                    pass  # Layers may not have the same dimensions
-            if "attentions" in output:
-                try:
-                    output.attentions = tf.convert_to_tensor(output.attentions)
-                except ValueError:
-                    pass  # Layers may not have the same dimensions
-
+            for key, config_var in config_variables.items():
+                if key in output:
+                    if not getattr(self.config, config_var, False):
+                        output[key] = None
+                    elif output[key] is not None:
+                        try:
+                            output[key] = tf.convert_to_tensor(output[key])
+                        except ValueError:
+                            pass  # Layers may not have the same dimensions
         return output
 
     def can_generate(self) -> bool:
