@@ -69,10 +69,8 @@ class CpmAntConfig(PretrainedConfig):
             Whether to use cache.
         init_std (`float`, *optional*, defaults to 1.0):
             Initialize parameters with std = init_std.
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
-        Example:
+    Example:
 
     ```python
     >>> from transformers import CpmAntModel, CpmAntConfig
@@ -105,7 +103,6 @@ class CpmAntConfig(PretrainedConfig):
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
-        return_dict: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -123,5 +120,4 @@ class CpmAntConfig(PretrainedConfig):
         self.eps = eps
         self.use_cache = use_cache
         self.vocab_size = vocab_size
-        self.return_dict = return_dict
         self.init_std = init_std

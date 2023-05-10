@@ -57,6 +57,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_safetensors_available,
+    is_tf_symbolic_tensor,
     logging,
     requires_backends,
     working_or_temp_dir,
@@ -511,7 +512,7 @@ def input_processing(func, config, **kwargs):
     if isinstance(main_input, (tuple, list)):
         for i, input in enumerate(main_input):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
-            if type(input) == tf.Tensor:
+            if is_tf_symbolic_tensor(input):
                 # Tensor names have always the pattern `name:id` then we check only the
                 # `name` part
                 tensor_name = input.name.split(":")[0]
@@ -572,7 +573,7 @@ def input_processing(func, config, **kwargs):
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
     if "args" in output:
-        if output["args"] is not None and type(output["args"]) == tf.Tensor:
+        if output["args"] is not None and is_tf_symbolic_tensor(output["args"]):
             tensor_name = output["args"].name.split(":")[0]
             output[tensor_name] = output["args"]
         else:
@@ -1411,6 +1412,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]
+
+        # Backwards compatibility for older versions of datasets. Previously, if `columns` or `label_cols`
+        # were a single element list, the returned element spec would be a single element. Now, passing [feature]
+        # will return a dict structure {"feature": feature}, and passing a single string will return a single element.
+        feature_cols = feature_cols[0] if len(feature_cols) == 1 else feature_cols
+        label_cols = label_cols[0] if len(label_cols) == 1 else label_cols
 
         if drop_remainder is None:
             drop_remainder = shuffle
@@ -2813,6 +2820,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 allow_missing_keys=True,
                 output_loading_info=output_loading_info,
                 _prefix=load_weight_prefix,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers

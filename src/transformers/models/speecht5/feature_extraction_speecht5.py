@@ -14,12 +14,13 @@
 # limitations under the License.
 """Feature extractor class for SpeechT5."""
 
-from typing import List, Optional, Union
+import warnings
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio
 
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -60,7 +61,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         win_function (`str`, *optional*, defaults to `"hann_window"`):
             Name for the window function used for windowing, must be accessible via `torch.{win_function}`
         frame_signal_scale (`float`, *optional*, defaults to 1.0):
-            Constant multiplied in creating the frames before applying DFT.
+            Constant multiplied in creating the frames before applying DFT. This argument is deprecated.
         fmin (`float`, *optional*, defaults to 80):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*, defaults to 7600):
@@ -68,7 +69,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         mel_floor (`float`, *optional*, defaults to 1e-10):
             Minimum value of mel frequency banks.
         reduction_factor (`int`, *optional*, defaults to 2):
-            Spectrogram length reduction factor.
+            Spectrogram length reduction factor. This argument is deprecated.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~SpeechT5FeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -109,9 +110,32 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
-
-        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
+
+        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
+        self.window = window.numpy().astype(np.float64)
+
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=self.n_freqs,
+            num_mel_filters=self.num_mel_bins,
+            min_frequency=self.fmin,
+            max_frequency=self.fmax,
+            sampling_rate=self.sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+
+        if frame_signal_scale != 1.0:
+            warnings.warn(
+                "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers",
+                FutureWarning,
+            )
+        if reduction_factor != 2.0:
+            warnings.warn(
+                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
+                FutureWarning,
+            )
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
@@ -136,100 +160,24 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         return normed_input_values
 
-    @staticmethod
-    def _center_pad(one_waveform, n_fft, pad_mode):
-        padding = [(int(n_fft // 2), int(n_fft // 2))]
-        return np.pad(one_waveform, padding, mode=pad_mode)
-
-    @staticmethod
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._num_frames_calc
-    def _num_frames_calc(in_size, frame_size, frame_stride):
-        return int(1 + np.floor((in_size - frame_size) * 1 / frame_stride))
-
-    @staticmethod
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._frame_signal
-    def _frame_signal(one_waveform, n_frames, frame_signal_scale, window_length, sample_stride):
-        scale = frame_signal_scale
-        frames = np.zeros(n_frames * window_length)
-        for frame_idx in range(n_frames):
-            start = frame_idx * window_length
-            end = (frame_idx + 1) * window_length
-            wave_start = frame_idx * sample_stride
-            wave_end = frame_idx * sample_stride + window_length
-            frames[start:end] = scale * one_waveform[wave_start:wave_end]
-
-        return frames
-
-    @staticmethod
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._windowing
-    def _windowing(frames, window_length, window):
-        if frames.size % window_length != 0:
-            raise ValueError(
-                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
-                f" window_length={window_length}."
-            )
-
-        shaped = frames.reshape(-1, window_length)
-        shaped = window * shaped
-        return shaped
-
-    @staticmethod
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._dft
-    def _dft(frames, K, n_frames, n_samples, n_fft):
-        dft = np.zeros([n_frames, K])
-
-        for frame in range(n_frames):
-            begin = frame * n_samples
-
-            inwards_buffer = frames[begin : begin + n_samples]
-            inwards_buffer = np.pad(inwards_buffer, (0, n_fft - n_samples), "constant")
-            out = np.fft.rfft(inwards_buffer)
-
-            dft[frame] = np.abs(out[:K])
-
-        return dft
-
-    def _extract_fbank_features(
+    def _extract_mel_features(
         self,
         one_waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Extracts log-mel filterbank features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC
-        code and librosa.
+        Extracts log-mel filterbank features for one waveform array (unbatched).
         """
-        one_waveform = self._center_pad(one_waveform, self.n_fft, "reflect")
-
-        n_frames = self._num_frames_calc(one_waveform.size, self.sample_size, self.sample_stride)
-
-        frames = self._frame_signal(
-            one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride
+        log_mel_spec = spectrogram(
+            one_waveform,
+            window=self.window,
+            frame_length=self.sample_size,
+            hop_length=self.sample_stride,
+            fft_length=self.n_fft,
+            mel_filters=self.mel_filters,
+            mel_floor=self.mel_floor,
+            log_mel="log10",
         )
-
-        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
-        window = window.numpy()
-
-        frames = self._windowing(frames, self.sample_size, window)
-
-        dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
-
-        fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.n_freqs,
-            f_min=self.fmin,
-            f_max=self.fmax,
-            n_mels=self.num_mel_bins,
-            sample_rate=self.sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
-        fbanks = fbanks.numpy()
-
-        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
-
-    def _reduce(self, inputs):
-        reduced = []
-        for i in range(len(inputs)):
-            reduced.append(inputs[i][self.reduction_factor - 1 :: self.reduction_factor])
-        return reduced
+        return log_mel_spec.T
 
     def __call__(
         self,
@@ -341,7 +289,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 return inputs_target
             else:
                 inputs["labels"] = inputs_target["input_values"]
-                inputs["stop_labels"] = inputs_target["stop_labels"]
                 decoder_attention_mask = inputs_target.get("attention_mask")
                 if decoder_attention_mask is not None:
                     inputs["decoder_attention_mask"] = decoder_attention_mask
@@ -381,8 +328,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         # convert into correct format for padding
         if is_target:
-            features = [self._extract_fbank_features(waveform) for waveform in speech]
-            fbank_sizes = [len(x) for x in features]
+            features = [self._extract_mel_features(waveform) for waveform in speech]
             encoded_inputs = BatchFeature({"input_values": features})
             self.feature_size = self.num_mel_bins
         else:
@@ -429,22 +375,18 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
-        if is_target:
-            # make labels for stop prediction
-            stop_labels = []
-            for i, l in enumerate(fbank_sizes):
-                labels = np.zeros(len(padded_inputs["input_values"][i]))
-                labels[l - 1 :] = 1.0
-                stop_labels.append(labels)
-            padded_inputs["stop_labels"] = stop_labels
-
-            # thin out frames for reduction factor
-            if self.reduction_factor > 1:
-                padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
-                if attention_mask is not None:
-                    padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
-
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+    def to_dict(self) -> Dict[str, Any]:
+        output = super().to_dict()
+
+        # Don't serialize these as they are derived from the other properties.
+        names = ["window", "mel_filters", "sample_size", "sample_stride", "n_fft", "n_freqs"]
+        for name in names:
+            if name in output:
+                del output[name]
+
+        return output

@@ -34,6 +34,7 @@ from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+import requests
 
 from transformers import logging as transformers_logging
 
@@ -64,6 +65,7 @@ from .utils import (
     is_librosa_available,
     is_natten_available,
     is_onnx_available,
+    is_optimum_available,
     is_pandas_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
@@ -146,6 +148,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
+_run_tool_tests = parse_flag_from_env("RUN_TOOL_TESTS", default=False)
 
 
 def is_pt_tf_cross_test(test_case):
@@ -217,6 +220,21 @@ def is_pipeline_test(test_case):
             return test_case
         else:
             return pytest.mark.is_pipeline_test()(test_case)
+
+
+def is_tool_test(test_case):
+    """
+    Decorator marking a test as a tool test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
+    """
+    if not _run_tool_tests:
+        return unittest.skip("test is a tool test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_tool_test()(test_case)
 
 
 def slow(test_case):
@@ -690,6 +708,13 @@ def require_bitsandbytes(test_case):
     Decorator for bits and bytes (bnb) dependency
     """
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+
+
+def require_optimum(test_case):
+    """
+    Decorator for optimum dependency
+    """
+    return unittest.skipUnless(is_optimum_available(), "test requires optimum")(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1688,12 +1713,16 @@ class RequestCounter:
         self.head_request_count = 0
         self.get_request_count = 0
         self.other_request_count = 0
-        self.old_request = huggingface_hub.file_download.requests.request
-        huggingface_hub.file_download.requests.request = self.new_request
+
+        # Mock `get_session` to count HTTP calls.
+        self.old_get_session = huggingface_hub.utils._http.get_session
+        self.session = requests.Session()
+        self.session.request = self.new_request
+        huggingface_hub.utils._http.get_session = lambda: self.session
         return self
 
     def __exit__(self, *args, **kwargs):
-        huggingface_hub.file_download.requests.request = self.old_request
+        huggingface_hub.utils._http.get_session = self.old_get_session
 
     def new_request(self, method, **kwargs):
         if method == "GET":
@@ -1703,7 +1732,7 @@ class RequestCounter:
         else:
             self.other_request_count += 1
 
-        return self.old_request(method=method, **kwargs)
+        return requests.request(method=method, **kwargs)
 
 
 def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):

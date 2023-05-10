@@ -54,16 +54,25 @@ class EsmTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(self, vocab_file, **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        unk_token="<unk>",
+        cls_token="<cls>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        eos_token="<eos>",
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.all_tokens = load_vocab_file(vocab_file)
         self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
-        self.unk_token = "<unk>"
-        self.cls_token = "<cls>"
-        self.pad_token = "<pad>"
-        self.mask_token = "<mask>"
-        self.eos_token = "<eos>"
+        self.unk_token = unk_token
+        self.cls_token = cls_token
+        self.pad_token = pad_token
+        self.mask_token = mask_token
+        self.eos_token = eos_token
         self.unique_no_split_tokens = self.all_tokens
         self._create_trie(self.unique_no_split_tokens)
 
@@ -91,11 +100,16 @@ class EsmTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.eos_token_id]
         cls = [self.cls_token_id]
         sep = [self.eos_token_id]  # No sep token in ESM vocabulary
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+        if token_ids_1 is None:
+            if self.eos_token_id is None:
+                return cls + token_ids_0
+            else:
+                return cls + token_ids_0 + sep
+        elif self.eos_token_id is None:
+            raise ValueError("Cannot tokenize multiple sequences when EOS token is not set!")
+        return cls + token_ids_0 + sep + token_ids_1 + sep  # Multiple inputs always have an EOS token
 
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False

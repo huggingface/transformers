@@ -125,6 +125,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_diffusers_available = importlib.util.find_spec("diffusers") is not None
+try:
+    _diffusers_version = importlib_metadata.version("diffusers")
+    logger.debug(f"Successfully imported diffusers version {_diffusers_version}")
+except importlib_metadata.PackageNotFoundError:
+    _diffusers_available = False
+
+
 _detectron2_available = importlib.util.find_spec("detectron2") is not None
 try:
     _detectron2_version = importlib_metadata.version("detectron2")
@@ -183,6 +191,9 @@ try:
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
+
+
+_opencv_available = importlib.util.find_spec("cv2") is not None
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
@@ -407,6 +418,10 @@ def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_peft_available():
+    return importlib.util.find_spec("peft") is not None
+
+
 def is_bs4_available():
     return importlib.util.find_spec("bs4") is not None
 
@@ -425,6 +440,10 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
+
+
+def is_openai_available():
+    return importlib.util.find_spec("openai") is not None
 
 
 def is_flax_available():
@@ -575,8 +594,15 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available():
-    return importlib.util.find_spec("accelerate") is not None
+def is_accelerate_available(check_partial_state=False):
+    accelerate_available = importlib.util.find_spec("accelerate") is not None
+    if accelerate_available:
+        if check_partial_state:
+            return version.parse(importlib_metadata.version("accelerate")) >= version.parse("0.17.0")
+        else:
+            return True
+    else:
+        return False
 
 
 def is_optimum_available():

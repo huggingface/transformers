@@ -52,7 +52,7 @@ def extract_first_line_failure(failures_short_lines):
     file = None
     in_error = False
     for line in failures_short_lines.split("\n"):
-        if re.search("_ \[doctest\]", line):
+        if re.search(r"_ \[doctest\]", line):
             in_error = True
             file = line.split(" ")[2]
         elif in_error and not line.split(" ")[0].isdigit():

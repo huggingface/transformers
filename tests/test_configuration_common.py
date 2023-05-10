@@ -93,15 +93,20 @@ config_common_kwargs = {
 
 
 class ConfigTester(object):
-    def __init__(self, parent, config_class=None, has_text_modality=True, **kwargs):
+    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
         self.parent = parent
         self.config_class = config_class
         self.has_text_modality = has_text_modality
         self.inputs_dict = kwargs
+        self.common_properties = common_properties
 
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
-        common_properties = ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+        common_properties = (
+            ["hidden_size", "num_attention_heads", "num_hidden_layers"]
+            if self.common_properties is None
+            else self.common_properties
+        )
 
         # Add common fields for text models
         if self.has_text_modality:
@@ -357,7 +362,7 @@ class ConfigTestUtils(unittest.TestCase):
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()

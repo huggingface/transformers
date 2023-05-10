@@ -40,6 +40,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
+from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
 from .pipelines.test_pipelines_question_answering import QAPipelineTests
 from .pipelines.test_pipelines_summarization import SummarizationPipelineTests
@@ -68,6 +69,7 @@ pipeline_test_mapping = {
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
+    "mask-generation": {"test": MaskGenerationPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
@@ -357,6 +359,12 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_vision
+    @require_torch
+    def test_pipeline_mask_generation(self):
+        self.run_task_tests(task="mask-generation")
+
+    @is_pipeline_test
+    @require_vision
     @require_timm
     @require_torch
     def test_pipeline_object_detection(self):
@@ -428,9 +436,19 @@ class PipelineTesterMixin:
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
+    # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
+        # No fix is required for this case.
+        if (
+            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `DocumentQuestionAnsweringPipelineTests` requires a fast tokenizer.
+            return True
+
         return False
 
 

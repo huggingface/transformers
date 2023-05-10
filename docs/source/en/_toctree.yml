@@ -8,45 +8,24 @@
   title: Get started
 - sections:
   - local: pipeline_tutorial
-    title: Pipelines for inference
+    title: Run inference with pipelines
   - local: autoclass_tutorial
-    title: Load pretrained instances with an AutoClass
+    title: Write portable code with AutoClass
   - local: preprocessing
-    title: Preprocess
+    title: Preprocess data
   - local: training
     title: Fine-tune a pretrained model
+  - local: run_scripts
+    title: Train with a script
   - local: accelerate
-    title: Distributed training with 🤗 Accelerate
+    title: Set up distributed training with 🤗 Accelerate
   - local: model_sharing
-    title: Share a model
+    title: Share your model
+  - local: transformers_agents
+    title: Agents
   title: Tutorials
 - sections:
   - sections:
-    - local: create_a_model
-      title: Create a custom architecture
-    - local: custom_models
-      title: Sharing custom models
-    - local: run_scripts
-      title: Train with a script
-    - local: sagemaker
-      title: Run training on Amazon SageMaker
-    - local: converting_tensorflow_models
-      title: Converting from TensorFlow checkpoints
-    - local: serialization
-      title: Export to ONNX
-    - local: torchscript
-      title: Export to TorchScript
-    - local: troubleshooting
-      title: Troubleshoot
-    title: General usage
-  - sections:
-    - local: fast_tokenizers
-      title: Use tokenizers from 🤗 Tokenizers
-    - local: multilingual
-      title: Inference for multilingual models
-    - local: generation_strategies
-      title: Text generation strategies
-    - sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -63,38 +42,71 @@
         title: Summarization
       - local: tasks/multiple_choice
         title: Multiple choice
-      title: Task guides
-      isExpanded: false
     title: Natural Language Processing
+    isExpanded: false
   - sections:
-    - local: tasks/audio_classification
-      title: Audio classification
-    - local: tasks/asr
-      title: Automatic speech recognition
+      - local: tasks/audio_classification
+        title: Audio classification
+      - local: tasks/asr
+        title: Automatic speech recognition
     title: Audio
+    isExpanded: false
   - sections:
-    - local: tasks/image_classification
-      title: Image classification
-    - local: tasks/semantic_segmentation
-      title: Semantic segmentation
-    - local: tasks/video_classification
-      title: Video classification
-    - local: tasks/object_detection
-      title: Object detection
-    - local: tasks/zero_shot_object_detection
-      title: Zero-shot object detection
-    - local: tasks/zero_shot_image_classification
-      title: Zero-shot image classification
-    - local: tasks/monocular_depth_estimation
-      title: Depth estimation
+      - local: tasks/image_classification
+        title: Image classification
+      - local: tasks/semantic_segmentation
+        title: Semantic segmentation
+      - local: tasks/video_classification
+        title: Video classification
+      - local: tasks/object_detection
+        title: Object detection
+      - local: tasks/zero_shot_object_detection
+        title: Zero-shot object detection
+      - local: tasks/zero_shot_image_classification
+        title: Zero-shot image classification
+      - local: tasks/monocular_depth_estimation
+        title: Depth estimation
     title: Computer Vision
+    isExpanded: false
   - sections:
-    - local: tasks/image_captioning
-      title: Image captioning
-    - local: tasks/document_question_answering
-      title: Document Question Answering
+      - local: tasks/image_captioning
+        title: Image captioning
+      - local: tasks/document_question_answering
+        title: Document Question Answering
+      - local: tasks/text-to-speech
+        title: Text to speech
     title: Multimodal
-  - sections:
+    isExpanded: false
+  title: Task Guides
+- sections:
+    - local: fast_tokenizers
+      title: Use fast tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: Run inference with multilingual models
+    - local: generation_strategies
+      title: Customize text generation strategy
+    - local: create_a_model
+      title: Use model-specific APIs
+    - local: custom_models
+      title: Share a custom model
+    - local: sagemaker
+      title: Run training on Amazon SageMaker
+    - local: serialization
+      title: Export to ONNX
+    - local: torchscript
+      title: Export to TorchScript
+    - local: benchmarks
+      title: Benchmarks
+    - local: notebooks
+      title: Notebooks with examples
+    - local: community
+      title: Community resources
+    - local: custom_tools
+      title: Custom Tools and Prompts
+    - local: troubleshooting
+      title: Troubleshoot
+  title: Developer guides
+- sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
@@ -129,8 +141,8 @@
       title: Hyperparameter Search using Trainer API
     - local: tf_xla
       title: XLA Integration for TensorFlow Models
-    title: Performance and scalability
-  - sections:
+  title: Performance and scalability
+- sections:
     - local: contributing
       title: How to contribute to transformers?
     - local: add_new_model
@@ -143,16 +155,8 @@
       title: Testing
     - local: pr_checks
       title: Checks on a Pull Request
-    title: Contribute
-  - local: notebooks
-    title: 🤗 Transformers Notebooks
-  - local: community
-    title: Community resources
-  - local: benchmarks
-    title: Benchmarks
-  - local: migration
-    title: Migrating from previous packages
-  title: How-to guides
+  title: Contribute
+
 - sections:
   - local: philosophy
     title: Philosophy
@@ -179,6 +183,8 @@
   title: Conceptual guides
 - sections:
   - sections:
+    - local: main_classes/agent
+      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback
@@ -365,6 +371,8 @@
         title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/open-llama
+        title: Open-Llama
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -397,6 +405,8 @@
         title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -464,6 +474,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/focalnet
+        title: FocalNet
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
@@ -610,6 +622,8 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/sam
+        title: Segment Anything
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
