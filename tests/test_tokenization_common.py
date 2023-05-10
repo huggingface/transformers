@@ -156,29 +156,6 @@ def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
     out_queue.join()
 
 
-def _test_pickle_subword_regularization_tokenizer(in_queue, out_queue, timeout):
-    error = None
-
-    try:
-        inputs = in_queue.get(timeout=timeout)
-        tokenizer_new = inputs["tokenizer_new"]
-        sp_model_kwargs = inputs["sp_model_kwargs"]
-        test_sentencepiece_ignore_case = inputs["test_sentencepiece_ignore_case"]
-
-        unittest.TestCase().assertTrue(hasattr(tokenizer_new, "sp_model_kwargs"))
-        unittest.TestCase().assertIsNotNone(tokenizer_new.sp_model_kwargs)
-        unittest.TestCase().assertTrue(isinstance(tokenizer_new.sp_model_kwargs, dict))
-        unittest.TestCase().assertDictEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
-        check_subword_sampling(tokenizer_new, test_sentencepiece_ignore_case=test_sentencepiece_ignore_case)
-
-    except Exception:
-        error = f"{traceback.format_exc()}"
-
-    results = {"error": error}
-    out_queue.put(results, timeout=timeout)
-    out_queue.join()
-
-
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
     text: str = None,
@@ -534,9 +511,9 @@ class TokenizerTesterMixin:
 
         run_test_in_subprocess(
             test_case=self,
-            target_func=_test_pickle_subword_regularization_tokenizer,
+            target_func=_test_subword_regularization_tokenizer,
             inputs={
-                "tokenizer_new": tokenizer_new,
+                "tokenizer": tokenizer_new,
                 "sp_model_kwargs": sp_model_kwargs,
                 "test_sentencepiece_ignore_case": self.test_sentencepiece_ignore_case,
             },
