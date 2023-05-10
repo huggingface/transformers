@@ -723,10 +723,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
         batch_encoding = self("<|startofprev|>", text.strip(), add_prefix_space=True, add_special_tokens=False)
 
+        # Check for special tokens
         prompt_text_ids = batch_encoding["input_ids"][1:]
-        invalid_special_token_id = next((x for x in prompt_text_ids if x >= min(self.all_special_ids)), None)
-        if invalid_special_token_id is not None:
-            token = self.convert_ids_to_tokens(invalid_special_token_id)
+        min_special_id =  min(self.all_special_ids)
+        special_token_id = next((x for x in prompt_text_ids if x >= min_special_id), None)
+        if special_token_id is not None:
+            token = self.convert_ids_to_tokens(special_token_id)
             raise ValueError(f"Encountered text in the prompt corresponding to disallowed special token: {token}.")
 
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
