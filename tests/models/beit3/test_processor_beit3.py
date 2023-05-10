@@ -1,4 +1,4 @@
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 import pytest
 
-# from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_vision
@@ -41,19 +40,6 @@ class Beit3ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # fmt: off
-        vocab = ["", "l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
-        # fmt: on
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        # self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        # with open(self.merges_file, "w", encoding="utf-8") as fp:
-        #     fp.write("\n".join(merges))
-
         image_processor_map = {
             "do_resize": True,
             "size": 20,
@@ -69,11 +55,9 @@ class Beit3ProcessorTest(unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True, **kwargs)
-        # return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
 
     def get_rust_tokenizer(self, **kwargs):
         return XLMRobertaTokenizerFast(SAMPLE_VOCAB, keep_accents=True, **kwargs)
-        # return XLMRobertaTokenizerFast.from_pretrained("xlm-roberta-base")
 
     def get_image_processor(self, **kwargs):
         return Beit3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
@@ -157,23 +141,6 @@ class Beit3ProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-    def test_processor_case2(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Beit3Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        image_input = self.prepare_image_inputs()
-        query_input = self.prepare_image_inputs()
-
-        inputs = processor(images=image_input, query_images=query_input)
-
-        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):

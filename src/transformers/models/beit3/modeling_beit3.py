@@ -20,9 +20,6 @@ from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 
 
-# from ... import PreTrainedModel
-# from ...utils import logging
-
 EVAL_CAPACITY_TOKEN_FRACTION = 0.25
 SAMPLE_FRACTION = 0.2
 logger = logging.get_logger(__name__)
@@ -236,10 +233,6 @@ class Beit3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "beit3"
     main_input_name = "input_ids"
 
-    # def __init__(self,config):
-    #     super(Beit3PreTrainedModel, self).__init__(config)
-    #     self._set_gradient_checkpointing(config.is_gradient_checkpointing)
-
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
@@ -266,7 +259,6 @@ class Beit3PreTrainedModel(PreTrainedModel):
             ),
         ):
             module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            # module.vision_embed.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Beit3Encoder):
@@ -292,7 +284,6 @@ class Beit3MultiwayNetwork(nn.Module):
             [self.split_position, x.size(self.dim) - self.split_position],
             dim=self.dim,
         )
-        # x1, x2 = x[:self.split_position], x[self.split_position:]
         y1, y2 = self.first(x1, **kwargs), self.second(x2, **kwargs)
         return torch.cat([y1, y2], dim=self.dim)
 
@@ -358,7 +349,6 @@ class Beit3PositionalEmbedding(nn.Embedding):
         positions=None,
     ):
         if positions is None:
-            # being consistent with Fairseq, which starts from 2.
             positions = torch.arange(2, x.size(1) + 2, device=x.device).long().unsqueeze(0)
         return F.embedding(
             positions,
@@ -540,7 +530,6 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         incremental_state=None,
     ):
         if multiway_split_position is not None:
-            # assert self.args.multiway
             self.apply(set_split_position(multiway_split_position))
 
         if attn_mask is not None:
@@ -577,7 +566,6 @@ class Beit3Encoder(nn.Module):
         config,
         embed_positions=None,
     ):
-        # super().__init__(config)
         super().__init__()
 
         self.dropout_module = torch.nn.Dropout(config.dropout)
@@ -684,13 +672,8 @@ class Beit3Encoder(nn.Module):
 class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # self.args = args
-        # assert args.multiway
-        # assert args.vocab_size > 0
-        # assert not args.share_encoder_input_output_embed
         self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
         self.vision_embedding = Beit3VisionEmbedding(config)
-        # being consistent with Fairseq, which starts from 2 for position embedding
         embed_positions = Beit3MutliwayEmbedding(
             modules=[
                 Beit3PositionalEmbedding(self.vision_embedding.num_position_embeddings() + 2, config.embed_dim),
@@ -1046,7 +1029,6 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
             nn.GELU(),
             nn.Linear(embed_dim * 2, config.num_labels),
         )
-        # self.head.apply(self._init_weights)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VQA_INPUTS_DOCSTRING)
@@ -1138,8 +1120,6 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self.beit3 = Beit3Model(config)
         self.language_head = nn.Linear(embed_dim, embed_dim, bias=False)
         self.vision_head = nn.Linear(embed_dim, embed_dim, bias=False)
-        # self.language_head.apply(self._init_weights)
-        # self.vision_head.apply(self._init_weights)
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.post_init()
 
