@@ -3336,6 +3336,13 @@ class GPTNeoXForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTNeoXForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTNeoXForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6096,6 +6103,30 @@ class RoFormerPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
+
+
+RWKV_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RwkvForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RwkvModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RwkvPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 SAM_PRETRAINED_MODEL_ARCHIVE_LIST = None
