@@ -23,7 +23,7 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, hf_hub_download
+from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, hf_hub_download, metadata_update
 from huggingface_hub.utils import RepositoryNotFoundError, get_session
 
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
@@ -285,6 +285,7 @@ class Tool:
         repo_url = create_repo(
             repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
         )
+        metadata_update(repo_id, {"tags": ["tool"]}, repo_type="space")
         repo_id = repo_url.repo_id
 
         with tempfile.TemporaryDirectory() as work_dir:
