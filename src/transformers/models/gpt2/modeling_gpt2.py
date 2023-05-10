@@ -52,7 +52,6 @@ from .configuration_gpt2 import GPT2Config
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
-_REAL_CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1619,7 +1618,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -1670,9 +1669,9 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
+                start_positions = start_positions.squeeze(-1).to(start_logits.device)
             if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
+                end_positions = end_positions.squeeze(-1).to(end_logits.device)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
             start_positions = start_positions.clamp(0, ignored_index)
