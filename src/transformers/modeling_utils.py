@@ -2229,7 +2229,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             if torch_dtype is None:
-                torch_dtype = 'auto'
+                torch_dtype = torch.float32
 
             if device_map is None:
                 raise ValueError(
@@ -2297,7 +2297,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if load_in_8bit:
                 if torch_dtype is None:
-                    torch_dtype = 'auto'
+                    torch_dtype = torch.float32
 
                 if device_map is None:
                     device_map = "auto"
@@ -2583,7 +2583,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (
-                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and torch_dtype == torch.float16
+                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and
+                (torch_dtype == torch.float16 or load_in_4bit or load_in_8bit)
             )
             if (
                 (cls._keep_in_fp32_modules is not None)
