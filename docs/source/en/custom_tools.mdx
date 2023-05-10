@@ -325,7 +325,9 @@ We can help the agent here by changing the tool name and description of `image_t
 to disassociate it a bit from "image" and "prompt":
 ```py
 agent.toolbox["modifier"] = agent.toolbox.pop("image_transformer")
-agent.toolbox["modifier"].description = agent.toolbox["modifier"].description.replace("transforms an image according to a prompt", "modifies an image")
+agent.toolbox["modifier"].description = agent.toolbox["modifier"].description.replace(
+    "transforms an image according to a prompt", "modifies an image"
+)
 ```
 
 Now "modify" is a strong cue to use the new image processor which should help with the above prompt. Let's run it again.
