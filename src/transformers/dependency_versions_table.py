@@ -46,7 +46,7 @@ deps = {
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "phonemizer": "phonemizer",
-    "protobuf": "protobuf<=3.20.2",
+    "protobuf": "protobuf<=3.20.3",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",
     "pydantic": "pydantic",
