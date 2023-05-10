@@ -18,7 +18,7 @@
 
 import collections
 import math
-from typing import Iterable, Mapping, Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
