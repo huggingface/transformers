@@ -284,8 +284,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
         self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
-        print(model.transformer.h[0].mlp.dense_4h_to_h.weight.SCB)
-
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
