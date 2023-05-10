@@ -125,6 +125,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_diffusers_available = importlib.util.find_spec("diffusers") is not None
+try:
+    _diffusers_version = importlib_metadata.version("diffusers")
+    logger.debug(f"Successfully imported diffusers version {_diffusers_version}")
+except importlib_metadata.PackageNotFoundError:
+    _diffusers_available = False
+
+
 _detectron2_available = importlib.util.find_spec("detectron2") is not None
 try:
     _detectron2_version = importlib_metadata.version("detectron2")
@@ -183,6 +191,9 @@ try:
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
+
+
+_opencv_available = importlib.util.find_spec("cv2") is not None
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
@@ -429,6 +440,10 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
+
+
+def is_openai_available():
+    return importlib.util.find_spec("openai") is not None
 
 
 def is_flax_available():
