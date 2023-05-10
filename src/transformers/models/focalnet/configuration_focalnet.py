@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -25,7 +26,7 @@ FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class FocalNetConfig(PretrainedConfig):
+class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a
     FocalNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -47,6 +48,8 @@ class FocalNetConfig(PretrainedConfig):
         use_conv_embed (`bool`, *optional*, defaults to `False`):
             Whether to use convolutional embedding. The authors noted that using convolutional embedding usually
             improve the performance, but it's not used by default.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[192, 384, 768, 768]`):
+            Dimensionality (hidden size) at each stage.
         depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth (number of layers) of each stage in the encoder.
         focal_levels (`list(int)`, *optional*, defaults to `[2, 2, 2, 2]`):
@@ -78,6 +81,14 @@ class FocalNetConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -102,6 +113,7 @@ class FocalNetConfig(PretrainedConfig):
         num_channels=3,
         embed_dim=96,
         use_conv_embed=False,
+        hidden_sizes=[192, 384, 768, 768],
         depths=[2, 2, 6, 2],
         focal_levels=[2, 2, 2, 2],
         focal_windows=[3, 3, 3, 3],
@@ -117,6 +129,8 @@ class FocalNetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,6 +140,7 @@ class FocalNetConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.use_conv_embed = use_conv_embed
+        self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
@@ -141,3 +156,7 @@ class FocalNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.encoder_stride = encoder_stride
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )

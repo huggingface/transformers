@@ -33,7 +33,7 @@ RUN echo torch=$VERSION
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -U tensorflow==2.11
-RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U "tensorflow_probability<0.20"
 RUN python3 -m pip uninstall -y flax jax
 
 # To include the change in this commit https://github.com/onnx/tensorflow-onnx/commit/ddca3a5eb2d912f20fe7e0568dd1a3013aee9fa3
@@ -50,6 +50,9 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/acc
 
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+# For bettertransformer
+RUN python3 -m pip install --no-cache-dir optimum
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
