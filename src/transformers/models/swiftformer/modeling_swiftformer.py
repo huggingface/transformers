@@ -16,7 +16,7 @@
 
 
 import collections.abc
-from typing import Iterator, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -362,15 +362,11 @@ class SwiftFormerStage(nn.Module):
             else:
                 blocks.append(SwiftFormerConvEncoder(config, dim=dim))
 
-        for idx, block in enumerate(blocks):
-            self.add_module(str(idx), block)
-
-    def __iter__(self) -> Iterator[nn.Module]:
-        return iter(self._modules.values())
+        self.blocks = nn.ModuleList(blocks)
 
     def forward(self, input):
-        for module in self:
-            input = module(input)
+        for block in self.blocks:
+            input = block(input)
         return input
 
 
