@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT Neo model."""
 
-
+# TODO Implement weight tying, and see if there's a generic solution (because this will come up in user PRs too)
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
@@ -162,7 +162,7 @@ class TFGPTNeoAttention(tf.keras.layers.Layer):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = TFGPTNeoSelfAttention(config, self.attention_type)
+            self.attention = TFGPTNeoSelfAttention(config, self.attention_type, name="attention")
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -361,7 +361,7 @@ class TFGPTNeoModel(TFGPTNeoPreTrainedModel):
         self.wte = tf.keras.layers.Embedding(config.vocab_size, self.embed_dim, name="wte")
         self.wpe = tf.keras.layers.Embedding(config.max_position_embeddings, self.embed_dim, name="wpe")
         self.drop = tf.keras.layers.Dropout(float(config.embed_dropout))
-        self.h = [TFGPTNeoBlock(config, layer_id=i, name=f"h_{i}") for i in range(config.num_layers)]
+        self.h = [TFGPTNeoBlock(config, layer_id=i, name=f"h_._{i}") for i in range(config.num_layers)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
     def get_input_embeddings(self):
@@ -530,10 +530,12 @@ class TFGPTNeoForCausalLM(TFGPTNeoPreTrainedModel, TFCausalLanguageModelingLoss)
         r"h\.\d+\.attn\.attention\.bias",
     ]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias"]
+
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.transformer = TFGPTNeoModel(config)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
 
     def get_output_embeddings(self):
@@ -675,7 +677,7 @@ class TFGPTNeoForSequenceClassification(TFGPTNeoPreTrainedModel):
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.num_labels = config.num_labels
-        self.transformer = TFGPTNeoModel(config)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
         self.score = tf.keras.layers.Dense(self.num_labels, use_bias=False, name="score")
 
 
@@ -795,8 +797,8 @@ class TFGPTNeoForTokenClassification(TFGPTNeoPreTrainedModel, TFTokenClassificat
         super().__init__(config, *args, **kwargs)
         self.num_labels = config.num_labels
 
-        self.transformer = TFGPTNeoModel(config)
-        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout, name="dropout")
         self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
 
 
@@ -880,7 +882,7 @@ class TFGPTNeoForQuestionAnswering(TFGPTNeoPreTrainedModel, TFQuestionAnsweringL
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.num_labels = config.num_labels
-        self.transformer = TFGPTNeoModel(config)
+        self.transformer = TFGPTNeoModel(config, name="transformer")
         self.qa_outputs = tf.keras.layers.Dense(2, name="qa_outputs")
 
 

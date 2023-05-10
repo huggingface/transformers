@@ -97,8 +97,10 @@ class GPTNeoModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
         self.attention_types = attention_types
+
     def get_large_model_config(self):
         return GPTNeoConfig.from_pretrained("gpt-neo-125M")
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -137,6 +139,7 @@ class GPTNeoModelTester:
             token_labels,
             choice_labels,
         )
+
     def get_config(self):
         return GPTNeoConfig(
             vocab_size=self.vocab_size,
@@ -151,10 +154,12 @@ class GPTNeoModelTester:
             window_size=self.window_size,
             attention_types=self.attention_types,
         )
+
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 300
         return config
+
     def prepare_config_and_inputs_for_decoder(self):
         (
             config,
@@ -183,6 +188,7 @@ class GPTNeoModelTester:
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
     def create_and_check_gpt_neo_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFGPTNeoModel(config=config)
 
@@ -193,6 +199,7 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         # past_key_values is not implemented
         # self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+
     def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFGPTNeoModel(config=config)
 
@@ -226,6 +233,7 @@ class GPTNeoModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_gpt_neo_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
     ):
@@ -268,6 +276,7 @@ class GPTNeoModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_gpt_neo_model_past_large_inputs(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
     ):
@@ -310,6 +319,7 @@ class GPTNeoModelTester:
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def create_and_check_gpt_neo_for_question_answering(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -318,6 +328,7 @@ class GPTNeoModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.start_logits.shape, [self.batch_size, self.seq_length])
         self.parent.assertEqual(result.end_logits.shape, [self.batch_size, self.seq_length])
+
     def create_and_check_gpt_neo_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -326,6 +337,7 @@ class GPTNeoModelTester:
         model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def create_and_check_gpt_neo_for_token_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -335,14 +347,13 @@ class GPTNeoModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.logits.shape, [self.batch_size, self.seq_length, self.num_labels])
 
-    def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_forward_and_backwards(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFGPTNeoForCausalLM(config)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -444,6 +455,24 @@ class TFGPTNeoModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_neo_for_token_classification(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
     def _get_hidden_states(self):
         return tf.constant(
             [
@@ -486,6 +515,7 @@ class TFGPTNeoModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # and the attn_probs should be 0 for token [0, 1]
         self.assertTrue(tf.reduce_all(attn_probs[:, :, 5, 2:6] != 0))
         self.assertTrue(tf.reduce_all(attn_probs[:, :, 5, :2] == 0))
+
 
 @require_tf
 class TFGPTNeoModelLanguageGenerationTest(unittest.TestCase):
