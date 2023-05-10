@@ -22,7 +22,7 @@ from os.path import abspath, dirname, join
 
 import _pytest
 
-from transformers.utils.doctest_utils import HfDoctestModule, HfDocTestParser
+from transformers.testing_utils import HfDoctestModule, HfDocTestParser
 
 
 # allow having multiple repository checkouts and not needing to remember to rerun
