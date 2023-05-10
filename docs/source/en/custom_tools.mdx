@@ -54,7 +54,7 @@ The prompt is structured broadly into four parts.
 
 To better understand each part, let's look at a shortened version of how the `run` prompt can look like:
 
-````
+````text
 I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
 [...]
 You can print intermediate results if it makes sense to do so.
@@ -101,7 +101,7 @@ The second part (the bullet points below *"Tools"*) is dynamically added upon ca
 exactly as many bullet points as there are tools in `agent.toolbox` and each bullet point consists of the name 
 and description of the tool:
 
-```
+```text
 - <tool.name>: <tool.description>
 ```
 
@@ -115,7 +115,7 @@ print(f"- {document_qa.name}: {document_qa.description}")
 ```
 
 which gives:
-```
+```text
 - document_qa: This is a tool that answers a question about a document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
 ```
 
