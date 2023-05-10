@@ -21,7 +21,7 @@ If you are not aware of what tools and agents are in the context of transformers
 
 <Tip warning={true}>
 
-Transformers Agent is an experimental API which is subject to change at any time. Results returned by the agents
+Transformers Agent is an experimental API that is subject to change at any time. Results returned by the agents
 can vary as the APIs or underlying models are prone to change.
 
 </Tip>
@@ -36,15 +36,15 @@ In this guide we'll take a look at:
 ## Customizing the prompt
 
 As explained in [Transformers Agents](transformers_agents) agents can run in [`~Agent.run`] and [`~Agent.chat`] mode.
-Both the `run` and `chat` mode underlie the same logic. The language model powering the agent is conditioned on a long 
+Both the `run` and `chat` modes underlie the same logic. The language model powering the agent is conditioned on a long 
 prompt and completes the prompt by generating the next tokens until the stop token is reached.
 The only difference between the two modes is that during the `chat` mode the prompt is extended with 
 previous user inputs and model generations. This allows the agent to have access to past interactions,
-seemingly giving the agent some kidn of memory.
+seemingly giving the agent some kind of memory.
 
 ### Structure of the prompt
 
-Let's take a closer look into how the prompt is structured to understand how it can be best customized.
+Let's take a closer look at how the prompt is structured to understand how it can be best customized.
 The prompt is structured broadly into four parts.
 
 - 1. Introduction: how the agent should behave, explanation of the concept of tools.
@@ -60,8 +60,8 @@ I will ask you to perform a task, your job is to come up with a series of simple
 You can print intermediate results if it makes sense to do so.
 
 Tools:
-- document_qa: This is a tool that answers a question about an document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
-- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to caption, and returns a text that contains the description in English.
+- document_qa: This is a tool that answers a question about a document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
+- image_captioner: This is a tool that generates a description of an image. It takes an input named `image` which should be the image to the caption and returns a text that contains the description in English.
 [...]
 
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
@@ -116,13 +116,13 @@ print(f"- {document_qa.name}: {document_qa.description}")
 
 which gives:
 ```
-- document_qa: This is a tool that answers a question about an document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
+- document_qa: This is a tool that answers a question about a document (pdf). It takes an input named `document` which should be the document containing the information, as well as a `question` that is the question about the document. It returns a text that contains the answer to the question.
 ```
 
 We can see that the tool name is short and precise. The description includes two parts, the first explaining 
-what the tool does and the second stating what input arguments and return values are expected.
+what the tool does and the second states what input arguments and return values are expected.
 
-A good tool name and tool description is very important for the agent to correctly use it. Note that the only
+A good tool name and tool description are very important for the agent to correctly use it. Note that the only
 information the agent has about the tool is its name and description, so one should make sure that both 
 are precisely written and match the style of the existing tools in the toolbox.
 
@@ -137,7 +137,7 @@ The third part includes a set of curated examples that show the agent exactly wh
 for what kind of user request. The large language models empowering the agent are extremely good at 
 recognizing patterns in a prompt and repeating the pattern with new data. Therefore, it is very important
 that the examples are written in a way that maximizes the likelihood of the agent to generating correct,
-  executeable code in practice. 
+  executable code in practice. 
 
 Let's have a look at one example:
 
@@ -155,14 +155,14 @@ image = image_generator("A banner showing " + answer)
 ```
 
 The pattern the model is prompted to repeat has three parts: The task statement, the agent's explanation of 
-what it intends to do and finally the generated code. Every example that is part of the prompt has this exact 
+what it intends to do, and finally the generated code. Every example that is part of the prompt has this exact 
 pattern, thus making sure that the agent will reproduce exactly the same pattern when generating new tokens.
 
-The prompt examples are curated by the Transformers team and rigourously evaluated on a set of 
+The prompt examples are curated by the Transformers team and rigorously evaluated on a set of 
 [problem statements](https://github.com/huggingface/transformers/blob/main/src/transformers/tools/evaluate_agent.py)
 to ensure that the agent's prompt is as good as possible to solve real use cases of the agent.
 
-The final part of the prompt corresponding to:
+The final part of the prompt corresponds to:
 ```
 Task: "Draw me a picture of rivers and lakes"
 
@@ -176,13 +176,13 @@ is dynamically created based on the actual user input. For the above example, th
 agent.run("Draw me a picture of rivers and lakes")
 ```
 
-The user input - *a.k.a* the task: *"Draw me a picture of rivers and lakes"* is casted into the 
+The user input - *a.k.a* the task: *"Draw me a picture of rivers and lakes"* is cast into the 
 prompt template: "Task: <task> \n\n I will use the following". This sentence makes up the final lines of the 
 prompt the agent is conditioned on, therefore strongly influencing the agent to finish the example 
 exactly in the same way it was previously done in the examples.
 
-Without going into too much details, the chat template has the same prompt structure with the 
-examples having a slighly different style, *e.g.*:
+Without going into too much detail, the chat template has the same prompt structure with the 
+examples having a slightly different style, *e.g.*:
 
 ```
 [...]
@@ -219,13 +219,13 @@ print(f"The answer is {answer}")
 ```
 
 Contrary, to the examples of the `run` prompt, each `chat` prompt example has one or more exchanges between the 
-*Human* and the *Assistant*. Every exchange is structured similar to the example of the `run` prompt. 
+*Human* and the *Assistant*. Every exchange is structured similarly to the example of the `run` prompt. 
 The user's input is appended to behind *Human:* and the agent is prompted to first generate what needs to be done 
 before generating code. An exchange can be based on previous exchanges, therefore allowing the user to refer
-to past exchanges as is done *e.g.* above by the user's input of "I thied **this** code" referring to the 
+to past exchanges as is done *e.g.* above by the user's input of "I tried **this** code" refers to the 
 previously generated code of the agent.
 
-Upon running `.chat`, the user's input or *task* is casted into an unfinished example of the form:
+Upon running `.chat`, the user's input or *task* is cast into an unfinished example of the form:
 ```
 Human: <user-input>\n\nAssistent:
 ```
@@ -236,12 +236,12 @@ Great now that we know how the prompt is structured, let's see how we can custom
 
 ### Writing good user inputs
 
-While large language models are getting better and better at understanding user's intentions, it helps 
+While large language models are getting better and better at understanding users' intentions, it helps 
 enormously to be as precise as possible to help the agent pick the correct task. What does it mean to be 
 as precise as possible?
 
 The agent sees a list of tool names and their description in its prompt. The more tools are added the 
-more difficult it becomes for the agent to choose the correct tool and it's even more difficult to chose
+more difficult it becomes for the agent to choose the correct tool and it's even more difficult to choose
 the correct sequences of tools to run. Let's look at a common failure case, here we will only return 
 the code to analyze it.
 
@@ -257,7 +257,7 @@ gives:
 
 ```
 ==Explanation from the agent==
-I will use the following  tool: `image_segmenter` to create a segmentation mask for the image.
+I will use the following tool: `image_segmenter` to create a segmentation mask for the image.
 
 
 ==Code generated by the agent==
@@ -274,7 +274,7 @@ agent.toolbox["image_generator"].description
 'This is a tool that creates an image according to a prompt, which is a text description. It takes an input named `prompt` which contains the image description and outputs an image.
 ```
 
-The name and description makes use of the keywords "image", "prompt", "create" and "generate". Using these words will most likely work better here. Let's refine our prompt a bit.
+The name and description make use of the keywords "image", "prompt", "create" and "generate". Using these words will most likely work better here. Let's refine our prompt a bit.
 
 ```py
 agent.run("Create an image of a tree", return_code=True)
@@ -283,7 +283,7 @@ agent.run("Create an image of a tree", return_code=True)
 gives:
 ```py
 ==Explanation from the agent==
-I will use the following  tool `image_generator` to generate an image of a tree.
+I will use the following tool `image_generator` to generate an image of a tree.
 
 
 ==Code generated by the agent==
@@ -297,12 +297,12 @@ and description and try refining your task request with it.
 ### Customizing the tool descriptions
 
 As we've seen before the agent has access to each of the tools' names and descriptions. The base tools 
-should have very precise names and descriptions, however you might find that it could help to change the 
+should have very precise names and descriptions, however, you might find that it could help to change the 
 the description or name of a tool for your specific use case. This might become especially important 
-when you've add multiple tools that are very similar or if you want to use your agent only for a certain 
+when you've added multiple tools that are very similar or if you want to use your agent only for a certain 
 domain, *e.g.* image generation and transformations.
 
-A common problem is that the agent confuses image generation with image transformation / modification when 
+A common problem is that the agent confuses image generation with image transformation/modification when 
 used a lot for image generation tasks, *e.g.*
 ```py
 agent.run("Make an image of a house and a car", return_code=True)
@@ -310,7 +310,7 @@ agent.run("Make an image of a house and a car", return_code=True)
 returns
 ```
 ==Explanation from the agent== 
-I will use the following  tools `image_generator` to generate an image of a house and `image_transformer` to transform the image of a car into the image of a house.
+I will use the following tools `image_generator` to generate an image of a house and `image_transformer` to transform the image of a car into the image of a house.
 
 ==Code generated by the agent==
 house_image = image_generator(prompt="A house")
@@ -337,7 +337,7 @@ agent.run("Make an image of a house and a car", return_code=True)
 Now we're getting:
 ```
 ==Explanation from the agent==
-I will use the following  tools: `image_generator` to generate an image of a house, then `image_generator` to generate an image of a car.
+I will use the following tools: `image_generator` to generate an image of a house, then `image_generator` to generate an image of a car.
 
 
 ==Code generated by the agent==
@@ -345,14 +345,14 @@ house_image = image_generator(prompt="A house")
 car_image = image_generator(prompt="A car")
 ```
 
-which is definitely closer to what we had in mind! However, we want to have both the house and car in the same image. Steering the task more towards single image generation should help:
+which is definitely closer to what we had in mind! However, we want to have both the house and car in the same image. Steering the task more toward single image generation should help:
 
 ```py
 agent.run("Create image: 'A house and car'", return_code=True)
 ```
 ```
 ==Explanation from the agent==
-I will use the following  tool: `image_generator` to generate an image.
+I will use the following tool: `image_generator` to generate an image.
 
 
 ==Code generated by the agent==
@@ -361,7 +361,7 @@ image = image_generator(prompt="A house and car")
 
 <Tip warning={true}>
 
-Agents are still brittle for many use cases, especially when it compes to 
+Agents are still brittle for many use cases, especially when it comes to 
 slightly more complex use cases like generating an image of multiple objects.
 Both the agent itself and the underlying prompt will be further improved in the coming 
 months making sure that agents become more robust to a variety of user inputs.
@@ -371,8 +371,8 @@ months making sure that agents become more robust to a variety of user inputs.
 ### Customizing the whole prompt
 
 To give the user maximum flexibility, the whole prompt template as explained in [above](#structure-of-the-prompt)
-can be overwritten by the user. In this case make sure that your custom prompt includes the an introduction section, 
-a tool section, an example section and an unfinished example section. If you want to overwrite the `run` prompt template, 
+can be overwritten by the user. In this case make sure that your custom prompt includes an introduction section, 
+a tool section, an example section, and an unfinished example section. If you want to overwrite the `run` prompt template, 
 you can do as follows:
 
 ```py
@@ -384,7 +384,7 @@ agent = HfAgent(your_endpoint, run_prompt_template=template)
 <Tip warning={true}>
 
   Please make sure to have the `<<all_tools>>` string and the `<<prompt>>` defined somewhere in the `template` so that the agent can be aware 
-  of the tools it has available to it as well as correctly insert the users prompt.
+  of the tools, it has available to it as well as correctly insert the user's prompt.
 
 </Tip>
 
@@ -407,7 +407,7 @@ agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
 <Tip warning={true}>
 
   Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
-  of the tools it has available to it.
+  of the tools, it has available to it.
 
 </Tip>
 
@@ -447,7 +447,7 @@ It takes two inputs: `image`, which should be the image to transform, and `promp
 Name: 'image_transformer'
 ```
 
-The name and description is accurate and fits the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
+The name and description are accurate and fit the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
 Next, let's instantiate an agent with `controlnet_transformer` and `upscaler`:
 
 ```py
@@ -462,7 +462,7 @@ image_transformer has been replaced by <transformers_modules.diffusers.controlne
 8718a60c0aa6312.image_transformation.ControlNetTransformationTool object at 0x7f1d3bfa3a00> as provided in `additional_tools`
 ```
 
-The set of curated tools already has a `image_transformer` tool which is hereby replaced with our custom tool.
+The set of curated tools already has an `image_transformer` tool which is hereby replaced with our custom tool.
 
 <Tip>
 
@@ -472,7 +472,7 @@ as the overwritten tool in this case.
 
 </Tip>
 
-The upscaler tool was given the name `image_upscaler` which is not yet present in the default toolbox and is therefore is simply added to the list of tools.
+The upscaler tool was given the name `image_upscaler` which is not yet present in the default toolbox and is therefore simply added to the list of tools.
 You can always have a look at the toolbox that is currently available to the agent via the `agent.toolbox` attribute:
 
 ```py
@@ -519,7 +519,7 @@ image = agent.run("Transform the image: 'A frozen lake and snowy forest'", image
 
 ```
 ==Explanation from the agent==
-I will use the following  tool: `image_transformer` to transform the image.
+I will use the following tool: `image_transformer` to transform the image.
 
 
 ==Code generated by the agent==
@@ -528,7 +528,7 @@ image = image_transformer(image, prompt="A frozen lake and snowy forest")
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes_winter.png" width=200> 
 
-The new image processing tool is based on ControlNet which is can make very strong modifications to the image.
+The new image processing tool is based on ControlNet which can make very strong modifications to the image.
 By default the image processing tool returns an image of size 512x512 pixels. Let's see if we can upscale it.
 
 ```py
@@ -537,7 +537,7 @@ image = agent.run("Upscale the image", image)
 
 ```
 ==Explanation from the agent==
-I will use the following  tool: `image_upscaler` to upscale the image.
+I will use the following tool: `image_upscaler` to upscale the image.
 
 
 ==Code generated by the agent==
@@ -549,11 +549,11 @@ upscaled_image = image_upscaler(image)
 The agent automatically mapped our prompt "Upscale the image" to the just added upscaler tool purely based on the description and name of the upscaler tool 
 and was able to correctly run it.
 
-Next, let's have a look into how you can create a new custom tool.
+Next, let's have a look at how you can create a new custom tool.
 
 ### Adding new tools
 
-In this section we show how to create a new tool that can be added to the agent.
+In this section, we show how to create a new tool that can be added to the agent.
 
 #### Creating a new tool
 
