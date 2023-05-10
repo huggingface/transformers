@@ -327,7 +327,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict_to_return = None
-        if model_class.__name__ == "BEiT3ForVisualReasoning":
+        if model_class.__name__ == "Beit3ForVisualReasoning":
             # inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_visual_reasoning()[1]
             inputs_dict_to_return = {}
             if return_labels:
@@ -339,7 +339,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict_to_return["padding_mask"] = inputs_dict["padding_mask"]
             inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
             return inputs_dict_to_return
-        elif model_class.__name__ == "BEiT3ForImageClassification":
+        elif model_class.__name__ == "Beit3ForImageClassification":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_image_classification()[1]
             if return_labels:
                 inputs_dict_to_return["labels"] = torch.zeros(
@@ -349,16 +349,16 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict_to_return["input_ids"]
             del inputs_dict_to_return["padding_mask"]
             return inputs_dict_to_return
-        elif model_class.__name__ == "BEiT3ForImageTextRetrieval":
+        elif model_class.__name__ == "Beit3ForImageTextRetrieval":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
-        elif model_class.__name__ == "BEiT3ForVisualQuestionAnswering":
+        elif model_class.__name__ == "Beit3ForVisualQuestionAnswering":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
             inputs_dict_to_return["labels"] = torch.ones(
                 (self.model_tester.batch_size, self.model_tester.num_labels),
                 dtype=torch.float,
                 device=torch_device,
             )
-        elif model_class.__name__ == "BEiT3ForCaptioning":
+        elif model_class.__name__ == "Beit3ForCaptioning":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
         inputs_dict_to_return.update(inputs_dict)
         return inputs_dict_to_return
@@ -375,7 +375,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             signature = inspect.signature(model.forward)
             arg_names = [*signature.parameters.keys()]
 
-            if model_class.__name__ == "BEiT3ForImageClassification":
+            if model_class.__name__ == "Beit3ForImageClassification":
                 # signature.parameters is an OrderedDict => so arg_names order is deterministic
 
                 expected_arg_names = ["pixel_values"]
@@ -386,7 +386,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class.__name__ == "BEiT3ForImageTextRetrieval":
+            if model_class.__name__ == "Beit3ForImageTextRetrieval":
                 return
             model = model_class(config)
             model.to(torch_device)
@@ -409,7 +409,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             else:
                 seq_length = self.model_tester.seq_length
             total_seq_length = ((self.model_tester.img_size // self.model_tester.patch_size) ** 2) + 1
-            if model_class.__name__ != "BEiT3ForImageClassification":
+            if model_class.__name__ != "Beit3ForImageClassification":
                 total_seq_length = total_seq_length + seq_length
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
