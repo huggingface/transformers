@@ -18,8 +18,8 @@ import importlib.util
 import json
 import os
 import time
-from typing import Dict
 from dataclasses import dataclass
+from typing import Dict
 
 import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
@@ -222,7 +222,7 @@ class Agent:
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
-        """ Get all tool currently available to the agent """
+        """Get all tool currently available to the agent"""
         return self._toolbox
 
     def format_prompt(self, task, chat_mode=False):
