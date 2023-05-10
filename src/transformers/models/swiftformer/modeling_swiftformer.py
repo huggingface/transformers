@@ -45,11 +45,11 @@ _CONFIG_FOR_DOC = "SwiftFormerConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "MBZUAI/swiftformer-xs"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 220, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
