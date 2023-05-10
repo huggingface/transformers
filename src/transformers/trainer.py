@@ -3105,6 +3105,7 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
             model = self.accelerator.prepare(self.model)
             self.model_wrapped = model
 
@@ -3694,6 +3695,7 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if self.is_deepspeed_enabled and self.model_wrapped is self.model:
+            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
             model = self.accelerator.prepare(self.model)
             self.model_wrapped = model
 
