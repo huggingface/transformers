@@ -237,7 +237,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 
 ### Docuement Question answering
 
-Document Question Answering is a task that answers natural language questions from a document. Unlike token-level question answering task which takes text as input, document question answering takes an image of a document as input along with a question about the document and returns an answer. Document Question Answering can be used to parse structured documents and extract key information from documents. For example total amount and change amount can be extracted from a receipt.
+Document Question answering is a task that answers natural language questions from a document. Unlike token-level question answering task which takes text as input, document question answering takes an image of a document as input along with a question about the document and returns an answer. Document Question answering can be used to parse structured documents and extract key information from documents. For example total amount and change amount can be extracted from a receipt.
 
 ```py
 >>> from transformers import pipeline
@@ -250,7 +250,7 @@ Document Question Answering is a task that answers natural language questions fr
 >>> doc_question_answerer = pipeline("document-question-answering", model="naver-clova-ix/donut-base-finetuned-docvqa")
 >>> preds = doc_question_answerer(
 ...     question="What is the total amount?",
-...     image=image
+...     image=image,
 ... )
 >>> preds
 [{'answer': '17,000'}]
