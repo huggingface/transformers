@@ -310,6 +310,7 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-xdist",
+        "timeout-decorator",
         "parameterized",
         "psutil",
         "datasets",
