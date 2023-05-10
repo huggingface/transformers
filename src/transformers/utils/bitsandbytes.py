@@ -158,7 +158,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                                 module.out_features,
                                 module.bias is not None,
                                 quantization_config.fp4_compute_dtype,
-                                compress_statistics=quantization_config.bnb_4bit_compress_statistics,
+                                compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type
                             )
                     # Force requires grad to False to avoid unexpected errors
