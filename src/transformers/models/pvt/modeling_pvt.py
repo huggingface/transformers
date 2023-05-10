@@ -306,7 +306,7 @@ class PvtFFN(nn.Module):
         out_features: Optional[int] = None,
     ):
         super().__init__()
-        out_features = out_features or in_features
+        out_features = out_features if out_features is not None else in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
