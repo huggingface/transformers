@@ -102,7 +102,7 @@
     - local: community
       title: Community resources
     - local: custom_tools
-      title: Custom Tools
+      title: Custom Tools and Prompts
     - local: troubleshooting
       title: Troubleshoot
   title: Developer guides
