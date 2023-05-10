@@ -1121,7 +1121,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dummy_inputs = {}
 
         serving_sig = self.get_serving_input_signature()
-        breakpoint()
         if self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 2:
             dummy_inputs["input_ids"] = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         elif self.main_input_name == "input_ids" and serving_sig[0]["input_ids"].shape.rank == 3:
