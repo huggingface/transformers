@@ -1025,7 +1025,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generation_config.__setattr__("lang_to_id", {language: lang_id})
         model.generation_config.__setattr__("task_to_id", {task: task_id})
 
-        output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
+        output = model.generate(input_features, max_new_tokens=5, task=task, language=language, prompt_ids=prompt_ids)
 
         expected_output_start = [
             *prompt_ids.tolist(),
@@ -1042,7 +1042,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         prompt_ids = np.asarray(range(5))
         forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
 
-        output = model.generate(input_features, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids)
+        output = model.generate(
+            input_features, max_new_tokens=5, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids
+        )
 
         expected_output_start = [
             *prompt_ids.tolist(),

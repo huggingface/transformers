@@ -491,6 +491,21 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             time_precision=time_precision,
         )
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_prompt_ids
+    def get_prompt_ids(self, text: str, return_tensors="np"):
+        """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
+        batch_encoding = self("<|startofprev|>", text.strip(), add_prefix_space=True, add_special_tokens=False)
+
+        # Check for special tokens
+        prompt_text_ids = batch_encoding["input_ids"][1:]
+        special_token_id = next((x for x in prompt_text_ids if x >= self.all_special_ids[0]), None)
+        if special_token_id is not None:
+            token = self.convert_ids_to_tokens(special_token_id)
+            raise ValueError(f"Encountered text in the prompt corresponding to disallowed special token: {token}.")
+
+        batch_encoding.convert_to_tensors(tensor_type=return_tensors)
+        return batch_encoding["input_ids"]
+
     @staticmethod
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
     def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
