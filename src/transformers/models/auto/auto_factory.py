@@ -516,7 +516,7 @@ class _BaseAutoModelClass:
 
 
 class _BaseAutoBackboneClass(_BaseAutoModelClass):
-    # Base class for auto models.
+    # Base class for auto backbone models.
     _model_mapping = None
 
     @classmethod
