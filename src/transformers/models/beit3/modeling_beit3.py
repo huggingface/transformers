@@ -387,16 +387,11 @@ class Beit3MultiheadAttention(nn.Module):
     ):
         batch_size, target_length, embed_dim = query.size()
 
-        key_bsz, src_len, _ = key.size()
+        key_batch_size, src_len, _ = key.size()
 
-        query = self.query_proj(query)
-        key = self.key_proj(key)
-        value = self.value_proj(value)
-        query *= self.scaling
-
-        query = query.view(batch_size, target_length, self.num_heads, self.head_dim).transpose(1, 2)
-        key = key.view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value = value.view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query = (self.query_proj(query) * self.scaling).view(batch_size, target_length, self.num_heads, self.head_dim).transpose(1, 2)
+        key = self.key_proj(key).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = self.value_proj(value).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
         query = query.reshape(batch_size * self.num_heads, target_length, self.head_dim)
         key = key.reshape(batch_size * self.num_heads, src_len, self.head_dim)
         value = value.reshape(batch_size * self.num_heads, src_len, self.head_dim)
@@ -743,7 +738,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         return_dict=None,
         labels=None,
     ):
-        bsz = input_ids.size()[0]
+        batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_input = torch.cat((pixel_values1, pixel_values2), dim=0)
@@ -761,7 +756,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         vision_cls = x[:, 0, :]
         language_cls = x[:, multiway_split_position, :]
         cls_rep = torch.cat((vision_cls, language_cls), dim=-1)
-        a, b = torch.split(cls_rep, split_size_or_sections=[bsz, bsz], dim=0)
+        a, b = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
         cls_rep = torch.cat((a, b), dim=-1)
 
         logits = self.head(cls_rep)

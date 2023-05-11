@@ -100,13 +100,6 @@ class Beit3Processor(ProcessorMixin):
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
-    def post_process(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to [`Beit3ImageProcessor.post_process`]. Please refer to the docstring
-        of this method for more information.
-        """
-        return self.image_processor.post_process(*args, **kwargs)
-
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to XLMRobertaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`].
