@@ -473,8 +473,10 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.5798), atol=2e-4))
+        self.assertTrue(torch.allclose(masks, torch.tensor([-6.6381, -6.0734, -7.5308]).to(torch_device), atol=2e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-huge")
@@ -494,8 +496,12 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9935), atol=2e-4))
+        self.assertTrue(
+            torch.allclose(masks, torch.tensor([-21.5465, -23.1122, -22.3331]).to(torch_device), atol=2e-4)
+        )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = SamModel.from_pretrained("facebook/sam-vit-huge")
@@ -517,6 +523,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
 
         EXPECTED_SCORES = torch.tensor(
             [
@@ -534,7 +541,9 @@ class SamModelIntegrationTest(unittest.TestCase):
                 ],
             ]
         )
+        EXPECTED_MASKS = torch.tensor([-26.5424, -34.0901, -30.6406])
         self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
+        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=1e-3))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamModel.from_pretrained("facebook/sam-vit-huge")

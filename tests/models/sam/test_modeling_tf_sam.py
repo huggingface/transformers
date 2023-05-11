@@ -438,7 +438,10 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
-        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.5798), atol=1e-4))
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+
+        self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.5798), atol=2e-4))
+        self.assertTrue(np.allclose(masks.numpy(), np.array([-6.6381, -6.0734, -7.5308]), atol=1e-2))
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
@@ -452,8 +455,10 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        self.assertTrue(np.allclose(scores[-1], np.array(0.9935), atol=1e-4))
+        self.assertTrue(np.allclose(scores[-1], np.array(0.9935), atol=2e-4))
+        self.assertTrue(np.allclose(masks.numpy(), np.array([-21.5465, -23.1122, -22.3331]), atol=2e-2))
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
@@ -469,6 +474,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
         EXPECTED_SCORES = np.array(
             [
@@ -486,7 +492,9 @@ class SamModelIntegrationTest(unittest.TestCase):
                 ],
             ]
         )
+        EXPECTED_MASKS = np.array([-26.5424, -34.0901, -30.6406])
         self.assertTrue(np.allclose(scores.numpy(), EXPECTED_SCORES, atol=1e-3))
+        self.assertTrue(np.allclose(masks.numpy(), EXPECTED_MASKS, atol=3e-2))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)

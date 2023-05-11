@@ -527,8 +527,8 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
 
-        image_embeddings = tf.reshape(image_embeddings, [batch_size * point_batch_size, num_channels, height, width])
         image_embeddings = tf.transpose(image_embeddings, perm=(0, 1, 3, 2))
+        image_embeddings = tf.reshape(image_embeddings, [batch_size * point_batch_size, num_channels, height, width])
 
         upscaled_embedding = self.upscale_conv1(image_embeddings)
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
