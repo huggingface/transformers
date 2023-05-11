@@ -247,3 +247,27 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_integration(self):
+        # fmt: off
+        expected = np.array([
+            -1.5745, -1.7713, -1.7020, -1.6069, -1.2250, -1.1105, -0.9072, -0.8241,
+            -1.2310, -0.8098, -0.3320, -0.4101, -0.7985, -0.4996, -0.8213, -0.9128,
+            -1.0420, -1.1286, -1.0440, -0.7999, -0.8405, -1.2275, -1.5443, -1.4625,
+        ])
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        self.assertEquals(input_features.shape, (1, 584, 24))
+        self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))
