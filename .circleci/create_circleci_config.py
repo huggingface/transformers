@@ -455,9 +455,14 @@ doc_test_job = CircleCIJob(
             "command": command,
         },
         {
-            "name": "List files beings changed: pr_documentation_tests.txt",
+            "name": "Show information in `Get files to test`",
             "command":
                 "cat pr_documentation_tests.txt"
+        },
+        {
+            "name": "Get the last line in `pr_documentation_tests.txt`",
+            "command":
+                "tail -n1 pr_documentation_tests.txt | tee pr_documentation_tests.txt"
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
