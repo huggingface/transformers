@@ -126,8 +126,8 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
         self.assertEqual(len(timm_model.stage_names), len(transformers_model.stage_names))
         self.assertEqual(timm_model.channels, transformers_model.channels)
 
-        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True, out_indices=(1, 2, 3))
-        transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint, out_indices=(1, 2, 3))
+        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True, out_indices=[1, 2, 3])
+        transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint, out_indices=[1, 2, 3])
 
         self.assertEqual(timm_model.out_indices, transformers_model.out_indices)
         self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))

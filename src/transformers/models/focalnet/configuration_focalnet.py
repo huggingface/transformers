@@ -26,7 +26,7 @@ FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class FocalNetConfig(PretrainedConfig, BackboneConfigMixin):
+class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a
     FocalNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
