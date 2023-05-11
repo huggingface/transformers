@@ -389,7 +389,11 @@ class Beit3MultiheadAttention(nn.Module):
 
         key_batch_size, src_len, _ = key.size()
 
-        query = (self.query_proj(query) * self.scaling).view(batch_size, target_length, self.num_heads, self.head_dim).transpose(1, 2)
+        query = (
+            (self.query_proj(query) * self.scaling)
+            .view(batch_size, target_length, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+        )
         key = self.key_proj(key).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
         value = self.value_proj(value).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
         query = query.reshape(batch_size * self.num_heads, target_length, self.head_dim)
