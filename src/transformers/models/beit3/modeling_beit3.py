@@ -239,7 +239,6 @@ class Beit3PreTrainedModel(PreTrainedModel):
             self.ffn_layernorm.reset_parameters()
 
 
-
 class Beit3MultiwayNetwork(nn.Module):
     def __init__(self, module, dim=1):
         super().__init__()
