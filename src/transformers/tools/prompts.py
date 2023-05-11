@@ -172,7 +172,7 @@ Human: It worked! Can you translate the summary in German?
 Assistant: I will use the tool `translator` to translate the text in German.
 
 ```py
-translated_summary = translator(summarized_text, src_lang="English", tgt_lang="German)
+translated_summary = translator(summarized_text, src_lang="English", tgt_lang="German")
 ```
 
 ====
