@@ -70,11 +70,9 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _bs4_available = _is_package_available("bs4")
-_coloredlogs_available = _is_package_available("coloredlogs")
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
-_diffusers_available = _is_package_available("diffusers")
 _faiss_available = _is_package_available("faiss") or _is_package_available("faiss-cpu")
 _ftfy_available = _is_package_available("ftfy")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
@@ -86,7 +84,6 @@ _natten_available = _is_package_available("natten")
 _ninja_available = _is_package_available("ninja")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
-_opencv_available = importlib.util.find_spec("cv2") is not None
 _optimum_available = _is_package_available("optimum")
 _optimumneuron_available = _optimum_available and _is_package_available("optimum.neuron")
 _pandas_available = _is_package_available("pandas")
@@ -112,7 +109,6 @@ _smdistributed_available = _is_package_available("smdistributed")
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
 _sudachipy_available = _is_package_available("sudachipy")
-_sympy_available = _is_package_available("sympy")
 _tensorflow_probability_available = _is_package_available("tensorflow_probability")
 _tensorflow_text_available = _is_package_available("tensorflow_text")
 _tf2onnx_available = _is_package_available("tf2onnx")
@@ -333,10 +329,6 @@ def is_tf_available():
     return _tf_available
 
 
-def is_coloredlogs_available():
-    return _coloredlogs_available
-
-
 def is_tf2onnx_available():
     return _tf2onnx_available
 
@@ -347,10 +339,6 @@ def is_onnx_available():
 
 def is_openai_available():
     return _openai_available
-
-
-def is_opencv_available():
-    return _opencv_available
 
 
 def is_flax_available():
@@ -662,10 +650,6 @@ def is_ccl_available():
 
 def is_decord_available():
     return _decord_available
-
-
-def is_diffusers_available():
-    return _diffusers_available
 
 
 def is_sudachi_available():
