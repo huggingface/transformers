@@ -70,6 +70,7 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _bs4_available = _is_package_available("bs4")
+_coloredlogs_available = _is_package_available("coloredlogs")
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
@@ -327,6 +328,10 @@ def is_bs4_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_coloredlogs_available():
+    return _coloredlogs_available
 
 
 def is_tf2onnx_available():
