@@ -32,7 +32,7 @@ class Beit3Config(PretrainedConfig):
     architecture.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 8092):
+        vocab_size (`int`, *optional*, defaults to 64010):
             Vocabulary size of the BEiT3 model. Defines the number of different image tokens that can be used during
             pre-training.
         hidden_size (`int`, *optional*, defaults to 768):

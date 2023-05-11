@@ -667,7 +667,7 @@ class Beit3Model(Beit3PreTrainedModel):
 
     def forward(
         self,
-        textual_tokens=None,
+        token_ids=None,
         pixel_values=None,
         text_padding_position=None,
         attn_mask=None,
@@ -675,18 +675,18 @@ class Beit3Model(Beit3PreTrainedModel):
         incremental_state=None,
         positions=None,
     ):
-        if textual_tokens is None:
+        if token_ids is None:
             x = self.vision_embedding(pixel_values, vision_masked_position)
             encoder_padding_mask = None
             multiway_split_position = -1
         elif pixel_values is None:
-            x = self.text_embedding(textual_tokens)
+            x = self.text_embedding(token_ids)
             encoder_padding_mask = text_padding_position
             multiway_split_position = 0
         else:
             x1 = self.vision_embedding(pixel_values, vision_masked_position)
             multiway_split_position = x1.size(1)
-            x2 = self.text_embedding(textual_tokens)
+            x2 = self.text_embedding(token_ids)
             x = torch.cat([x1, x2], dim=1)
 
             if text_padding_position is not None:
