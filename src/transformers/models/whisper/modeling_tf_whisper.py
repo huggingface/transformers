@@ -1403,7 +1403,7 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         )
 
     @unpack_inputs
-    def forward(
+    def call(
         self,
         input_features: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,

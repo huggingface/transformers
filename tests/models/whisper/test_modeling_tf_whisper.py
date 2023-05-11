@@ -952,7 +952,7 @@ class TFWhisperEncoderModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -971,13 +971,18 @@ class TFWhisperEncoderModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            outputs = model(**inputs)[0]
+            
+            with tf.stop_gradient:
+                outputs = model(**inputs)[0]
+            
             input_ids = inputs["input_features"]
             del inputs["input_features"]
 
             encoder = model.encoder
-            inputs["encoder_outputs"] = encoder(input_ids)
-            outputs_embeds = model(**inputs)[0]
+            
+            with tf.stop_gradient:
+                inputs["encoder_outputs"] = encoder(input_ids)
+                outputs_embeds = model(**inputs)[0]
 
             self.assertTrue((outputs_embeds == outputs).all())
 
