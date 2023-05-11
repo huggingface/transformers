@@ -401,7 +401,7 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSamModel.from_pretrained(model_name, from_pt=True)
+            model = TFSamModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-4, name="outputs", attributes=None):
@@ -430,7 +430,7 @@ def prepare_dog_img():
 @slow
 class SamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -444,7 +444,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(masks.numpy(), np.array([-6.6381, -6.0734, -7.5308]), atol=1e-2))
 
     def test_inference_mask_generation_one_point_one_bb(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -461,7 +461,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(masks.numpy(), np.array([-21.5465, -23.1122, -22.3331]), atol=2e-2))
 
     def test_inference_mask_generation_batched_points_batched_images(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -497,7 +497,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(masks.numpy(), EXPECTED_MASKS, atol=3e-2))
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -519,7 +519,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9689), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -545,7 +545,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9712), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
         raw_image = prepare_image()
 
@@ -568,7 +568,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9936), atol=1e-4))
 
     def test_inference_mask_generation_two_points_batched(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -587,7 +587,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[1][-1], np.array(0.9716), atol=1e-4))
 
     def test_inference_mask_generation_one_box(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -602,7 +602,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.8686), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -624,7 +624,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores_batched[1, :].numpy(), scores_single.numpy(), atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
@@ -651,7 +651,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-huge", from_pt=True)
+        model = TFSamModel.from_pretrained("facebook/sam-vit-huge")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
         raw_image = prepare_image()
