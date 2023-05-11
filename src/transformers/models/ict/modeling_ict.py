@@ -418,112 +418,6 @@ class IctInpaintGenerator(nn.Module):
 
         return x
 
-
-class IctAdversarialLoss(nn.Module):
-    r"""
-    Adversarial loss https://arxiv.org/abs/1711.10337
-    """
-
-    def __init__(self, gan_loss_function="nsgan", target_real_label=1.0, target_fake_label=0.0):
-        r"""
-        gan_loss_function = nsgan | lsgan | hinge
-        """
-        super().__init__()
-
-        self.gan_loss_function = gan_loss_function
-        self.register_buffer("real_label", torch.tensor(target_real_label))
-        self.register_buffer("fake_label", torch.tensor(target_fake_label))
-
-        if gan_loss_function == "nsgan":
-            self.criterion = nn.BCELoss()
-
-        elif gan_loss_function == "lsgan":
-            self.criterion = nn.MSELoss()
-
-        elif gan_loss_function == "hinge":
-            self.criterion = nn.ReLU()
-
-    def __call__(self, outputs, is_real, is_discriminator=None):
-        if self.gan_loss_function == "hinge":
-            if is_discriminator:
-                if is_real:
-                    outputs = -outputs
-                return self.criterion(1 + outputs).mean()
-            else:
-                return (-outputs).mean()
-
-        else:
-            labels = (self.real_label if is_real else self.fake_label).expand_as(outputs)
-            loss = self.criterion(outputs, labels)
-            return loss
-
-
-class IctStyleLoss(nn.Module):
-    r"""
-    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
-    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.add_module("vgg", VGG19())
-        self.criterion = torch.nn.L1Loss()
-
-    def compute_gram_matrix(self, x):
-        batch_size, channels, height, width = x.size()
-        features = x.view(batch_size, channels, width * height)
-        gram = features.bmm(features.transpose(1, 2)) / (height * width * channels)
-
-        return gram
-
-    def __call__(self, x, y):
-        # Compute features
-        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
-
-        # Compute loss
-        style_loss = 0.0
-        style_loss += self.criterion(
-            self.compute_gram_matrix(x_vgg["relu2_2"]), self.compute_gram_matrix(y_vgg["relu2_2"])
-        )
-        style_loss += self.criterion(
-            self.compute_gram_matrix(x_vgg["relu3_4"]), self.compute_gram_matrix(y_vgg["relu3_4"])
-        )
-        style_loss += self.criterion(
-            self.compute_gram_matrix(x_vgg["relu4_4"]), self.compute_gram_matrix(y_vgg["relu4_4"])
-        )
-        style_loss += self.criterion(
-            self.compute_gram_matrix(x_vgg["relu5_2"]), self.compute_gram_matrix(y_vgg["relu5_2"])
-        )
-
-        return style_loss
-
-
-class IctPerceptualLoss(nn.Module):
-    r"""
-    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
-    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
-    """
-
-    def __init__(self, weights=None):
-        super().__init__()
-        self.add_module("vgg", VGG19())
-        self.criterion = torch.nn.L1Loss()
-        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
-
-    def __call__(self, x, y):
-        # Compute features
-        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
-
-        content_loss = 0.0
-        content_loss += self.weights[0] * self.criterion(x_vgg["relu1_1"], y_vgg["relu1_1"])
-        content_loss += self.weights[1] * self.criterion(x_vgg["relu2_1"], y_vgg["relu2_1"])
-        content_loss += self.weights[2] * self.criterion(x_vgg["relu3_1"], y_vgg["relu3_1"])
-        content_loss += self.weights[3] * self.criterion(x_vgg["relu4_1"], y_vgg["relu4_1"])
-        content_loss += self.weights[4] * self.criterion(x_vgg["relu5_1"], y_vgg["relu5_1"])
-
-        return content_loss
-
-
 class VGG19(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -642,6 +536,113 @@ class VGG19(torch.nn.Module):
             "relu5_4": relu5_4,
         }
         return out
+
+
+
+class IctAdversarialLoss(nn.Module):
+    r"""
+    Adversarial loss https://arxiv.org/abs/1711.10337
+    """
+
+    def __init__(self, gan_loss_function="nsgan", target_real_label=1.0, target_fake_label=0.0):
+        r"""
+        gan_loss_function = nsgan | lsgan | hinge
+        """
+        super().__init__()
+
+        self.gan_loss_function = gan_loss_function
+        self.register_buffer("real_label", torch.tensor(target_real_label))
+        self.register_buffer("fake_label", torch.tensor(target_fake_label))
+
+        if gan_loss_function == "nsgan":
+            self.criterion = nn.BCELoss()
+
+        elif gan_loss_function == "lsgan":
+            self.criterion = nn.MSELoss()
+
+        elif gan_loss_function == "hinge":
+            self.criterion = nn.ReLU()
+
+    def __call__(self, outputs, is_real, is_discriminator=None):
+        if self.gan_loss_function == "hinge":
+            if is_discriminator:
+                if is_real:
+                    outputs = -outputs
+                return self.criterion(1 + outputs).mean()
+            else:
+                return (-outputs).mean()
+
+        else:
+            labels = (self.real_label if is_real else self.fake_label).expand_as(outputs)
+            loss = self.criterion(outputs, labels)
+            return loss
+
+
+class IctStyleLoss(nn.Module):
+    r"""
+    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
+    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.add_module("vgg", VGG19())
+        self.criterion = torch.nn.L1Loss()
+
+    def compute_gram_matrix(self, x):
+        batch_size, channels, height, width = x.size()
+        features = x.view(batch_size, channels, width * height)
+        gram = features.bmm(features.transpose(1, 2)) / (height * width * channels)
+
+        return gram
+
+    def __call__(self, x, y):
+        # Compute features
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+
+        # Compute loss
+        style_loss = 0.0
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu2_2"]), self.compute_gram_matrix(y_vgg["relu2_2"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu3_4"]), self.compute_gram_matrix(y_vgg["relu3_4"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu4_4"]), self.compute_gram_matrix(y_vgg["relu4_4"])
+        )
+        style_loss += self.criterion(
+            self.compute_gram_matrix(x_vgg["relu5_2"]), self.compute_gram_matrix(y_vgg["relu5_2"])
+        )
+
+        return style_loss
+
+
+class IctPerceptualLoss(nn.Module):
+    r"""
+    Perceptual loss, VGG-based https://arxiv.org/abs/1603.08155
+    https://github.com/dxyang/StyleTransfer/blob/master/utils.py
+    """
+
+    def __init__(self, weights=None):
+        super().__init__()
+        self.add_module("vgg", VGG19())
+        self.criterion = torch.nn.L1Loss()
+        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
+
+    def __call__(self, x, y):
+        # Compute features
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+
+        content_loss = 0.0
+        content_loss += self.weights[0] * self.criterion(x_vgg["relu1_1"], y_vgg["relu1_1"])
+        content_loss += self.weights[1] * self.criterion(x_vgg["relu2_1"], y_vgg["relu2_1"])
+        content_loss += self.weights[2] * self.criterion(x_vgg["relu3_1"], y_vgg["relu3_1"])
+        content_loss += self.weights[3] * self.criterion(x_vgg["relu4_1"], y_vgg["relu4_1"])
+        content_loss += self.weights[4] * self.criterion(x_vgg["relu5_1"], y_vgg["relu5_1"])
+
+        return content_loss
+
 
 
 class IctGuidedUpsampler(IctPretrainedModel):
