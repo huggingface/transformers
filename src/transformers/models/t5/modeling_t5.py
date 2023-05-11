@@ -850,7 +850,8 @@ class T5PreTrainedModel(PreTrainedModel):
 
         if decoder_start_token_id is None:
             raise ValueError(
-                "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information."
+                "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+                "See T5 docs for more information."
             )
 
         # shift inputs to the right
@@ -993,7 +994,7 @@ class T5Stack(T5PreTrainedModel):
 
         if use_cache is True:
             if not self.is_decoder:
-                raise ValueError("You have to initialize the model with valid token embeddings")
+                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
