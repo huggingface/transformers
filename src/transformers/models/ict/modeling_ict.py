@@ -655,6 +655,7 @@ class IctGuidedUpsampler(IctPretrainedModel):
 
         self.post_init()
 
+    # copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/dataset_my.py#L203-L209
     def resize(self, img, target_height, target_width):
         img = img.cpu().detach().numpy()
         img_height, img_width = img.shape[0:2]
@@ -699,9 +700,11 @@ ICT_START_DOCSTRING = r"""
 
 ICT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, height * width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IctImageProcessor.__call__`]
             for details.
+        clusters (`np.ndarray`, of shape `(n_clusters, 3)`):
+            Clusters used to quantize the image of shape `(n_clusters, 3)` before being fed to Guided Upsampler. 
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
             masks if not provided.
@@ -726,7 +729,6 @@ class IctModel(IctPretrainedModel):
         self.config = config
         self.transformer = IctTransformerModel(config, use_mask_token=use_mask_token)
         self.guided_upsampler = IctGuidedUpsampler(config)
-        # self.clusters =
 
         # Initialize weights and apply final processing
         self.post_init()
