@@ -232,6 +232,13 @@ class Beit3PreTrainedModel(PreTrainedModel):
         if isinstance(module, Beit3Encoder):
             module.gradient_checkpointing = value
 
+    def reset_parameters(self):
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
+        if self.ffn_layernorm is not None:
+            self.ffn_layernorm.reset_parameters()
+
+
 
 class Beit3MultiwayNetwork(nn.Module):
     def __init__(self, module, dim=1):
@@ -256,13 +263,26 @@ class Beit3MultiwayNetwork(nn.Module):
         return torch.cat([y1, y2], dim=self.dim)
 
 
-class Beit3MutliwayEmbedding(Beit3MultiwayNetwork):
+class Beit3Embedder(nn.Module):
     def __init__(self, modules, dim=1):
-        super(Beit3MultiwayNetwork, self).__init__()
+        super().__init__()
         self.dim = dim
         self.first = modules[0]
         self.second = modules[1]
         self.split_position = -1
+
+    def forward(self, hidden_states, **kwargs):
+        if self.split_position == -1:
+            return self.first(hidden_states, **kwargs)
+        if self.split_position == 0:
+            return self.second(hidden_states, **kwargs)
+        text_hidden, image_hidden = torch.split(
+            hidden_states,
+            [self.split_position, hidden_states.size(self.dim) - self.split_position],
+            dim=self.dim,
+        )
+        y1, y2 = self.first(text_hidden, **kwargs), self.second(image_hidden, **kwargs)
+        return torch.cat([y1, y2], dim=self.dim)
 
 
 class Beit3VisionEmbedding(nn.Module):
@@ -324,9 +344,9 @@ class Beit3PositionalEmbedding(nn.Embedding):
         )
 
 
-class Beit3FeedForwardNetwork(nn.Module):
+class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.embed_dim = config.embed_dim
         self.activation_fn = get_activation(config.activation_fn)
         self.activation_dropout = torch.nn.Dropout(config.activation_dropout)
@@ -334,12 +354,6 @@ class Beit3FeedForwardNetwork(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
         self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.subln else None
-
-    def reset_parameters(self):
-        self.fc1.reset_parameters()
-        self.fc2.reset_parameters()
-        if self.ffn_layernorm is not None:
-            self.ffn_layernorm.reset_parameters()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         x_shape = hidden_states.shape
@@ -641,7 +655,7 @@ class Beit3Model(Beit3PreTrainedModel):
         super().__init__(config)
         self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
         self.vision_embedding = Beit3VisionEmbedding(config)
-        embed_positions = Beit3MutliwayEmbedding(
+        embed_positions = Beit3Embedder(
             modules=[
                 Beit3PositionalEmbedding(self.vision_embedding.num_position_embeddings() + 2, config.embed_dim),
                 Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim),
