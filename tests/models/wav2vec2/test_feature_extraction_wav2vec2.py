@@ -33,13 +33,11 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
         rng = global_rng
-
     values = []
     for batch_idx in range(shape[0]):
         values.append([])
         for _ in range(shape[1]):
             values[-1].append(rng.random() * scale)
-
     return values
 
 
@@ -95,7 +93,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class t(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
     def setUp(self):
@@ -118,6 +116,14 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
+        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
         encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
         encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
