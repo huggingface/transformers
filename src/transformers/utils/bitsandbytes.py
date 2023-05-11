@@ -157,7 +157,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
                                 module.in_features,
                                 module.out_features,
                                 module.bias is not None,
-                                quantization_config.fp4_compute_dtype,
+                                quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type
                             )

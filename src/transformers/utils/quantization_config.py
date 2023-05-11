@@ -17,6 +17,7 @@
 import copy
 import json
 import os
+import torch
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
@@ -64,7 +65,7 @@ class BitsAndBytesConfig:
         llm_int8_has_fp16_weight (`bool`, *optional*, defaults to `False`):
             This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
             have to be converted back and forth for the backward pass.
-        fp4_compute_dtype (`torch.dtype`, *optional*, defaults to `None`):
+        bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
             This sets the computational type which might be different than the input time. For example, inputs might
             be fp32, but computation can be set to bf16 for speedups.
         bnb_4bit_quant_type (`str`, {fp4, fn4}, defaults to `fp4`):
@@ -85,7 +86,7 @@ class BitsAndBytesConfig:
         bnb_kbit_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
         llm_int8_has_fp16_weight=False,
-        fp4_compute_dtype=None,
+        bnb_4bit_compute_dtype=torch.float32,
         bnb_4bit_quant_type='fp4',
         bnb_4bit_use_double_quant=False,
         **kwargs,
@@ -96,10 +97,12 @@ class BitsAndBytesConfig:
         self.bnb_kbit_skip_modules = bnb_kbit_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
-        self.fp4_compute_dtype = fp4_compute_dtype
+        self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
         self.bnb_4bit_quant_type = bnb_4bit_quant_type
         self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
 
+        if isinstance(self.bnb_4bit_compute_dtype, str):
+            self.bnb_4bit_compute_dtype = getattr(torch, self.bnb_4bit_compute_dtype)
 
         self.post_init()
 
@@ -119,8 +122,8 @@ class BitsAndBytesConfig:
         if not isinstance(self.llm_int8_has_fp16_weight, bool):
             raise ValueError("llm_int8_has_fp16_weight must be a boolean")
 
-        if self.fp4_compute_dtype is not None and not isinstance(self.fp4_compute_dtype, torch.dtype):
-            raise ValueError("fp4_compute_dtype must be torch.dtype")
+        if self.bnb_4bit_compute_dtype is not None and not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
+            raise ValueError("bnb_4bit_compute_dtype must be torch.dtype")
 
         if not isinstance(self.bnb_4bit_quant_type, str):
             raise ValueError("bnb_4bit_quant_type must be a string")
@@ -165,6 +168,8 @@ class BitsAndBytesConfig:
         Returns:
             [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
         """
+
+
         config = cls(**config_dict)
 
         to_remove = []
@@ -174,6 +179,7 @@ class BitsAndBytesConfig:
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
+
 
         if return_unused_kwargs:
             return config, kwargs
@@ -202,5 +208,8 @@ class BitsAndBytesConfig:
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
+
         output = copy.deepcopy(self.__dict__)
+        output['bnb_4bit_compute_dtype'] = str(output['bnb_4bit_compute_dtype']).split(".")[1]
+
         return output
