@@ -166,7 +166,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
         # Test 2-D numpy arrays are batched.
         speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+        np_speech_inputs = np.asarray(speech_inputs)
         encoded_sequences_1 = tokenizer(speech_inputs, return_tensors="np").input_values
         encoded_sequences_2 = tokenizer(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
