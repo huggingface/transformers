@@ -307,9 +307,12 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
-        is_batched = bool(
-            isinstance(speech, (list, tuple))
-            and (isinstance(speech[0], np.ndarray) or isinstance(speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1
+        if is_batched_numpy:
+            if len(speech.shape) > 2:
+                raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(speech, (list, tuple)) and (isinstance(speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
