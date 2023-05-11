@@ -65,7 +65,17 @@ We provide support for openAI models as well as opensource alternatives from Big
 models perform better (but require you to have an openAI API key, so cannot be used for free); Hugging Face is
 providing free access to endpoints for BigCode and OpenAssistant models.
 
-To use openAI models, you instantiate an [`OpenAiAgent`]:
+To start with, please install the `agents` extras in order to install all default dependencies.
+```bash
+pip install transformers[agents]
+```
+
+To use openAI models, you instantiate an [`OpenAiAgent`] after installing the `openai` dependency:
+
+```bash
+pip install openai
+```
+
 
 ```py
 from transformers import OpenAiAgent
