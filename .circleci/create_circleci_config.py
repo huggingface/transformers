@@ -432,10 +432,13 @@ repo_utils_job = CircleCIJob(
     tests_to_run="tests/repo_utils",
 )
 
-# At this moment, only the files that are in `utils/documentation_tests.txt` will be kept (together with a dummy file).
-py_command = 'import os; import json; fp = open("pr_documentation_tests.txt"); data_1 = fp.read().strip().split("\\n"); fp = open("utils/documentation_tests.txt"); data_2 = fp.read().strip().split("\\n"); to_test = [x for x in data_1 if x in set(data_2)] + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
+
+# We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
+# hangs forever during test collection while showing `collecting 0 items / 21 errors`. (To see this, we have to remove
+# the bash output redirection.)
+py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_doctest_files() + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
 py_command = f"$(python3 -c '{py_command}')"
-command = f'echo "{py_command}" > pr_documentation_tests_filtered.txt'
+command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
@@ -451,27 +454,20 @@ doc_test_job = CircleCIJob(
         "touch dummy.py",
         {
             "name": "Get files to test",
-            "command":
-                "git remote add upstream https://github.com/huggingface/transformers.git && git fetch upstream \n"
-                "git diff --name-only --relative --diff-filter=AMR refs/remotes/upstream/main...HEAD | grep -E '\.(py|mdx)$' | grep -Ev '^\..*|/\.' | grep -Ev '__' > pr_documentation_tests.txt"
+            "command": command,
         },
         {
-            "name": "List files beings changed: pr_documentation_tests.txt",
+            "name": "Show information in `Get files to test`",
             "command":
-                "cat pr_documentation_tests.txt"
+                "cat pr_documentation_tests_temp.txt"
         },
         {
-            "name": "Filter pr_documentation_tests.txt",
+            "name": "Get the last line in `pr_documentation_tests.txt`",
             "command":
-                command
-        },
-        {
-            "name": "List files beings tested: pr_documentation_tests_filtered.txt",
-            "command":
-                "cat pr_documentation_tests_filtered.txt"
+                "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
         },
     ],
-    tests_to_run="$(cat pr_documentation_tests_filtered.txt)",  # noqa
+    tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
     command_timeout=1200,  # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
