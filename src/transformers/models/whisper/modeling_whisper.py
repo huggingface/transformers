@@ -16,6 +16,7 @@
 
 import math
 import random
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -224,6 +225,75 @@ def _compute_mask_indices(
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
+
+
+def median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
+    """
+    Applies a median filter of width `filter_width` along the last dimension of the input.
+
+    The `inputs` tensor is assumed to be 3- or 4-dimensional.
+    """
+    if filter_width <= 0 or filter_width % 2 != 1:
+        raise ValueError("`filter_width` should be an odd number")
+
+    pad_width = filter_width // 2
+    if inputs.shape[-1] <= pad_width:
+        return inputs
+
+    # Pad the left and right edges.
+    inputs = nn.functional.pad(inputs, (pad_width, pad_width, 0, 0), mode="reflect")
+
+    # sort() is faster than torch.median (https://github.com/pytorch/pytorch/issues/51450)
+    result = inputs.unfold(-1, filter_width, 1).sort()[0][..., pad_width]
+    return result
+
+
+def dtw(x: np.ndarray):
+    """
+    Dynamic time warping. Used by word-level timestamps.
+    """
+    N, M = x.shape
+    cost = np.ones((N + 1, M + 1), dtype=np.float32) * np.inf
+    trace = -np.ones((N + 1, M + 1), dtype=np.float32)
+
+    cost[0, 0] = 0
+    for j in range(1, M + 1):
+        for i in range(1, N + 1):
+            c0 = cost[i - 1, j - 1]
+            c1 = cost[i - 1, j]
+            c2 = cost[i, j - 1]
+
+            if c0 < c1 and c0 < c2:
+                c, t = c0, 0
+            elif c1 < c0 and c1 < c2:
+                c, t = c1, 1
+            else:
+                c, t = c2, 2
+
+            cost[i, j] = x[i - 1, j - 1] + c
+            trace[i, j] = t
+
+    # backtrace
+    i = trace.shape[0] - 1
+    j = trace.shape[1] - 1
+    trace[0, :] = 2
+    trace[:, 0] = 1
+
+    result = []
+    while i > 0 or j > 0:
+        result.append((i - 1, j - 1))
+        if trace[i, j] == 0:
+            i -= 1
+            j -= 1
+        elif trace[i, j] == 1:
+            i -= 1
+        elif trace[i, j] == 2:
+            j -= 1
+        else:
+            raise ValueError("Unexpected trace[i, j]")
+
+    result = np.array(result)
+    return result[::-1, :].T
 
 
 class WhisperPositionalEmbedding(nn.Embedding):
@@ -1471,7 +1541,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
-        return_word_timestamps=None,
+        return_token_timestamps=None,
         **kwargs,
     ):
         """
@@ -1534,9 +1604,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
-            return_word_timestamps (`bool`, *optional*):
-                Whether to return word-level timestamps with the text. It is not necessary to enable
-                `return_timestamps` for this, but if you do, it organizes the word-level timestamps per chunk.
+            return_token_timestamps (`bool`, *optional*):
+                Whether to return token-level timestamps with the text. This can be used with or without the
+                `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
+                words.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1665,7 +1736,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
-        return super().generate(
+        if return_token_timestamps:
+            kwargs["output_attentions"] = True
+            kwargs["output_scores"] = True
+            kwargs["return_dict_in_generate"] = True
+
+        outputs = super().generate(
             inputs,
             generation_config,
             logits_processor,
@@ -1674,6 +1750,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             synced_gpus,
             **kwargs,
         )
+
+        if return_token_timestamps:
+            if getattr(generation_config, "task", None) == "translate":
+                warnings.warn("Word-level timestamps may not be reliable for task 'translate'.")
+
+            outputs = self._extract_token_timestamps(outputs)
+
+        return outputs
 
     def prepare_inputs_for_generation(
         self,
@@ -1696,13 +1780,76 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "decoder_attention_mask": None,
         }
 
-    #
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+    def _extract_token_timestamps(self, generate_outputs, time_precision=0.02):
+        """
+        Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
+        map each output token to a position in the input audio.
+
+        Returns:
+            Dictionary containing the following:
+            - **sequences**: tensors with the predicted token_ids
+            - **timestamps**: `(start time, end time)` tuple for each predicted token
+            - **probabilities**: tensor with the probability for each token in `sequences`
+        """
+        # Strip off the first token; we have no attentions or scores for this token.
+        predicted_ids = generate_outputs.sequences[:, 1:]
+
+        # Get the probability for each predicted token.
+        scores = torch.cat([x.unsqueeze(0) for x in generate_outputs.scores], dim=0)
+        scores = scores.permute([1, 0, 2])
+        probabilities = scores.softmax(dim=-1)
+        token_probs = torch.gather(probabilities, 2, predicted_ids.unsqueeze(2)).squeeze(2)
+
+        # There is no score for the first token, so set this to 1.0.
+        ones = torch.ones((predicted_ids.shape[0], 1))
+        token_probs = torch.cat([ones, token_probs], dim=-1)
+
+        # Create a list with `decoder_layers` elements, each a tensor of shape
+        # (batch size, attention_heads, output length, input length).
+        cross_attentions = []
+        for i in range(self.config.decoder_layers):
+            cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
+
+        # Select specific cross-attention layers and heads. This is a tensor
+        # of shape (batch size, num selected, output length, input length).
+        weights = torch.stack([cross_attentions[l][:, h] for l, h in self.config.alignment_heads])
+        weights = weights.permute([1, 0, 2, 3])
+
+        # Normalize and smoothen the weights.
+        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+        weights = (weights - mean) / std
+        weights = median_filter(weights, 7)
+
+        # Take the average of the different cross-attention heads.
+        matrix = weights.mean(dim=1)
+
+        # Perform dynamic time warping on each element of the batch.
+        timestamps = []
+        for b in range(matrix.shape[0]):
+            text_indices, time_indices = dtw(-matrix[b].double().cpu().numpy())
+
+            jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
+            jump_times = time_indices[jumps] * time_precision
+
+            start_times = jump_times[:-1]
+            end_times = jump_times[1:]
+
+            timings = list(zip(start_times, end_times))
+            timestamps.append([(0, 0)] + timings + [(None, None)])
+
+        result = {
+            "sequences": generate_outputs.sequences,
+            "timestamps": timestamps,
+            "probabilities": token_probs,
+        }
+        return result
 
 
 @add_start_docstrings(
