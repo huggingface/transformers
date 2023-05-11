@@ -45,6 +45,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel
 
     from transformers import (
+        AutoBackbone,
         AutoConfig,
         AutoModel,
         AutoModelForCausalLM,
@@ -66,11 +67,13 @@ if is_torch_available():
         FunnelModel,
         GPT2Config,
         GPT2LMHeadModel,
+        ResNetBackbone,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
         TapasConfig,
         TapasForQuestionAnswering,
+        TimmBackbone,
     )
     from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -223,6 +226,40 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForTokenClassification.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForTokenClassification)
+
+    @slow
+    def test_auto_backbone_timm_model_from_pretrained(self):
+        # Configs can't be loaded for timm models
+        model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True)
+        model, loading_info = AutoBackbone.from_pretrained(
+            "resnet18", use_timm_backbone=True, output_loading_info=True
+        )
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TimmBackbone)
+
+        # Check kwargs are correctly passed to the backbone
+        model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_indices=(-1, -2))
+        self.assertEqual(model.out_indices, (-1, -2))
+
+        # Check out_features cannot be passed to Timm backbones
+        with self.assertRaises(ValueError):
+            _ = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_features=["stage1"])
+
+    @slow
+    def test_auto_backbone_from_pretrained(self):
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18")
+        model, loading_info = AutoBackbone.from_pretrained("microsoft/resnet-18", output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, ResNetBackbone)
+
+        # Check kwargs are correctly passed to the backbone
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_indices=(-1, -2))
+        self.assertEqual(model.out_indices, (-1, -2))
+        self.assertEqual(model.out_features, ["stage3", "stage4"])
+
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_features=["stage2", "stage4"])
+        self.assertEqual(model.out_indices, (2, 4))
+        self.assertEqual(model.out_features, ["stage3", "stage4"])
 
     def test_from_pretrained_identifier(self):
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
