@@ -1515,7 +1515,9 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
     gradient_checkpointing: bool = False
 
     def setup(self) -> None:
-        self.encoder = FlaxWhisperEncoder(config=self.config, dtype=self.dtype)
+        self.encoder = FlaxWhisperEncoder(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.config.is_encoder_decoder = False
         num_layers = self.config.num_hidden_layers + 1
         if self.config.use_weighted_layer_sum:
