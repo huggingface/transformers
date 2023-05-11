@@ -22,7 +22,7 @@ import numpy as np
 
 from transformers import VisualBertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.testing_utils import require_torch, torch_device
 
@@ -176,7 +176,7 @@ class Beit3ModelTester:
         to_fill = list(range(0, self.seq_length, 3))
         language_masked_pos[:, to_fill] = 1
         config = self.get_config()
-        label = torch.tensor([20, 5, 2])
+        torch.tensor([20, 5, 2])
         return config, {}
 
     def prepare_config_and_inputs_for_visual_question_answering(self):
@@ -490,7 +490,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    elif isinstance(tuple_object,int):
+                    elif isinstance(tuple_object, int):
                         return self.assertTrue(tuple_object == dict_object)
                     else:
                         self.assertTrue(
