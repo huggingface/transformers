@@ -629,6 +629,8 @@ def _load_state_dict_into_meta_model(
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
 
+    if (load_in_4bit == True and load_in_8bit == True):
+        raise ValueError('You cannot set load_in_4bit=True and load_in_8bit=True at the same time! Choose one option.')
     if load_in_8bit or load_in_4bit:
         from .utils.bitsandbytes import set_module_kbit_tensor_to_device
 
@@ -1697,12 +1699,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_kbit", False) and getattr(self, "is_8bit_serializable", False):
+        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
                 " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
                 UserWarning,
             )
+
+        if getattr(self, "is_loaded_in_4bit", False):
+            warnings.warn(
+                "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
+                UserWarning,
+            )
+            raise NotImplementedError("You are calling `save_pretrained` on a 4-bit converted model. \
+                                      This is currently not supported")
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -1882,7 +1893,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.to` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.to` is not supported for `k-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
@@ -1892,7 +1903,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.half()` is not supported for `k-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -1902,7 +1913,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_kbit", False):
             raise ValueError(
-                "`.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.float()` is not supported for `k-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -2794,6 +2805,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
+        model.is_loaded_in_4bit = load_in_4bit
+        model.is_loaded_in_8bit = load_in_8bit
         model.is_loaded_in_kbit = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
