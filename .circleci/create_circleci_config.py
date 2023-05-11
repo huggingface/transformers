@@ -436,7 +436,7 @@ repo_utils_job = CircleCIJob(
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure.
 py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_doctest_files() + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
 py_command = f"$(python3 -c '{py_command}')"
-command = f'echo "{py_command}" > pr_documentation_tests.txt'
+command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
@@ -457,12 +457,12 @@ doc_test_job = CircleCIJob(
         {
             "name": "Show information in `Get files to test`",
             "command":
-                "cat pr_documentation_tests.txt"
+                "cat pr_documentation_tests_temp.txt"
         },
         {
             "name": "Get the last line in `pr_documentation_tests.txt`",
             "command":
-                "tail -n1 pr_documentation_tests.txt | tee pr_documentation_tests.txt"
+                "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
