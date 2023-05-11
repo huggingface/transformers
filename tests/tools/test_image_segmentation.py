@@ -44,10 +44,10 @@ class ImageSegmentationToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_kwarg(self):
         image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
-        result = self.tool(image=image, prompt="cat")
+        result = self.tool(image=image, label="cat")
         self.assertTrue(isinstance(result, Image.Image))
 
     def test_exact_match_kwarg_remote(self):
         image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
-        result = self.remote_tool(image=image, prompt="cat")
+        result = self.remote_tool(image=image, label="cat")
         self.assertTrue(isinstance(result, Image.Image))
