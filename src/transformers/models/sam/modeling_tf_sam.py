@@ -900,7 +900,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         attn = tf.reshape(attn, (batch_size, query_height * query_width, key_height * key_width))
         return attn
 
-    def call(self, hidden_states: tf.Tensor, output_attentions=False) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, output_attentions=False, training=False) -> tf.Tensor:
         batch_size, height, width, _ = shape_list(hidden_states)
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = tf.reshape(self.qkv(hidden_states), (batch_size, height * width, 3, self.num_attention_heads, -1))
@@ -918,8 +918,10 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
-        # attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
-        attn_probs = attn_weights
+        if training:
+            attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout)
+        else:
+            attn_probs = attn_weights
 
         attn_output = tf.reshape(attn_probs @ value, (batch_size, self.num_attention_heads, height, width, -1))
         attn_output = tf.transpose(attn_output, perm=(0, 2, 3, 1, 4))
@@ -983,6 +985,7 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         output_attentions: Optional[bool] = False,
+        training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor]:
         residual = hidden_states
 
@@ -994,6 +997,7 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
         hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
             output_attentions=output_attentions,
+            training=training,
         )
         if self.window_size > 0:
             hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
@@ -1086,6 +1090,7 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
     ) -> Union[Tuple, TFSamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1107,7 +1112,7 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions, training=training)
 
             hidden_states = layer_outputs[0]
 
@@ -1367,6 +1372,7 @@ class TFSamModel(TFSamPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict=None,
+        training=False,
         **kwargs,
     ) -> List[Dict[str, tf.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1425,6 +1431,7 @@ class TFSamModel(TFSamPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
+                training=training,
             )
             image_embeddings = vision_outputs["last_hidden_state"]
 
