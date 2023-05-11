@@ -102,7 +102,7 @@ class IctImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_color_quantize = do_color_quantize
-        self.clusters = clusters
+        self.clusters = np.array(clusters)
 
     def resize(
         self,
@@ -314,7 +314,6 @@ class IctImageProcessor(BaseImageProcessor):
         if do_color_quantize:
             images = [to_channel_dimension_format(image, ChannelDimension.FIRST) for image in images]
             # flatten images to (batch_size, height * width)
-            clusters = np.array(clusters)
             images = [self.color_quantize(image=image, clusters=clusters) for image in images]
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]

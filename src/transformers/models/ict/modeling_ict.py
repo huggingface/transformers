@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 import torchvision.models as models
+import torchvision.transforms.functional as F
 from PIL import Image
 from torch import nn
 
@@ -245,7 +246,7 @@ class IctEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-            
+
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
@@ -269,7 +270,9 @@ class IctPretrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm, nn.Conv2d, nn.ConvTranspose2d]) -> None:
+    def _init_weights(
+        self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm, nn.Conv2d, nn.ConvTranspose2d]
+    ) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data = nn.init.normal_(
@@ -299,7 +302,7 @@ class IctTransformerModel(IctPretrainedModel):
         self.encoder = IctEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False) 
+        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -345,7 +348,7 @@ class IctTransformerModel(IctPretrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.head(sequence_output)  
+        pooled_output = self.head(sequence_output)  # logits
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -538,7 +541,6 @@ class VGG19(torch.nn.Module):
         return out
 
 
-
 class IctAdversarialLoss(nn.Module):
     r"""
     Adversarial loss https://arxiv.org/abs/1711.10337
@@ -644,7 +646,6 @@ class IctPerceptualLoss(nn.Module):
         return content_loss
 
 
-
 class IctGuidedUpsampler(IctPretrainedModel):
     def __init__(self, config: IctConfig):
         super().__init__(config)
@@ -655,7 +656,8 @@ class IctGuidedUpsampler(IctPretrainedModel):
 
         self.post_init()
 
-    # copied from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/dataset_my.py#L203-L209
+    # modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/dataset_my.py#L203-L209
+    # and https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/dataset_my.py#L183-L186
     def resize(self, img, target_height, target_width):
         img = img.cpu().detach().numpy()
         img_height, img_width = img.shape[0:2]
@@ -668,11 +670,14 @@ class IctGuidedUpsampler(IctPretrainedModel):
             img = img[j : j + side, i : i + side, ...]
         img = img.astype(np.uint8)
         np_img = Image.fromarray(img)
-        img = np.array(np_img.resize((target_height, target_width), resample=Image.BICUBIC))
-        return torch.from_numpy(img)
+        resized_np_img = np_img.resize((target_height, target_width), resample=Image.BICUBIC)
 
+        return F.to_tensor(resized_np_img).float()
+
+    # modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Guided_Upsample/src/models.py#L165-L183
     def forward(self, images, edges, masks):
         images = torch.stack([self.resize(image, self.output_height, self.output_width) for image in images])
+        masks = torch.stack([self.resize(mask, self.output_height, self.output_width) for mask in masks])
         edges = torch.stack([self.resize(edge, self.output_height, self.output_width) for edge in edges])
         masks = torch.stack([self.resize(mask, self.output_height, self.output_width) for mask in masks]).unsqueeze(-1)
         images_masked = (images * (1 - masks).float()) + masks
@@ -704,7 +709,7 @@ ICT_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IctImageProcessor.__call__`]
             for details.
         clusters (`np.ndarray`, of shape `(n_clusters, 3)`):
-            Clusters used to quantize the image of shape `(n_clusters, 3)` before being fed to Guided Upsampler. 
+            Clusters used to quantize the image of shape `(n_clusters, 3)` before being fed to Guided Upsampler.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, height * width)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Generate random
             masks if not provided.
@@ -735,7 +740,7 @@ class IctModel(IctPretrainedModel):
 
     def get_input_embeddings(self):
         return self.transformer.embeddings.token_embedding
-    
+
     @add_start_docstrings_to_model_forward(ICT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -785,25 +790,25 @@ class IctModel(IctPretrainedModel):
         )
 
         sequence_output = outputs[0]
-
-        # TODO: Change back using clusters
-        # current_img= clusters[pixel_values[i]].view(opts.image_size, opts.image_size, 3).numpy().astype(np.uint8)
         batch_size, sequence_length, num_channels = sequence_output.shape
         height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(
-            batch_size, num_channels, height, width
-        )  
-        
+        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+
+        # modified from https://github.com/raywzy/ICT/blob/59dd12d374d47cdf0dce90923017ca3657e6aa0b/Transformer/inference.py#L107-L126
         clusters = np.rint(127.5 * (clusters + 1.0))
         clusters = torch.from_numpy(clusters)
-        recovered_pixel_values = torch.stack(
-            [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
-        )
+        recovered_pixel_values = [clusters[pixel_values[i]].view(height, width, 3) for i in range(batch_size)]
 
-        reshaped_bool_masked_pos = bool_masked_pos.reshape(-1, height, height)
+        # Handle without boolean mask
+        reshaped_bool_masked_pos = (
+            bool_masked_pos.reshape(-1, height, width)
+            if bool_masked_pos
+            else torch.full((1, height, width), 1)
+        )
         reconstructed_pixel_values = self.guided_upsampler(
             recovered_pixel_values, recovered_pixel_values, reshaped_bool_masked_pos
         )
+
         loss = None
         if bool_masked_pos is not None:
             size = math.floor(self.config.image_size**0.5)
