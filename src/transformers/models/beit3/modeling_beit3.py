@@ -1,7 +1,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -445,6 +445,32 @@ class Beit3MultiheadAttention(nn.Module):
         return attn, attn_weights
 
 
+@dataclass
+class Beit3ModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        encoder_out (`torch.Tensor` of shape `(1,)`):
+            Output of Encoder
+        encoder_embedding (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+            encoder embedding states
+        encoder_padding_mask (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+            Padding mask used in encoder
+        encoder_states (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+            Encoder hidden states
+        multiway_split_position (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+            Split position denoting the point of split between text and image
+    """
+
+    encoder_out: Optional[torch.Tensor] = None
+    encoder_embedding: Optional[torch.FloatTensor] = None
+    encoder_padding_mask: Optional[torch.FloatTensor] = None
+    encoder_states: List[Any] = None
+
+
 class Beit3EncoderLayer(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -597,19 +623,18 @@ class Beit3Encoder(nn.Module):
         if self.layer_norm is not None:
             x = self.layer_norm(x)
 
-        return {
-            "encoder_out": x,
-            "encoder_embedding": encoder_embedding,
-            "encoder_padding_mask": encoder_padding_mask,
-            "encoder_states": encoder_states,
-        }
+        return Beit3ModelOutput(
+            encoder_out=x,
+            encoder_embedding=encoder_embedding,
+            encoder_padding_mask=encoder_padding_mask,
+            encoder_states=encoder_states,
+        )
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """Beit3 is a multimodal foundation model, It achieves big convergence from bachbone architecture, pretraining task
+    and model scaling. The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
+    architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3Model(Beit3PreTrainedModel):
@@ -689,10 +714,10 @@ class Beit3Model(Beit3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Beit3 Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """Beit3ForVisualReasoning has a MLP head on top of Beit3Model. Beit3 is a multimodal foundation model, It achieves
+    big convergence from bachbone architecture, pretraining task and model scaling. The key idea in BEiT-3 is to model
+    images as another language. Beit3 uses multiway Transformers architecture which uses a shared self-attention
+    module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForVisualReasoning(Beit3PreTrainedModel):
@@ -730,8 +755,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             pixel_values=vision_input,
             text_padding_position=padding_mask,
         )
-        x = outputs["encoder_out"]
-        multiway_split_position = outputs["multiway_split_position"]
+        x = outputs.encoder_out
+        multiway_split_position = outputs.multiway_split_position
 
         vision_cls = x[:, 0, :]
         language_cls = x[:, multiway_split_position, :]
@@ -748,21 +773,21 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             loss = loss_fct(reshaped_logits, labels.view(-1))
 
         if not return_dict:
-            output = (reshaped_logits,) + (outputs["encoder_states"],) if output_hidden_states else (reshaped_logits,)
+            output = (reshaped_logits,) + (outputs.encoder_states,) if output_hidden_states else (reshaped_logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=reshaped_logits,
-            hidden_states=outputs["encoder_states"],
+            hidden_states=outputs.encoder_states,
         )
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """Beit3ForImageClassification has a Linear head on top of Beit3Model for classification. Beit3 is a multimodal
+    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
+    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
+    a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForImageClassification(Beit3PreTrainedModel):
@@ -788,7 +813,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.beit3(textual_tokens=None, pixel_values=pixel_values)
-        encoder_out = encoder_outputs["encoder_out"]
+        encoder_out = encoder_outputs.encoder_out
         t = encoder_out[:, 1:, :]
         logits = self.classifier(self.fc_norm(t.mean(1)))
         loss = None
@@ -815,21 +840,21 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
                 loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,)
-            output = (output + (encoder_outputs["encoder_states"],)) if output_hidden_states else output
+            output = (output + (encoder_outputs.encoder_states,)) if output_hidden_states else output
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
-            hidden_states=encoder_outputs["encoder_states"],
+            hidden_states=encoder_outputs.encoder_states,
         )
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """Beit3ForCaptioning has a Linear head on top of Beit3Model for Image captioning . Beit3 is a multimodal
+    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
+    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
+    a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForCaptioning(Beit3PreTrainedModel):
@@ -898,9 +923,9 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             positions=positions,
         )
         if pixel_values is not None:
-            text_feats = outputs["encoder_out"][:, image_len:]
+            text_feats = outputs.encoder_out[:, image_len:]
         else:
-            text_feats = outputs["encoder_out"]
+            text_feats = outputs.encoder_out
 
         if language_masked_pos is not None:
             text_feats = text_feats[language_masked_pos.bool()]
@@ -919,13 +944,13 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
         if not return_dict:
             output = (logits,)
-            output = output + (outputs["encoder_states"],) if output_hidden_states else output
+            output = output + (outputs.encoder_states,) if output_hidden_states else output
             return ((loss.mean(),) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss.mean(),
             logits=logits,
-            hidden_states=outputs["encoder_states"],
+            hidden_states=outputs.encoder_states,
         )
 
 
@@ -945,10 +970,11 @@ class Pooler(nn.Module):
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """Beit3ForVisualQuestionAnswering has a Linear head on top of Beit3Model for visual question answering . Beit3 is a
+multimodal
+    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
+    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
+    a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
@@ -989,7 +1015,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        x = encoder_outputs["encoder_out"]
+        x = encoder_outputs.encoder_out
         cls_rep = self.pooler(x)
         logits = self.classifier(cls_rep)
         reshaped_logits = logits.view(-1, self.num_labels)
@@ -1002,16 +1028,14 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
             output = (
-                (reshaped_logits,) + (encoder_outputs["encoder_states"],)
-                if output_hidden_states
-                else (reshaped_logits,)
+                (reshaped_logits,) + (encoder_outputs.encoder_states,) if output_hidden_states else (reshaped_logits,)
             )
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=reshaped_logits,
-            hidden_states=encoder_outputs["encoder_states"],
+            hidden_states=encoder_outputs.encoder_states,
         )
 
 
@@ -1080,7 +1104,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_out = outputs["encoder_out"]
+        vision_out = outputs.encoder_out
         vision_cls = self.vision_head(vision_out[:, 0, :])
         vision_cls = F.normalize(vision_cls, dim=-1)
 
@@ -1089,7 +1113,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             pixel_values=None,
             text_padding_position=padding_mask,
         )
-        text_out = outputs["encoder_out"]
+        text_out = outputs.encoder_out
         text_cls = self.language_head(text_out[:, 0, :])
         text_cls = F.normalize(text_cls, dim=-1)
 
