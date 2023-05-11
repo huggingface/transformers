@@ -16,10 +16,13 @@
 
 import inspect
 import unittest
+from typing import Dict, List, Tuple
 
 import numpy as np
 
 from transformers import VisualBertConfig, is_torch_available
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES
 from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.testing_utils import require_torch, torch_device
 
@@ -168,6 +171,14 @@ class Beit3ModelTester:
         label = torch.tensor([20, 5, 2])
         return config, {"language_masked_pos": language_masked_pos, "labels": label}
 
+    def prepare_config_and_inputs_for_basemodel(self):
+        language_masked_pos = torch.zeros((self.batch_size, self.seq_length))
+        to_fill = list(range(0, self.seq_length, 3))
+        language_masked_pos[:, to_fill] = 1
+        config = self.get_config()
+        label = torch.tensor([20, 5, 2])
+        return config, {}
+
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
@@ -197,36 +208,12 @@ class Beit3ModelTester:
         result = model(**input_dict)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    #
-    # def create_and_check_for_multiple_choice(self, config, input_dict):
-    #     model = VisualBertForMultipleChoice(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(**input_dict)
-    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
-    #
-    # def create_and_check_for_nlvr(self, config, input_dict):
-    #     model = VisualBertForVisualReasoning(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(**input_dict)
-    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-    #
-    # def create_and_check_for_flickr(self, config, input_dict):
-    #     model = VisualBertForRegionToPhraseAlignment(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(**input_dict)
-    #     self.parent.assertEqual(
-    #         result.logits.shape, (self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length)
-    #     )
-
 
 @require_torch
 class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            # BEiT3Model,
+            Beit3Model,
             Beit3ForVisualReasoning,
             Beit3ForImageTextRetrieval,
             Beit3ForVisualQuestionAnswering,
@@ -360,6 +347,11 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
         elif model_class.__name__ == "Beit3ForCaptioning":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
+        elif model_class.__name__ == "Beit3Model":
+            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_basemodel()[1]
+            inputs_dict_to_return.update(inputs_dict)
+            del inputs_dict_to_return["padding_mask"]
+            return inputs_dict_to_return
         inputs_dict_to_return.update(inputs_dict)
         return inputs_dict_to_return
 
@@ -452,298 +444,101 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
 
-#     def test_attention_outputs(self):
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-#         config.return_dict = True
-#
-#         seq_len = getattr(self.model_tester, "seq_length", None)
-#         visual_seq_len = getattr(self.model_tester, "visual_seq_length", None)
-#
-#         encoder_seq_length = (seq_len if seq_len is not None else 0) + (
-#             visual_seq_len if visual_seq_len is not None else 0
-#         )
-#         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-#         chunk_length = getattr(self.model_tester, "chunk_length", None)
-#         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-#             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
-#
-#         for model_class in self.all_model_classes:
-#             inputs_dict["output_attentions"] = True
-#             inputs_dict["output_hidden_states"] = False
-#             config.return_dict = True
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-#             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-#
-#             # check that output_attentions also work using config
-#             del inputs_dict["output_attentions"]
-#             config.output_attentions = True
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-#             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-#
-#             if chunk_length is not None:
-#                 self.assertListEqual(
-#                     list(attentions[0].shape[-4:]),
-#                     [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-#                 )
-#             else:
-#                 self.assertListEqual(
-#                     list(attentions[0].shape[-3:]),
-#                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-#                 )
-#             out_len = len(outputs)
-#
-#             # Check attention is always last and order is fine
-#             inputs_dict["output_attentions"] = True
-#             inputs_dict["output_hidden_states"] = True
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#
-#             if hasattr(self.model_tester, "num_hidden_states_types"):
-#                 added_hidden_states = self.model_tester.num_hidden_states_types
-#             elif self.is_encoder_decoder:
-#                 added_hidden_states = 2
-#             else:
-#                 added_hidden_states = 1
-#             self.assertEqual(out_len + added_hidden_states, len(outputs))
-#
-#             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-#
-#             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-#             if chunk_length is not None:
-#                 self.assertListEqual(
-#                     list(self_attentions[0].shape[-4:]),
-#                     [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-#                 )
-#             else:
-#                 self.assertListEqual(
-#                     list(self_attentions[0].shape[-3:]),
-#                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-#                 )
-#
-#     def test_hidden_states_output(self):
-#         def check_hidden_states_output(inputs_dict, config, model_class):
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#
-#             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-#
-#             expected_num_layers = getattr(
-#                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-#             )
-#             self.assertEqual(len(hidden_states), expected_num_layers)
-#
-#             if hasattr(self.model_tester, "encoder_seq_length"):
-#                 seq_length = self.model_tester.encoder_seq_length
-#                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-#                     seq_length = seq_length * self.model_tester.chunk_length
-#             else:
-#                 seq_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
-#
-#             self.assertListEqual(
-#                 list(hidden_states[0].shape[-2:]),
-#                 [seq_length, self.model_tester.hidden_size],
-#             )
-#
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-#
-#         for model_class in self.all_model_classes:
-#             inputs_dict["output_hidden_states"] = True
-#             check_hidden_states_output(inputs_dict, config, model_class)
-#
-#             # check that output_hidden_states also work using config
-#             del inputs_dict["output_hidden_states"]
-#             config.output_hidden_states = True
-#
-#             check_hidden_states_output(inputs_dict, config, model_class)
-#
-#     def test_config(self):
-#         self.config_tester.run_common_tests()
-#
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
-#
-#     def test_model_various_embeddings(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-#         for type in ["absolute", "relative_key", "relative_key_query"]:
-#             config_and_inputs[0].position_embedding_type = type
-#             self.model_tester.create_and_check_model(*config_and_inputs)
-#
-#     def test_model_for_pretraining(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
-#         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
-#
-#     def test_model_for_vqa(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_vqa()
-#         self.model_tester.create_and_check_for_vqa(*config_and_inputs)
-#
-#     def test_model_for_nlvr(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_nlvr()
-#         self.model_tester.create_and_check_for_nlvr(*config_and_inputs)
-#
-#     def test_model_for_multiple_choice(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_multiple_choice()
-#         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-#
-#     def test_model_for_flickr(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_flickr()
-#         self.model_tester.create_and_check_for_flickr(*config_and_inputs)
-#
-#     @slow
-#     def test_model_from_pretrained(self):
-#         for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-#             model = VisualBertModel.from_pretrained(model_name)
-#             self.assertIsNotNone(model)
-#
-#
-# @require_torch
-# class VisualBertModelIntegrationTest(unittest.TestCase):
-#     @slow
-#     def test_inference_vqa_coco_pre(self):
-#         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
-#
-#         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-#         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
-#         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
-#         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
-#         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-#         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-#
-#         with torch.no_grad():
-#             output = model(
-#                 input_ids=input_ids,
-#                 attention_mask=attention_mask,
-#                 token_type_ids=token_type_ids,
-#                 visual_embeds=visual_embeds,
-#                 visual_attention_mask=visual_attention_mask,
-#                 visual_token_type_ids=visual_token_type_ids,
-#             )
-#
-#         vocab_size = 30522
-#
-#         expected_shape = torch.Size((1, 16, vocab_size))
-#         self.assertEqual(output.prediction_logits.shape, expected_shape)
-#
-#         expected_slice = torch.tensor(
-#             [[[-5.1858, -5.1903, -4.9142], [-6.2214, -5.9238, -5.8381], [-6.3027, -5.9939, -5.9297]]]
-#         )
-#
-#         self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
-#
-#         expected_shape_2 = torch.Size((1, 2))
-#         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
-#
-#         expected_slice_2 = torch.tensor([[0.7393, 0.1754]])
-#
-#         self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
-#
-#     @slow
-#     def test_inference_vqa(self):
-#         model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
-#
-#         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-#         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
-#         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
-#         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
-#         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-#         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-#
-#         with torch.no_grad():
-#             output = model(
-#                 input_ids=input_ids,
-#                 attention_mask=attention_mask,
-#                 token_type_ids=token_type_ids,
-#                 visual_embeds=visual_embeds,
-#                 visual_attention_mask=visual_attention_mask,
-#                 visual_token_type_ids=visual_token_type_ids,
-#             )
-#
-#         # vocab_size = 30522
-#
-#         expected_shape = torch.Size((1, 3129))
-#         self.assertEqual(output.logits.shape, expected_shape)
-#
-#         expected_slice = torch.tensor(
-#             [[-8.9898, 3.0803, -1.8016, 2.4542, -8.3420, -2.0224, -3.3124, -4.4139, -3.1491, -3.8997]]
-#         )
-#
-#         self.assertTrue(torch.allclose(output.logits[:, :10], expected_slice, atol=1e-4))
-#
-#     @slow
-#     def test_inference_nlvr(self):
-#         model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
-#
-#         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-#         token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
-#         visual_embeds = torch.ones(size=(1, 10, 1024), dtype=torch.float32) * 0.5
-#         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
-#         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
-#         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
-#
-#         with torch.no_grad():
-#             output = model(
-#                 input_ids=input_ids,
-#                 attention_mask=attention_mask,
-#                 token_type_ids=token_type_ids,
-#                 visual_embeds=visual_embeds,
-#                 visual_attention_mask=visual_attention_mask,
-#                 visual_token_type_ids=visual_token_type_ids,
-#             )
-#
-#         # vocab_size = 30522
-#
-#         expected_shape = torch.Size((1, 2))
-#         self.assertEqual(output.logits.shape, expected_shape)
-#
-#         expected_slice = torch.tensor([[-1.1436, 0.8900]])
-#
-#         self.assertTrue(torch.allclose(output.logits, expected_slice, atol=1e-4))
-#
-#     @slow
-#     def test_inference_vcr(self):
-#         model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
-#
-#         input_ids = torch.tensor([[[1, 2, 3, 4, 5, 6] for i in range(4)]], dtype=torch.long)
-#         attention_mask = torch.ones_like(input_ids)
-#         token_type_ids = torch.ones_like(input_ids)
-#
-#         visual_embeds = torch.ones(size=(1, 4, 10, 512), dtype=torch.float32) * 0.5
-#         visual_token_type_ids = torch.ones(size=(1, 4, 10), dtype=torch.long)
-#         visual_attention_mask = torch.ones_like(visual_token_type_ids)
-#
-#         with torch.no_grad():
-#             output = model(
-#                 input_ids=input_ids,
-#                 attention_mask=attention_mask,
-#                 token_type_ids=token_type_ids,
-#                 visual_embeds=visual_embeds,
-#                 visual_attention_mask=visual_attention_mask,
-#                 visual_token_type_ids=visual_token_type_ids,
-#             )
-#
-#         # vocab_size = 30522
-#
-#         expected_shape = torch.Size((1, 4))
-#         self.assertEqual(output.logits.shape, expected_shape)
-#
-#         expected_slice = torch.tensor([[-7.7697, -7.7697, -7.7697, -7.7697]])
-#
-#         self.assertTrue(torch.allclose(output.logits, expected_slice, atol=1e-4))
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "Beit3Model":
+                return
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+            ]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    elif isinstance(tuple_object,int):
+                        return self.assertTrue(tuple_object == dict_object)
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
