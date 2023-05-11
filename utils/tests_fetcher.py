@@ -225,7 +225,9 @@ def get_diff_for_py_and_mdx_files(repo, base_commit, commits):
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
             # We always add new python files
-            if diff_obj.change_type in ["A", "M", "R"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
+            if diff_obj.change_type in ["A", "M", "R"] and (
+                diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")
+            ):
                 code_diff.append(diff_obj.b_path)
 
     return code_diff
