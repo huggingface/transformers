@@ -407,8 +407,7 @@ class _BaseAutoModelClass:
                 repo_id, class_ref = class_ref.split("--")
             else:
                 repo_id = config.name_or_path
-            module_file, class_name = class_ref.split(".")
-            model_class = get_class_from_dynamic_module(repo_id, module_file + ".py", class_name, **kwargs)
+            model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)

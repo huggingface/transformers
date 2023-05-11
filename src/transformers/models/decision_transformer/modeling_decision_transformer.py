@@ -118,8 +118,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4))
+        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -747,6 +748,7 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     main_input_name = "states"
     supports_gradient_checkpointing = False
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

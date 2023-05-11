@@ -34,7 +34,9 @@ if is_torch_available():
         GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
         GPTNeoForCausalLM,
+        GPTNeoForQuestionAnswering,
         GPTNeoForSequenceClassification,
+        GPTNeoForTokenClassification,
         GPTNeoModel,
     )
 
@@ -324,6 +326,17 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_gpt_neo_for_question_answering(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPTNeoForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def create_and_check_gpt_neo_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -333,6 +346,16 @@ class GPTNeoModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_gpt_neo_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPTNeoForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
@@ -374,13 +397,23 @@ class GPTNeoModelTester:
 @require_torch
 class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPTNeoModel, GPTNeoForCausalLM, GPTNeoForSequenceClassification) if is_torch_available() else ()
+        (
+            GPTNeoModel,
+            GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
+            GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTNeoModel,
+            "question-answering": GPTNeoForQuestionAnswering,
             "text-classification": GPTNeoForSequenceClassification,
+            "token-classification": GPTNeoForTokenClassification,
             "text-generation": GPTNeoForCausalLM,
             "zero-shot": GPTNeoForSequenceClassification,
         }
@@ -424,9 +457,17 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
+    def test_gpt_neo_question_answering_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_question_answering(*config_and_inputs)
+
     def test_gpt_neo_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
+
+    def test_gpt_neo_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_token_classification(*config_and_inputs)
 
     def test_gpt_neo_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
