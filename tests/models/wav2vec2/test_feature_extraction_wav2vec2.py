@@ -33,11 +33,13 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
         rng = global_rng
+
     values = []
     for batch_idx in range(shape[0]):
         values.append([])
         for _ in range(shape[1]):
             values[-1].append(rng.random() * scale)
+
     return values
 
 
