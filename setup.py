@@ -415,13 +415,7 @@ extras["torchhub"] = deps_list(
 )
 
 extras["agents"] = deps_list(
-    "diffusers",
-    "accelerate",
-    "datasets",
-    "torch",
-    "sentencepiece",
-    "opencv-python",
-    "Pillow"
+    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
