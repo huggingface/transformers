@@ -265,7 +265,7 @@ def get_doctest_files(diff_with_last_commit=False):
     """
     test_files_to_run = get_modified_python_and_mdx_files(diff_with_last_commit)
     with open("utils/documentation_tests.txt") as fp:
-        documentation_tests = set(fp.read().strip().split("\\n"))
+        documentation_tests = set(fp.read().strip().split("\n"))
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
     test_files_to_run = [x for x in test_files_to_run if x in documentation_tests]
     # Make sure we did not end up with a test file that was removed
