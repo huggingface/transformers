@@ -432,6 +432,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
+            self.additional_special_tokens += new_tokens
             if len(new_tokens) == 1:
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
             else:
