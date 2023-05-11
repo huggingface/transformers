@@ -173,7 +173,6 @@ class NatModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
-        config.out_indices = None
         model = NatBackbone(config=config)
         model.to(torch_device)
         model.eval()

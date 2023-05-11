@@ -176,7 +176,6 @@ class DinatModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
-        config.out_indices = None
         model = DinatBackbone(config=config)
         model.to(torch_device)
         model.eval()
