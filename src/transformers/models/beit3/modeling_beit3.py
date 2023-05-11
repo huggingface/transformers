@@ -751,7 +751,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         padding_mask = torch.cat((padding_mask, padding_mask), dim=0)
 
         outputs = self.beit3(
-            textual_tokens=language_input,
+            token_ids=language_input,
             pixel_values=vision_input,
             text_padding_position=padding_mask,
         )
@@ -812,7 +812,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     ) -> Union[Tuple[Any], ImageClassifierOutputWithNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_outputs = self.beit3(textual_tokens=None, pixel_values=pixel_values)
+        encoder_outputs = self.beit3(token_ids=None, pixel_values=pixel_values)
         encoder_out = encoder_outputs.encoder_out
         t = encoder_out[:, 1:, :]
         logits = self.classifier(self.fc_norm(t.mean(1)))
@@ -915,7 +915,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             )
 
         outputs = self.beit3(
-            textual_tokens=input_ids,
+            token_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_position=padding_mask,
             attn_mask=uni_mask,
@@ -1008,7 +1008,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], SequenceClassifierOutput]:
         encoder_outputs = self.beit3(
-            textual_tokens=input_ids,
+            token_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_position=padding_mask,
         )
@@ -1097,7 +1097,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Biet3ImageTextMatchingModelOutput]:
         outputs = self.beit3(
-            textual_tokens=None,
+            token_ids=None,
             pixel_values=pixel_values,
             text_padding_position=None,
         )
@@ -1109,7 +1109,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         vision_cls = F.normalize(vision_cls, dim=-1)
 
         outputs = self.beit3(
-            textual_tokens=input_ids,
+            token_ids=input_ids,
             pixel_values=None,
             text_padding_position=padding_mask,
         )
